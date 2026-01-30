@@ -35,11 +35,17 @@ def send_error(id: Any, code: int, message: str):
 # 載入索引
 INDEX_DIR = Path(__file__).parent.parent / ".flyto-index"
 
+# Content cache for lazy loading
+_content_cache: dict = {}
+_content_loaded: bool = False
+
+
 def load_project_map() -> dict:
     path = INDEX_DIR / "PROJECT_MAP.json"
     if path.exists():
         return json.loads(path.read_text())
     return {}
+
 
 def load_index() -> dict:
     path = INDEX_DIR / "index.json"
@@ -47,7 +53,62 @@ def load_index() -> dict:
         return json.loads(path.read_text())
     return {}
 
-# 工具實現
+
+def load_content_file() -> dict:
+    """Load content from content.jsonl file (lazy load, cached)."""
+    global _content_cache, _content_loaded
+
+    if _content_loaded:
+        return _content_cache
+
+    content_file = INDEX_DIR / "content.jsonl"
+    if content_file.exists():
+        try:
+            with open(content_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        record = json.loads(line)
+                        _content_cache[record["id"]] = record["content"]
+        except Exception:
+            pass
+
+    _content_loaded = True
+    return _content_cache
+
+
+def get_symbol_content_text(symbol_id: str, symbol_data: dict) -> str:
+    """
+    Get symbol content, checking both inline and content.jsonl.
+
+    Backward compatible: works with old indexes that have inline content.
+    """
+    # Try inline content first
+    content = symbol_data.get("content", "")
+    if content:
+        return content
+
+    # Try content file
+    content_map = load_content_file()
+    return content_map.get(symbol_id, "")
+
+# Symbol type importance weights
+TYPE_WEIGHTS = {
+    "composable": 15,  # Vue composables are often what you want
+    "component": 12,   # Vue/React components
+    "function": 10,    # Top-level functions
+    "class": 8,        # Classes
+    "interface": 6,    # TypeScript interfaces
+    "type": 5,         # Type definitions
+    "method": 3,       # Methods are usually accessed via class
+    "store": 12,       # Pinia/Vuex stores
+    "api": 10,         # API endpoints
+}
+
+# Path patterns that indicate less important code
+LOW_PRIORITY_PATHS = ["test", "tests", "__test__", "spec", "mock", "fixture", "example"]
+
+
 def search_by_keyword(
     query: str,
     max_results: int = 20,
@@ -56,7 +117,7 @@ def search_by_keyword(
     include_content: bool = False
 ) -> dict:
     """
-    跨專案搜尋
+    跨專案搜尋（智能排序）
 
     Args:
         query: 搜尋關鍵字
@@ -64,6 +125,15 @@ def search_by_keyword(
         symbol_type: 只搜特定類型 (function/class/composable/component/method/interface/type)
         project: 只搜特定專案 (flyto-core/flyto-cloud/flyto-pro/...)
         include_content: 是否包含程式碼片段
+
+    Scoring:
+        - Name match: +10 (exact: +20)
+        - Summary match: +5
+        - Content match: +1
+        - Type importance: +3~15 (composable > function > method)
+        - Reference count: +0.5 per ref (max +10)
+        - Path importance: -5 if in tests/
+        - Has exports: +3
     """
     index = load_index()
     results = []
@@ -84,7 +154,9 @@ def search_by_keyword(
 
         score = 0
         match_reason = []
+        path = symbol.get("path", "").lower()
 
+        # === 文字匹配 ===
         # 名稱匹配（高權重）
         name = symbol.get("name", "").lower()
         if any(w in name for w in query_words):
@@ -101,28 +173,51 @@ def search_by_keyword(
             score += 5
             match_reason.append("summary")
 
-        # 內容匹配
-        content = symbol.get("content", "").lower()
+        # 內容匹配 (load from content.jsonl if needed)
+        content = get_symbol_content_text(symbol_id, symbol).lower()
         if any(w in content for w in query_words):
             score += 1
             match_reason.append("content")
 
-        if score > 0:
-            result = {
-                "project": sym_project,
-                "path": symbol.get("path", ""),
-                "symbol_id": symbol_id,
-                "name": symbol.get("name", ""),
-                "type": sym_type,
-                "line": symbol.get("start_line", 0),
-                "summary": symbol.get("summary", "")[:150],
-                "score": score,
-                "match": ", ".join(match_reason),
-            }
-            if include_content:
-                # 取前 500 字元的程式碼
-                result["snippet"] = symbol.get("content", "")[:500]
-            results.append(result)
+        # 沒有任何匹配就跳過
+        if score == 0:
+            continue
+
+        # === 智能加權 ===
+        # 1. Symbol 類型權重
+        type_weight = TYPE_WEIGHTS.get(sym_type, 0)
+        score += type_weight
+
+        # 2. 引用次數權重（被引用越多越重要）
+        ref_count = symbol.get("ref_count", 0)
+        ref_bonus = min(ref_count * 0.5, 10)  # 最多 +10
+        score += ref_bonus
+
+        # 3. 路徑權重（tests 降權）
+        if any(p in path for p in LOW_PRIORITY_PATHS):
+            score -= 5
+
+        # 4. Export 權重（公開 API 加分）
+        if symbol.get("exports"):
+            score += 3
+
+        result = {
+            "project": sym_project,
+            "path": symbol.get("path", ""),
+            "symbol_id": symbol_id,
+            "name": symbol.get("name", ""),
+            "type": sym_type,
+            "line": symbol.get("start_line", 0),
+            "summary": symbol.get("summary", "")[:150],
+            "score": round(score, 1),
+            "ref_count": ref_count,
+            "match": ", ".join(match_reason),
+        }
+        if include_content:
+            # 取前 500 字元的程式碼
+            full_content = get_symbol_content_text(symbol_id, symbol)
+            result["snippet"] = full_content[:500]
+        results.append(result)
 
     # 排序
     results.sort(key=lambda x: -x.get("score", 0))
@@ -320,31 +415,37 @@ def list_projects() -> dict:
 def get_symbol_content(symbol_id: str) -> dict:
     """
     取得 symbol 的完整程式碼
+
+    Loads content from content.jsonl if not in main index.
     """
     index = load_index()
     symbol = index.get("symbols", {}).get(symbol_id)
+    resolved_id = symbol_id
 
     if not symbol:
         # 嘗試模糊匹配
         for sid, sym in index.get("symbols", {}).items():
             if symbol_id in sid or sid.endswith(symbol_id):
                 symbol = sym
-                symbol_id = sid
+                resolved_id = sid
                 break
 
     if not symbol:
         return {"error": f"Symbol not found: {symbol_id}"}
 
+    # Get content (may be in content.jsonl)
+    content = get_symbol_content_text(resolved_id, symbol)
+
     return {
-        "symbol_id": symbol_id,
-        "project": symbol_id.split(":")[0] if ":" in symbol_id else "",
+        "symbol_id": resolved_id,
+        "project": resolved_id.split(":")[0] if ":" in resolved_id else "",
         "path": symbol.get("path", ""),
         "name": symbol.get("name", ""),
         "type": symbol.get("type", ""),
         "line_start": symbol.get("start_line", 0),
         "line_end": symbol.get("end_line", 0),
         "summary": symbol.get("summary", ""),
-        "content": symbol.get("content", ""),
+        "content": content,
     }
 
 
@@ -352,15 +453,17 @@ def find_references(symbol_id: str) -> dict:
     """
     Find all places that reference this symbol.
 
-    Searches for:
-    1. CALLS dependencies pointing to this symbol
-    2. Content matches in other symbols
+    Uses:
+    1. Reverse index (pre-computed during indexing)
+    2. Resolved dependencies
+    3. Content search as fallback
     """
     import re
 
     index = load_index()
     symbols = index.get("symbols", {})
     dependencies = index.get("dependencies", {})
+    reverse_index = index.get("reverse_index", {})
 
     # Resolve symbol_id if partial
     resolved_id = symbol_id
@@ -403,15 +506,71 @@ def find_references(symbol_id: str) -> dict:
             return parts[1]
         return ""
 
-    # Method 1: Search CALLS dependencies
+    # Method 0: Use pre-computed reverse index (fastest & most accurate)
+    if resolved_id in reverse_index:
+        for caller_id in reverse_index[resolved_id]:
+            caller_symbol = symbols.get(caller_id, {})
+            from_path = caller_symbol.get("path", "") or extract_path_from_source_id(caller_id)
+
+            # Skip self-references
+            if from_path == target_path:
+                continue
+
+            # Find the line from dependencies
+            line = 0
+            for dep in dependencies.values():
+                resolved_target = dep.get("metadata", {}).get("resolved_target", "")
+                if resolved_target == resolved_id and dep.get("source", "") == caller_id:
+                    line = dep.get("line", 0)
+                    break
+
+            key = (from_path, caller_id)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+
+            references.append({
+                "type": "call",
+                "from_symbol": caller_id,
+                "from_path": from_path,
+                "from_name": caller_symbol.get("name", ""),
+                "line": line,
+                "confidence": "high",  # From reverse index
+            })
+
+    # Also check reverse index by name (some deps might not be fully resolved)
+    if target_name in reverse_index:
+        for caller_id in reverse_index[target_name]:
+            caller_symbol = symbols.get(caller_id, {})
+            from_path = caller_symbol.get("path", "") or extract_path_from_source_id(caller_id)
+
+            if from_path == target_path:
+                continue
+
+            key = (from_path, caller_id)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+
+            references.append({
+                "type": "call",
+                "from_symbol": caller_id,
+                "from_path": from_path,
+                "from_name": caller_symbol.get("name", ""),
+                "line": 0,
+                "confidence": "medium",
+            })
+
+    # Method 1: Search CALLS dependencies (fallback for deps without reverse index)
     for dep_id, dep in dependencies.items():
         dep_type = dep.get("type", "")
         target = dep.get("target", "")
+        resolved_target = dep.get("metadata", {}).get("resolved_target", "")
 
         # Check if this dependency targets our symbol
         if dep_type == "calls":
-            # Match by symbol_id or by name
-            if target == resolved_id or target == target_name:
+            # Match by resolved_target, symbol_id, or by name
+            if resolved_target == resolved_id or target == resolved_id or target == target_name:
                 source_id = dep.get("source", "")
                 source_symbol = symbols.get(source_id, {})
 
@@ -434,6 +593,7 @@ def find_references(symbol_id: str) -> dict:
                     "from_path": from_path,
                     "from_name": source_symbol.get("name", ""),
                     "line": line,
+                    "confidence": "high" if resolved_target else "medium",
                 })
 
     # Method 2: Search content for symbol name usage
@@ -449,7 +609,7 @@ def find_references(symbol_id: str) -> dict:
             if sym_path == target_path:
                 continue
 
-            content = sym.get("content", "")
+            content = get_symbol_content_text(sym_id, sym)
             matches = list(re.finditer(pattern, content))
 
             if matches:
@@ -470,10 +630,16 @@ def find_references(symbol_id: str) -> dict:
                     "from_name": sym.get("name", ""),
                     "line": line,
                     "occurrences": len(matches),
+                    "confidence": "low",  # Content regex match
                 })
 
-    # Sort by path for better readability
-    references.sort(key=lambda x: (x.get("from_path", ""), x.get("line", 0)))
+    # Sort by confidence (high first), then by path
+    confidence_order = {"high": 0, "medium": 1, "low": 2}
+    references.sort(key=lambda x: (
+        confidence_order.get(x.get("confidence", "low"), 2),
+        x.get("from_path", ""),
+        x.get("line", 0)
+    ))
 
     # Group by project
     by_project = {}
@@ -483,10 +649,18 @@ def find_references(symbol_id: str) -> dict:
             by_project[project] = []
         by_project[project].append(ref)
 
+    # Count by confidence
+    confidence_counts = {"high": 0, "medium": 0, "low": 0}
+    for ref in references:
+        conf = ref.get("confidence", "low")
+        confidence_counts[conf] = confidence_counts.get(conf, 0) + 1
+
     return {
         "symbol": resolved_id,
         "name": target_name,
+        "ref_count": target_symbol.get("ref_count", 0),
         "total": len(references),
+        "confidence_breakdown": confidence_counts,
         "by_project": by_project,
         "references": references,
     }
@@ -649,7 +823,7 @@ def fulltext_search(
         if project and project.lower() not in sym_project.lower():
             continue
 
-        content = sym.get("content", "")
+        content = get_symbol_content_text(sym_id, sym)
         if not content:
             continue
 

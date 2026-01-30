@@ -73,6 +73,9 @@ class Symbol:
     params: list[str] = field(default_factory=list)
     returns: str = ""
 
+    # 引用統計（用於搜尋排序）
+    reference_count: int = 0
+
     @property
     def id(self) -> str:
         """生成唯一 Symbol ID"""
@@ -88,21 +91,59 @@ class Symbol:
         self.content_hash = hashlib.sha256(self.content.encode()).hexdigest()[:16]
         return self.content_hash
 
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id,
+    def to_dict(self, include_content: bool = True, compact: bool = False) -> dict:
+        """
+        Convert to dict.
+
+        Args:
+            include_content: Include content field (set False for main index)
+            compact: Skip empty fields to reduce size
+        """
+        result = {
             "project": self.project,
             "path": self.path,
             "type": self.symbol_type.value,
             "name": self.name,
             "start_line": self.start_line,
             "end_line": self.end_line,
-            "content": self.content,
-            "content_hash": self.content_hash,
-            "summary": self.summary,
             "language": self.language,
-            "exports": self.exports,
-            "imports": self.imports,
+        }
+
+        # Include content only when requested
+        if include_content:
+            result["content"] = self.content
+
+        # Always include content_hash for change detection
+        if self.content_hash:
+            result["content_hash"] = self.content_hash
+
+        # Compact mode: skip empty fields
+        if compact:
+            if self.summary:
+                result["summary"] = self.summary
+            if self.exports:
+                result["exports"] = self.exports
+            if self.imports:
+                result["imports"] = self.imports
+            if self.params:
+                result["params"] = self.params
+            if self.returns:
+                result["returns"] = self.returns
+            if self.reference_count > 0:
+                result["ref_count"] = self.reference_count
+        else:
+            result["summary"] = self.summary
+            result["exports"] = self.exports
+            result["imports"] = self.imports
+            result["ref_count"] = self.reference_count
+
+        return result
+
+    def to_content_record(self) -> dict:
+        """Return minimal record for content.jsonl."""
+        return {
+            "id": self.id,
+            "content": self.content,
         }
 
 
@@ -188,6 +229,9 @@ class ProjectIndex:
 
     # API endpoints
     api_endpoints: list[dict] = field(default_factory=list)
+
+    # 反向索引（symbol_id -> 被誰引用）
+    reverse_index: dict[str, list[str]] = field(default_factory=dict)
 
     def get_affected_by(self, symbol_id: str) -> list[str]:
         """

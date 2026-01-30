@@ -13,7 +13,10 @@ from typing import Optional
 from datetime import datetime
 
 from .models import ProjectIndex, Symbol, Dependency, FileManifest, SymbolType
-from .scanner import PythonScanner, VueScanner, TypeScriptScanner, ScanResult
+from .scanner import (
+    PythonScanner, VueScanner, TypeScriptScanner,
+    GoScanner, RustScanner, JavaScanner, ScanResult
+)
 from .indexer import IncrementalIndexer, scan_directory_hashes, compute_file_hash
 from .context.loader import ContextLoader, L0Context, L1Context, L2Context
 
@@ -43,6 +46,9 @@ class IndexEngine:
             PythonScanner(project_name),
             VueScanner(project_name),
             TypeScriptScanner(project_name),
+            GoScanner(project_name),
+            RustScanner(project_name),
+            JavaScanner(project_name),
         ]
         self.incremental = IncrementalIndexer(self.project_root, self.index_dir)
 
@@ -106,6 +112,10 @@ class IndexEngine:
 
         # 更新索引
         self._update_index(result, changes)
+
+        # 解析依賴並建立反向索引
+        self._resolve_dependencies()
+        self._build_reverse_index()
 
         # 保存索引
         self._save_index()
@@ -334,21 +344,146 @@ class IndexEngine:
         for manifest in result.manifests:
             self.index.files[manifest.path] = manifest
 
-    def _save_index(self):
-        """保存索引"""
+    def _resolve_dependencies(self):
+        """
+        解析依賴關係，將原始呼叫名稱轉換為完整 symbol ID
+
+        這讓 impact analysis 和 find_references 更準確
+        """
+        from .resolver import SymbolResolver
+
+        # 建立 index dict 給 resolver 用
+        index_dict = {
+            "symbols": {sid: s.to_dict() for sid, s in self.index.symbols.items()},
+            "dependencies": {did: d.to_dict() for did, d in self.index.dependencies.items()},
+        }
+        resolver = SymbolResolver(index_dict)
+
+        # 建立 symbol name -> symbol_id 的快速查詢表
+        name_to_ids = {}
+        for sid, symbol in self.index.symbols.items():
+            name = symbol.name
+            if name not in name_to_ids:
+                name_to_ids[name] = []
+            name_to_ids[name].append(sid)
+
+        # 解析每個依賴
+        for dep_id, dep in self.index.dependencies.items():
+            if dep.dep_type.value != "calls":
+                continue
+
+            target = dep.target_id
+            source_path = ""
+
+            # 從 source_id 提取檔案路徑
+            if ":" in dep.source_id:
+                parts = dep.source_id.split(":")
+                if len(parts) >= 2:
+                    source_path = parts[1]
+
+            # 嘗試解析 target
+            resolved = None
+
+            # 方法 1: 直接匹配 symbol name
+            if target in name_to_ids:
+                candidates = name_to_ids[target]
+                # 優先選同檔案或同專案的
+                for cid in candidates:
+                    if source_path and source_path in cid:
+                        resolved = cid
+                        break
+                if not resolved and candidates:
+                    resolved = candidates[0]
+
+            # 方法 2: 處理 method 呼叫 (obj.method)
+            if not resolved and "." in target:
+                parts = target.split(".")
+                method_name = parts[-1]
+                # 找 Class.method 格式的 symbol
+                for sid in self.index.symbols:
+                    if sid.endswith(f":{target}") or sid.endswith(f".{method_name}"):
+                        resolved = sid
+                        break
+
+            # 更新 dependency 的 resolved_target
+            if resolved:
+                dep.metadata["resolved_target"] = resolved
+
+    def _build_reverse_index(self):
+        """
+        建立反向索引：symbol_id -> 被誰引用
+
+        同時計算每個 symbol 的引用次數
+        """
+        # 初始化反向索引
+        reverse_index = {}  # symbol_id -> [caller_ids]
+
+        for dep_id, dep in self.index.dependencies.items():
+            if dep.dep_type.value != "calls":
+                continue
+
+            # 優先使用 resolved_target
+            target = dep.metadata.get("resolved_target") or dep.target_id
+            source = dep.source_id
+
+            # 從 source_id 提取實際的 caller symbol
+            # source_id 格式: project:path:type:name
+            caller_id = source
+
+            if target not in reverse_index:
+                reverse_index[target] = []
+
+            if caller_id not in reverse_index[target]:
+                reverse_index[target].append(caller_id)
+
+        # 儲存反向索引
+        self.index.reverse_index = reverse_index
+
+        # 計算每個 symbol 的引用次數
+        for sid, symbol in self.index.symbols.items():
+            ref_count = len(reverse_index.get(sid, []))
+            # 也檢查 name match（有些依賴沒解析成功）
+            for callers in reverse_index.values():
+                for caller in callers:
+                    if symbol.name in caller:
+                        ref_count += 1
+            symbol.reference_count = ref_count
+
+    def _save_index(self, separate_content: bool = True):
+        """
+        保存索引
+
+        Args:
+            separate_content: If True, save content to content.jsonl separately
+        """
         self.index_dir.mkdir(parents=True, exist_ok=True)
         index_file = self.index_dir / "index.json"
+        content_file = self.index_dir / "content.jsonl"
 
+        # Save content to JSONL if requested
+        if separate_content:
+            with open(content_file, 'w', encoding='utf-8') as f:
+                for symbol in self.index.symbols.values():
+                    if symbol.content:
+                        record = symbol.to_content_record()
+                        f.write(json.dumps(record, ensure_ascii=False) + '\n')
+
+        # Main index without content (compact mode)
         data = {
             "project": self.index.project,
             "root_path": self.index.root_path,
             "indexed_at": datetime.now().isoformat(),
             "files": {k: v.to_dict() for k, v in self.index.files.items()},
-            "symbols": {k: v.to_dict() for k, v in self.index.symbols.items()},
+            "symbols": {
+                k: v.to_dict(include_content=not separate_content, compact=True)
+                for k, v in self.index.symbols.items()
+            },
             "dependencies": {k: v.to_dict() for k, v in self.index.dependencies.items()},
             "entry_points": self.index.entry_points,
             "routes": self.index.routes,
             "api_endpoints": self.index.api_endpoints,
+            "reverse_index": self.index.reverse_index,
+            "has_content_file": separate_content,
         }
 
         index_file.write_text(json.dumps(data, indent=2, ensure_ascii=False))
@@ -361,6 +496,7 @@ class IndexEngine:
             entry_points=data.get("entry_points", []),
             routes=data.get("routes", {}),
             api_endpoints=data.get("api_endpoints", []),
+            reverse_index=data.get("reverse_index", {}),
         )
 
         # 還原 files
@@ -373,8 +509,18 @@ class IndexEngine:
                 last_indexed=fdata.get("indexed_at", ""),
             )
 
+        # Load content from JSONL if available
+        content_map = {}
+        if data.get("has_content_file"):
+            content_file = self.index_dir / "content.jsonl"
+            if content_file.exists():
+                content_map = self._load_content_file(content_file)
+
         # 還原 symbols
         for sid, sdata in data.get("symbols", {}).items():
+            # Get content from content_map or from inline data
+            content = content_map.get(sid, sdata.get("content", ""))
+
             index.symbols[sid] = Symbol(
                 project=sdata["project"],
                 path=sdata["path"],
@@ -382,12 +528,13 @@ class IndexEngine:
                 name=sdata["name"],
                 start_line=sdata.get("start_line", 0),
                 end_line=sdata.get("end_line", 0),
-                content=sdata.get("content", ""),
+                content=content,
                 content_hash=sdata.get("content_hash", ""),
                 summary=sdata.get("summary", ""),
                 language=sdata.get("language", ""),
                 exports=sdata.get("exports", []),
                 imports=sdata.get("imports", []),
+                reference_count=sdata.get("ref_count", 0),
             )
 
         # 還原 dependencies
@@ -402,3 +549,17 @@ class IndexEngine:
             )
 
         return index
+
+    def _load_content_file(self, content_file: Path) -> dict:
+        """Load content from JSONL file."""
+        content_map = {}
+        try:
+            with open(content_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        record = json.loads(line)
+                        content_map[record["id"]] = record["content"]
+        except Exception:
+            pass
+        return content_map

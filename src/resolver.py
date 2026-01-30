@@ -5,9 +5,11 @@ This module provides functionality to:
 1. Build an export map from indexed symbols
 2. Resolve function/method calls to their symbol IDs using import context
 3. Handle various import patterns (relative, alias, package)
+4. Multi-language support: Python, JS/TS, Go, Rust, Java
 """
 
 from typing import Optional
+import re
 
 
 class SymbolResolver:
@@ -120,8 +122,15 @@ class SymbolResolver:
         - Relative imports: ./foo, ../utils
         - Alias imports: @/composables/useAuth
         - Package imports: vue, pinia
+        - Go packages: github.com/user/pkg
+        - Rust crates: crate::module, super::module
+        - Java packages: com.example.package
         """
         source_project = self._extract_project(source_file)
+        source_lang = self._detect_language(source_file)
+
+        # Language-specific normalization
+        normalized_module = self._normalize_module_path(module, source_lang, source_file)
 
         # Try to find matching symbol
         for sym_id, sym in self.symbols.items():
@@ -133,16 +142,12 @@ class SymbolResolver:
             if export_name != sym_name:
                 continue
 
-            # Check path similarity
-            # Handle @/ alias (common in Vue projects)
-            normalized_module = module.replace("@/", "src/").replace("@", "src")
-
             # Check if module path matches symbol path
             if normalized_module in sym_path:
                 return sym_id
 
             # Check last segment match (filename)
-            module_file = module.split("/")[-1]
+            module_file = module.split("/")[-1].split(".")[-1]  # Handle both / and .
             path_file = sym_path.split("/")[-1].split(".")[0]
             if module_file == path_file:
                 # Prefer same project
@@ -159,6 +164,56 @@ class SymbolResolver:
                 return candidates[0]
 
         return None
+
+    def _normalize_module_path(self, module: str, lang: str, source_file: str) -> str:
+        """Normalize module path based on language."""
+        if lang == "javascript" or lang == "typescript" or lang == "vue":
+            # Handle @/ alias (common in Vue/React projects)
+            return module.replace("@/", "src/").replace("@", "src")
+
+        elif lang == "go":
+            # Go: github.com/user/pkg -> pkg (last segment)
+            # Or internal/pkg -> internal/pkg
+            if "/" in module:
+                # For external packages, use last segment
+                if module.startswith("github.com/") or module.startswith("golang.org/"):
+                    return module.split("/")[-1]
+                return module
+            return module
+
+        elif lang == "rust":
+            # Rust: crate::module::submod -> module/submod
+            # super::module -> ../module
+            # self::module -> ./module
+            path = module.replace("::", "/")
+            path = re.sub(r'^crate/', '', path)
+            path = re.sub(r'^super/', '../', path)
+            path = re.sub(r'^self/', './', path)
+            return path
+
+        elif lang == "java":
+            # Java: com.example.package.Class -> com/example/package/Class
+            return module.replace(".", "/")
+
+        return module
+
+    def _detect_language(self, file_path: str) -> str:
+        """Detect language from file extension."""
+        ext_map = {
+            ".py": "python",
+            ".js": "javascript",
+            ".jsx": "javascript",
+            ".ts": "typescript",
+            ".tsx": "typescript",
+            ".vue": "vue",
+            ".go": "go",
+            ".rs": "rust",
+            ".java": "java",
+        }
+        for ext, lang in ext_map.items():
+            if file_path.endswith(ext):
+                return lang
+        return "unknown"
 
     def _resolve_method(
         self,
