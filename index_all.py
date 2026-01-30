@@ -1,55 +1,98 @@
 #!/usr/bin/env python3
 """
-索引 flytohub 下所有專案
+Index projects from config
 
-用法：
-    python index_all.py
+Usage:
+    python index_all.py                    # Use config/projects.yaml
+    python index_all.py /path/to/config    # Use custom config
+    python index_all.py --discover /path   # Auto-discover projects in path
 """
 
 import json
 import sys
+import yaml
 from pathlib import Path
 
-# 添加 src 到 path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.engine import IndexEngine
 from src.mapper.project_map import ProjectMapGenerator
 
-FLYTOHUB_ROOT = Path("/Library/其他專案/flytohub")
-OUTPUT_DIR = Path(__file__).parent / ".flyto-index"
 
-# 要索引的專案
-PROJECTS = [
-    "flyto-core",
-    "flyto-pro",
-    "flyto-cloud",
-    "flyto-cloud-dev",
-    "flyto-indexer",
-    "flyto-i18n",
-    "flyto-landing-page",
-    "flyto-modules-pro",
-    "flyto-evolution-log",
-    "templates",
-]
+def load_projects_config(config_path: Path = None) -> dict:
+    """Load projects from config file."""
+    if config_path is None:
+        config_path = Path(__file__).parent / "config" / "projects.yaml"
+
+    if not config_path.exists():
+        print(f"Config not found: {config_path}")
+        print("Creating default config...")
+        create_default_config(config_path)
+
+    with open(config_path) as f:
+        return yaml.safe_load(f)
 
 
-def index_project(project_name: str) -> dict:
-    """索引單個專案"""
-    project_path = FLYTOHUB_ROOT / project_name
+def create_default_config(config_path: Path):
+    """Create default projects.yaml."""
+    default = {
+        "workspace": {
+            "name": "my-workspace",
+            "output_dir": ".flyto-index",
+        },
+        "projects": [
+            {
+                "name": "example-project",
+                "path": "/path/to/your/project",
+            }
+        ],
+    }
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(config_path, "w") as f:
+        yaml.dump(default, f, default_flow_style=False)
+    print(f"Created: {config_path}")
+    print("Please edit this file and run again.")
+
+
+def discover_projects(parent_path: Path) -> list[dict]:
+    """Auto-discover projects in a directory."""
+    projects = []
+    for child in sorted(parent_path.iterdir()):
+        if not child.is_dir() or child.name.startswith("."):
+            continue
+
+        # Check if it's a project
+        is_project = (
+            (child / ".git").exists() or
+            (child / "package.json").exists() or
+            (child / "pyproject.toml").exists() or
+            (child / "Cargo.toml").exists() or
+            (child / "go.mod").exists()
+        )
+
+        if is_project:
+            projects.append({
+                "name": child.name,
+                "path": str(child),
+            })
+
+    return projects
+
+
+def index_project(project_name: str, project_path: Path, output_dir: Path) -> dict:
+    """Index a single project."""
     if not project_path.exists():
-        print(f"  ⚠️  {project_name} not found, skipping")
+        print(f"  [!] {project_name} not found: {project_path}")
         return None
 
-    print(f"  📁 Scanning {project_name}...")
+    print(f"  Scanning {project_name}...")
 
     try:
-        engine = IndexEngine(project_name, project_path, OUTPUT_DIR / project_name)
+        engine = IndexEngine(project_name, project_path, output_dir / project_name)
         result = engine.scan(incremental=False)
 
-        print(f"     Files: {result['files_scanned']}, Symbols: {result['symbols_found']}, Deps: {result['dependencies_found']}")
+        print(f"     Files: {result['files_scanned']}, Symbols: {result['symbols_found']}")
 
-        # 返回索引數據
         return {
             "project": project_name,
             "root_path": str(project_path),
@@ -59,13 +102,12 @@ def index_project(project_name: str) -> dict:
             "stats": result,
         }
     except Exception as e:
-        print(f"     ❌ Error: {e}")
+        print(f"     [x] Error: {e}")
         return None
 
 
-def generate_project_map(project_name: str) -> dict:
-    """生成專案的 PROJECT_MAP"""
-    project_path = FLYTOHUB_ROOT / project_name
+def generate_project_map(project_path: Path) -> dict:
+    """Generate PROJECT_MAP for a project."""
     if not project_path.exists():
         return None
 
@@ -73,102 +115,139 @@ def generate_project_map(project_name: str) -> dict:
         generator = ProjectMapGenerator(project_path)
         return generator.generate()
     except Exception as e:
-        print(f"     ❌ Map error: {e}")
+        print(f"     [x] Map error: {e}")
         return None
 
 
 def main():
+    # Parse arguments
+    config_path = None
+    discover_path = None
+
+    args = sys.argv[1:]
+    if "--discover" in args:
+        idx = args.index("--discover")
+        if idx + 1 < len(args):
+            discover_path = Path(args[idx + 1])
+    elif args:
+        config_path = Path(args[0])
+
+    # Load or discover projects
+    if discover_path:
+        print(f"Discovering projects in: {discover_path}")
+        projects = discover_projects(discover_path)
+        output_dir = discover_path / ".flyto-index"
+        workspace_name = discover_path.name
+    else:
+        config = load_projects_config(config_path)
+        if not config:
+            return
+
+        workspace = config.get("workspace", {})
+        workspace_name = workspace.get("name", "workspace")
+        output_dir = Path(workspace.get("output_dir", ".flyto-index"))
+
+        # Handle relative output_dir
+        if not output_dir.is_absolute():
+            output_dir = Path(__file__).parent / output_dir
+
+        projects = config.get("projects", [])
+
+    if not projects:
+        print("No projects to index.")
+        return
+
     print("=" * 60)
-    print("Indexing all flytohub projects")
+    print(f"Indexing: {workspace_name}")
+    print(f"Projects: {len(projects)}")
+    print(f"Output: {output_dir}")
     print("=" * 60)
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 合併索引
+    # Combined index
     combined_index = {
+        "workspace": workspace_name,
         "projects": [],
+        "project_roots": {},  # Store project paths for MCP server
         "files": {},
         "symbols": {},
         "dependencies": {},
     }
 
-    # 合併 PROJECT_MAP
     combined_map = {
         "projects": [],
         "total_files": 0,
         "files": {},
         "categories": {},
-        "keyword_index": {},
-        "api_map": {},
     }
 
     total_files = 0
     total_symbols = 0
-    total_deps = 0
 
-    for project_name in PROJECTS:
-        print(f"\n[{PROJECTS.index(project_name) + 1}/{len(PROJECTS)}] {project_name}")
+    for i, proj in enumerate(projects):
+        name = proj["name"]
+        path = Path(proj["path"])
 
-        # 索引
-        index_data = index_project(project_name)
+        print(f"\n[{i + 1}/{len(projects)}] {name}")
+
+        # Index
+        index_data = index_project(name, path, output_dir)
         if index_data:
-            combined_index["projects"].append(project_name)
+            combined_index["projects"].append(name)
+            combined_index["project_roots"][name] = str(path)
 
-            # 合併 files（加上 project 前綴）
-            for path, fdata in index_data["files"].items():
-                full_path = f"{project_name}/{path}"
+            # Merge files
+            for fpath, fdata in index_data["files"].items():
+                full_path = f"{name}/{fpath}"
                 combined_index["files"][full_path] = fdata
 
-            # 合併 symbols
+            # Merge symbols
             for sid, sdata in index_data["symbols"].items():
                 combined_index["symbols"][sid] = sdata
 
-            # 合併 dependencies
+            # Merge dependencies
             for did, ddata in index_data["dependencies"].items():
                 combined_index["dependencies"][did] = ddata
 
             total_files += index_data["stats"]["files_scanned"]
             total_symbols += index_data["stats"]["symbols_found"]
-            total_deps += index_data["stats"]["dependencies_found"]
 
         # PROJECT_MAP
-        map_data = generate_project_map(project_name)
+        map_data = generate_project_map(path)
         if map_data:
-            combined_map["projects"].append(project_name)
+            combined_map["projects"].append(name)
             combined_map["total_files"] += map_data.get("total_files", 0)
 
-            # 合併 files
-            for path, finfo in map_data.get("files", {}).items():
-                full_path = f"{project_name}/{path}"
+            for mpath, finfo in map_data.get("files", {}).items():
+                full_path = f"{name}/{mpath}"
                 combined_map["files"][full_path] = finfo
 
-            # 合併 categories
             for cat, paths in map_data.get("categories", {}).items():
                 if cat not in combined_map["categories"]:
                     combined_map["categories"][cat] = []
-                combined_map["categories"][cat].extend([f"{project_name}/{p}" for p in paths])
+                combined_map["categories"][cat].extend([f"{name}/{p}" for p in paths])
 
-    # 保存合併索引
+    # Save
     print("\n" + "=" * 60)
-    print("Saving combined index...")
+    print("Saving index...")
 
-    index_file = OUTPUT_DIR / "index.json"
+    index_file = output_dir / "index.json"
     index_file.write_text(json.dumps(combined_index, indent=2, ensure_ascii=False))
-    print(f"  ✅ index.json ({index_file.stat().st_size // 1024} KB)")
+    print(f"  [ok] index.json ({index_file.stat().st_size // 1024} KB)")
 
-    map_file = OUTPUT_DIR / "PROJECT_MAP.json"
+    map_file = output_dir / "PROJECT_MAP.json"
     map_file.write_text(json.dumps(combined_map, indent=2, ensure_ascii=False))
-    print(f"  ✅ PROJECT_MAP.json ({map_file.stat().st_size // 1024} KB)")
+    print(f"  [ok] PROJECT_MAP.json ({map_file.stat().st_size // 1024} KB)")
 
-    # 總結
+    # Summary
     print("\n" + "=" * 60)
-    print("SUMMARY")
+    print("DONE")
     print("=" * 60)
-    print(f"  Projects indexed: {len(combined_index['projects'])}")
-    print(f"  Total files: {total_files}")
-    print(f"  Total symbols: {total_symbols}")
-    print(f"  Total dependencies: {total_deps}")
-    print(f"\n  Index saved to: {OUTPUT_DIR}")
+    print(f"  Projects: {len(combined_index['projects'])}")
+    print(f"  Files: {total_files}")
+    print(f"  Symbols: {total_symbols}")
+    print(f"\n  Index: {output_dir}")
 
 
 if __name__ == "__main__":

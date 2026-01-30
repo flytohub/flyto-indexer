@@ -2,17 +2,18 @@
 """
 Flyto Indexer MCP Server
 
-讓 Claude 可以直接查詢索引和執行語意搜尋。
+Code search and analysis for any project.
+Reads project list from index.json (no hardcoded paths).
 
 Usage:
     python -m src.mcp_server
 
-Claude Code 設定 (~/.claude/mcp_servers.json):
+Claude Code config (~/.claude/mcp_servers.json):
 {
     "flyto-indexer": {
         "command": "python",
         "args": ["-m", "src.mcp_server"],
-        "cwd": "/Library/其他專案/flytohub/flyto-indexer"
+        "cwd": "/path/to/flyto-indexer"
     }
 }
 """
@@ -800,19 +801,9 @@ def check_index_status() -> dict:
     index_mtime = datetime.fromtimestamp(index_file.stat().st_mtime)
     indexed_at = index.get("indexed_at", "")
 
-    # Get project roots from project map
+    # Get project roots from index (set by index_all.py)
     projects = index.get("projects", [])
-    project_roots = {
-        "flyto-core": "/Library/其他專案/flytohub/flyto-core",
-        "flyto-pro": "/Library/其他專案/flytohub/flyto-pro",
-        "flyto-cloud": "/Library/其他專案/flytohub/flyto-cloud",
-        "flyto-cloud-dev": "/Library/其他專案/flytohub/flyto-cloud-dev",
-        "flyto-indexer": "/Library/其他專案/flytohub/flyto-indexer",
-        "flyto-i18n": "/Library/其他專案/flytohub/flyto-i18n",
-        "flyto-landing-page": "/Library/其他專案/flytohub/flyto-landing-page",
-        "flyto-modules-pro": "/Library/其他專案/flytohub/flyto-modules-pro",
-        "templates": "/Library/其他專案/flytohub/templates",
-    }
+    project_roots = index.get("project_roots", {})
 
     # Sample check: look at a few files from each project
     stale_files = []
@@ -903,7 +894,7 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "搜尋關鍵字，例如：useModuleSchema、WorkflowCanvas、execute"},
+                "query": {"type": "string", "description": "Search keyword (function name, class name, etc.)"},
                 "max_results": {"type": "integer", "default": 20, "description": "最多返回幾筆結果"},
                 "symbol_type": {
                     "type": "string",
@@ -912,8 +903,7 @@ TOOLS = [
                 },
                 "project": {
                     "type": "string",
-                    "enum": ["flyto-core", "flyto-pro", "flyto-cloud", "flyto-cloud-dev", "flyto-indexer", "flyto-i18n", "flyto-landing-page", "flyto-modules-pro", "templates"],
-                    "description": "只搜特定專案"
+                    "description": "Filter by project name (use list_projects to see available)"
                 },
                 "include_content": {"type": "boolean", "default": False, "description": "是否包含程式碼片段"},
             },
@@ -926,7 +916,7 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "檔案路徑，例如：flyto-cloud/src/pages/Cart.vue"},
+                "path": {"type": "string", "description": "File path (e.g., project/src/file.py)"},
             },
             "required": ["path"],
         },
@@ -983,7 +973,7 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "symbol_id": {"type": "string", "description": "Symbol ID，例如：flyto-cloud:src/composables/useModuleSchema.js:composable:useModuleSchema"},
+                "symbol_id": {"type": "string", "description": "Symbol ID (format: project:path:type:name)"},
             },
             "required": ["symbol_id"],
         },
@@ -994,7 +984,7 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "symbol_id": {"type": "string", "description": "Symbol ID，例如：flyto-cloud:src/composables/useModuleSchema.js:composable:useModuleSchema"},
+                "symbol_id": {"type": "string", "description": "Symbol ID (format: project:path:type:name)"},
             },
             "required": ["symbol_id"],
         },

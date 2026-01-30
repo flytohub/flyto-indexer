@@ -1,0 +1,44 @@
+# Flyto Indexer - Projects Configuration
+#
+# This is the ONLY place that contains project-specific paths.
+# The MCP server reads project list from the index, not from here.
+#
+# Usage:
+#   python index_all.py                    # Use this config
+#   python index_all.py /path/to/config    # Use custom config
+#   python index_all.py --discover /path   # Auto-discover projects
+
+workspace:
+  name: flytohub
+  output_dir: .flyto-index
+
+projects:
+  - name: flyto-core
+    path: /Library/其他專案/flytohub/flyto-core
+
+  - name: flyto-pro
+    path: /Library/其他專案/flytohub/flyto-pro
+
+  - name: flyto-cloud
+    path: /Library/其他專案/flytohub/flyto-cloud
+
+  - name: flyto-cloud-dev
+    path: /Library/其他專案/flytohub/flyto-cloud-dev
+
+  - name: flyto-indexer
+    path: /Library/其他專案/flytohub/flyto-indexer
+
+  - name: flyto-i18n
+    path: /Library/其他專案/flytohub/flyto-i18n
+
+  - name: flyto-landing-page
+    path: /Library/其他專案/flytohub/flyto-landing-page
+
+  - name: flyto-modules-pro
+    path: /Library/其他專案/flytohub/flyto-modules-pro
+
+  - name: flyto-evolution-log
+    path: /Library/其他專案/flytohub/flyto-evolution-log
+
+  - name: templates
+    path: /Library/其他專案/flytohub/templates
