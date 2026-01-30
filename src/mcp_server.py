@@ -498,6 +498,7 @@ def find_references(symbol_id: str) -> dict:
     target_path = target_symbol.get("path", "")
     references = []
     seen_keys = set()  # Use (path, line) as key to avoid duplicates
+    seen_paths = set()  # Track unique paths for dedup across projects
 
     def extract_path_from_source_id(source_id: str) -> str:
         """Extract file path from source_id like project:path:type:name"""
@@ -505,6 +506,25 @@ def find_references(symbol_id: str) -> dict:
         if len(parts) >= 2:
             return parts[1]
         return ""
+
+    def get_dedup_key(source_id: str) -> str:
+        """
+        Get dedup key for cross-project deduplication.
+
+        Uses basename + type + name to handle forks with different paths:
+        - flyto-cloud: src/ui/web/frontend/src/views/Cart.vue:component:Cart
+        - flyto-cloud-dev: frontend/src/views/Cart.vue:component:Cart
+        Both become: Cart.vue:component:Cart
+        """
+        parts = source_id.split(":")
+        if len(parts) >= 4:
+            # project:path:type:name -> basename(path):type:name
+            path = parts[1]
+            basename = path.rsplit("/", 1)[-1]  # Get filename only
+            return f"{basename}:{parts[2]}:{parts[3]}"
+        elif len(parts) >= 2:
+            return parts[1]
+        return source_id
 
     # Method 0: Use pre-computed reverse index (fastest & most accurate)
     if resolved_id in reverse_index:
@@ -515,6 +535,12 @@ def find_references(symbol_id: str) -> dict:
             # Skip self-references
             if from_path == target_path:
                 continue
+
+            # Dedup across projects (flyto-cloud vs flyto-cloud-dev)
+            dedup_key = get_dedup_key(caller_id)
+            if dedup_key in seen_paths:
+                continue
+            seen_paths.add(dedup_key)
 
             # Find the line from dependencies
             line = 0
@@ -547,6 +573,12 @@ def find_references(symbol_id: str) -> dict:
             if from_path == target_path:
                 continue
 
+            # Dedup across projects
+            dedup_key = get_dedup_key(caller_id)
+            if dedup_key in seen_paths:
+                continue
+            seen_paths.add(dedup_key)
+
             key = (from_path, caller_id)
             if key in seen_keys:
                 continue
@@ -561,14 +593,14 @@ def find_references(symbol_id: str) -> dict:
                 "confidence": "medium",
             })
 
-    # Method 1: Search CALLS dependencies (fallback for deps without reverse index)
+    # Method 1: Search dependencies (calls, extends, implements, uses)
     for dep_id, dep in dependencies.items():
         dep_type = dep.get("type", "")
         target = dep.get("target", "")
         resolved_target = dep.get("metadata", {}).get("resolved_target", "")
 
         # Check if this dependency targets our symbol
-        if dep_type == "calls":
+        if dep_type in ("calls", "extends", "implements", "uses"):
             # Match by resolved_target, symbol_id, or by name
             if resolved_target == resolved_id or target == resolved_id or target == target_name:
                 source_id = dep.get("source", "")
@@ -581,6 +613,12 @@ def find_references(symbol_id: str) -> dict:
                 if from_path == target_path:
                     continue
 
+                # Dedup across projects
+                dedup_key = get_dedup_key(source_id)
+                if dedup_key in seen_paths:
+                    continue
+                seen_paths.add(dedup_key)
+
                 line = dep.get("line", 0)
                 key = (from_path, line)
                 if key in seen_keys:
@@ -588,7 +626,7 @@ def find_references(symbol_id: str) -> dict:
                 seen_keys.add(key)
 
                 references.append({
-                    "type": "call",
+                    "type": dep_type,
                     "from_symbol": source_id,
                     "from_path": from_path,
                     "from_name": source_symbol.get("name", ""),
@@ -609,10 +647,17 @@ def find_references(symbol_id: str) -> dict:
             if sym_path == target_path:
                 continue
 
+            # Dedup across projects
+            dedup_key = get_dedup_key(sym_id)
+            if dedup_key in seen_paths:
+                continue
+
             content = get_symbol_content_text(sym_id, sym)
             matches = list(re.finditer(pattern, content))
 
             if matches:
+                seen_paths.add(dedup_key)  # Only add if matches found
+
                 # Find line number of first match
                 first_match = matches[0]
                 line_offset = content[:first_match.start()].count('\n')
@@ -658,8 +703,7 @@ def find_references(symbol_id: str) -> dict:
     return {
         "symbol": resolved_id,
         "name": target_name,
-        "ref_count": target_symbol.get("ref_count", 0),
-        "total": len(references),
+        "total": len(references),  # Unique callers (deduped across projects)
         "confidence_breakdown": confidence_counts,
         "by_project": by_project,
         "references": references,

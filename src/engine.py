@@ -464,58 +464,67 @@ class IndexEngine:
                 return parts[1]
         return ""
 
-    # 太通用的名稱，不計入引用追蹤
-    GENERIC_NAMES = {
-        # 內建/常用
-        'module', 'api', 'data', 'result', 'response', 'request', 'error',
-        'value', 'key', 'item', 'items', 'list', 'map', 'set', 'get',
-        'check', 'run', 'call', 'init', 'load', 'save', 'read', 'write',
-        'start', 'stop', 'open', 'close', 'add', 'remove', 'delete', 'update',
-        'create', 'find', 'search', 'filter', 'sort', 'parse', 'format',
-        'log', 'print', 'debug', 'info', 'warn', 'error',
+    # 語言內建名稱，不計入引用追蹤（因為無法追蹤到定義）
+    BUILTIN_NAMES = {
         # Python 內建
         'str', 'int', 'float', 'bool', 'dict', 'list', 'tuple', 'set',
         'len', 'range', 'type', 'isinstance', 'hasattr', 'getattr', 'setattr',
-        'open', 'file', 'path', 'join', 'split', 'strip', 'replace',
+        'open', 'print', 'input', 'format', 'sorted', 'filter', 'map', 'zip',
+        'min', 'max', 'sum', 'abs', 'round', 'enumerate', 'reversed',
         # JS 內建
         'console', 'window', 'document', 'Array', 'Object', 'String', 'Number',
         'JSON', 'Math', 'Date', 'Promise', 'fetch', 'setTimeout', 'setInterval',
-        # Vue/React
-        'ref', 'reactive', 'computed', 'watch', 'onMounted', 'onUnmounted',
-        'useState', 'useEffect', 'useCallback', 'useMemo', 'props', 'emit',
+        'parseInt', 'parseFloat', 'isNaN', 'isFinite', 'encodeURI', 'decodeURI',
+        # Vue/React 內建 hooks
+        'ref', 'reactive', 'computed', 'watch', 'watchEffect',
+        'onMounted', 'onUnmounted', 'onBeforeMount', 'onBeforeUnmount',
+        'useState', 'useEffect', 'useCallback', 'useMemo', 'useRef', 'useContext',
+        'defineProps', 'defineEmits', 'defineExpose',
     }
+
+    # 追蹤的依賴類型（不只是 calls）
+    TRACKED_DEP_TYPES = {'calls', 'extends', 'implements', 'uses'}
 
     def _build_reverse_index(self):
         """
         建立反向索引：symbol_id -> 被誰引用
 
         改進版：
-        - 只計算有 resolved_target 的依賴
-        - 過濾掉太通用的名稱
-        - 不再用名稱模糊匹配
+        - 追蹤多種依賴類型（calls, extends, implements, uses）
+        - 只過濾語言內建名稱
+        - 按專案去重（避免 fork 造成重複計算）
         """
         reverse_index = {}  # symbol_id -> [caller_ids]
 
         for dep_id, dep in self.index.dependencies.items():
-            if dep.dep_type.value != "calls":
+            # 追蹤多種依賴類型
+            if dep.dep_type.value not in self.TRACKED_DEP_TYPES:
                 continue
 
-            # 只使用已解析的 target
+            # 取得 target（優先使用 resolved，否則用原始 target）
             resolved = dep.metadata.get("resolved_target")
+
+            # 對於 extends/implements，直接使用 target_id
+            if not resolved and dep.dep_type.value in ('extends', 'implements'):
+                # 嘗試從 name_to_ids 解析
+                target_name = dep.target_id
+                for sid, sym in self.index.symbols.items():
+                    if sym.name == target_name:
+                        resolved = sid
+                        break
+
             if not resolved:
                 continue
 
-            # 檢查 target symbol 是否存在且不是通用名稱
+            # 檢查 target symbol 是否存在
             target_symbol = self.index.symbols.get(resolved)
             if not target_symbol:
                 continue
 
             target_name = target_symbol.name.split('.')[-1]  # 取最後一部分
-            if target_name.lower() in self.GENERIC_NAMES:
-                continue
 
-            # 名稱太短也跳過
-            if len(target_name) < 4:
+            # 只過濾語言內建（這些無法追蹤到定義）
+            if target_name.lower() in self.BUILTIN_NAMES:
                 continue
 
             source = dep.source_id
@@ -529,9 +538,18 @@ class IndexEngine:
         # 儲存反向索引
         self.index.reverse_index = reverse_index
 
-        # 計算每個 symbol 的引用次數（只計算在 reverse_index 中的）
+        # 計算每個 symbol 的引用次數
+        # 按專案路徑去重（避免 fork 重複計算）
         for sid, symbol in self.index.symbols.items():
-            symbol.reference_count = len(reverse_index.get(sid, []))
+            callers = reverse_index.get(sid, [])
+            # 提取唯一的檔案路徑（去掉專案前綴）
+            unique_paths = set()
+            for caller_id in callers:
+                parts = caller_id.split(":", 2)
+                if len(parts) >= 2:
+                    # 用 path:type:name 作為唯一標識
+                    unique_paths.add(":".join(parts[1:]))
+            symbol.reference_count = len(unique_paths)
 
     def _save_index(self, separate_content: bool = True):
         """
