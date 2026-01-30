@@ -882,10 +882,27 @@ def dependency_graph(
                         "type": imp["type"],
                     })
 
-    # Collect dependents (what depends on target)
+    # Collect dependents (what depends on target) - use reverse_index for accuracy
     if direction in ("both", "dependents"):
         seen_dependents = set()
         for path in target_paths:
+            # First, use reverse_index (more accurate, includes 'uses' dependencies)
+            for sid, callers in reverse_index.items():
+                if ":" in sid:
+                    sym_path = sid.split(":")[1]
+                    if sym_path == path:
+                        for caller in callers:
+                            if ":" in caller:
+                                caller_path = caller.split(":")[1]
+                                if caller_path not in seen_dependents and caller_path not in target_paths:
+                                    seen_dependents.add(caller_path)
+                                    result["dependents"].append({
+                                        "from": caller_path,
+                                        "to": path,
+                                        "type": "calls",  # reverse_index doesn't track dep type
+                                    })
+
+            # Fallback: also check dependents_map for additional deps
             for dep in dependents_map.get(path, []):
                 source = dep["source"]
                 if source not in seen_dependents and source not in target_paths:
@@ -1192,18 +1209,74 @@ def find_dead_code(
     index = load_index()
     symbols = index.get("symbols", {})
     reverse_index = index.get("reverse_index", {})
+    dependencies = index.get("dependencies", {})
+
+    # 建立被引用的名稱集合
+    referenced_names = set()
+    imported_files = set()  # 被導入的文件
+    referenced_classes = set()  # 被引用的類名（其方法不算死代碼）
+
+    for dep_id, dep in dependencies.items():
+        dep_type = dep.get("type", "")
+
+        if dep_type == "imports":
+            # 收集所有被導入的名稱
+            names = dep.get("metadata", {}).get("names", [])
+            for name in names:
+                referenced_names.add(name)
+                # 如果名稱首字母大寫，可能是類名
+                if name and name[0].isupper():
+                    referenced_classes.add(name)
+            # 收集被導入的模塊路徑
+            target = dep.get("target", "")
+            if target:
+                imported_files.add(target)
+                basename = target.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+                imported_files.add(basename)
+                # 對於 Python 模塊路徑（如 src.pro.meta.multi_pass_refiner）
+                # 也加入最後一個部分
+                if "." in target:
+                    last_part = target.rsplit(".", 1)[-1]
+                    imported_files.add(last_part)
+
+        elif dep_type == "calls":
+            # 收集被調用的名稱（未 resolve 的）
+            target = dep.get("target", "")
+            if target and not target.startswith("__"):
+                referenced_names.add(target)
+                # 也加入各個部分（處理 obj.method 的情況）
+                parts = target.split(".")
+                for part in parts:
+                    if part and len(part) > 2:
+                        referenced_names.add(part)
+                        # 首字母大寫的部分可能是類名
+                        if part[0].isupper():
+                            referenced_classes.add(part)
 
     dead_code = []
 
     # 應該被引用的類型（排除 file, variable 等）
     should_be_referenced = {"function", "method", "composable", "component", "class"}
 
-    # 入口點類型（不需要被引用）
+    # 入口點模式（不需要被引用）
     entry_point_patterns = [
         "main", "index", "app", "App", "Main",
         "__init__", "setup", "teardown",
         "test_", "Test", "_test",
+        "register", "init", "configure",
+        "handle", "route", "endpoint",
+        "do_GET", "do_POST", "do_PUT", "do_DELETE",  # HTTP handlers
+        "do_HEAD", "do_OPTIONS", "do_PATCH",
     ]
+
+    # Vue/React 生命週期和特殊方法
+    lifecycle_methods = {
+        "created", "mounted", "updated", "destroyed",
+        "beforeCreate", "beforeMount", "beforeUpdate", "beforeDestroy",
+        "onMounted", "onUnmounted", "onUpdated",
+        "componentDidMount", "componentWillUnmount", "render",
+        "setup", "data", "computed", "methods", "watch",
+    }
 
     for sym_id, sym in symbols.items():
         sym_type = sym.get("type", "")
@@ -1229,11 +1302,61 @@ def find_dead_code(
         if is_entry_point:
             continue
 
-        # 跳過導出的符號（可能被外部使用）
+        # 跳過生命週期方法
+        if sym_name in lifecycle_methods:
+            continue
+
+        # 跳過 Vue 組件內的函數（可能被模板 @click 等使用，難以追蹤）
+        if sym_type == "function" and sym_path.endswith(".vue"):
+            continue
+
+        # 跳過導出的符號
         if sym.get("exports"):
             continue
 
-        # 檢查是否有引用
+        # 跳過私有方法（以 _ 開頭但不是 __）
+        if sym_name.startswith("_") and not sym_name.startswith("__"):
+            continue
+
+        # 檢查是否被引用（導入或調用）
+        if sym_name in referenced_names:
+            continue
+
+        # 對於方法，也檢查方法名本身（不帶類名）
+        if sym_type == "method" and "." in sym_name:
+            method_only = sym_name.split(".")[-1]
+            if method_only in referenced_names:
+                continue
+            # 如果類名被引用，方法也不算死代碼
+            class_name = sym_name.split(".")[0]
+            if class_name in referenced_classes or class_name in referenced_names:
+                continue
+
+        # 對於類，如果類名被引用則不是死代碼
+        if sym_type == "class" and sym_name in referenced_classes:
+            continue
+
+        # 檢查文件是否被導入（對於類/組件）
+        file_basename = sym_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        if file_basename in imported_files or sym_path in imported_files:
+            continue
+
+        # 對於 JS/TS 類和組件，檢查文件名是否與類名匹配並被導入
+        # 例如 OutputRendererPlugin.js 定義了 OutputRendererPlugin
+        if sym_type in ("class", "component") and file_basename == sym_name:
+            # 檢查是否有任何導入指向這個文件路徑
+            is_imported = False
+            for dep in dependencies.values():
+                if dep.get("type") == "imports":
+                    target = dep.get("target", "")
+                    # 檢查相對路徑導入（如 ./renderers/OutputRendererPlugin）
+                    if sym_name in target or file_basename in target:
+                        is_imported = True
+                        break
+            if is_imported:
+                continue
+
+        # 檢查 reverse_index
         ref_count = sym.get("ref_count", 0)
         callers = reverse_index.get(sym_id, [])
 

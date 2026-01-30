@@ -513,6 +513,25 @@ class IndexEngine:
                         resolved = sid
                         break
 
+            # 對於 uses 類型，嘗試從 target_id 解析
+            # target_id 格式如：@/composables/useToast:composable:useToast
+            # 或：../composables/useToast:composable:useToast
+            if not resolved and dep.dep_type.value == 'uses':
+                target = dep.target_id
+                if ':' in target:
+                    # 提取 type:name 部分
+                    parts = target.split(':')
+                    if len(parts) >= 3:
+                        sym_type = parts[-2]
+                        sym_name = parts[-1]
+                        # 在 symbols 中查找匹配的 symbol
+                        for sid, sym in self.index.symbols.items():
+                            if (sym.name == sym_name and
+                                sym.symbol_type.value == sym_type and
+                                sid.startswith(self.project_name + ":")):
+                                resolved = sid
+                                break
+
             if not resolved:
                 continue
 
