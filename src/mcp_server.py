@@ -305,16 +305,65 @@ def impact_analysis(symbol_id: str) -> dict:
     影響分析
 
     修改某個 symbol 會影響哪些地方
+    使用 reverse_index 進行準確查詢
     """
     index = load_index()
+    symbols = index.get("symbols", {})
+    reverse_index = index.get("reverse_index", {})
     dependencies = index.get("dependencies", {})
-    affected = []
 
-    # 反向查詢
+    # Resolve symbol_id if partial
+    resolved_id = symbol_id
+    if symbol_id not in symbols:
+        for sid, sym in symbols.items():
+            if sym.get("name") == symbol_id:
+                if sym.get("type") in ("composable", "function", "class"):
+                    resolved_id = sid
+                    break
+        else:
+            for sid in symbols:
+                if symbol_id in sid:
+                    resolved_id = sid
+                    break
+
+    affected = []
+    seen_paths = set()  # Dedup across projects
+
+    def get_basename_key(source_id: str) -> str:
+        parts = source_id.split(":")
+        if len(parts) >= 4:
+            basename = parts[1].rsplit("/", 1)[-1]
+            return f"{basename}:{parts[2]}:{parts[3]}"
+        return source_id
+
+    # Method 1: Use reverse_index (most accurate)
+    if resolved_id in reverse_index:
+        for caller_id in reverse_index[resolved_id]:
+            dedup_key = get_basename_key(caller_id)
+            if dedup_key in seen_paths:
+                continue
+            seen_paths.add(dedup_key)
+
+            caller_symbol = symbols.get(caller_id, {})
+            affected.append({
+                "id": caller_id,
+                "path": caller_symbol.get("path", ""),
+                "name": caller_symbol.get("name", ""),
+                "type": caller_symbol.get("type", ""),
+                "reason": "直接調用",
+            })
+
+    # Method 2: Check resolved_target in dependencies
     for dep_id, dep in dependencies.items():
-        if dep.get("target") == symbol_id or symbol_id in dep.get("target", ""):
+        resolved_target = dep.get("metadata", {}).get("resolved_target", "")
+        if resolved_target == resolved_id:
             source_id = dep.get("source", "")
-            source_symbol = index.get("symbols", {}).get(source_id, {})
+            dedup_key = get_basename_key(source_id)
+            if dedup_key in seen_paths:
+                continue
+            seen_paths.add(dedup_key)
+
+            source_symbol = symbols.get(source_id, {})
             affected.append({
                 "id": source_id,
                 "path": source_symbol.get("path", ""),
@@ -329,14 +378,18 @@ def impact_analysis(symbol_id: str) -> dict:
     elif len(affected) <= 3:
         warning = f"修改會影響 {len(affected)} 個地方"
         suggestion = "影響範圍較小，建議逐一檢查這些調用處。"
+    elif len(affected) <= 10:
+        warning = f"⚠️ 修改會影響 {len(affected)} 個地方"
+        suggestion = "影響範圍中等，建議仔細評估。"
     else:
         warning = f"⚠️ 修改會影響 {len(affected)} 個地方！"
-        suggestion = "影響範圍較大，建議謹慎修改。"
+        suggestion = "影響範圍較大，建議謹慎修改並做好測試。"
 
     return {
-        "symbol": symbol_id,
+        "symbol": resolved_id,
         "affected_count": len(affected),
-        "affected": affected,
+        "affected": affected[:20],  # Limit to top 20
+        "has_more": len(affected) > 20,
         "warning": warning,
         "suggestion": suggestion,
     }
