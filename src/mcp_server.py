@@ -18,6 +18,7 @@ Claude Code config (~/.claude/mcp_servers.json):
 }
 """
 
+import gzip
 import json
 import sys
 from pathlib import Path
@@ -41,16 +42,35 @@ _content_loaded: bool = False
 
 
 def load_project_map() -> dict:
+    # Try gzip first, fallback to plain JSON
+    gz_path = INDEX_DIR / "PROJECT_MAP.json.gz"
+    if gz_path.exists():
+        with gzip.open(gz_path, 'rt', encoding='utf-8') as f:
+            return json.load(f)
     path = INDEX_DIR / "PROJECT_MAP.json"
     if path.exists():
         return json.loads(path.read_text())
     return {}
 
 
+# Cache for index (loaded once)
+_index_cache: dict = None
+
 def load_index() -> dict:
+    global _index_cache
+    if _index_cache is not None:
+        return _index_cache
+
+    # Try gzip first, fallback to plain JSON
+    gz_path = INDEX_DIR / "index.json.gz"
+    if gz_path.exists():
+        with gzip.open(gz_path, 'rt', encoding='utf-8') as f:
+            _index_cache = json.load(f)
+            return _index_cache
     path = INDEX_DIR / "index.json"
     if path.exists():
-        return json.loads(path.read_text())
+        _index_cache = json.loads(path.read_text())
+        return _index_cache
     return {}
 
 

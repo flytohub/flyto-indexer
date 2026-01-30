@@ -9,6 +9,7 @@ Usage:
     python index_all.py --full             # Force full rebuild (no incremental)
 """
 
+import gzip
 import json
 import sys
 import yaml
@@ -392,13 +393,16 @@ def main():
     combined_index["symbols"] = compact_symbols
     combined_index["has_content_file"] = True
 
-    index_file = output_dir / "index.json"
-    index_file.write_text(json.dumps(combined_index, indent=2, ensure_ascii=False))
-    print(f"  [ok] index.json ({index_file.stat().st_size // 1024} KB)")
+    # Save as gzip for smaller size
+    index_file = output_dir / "index.json.gz"
+    with gzip.open(index_file, 'wt', encoding='utf-8') as f:
+        json.dump(combined_index, f, ensure_ascii=False)
+    print(f"  [ok] index.json.gz ({index_file.stat().st_size // 1024} KB)")
 
-    map_file = output_dir / "PROJECT_MAP.json"
-    map_file.write_text(json.dumps(combined_map, indent=2, ensure_ascii=False))
-    print(f"  [ok] PROJECT_MAP.json ({map_file.stat().st_size // 1024} KB)")
+    map_file = output_dir / "PROJECT_MAP.json.gz"
+    with gzip.open(map_file, 'wt', encoding='utf-8') as f:
+        json.dump(combined_map, f, ensure_ascii=False)
+    print(f"  [ok] PROJECT_MAP.json.gz ({map_file.stat().st_size // 1024} KB)")
 
     # Save workspace manifest for next incremental run
     save_workspace_manifest(output_dir, new_manifest)
