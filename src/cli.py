@@ -6,8 +6,6 @@ Usage:
     flyto-index impact <symbol_id> --path <project_path>
     flyto-index context --path <project_path> [--query <query>]
     flyto-index outline <path>
-    flyto-index sync <path> [--full]
-    flyto-index search <query> --path <project_path>
 """
 
 import argparse
@@ -48,20 +46,6 @@ def main():
     outline_parser.add_argument("path", help="Project root path")
     outline_parser.add_argument("--name", help="Project name")
 
-    # sync 命令
-    sync_parser = subparsers.add_parser("sync", help="Sync index to Qdrant vector database")
-    sync_parser.add_argument("path", help="Project root path")
-    sync_parser.add_argument("--full", action="store_true", help="Full sync (not incremental)")
-    sync_parser.add_argument("--name", help="Project name")
-
-    # search 命令
-    search_parser = subparsers.add_parser("search", help="Semantic search in vector database")
-    search_parser.add_argument("query", help="Search query")
-    search_parser.add_argument("--path", required=True, help="Project root path")
-    search_parser.add_argument("--limit", type=int, default=10, help="Max results")
-    search_parser.add_argument("--type", help="Filter by symbol type")
-    search_parser.add_argument("--threshold", type=float, default=0.5, help="Score threshold")
-
     args = parser.parse_args()
 
     if not args.command:
@@ -77,10 +61,6 @@ def main():
             result = cmd_context(args)
         elif args.command == "outline":
             result = cmd_outline(args)
-        elif args.command == "sync":
-            result = cmd_sync(args)
-        elif args.command == "search":
-            result = cmd_search(args)
         else:
             parser.print_help()
             return
@@ -179,59 +159,6 @@ def cmd_outline(args):
 
     engine = IndexEngine(project_name, project_path)
     return engine.outline()
-
-
-def cmd_sync(args):
-    """執行 sync 命令 - 同步到 Qdrant"""
-    import sys
-    import os
-    src_path = Path(__file__).parent
-    if str(src_path) not in sys.path:
-        sys.path.insert(0, str(src_path))
-    os.chdir(src_path)
-
-    from store.sync import sync_index_to_qdrant
-
-    project_path = Path(args.path).resolve()
-    index_file = project_path / ".flyto-index" / "index.json"
-    project_name = args.name or project_path.name
-
-    if not index_file.exists():
-        return {"ok": False, "error": f"Index not found. Run 'flyto-index scan {args.path}' first."}
-
-    result = sync_index_to_qdrant(
-        index_file=index_file,
-        project_name=project_name,
-        incremental=not args.full,
-        show_progress=True,
-    )
-
-    return result
-
-
-def cmd_search(args):
-    """執行 search 命令 - 語義搜尋"""
-    import sys
-    import os
-    src_path = Path(__file__).parent
-    if str(src_path) not in sys.path:
-        sys.path.insert(0, str(src_path))
-    os.chdir(src_path)
-
-    from store.sync import SyncManager
-
-    project_path = Path(args.path).resolve()
-    project_name = project_path.name
-
-    sync_manager = SyncManager(project_name)
-    result = sync_manager.search(
-        query=args.query,
-        limit=args.limit,
-        filter_type=args.type,
-        score_threshold=args.threshold,
-    )
-
-    return result
 
 
 if __name__ == "__main__":

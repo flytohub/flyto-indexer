@@ -102,6 +102,18 @@ class VueScanner(BaseScanner):
                 func_symbol.compute_hash()
                 symbols.append(func_symbol)
 
+            # 提取 calls（函數呼叫）
+            calls = self._extract_calls(script_content, script_start)
+            for call in calls:
+                dep = Dependency(
+                    source_id=comp_symbol.id,
+                    target_id=call["name"],  # Raw call name, resolved later
+                    dep_type=DependencyType.CALLS,
+                    source_line=call["line"],
+                    metadata={"raw_call": True},
+                )
+                dependencies.append(dep)
+
             # 提取 defineProps/defineEmits
             props_emits = self._extract_props_emits(script_content)
             comp_symbol.metadata = {
@@ -246,6 +258,61 @@ class VueScanner(BaseScanner):
             result["emits"] = emits
 
         return result
+
+    def _extract_calls(self, script: str, offset: int) -> list[dict]:
+        """
+        提取函數呼叫
+
+        Args:
+            script: Script content
+            offset: Line offset (script start line)
+
+        Returns:
+            List of dicts with 'name' and 'line' keys
+        """
+        calls = []
+        seen = set()
+
+        # Keywords to skip
+        skip_keywords = {
+            'if', 'for', 'while', 'switch', 'catch', 'function', 'return',
+            'new', 'typeof', 'instanceof', 'delete', 'void', 'throw',
+            'async', 'await', 'import', 'export', 'from', 'class',
+            'const', 'let', 'var', 'else', 'try', 'finally',
+        }
+
+        # Skip common built-ins
+        skip_builtins = {
+            'console', 'Math', 'JSON', 'Object', 'Array', 'String',
+            'Number', 'Boolean', 'Date', 'Promise', 'Error',
+        }
+
+        # Match function calls
+        pattern = r'(\b[a-zA-Z_$][\w$]*(?:\.[a-zA-Z_$][\w$]*)*)\s*\('
+
+        for match in re.finditer(pattern, script):
+            name = match.group(1)
+            rel_line = script[:match.start()].count('\n') + 1
+            line = offset + rel_line
+
+            first_part = name.split('.')[0]
+            if first_part in skip_keywords or first_part in skip_builtins:
+                continue
+
+            # Skip if inside string (simple check)
+            before = script[max(0, match.start()-50):match.start()]
+            if before.count('"') % 2 == 1 or before.count("'") % 2 == 1:
+                continue
+
+            key = (name, line)
+            if key not in seen:
+                seen.add(key)
+                calls.append({
+                    "name": name,
+                    "line": line,
+                })
+
+        return calls
 
     def _generate_summary(
         self,

@@ -24,20 +24,9 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
 ]
 
-dependencies = [
-    "requests>=2.28.0",  # HTTP 請求（Ollama）
-]
+dependencies = []
 
 [project.optional-dependencies]
-vector = [
-    "qdrant-client>=1.7.0",
-    "openai>=1.0.0",
-]
-full = [
-    "qdrant-client>=1.7.0",
-    "openai>=1.0.0",
-    "tqdm>=4.64.0",
-]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",

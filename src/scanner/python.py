@@ -22,6 +22,7 @@ class PythonScanner(BaseScanner):
     - classes（含 methods）
     - functions
     - imports
+    - calls（函數呼叫）
     - 變數（module level）
     """
 
@@ -40,16 +41,29 @@ class PythonScanner(BaseScanner):
 
         lines = content.splitlines()
         rel_path = str(file_path)
+        file_source_id = f"{self.project}:{rel_path}:file:{file_path.stem}"
 
         # 提取 imports（建立 dependencies）
         imports = self._extract_imports(tree)
         for imp in imports:
             dep = Dependency(
-                source_id=f"{self.project}:{rel_path}:file:{file_path.stem}",
+                source_id=file_source_id,
                 target_id=imp["module"],  # 會在後處理時解析
                 dep_type=DependencyType.IMPORTS,
                 source_line=imp["line"],
                 metadata={"names": imp["names"]},
+            )
+            dependencies.append(dep)
+
+        # 提取 calls（函數呼叫）
+        calls = self._extract_calls(tree)
+        for call in calls:
+            dep = Dependency(
+                source_id=file_source_id,
+                target_id=call["name"],  # Raw call name, resolved later
+                dep_type=DependencyType.CALLS,
+                source_line=call["line"],
+                metadata={"raw_call": True},
             )
             dependencies.append(dep)
 
@@ -234,3 +248,63 @@ class PythonScanner(BaseScanner):
             if item is node:
                 return True
         return False
+
+    def _extract_calls(self, tree: ast.AST) -> list[dict]:
+        """
+        提取函數/方法呼叫
+
+        Returns:
+            List of dicts with 'name' and 'line' keys
+        """
+        calls = []
+        seen = set()  # Avoid duplicates for same call on same line
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                name = self._get_call_name(node)
+                if name:
+                    key = (name, node.lineno)
+                    if key not in seen:
+                        seen.add(key)
+                        calls.append({
+                            "name": name,
+                            "line": node.lineno,
+                        })
+
+        return calls
+
+    def _get_call_name(self, node: ast.Call) -> Optional[str]:
+        """
+        從 ast.Call 節點提取呼叫名稱
+
+        Handles:
+        - foo() → "foo"
+        - obj.method() → "obj.method"
+        - module.Class.method() → "module.Class.method"
+        - Class() → "Class"
+        """
+        func = node.func
+
+        if isinstance(func, ast.Name):
+            # Simple function call: foo()
+            return func.id
+
+        elif isinstance(func, ast.Attribute):
+            # Method/attribute call: obj.method()
+            parts = []
+            current = func
+
+            while isinstance(current, ast.Attribute):
+                parts.append(current.attr)
+                current = current.value
+
+            if isinstance(current, ast.Name):
+                parts.append(current.id)
+            else:
+                # Complex expression like foo().bar(), skip
+                return None
+
+            parts.reverse()
+            return ".".join(parts)
+
+        return None

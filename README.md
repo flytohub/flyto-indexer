@@ -1,8 +1,67 @@
 # Flyto Indexer
 
-**程式碼審計 + 智能索引系統**
+**程式碼品質分析工具**
 
-讓 AI 精準定位、改了會影響什麼一目了然。
+找出真正需要關注的問題：複雜函數、缺少測試的模組。
+
+## 程式碼品質分析（最實用）
+
+### 複雜度分析 - 找出過度複雜的函數
+
+```bash
+python examples/test_quality.py
+```
+
+分析結果範例：
+```
+Files scanned: 625
+Functions analyzed: 2922
+Complex functions: 369
+
+COMPLEX FUNCTIONS (top issues):
+  src/core/modules/registry/decorators.py:140
+  Function: register_module()
+  Lines: 489, Depth: 6, Params: 66, Branches: 16
+  Issues: 太長 (489 行), 參數太多 (66 個)
+```
+
+### 測試覆蓋分析 - 找出沒有測試的模組
+
+```
+Test Coverage Analysis:
+  Modules: 527
+  Covered: 112 (21.3%)
+  Uncovered: 415
+
+UNCOVERED MODULES (need tests):
+[HIGH] 409 modules
+  ! src/core/constants.py
+  ! src/core/enterprise/idp/impl.py
+  ! src/core/enterprise/rpa/impl.py
+```
+
+### Python API
+
+```python
+from analyzer import ComplexityAnalyzer, CoverageAnalyzer
+
+# 複雜度分析
+complexity = ComplexityAnalyzer(project_path)
+report = complexity.analyze()
+for func in report.complex_functions[:10]:
+    print(f"{func.file_path}:{func.line_start} - {func.name}()")
+    print(f"  Issues: {', '.join(func.issues)}")
+
+# 測試覆蓋分析
+coverage = CoverageAnalyzer(project_path)
+report = coverage.analyze()
+print(f"Coverage: {report.coverage_rate:.1f}%")
+for m in report.uncovered_modules:
+    if m.importance == "high":
+        print(f"  ! {m.path} - {len(m.functions)} functions")
+```
+
+---
 
 ## AI 工具整合
 
@@ -93,9 +152,15 @@ flyto-indexer/
 │   │   ├── l0_outline.py # L0 大綱
 │   │   ├── l1_summary.py # L1 摘要
 │   │   └── l2_chunk.py   # L2 片段
-│   ├── store/             # 存儲層
-│   │   ├── vector.py     # 向量庫（接 Qdrant）
-│   │   └── graph.py      # 關係圖存儲
+│   ├── analyzer/          # 程式碼品質分析
+│   │   ├── complexity.py # 複雜度分析
+│   │   ├── coverage.py   # 測試覆蓋分析
+│   │   ├── duplicates.py # 重複碼偵測
+│   │   ├── api_consistency.py # API 一致性
+│   │   └── security.py   # 安全掃描
+│   ├── mapper/            # 索引生成
+│   │   ├── project_map.py # PROJECT_MAP 生成
+│   │   └── symbol_index.py # Symbol 索引
 │   └── cli.py             # 命令行入口
 ├── config/
 │   └── default.yaml       # 預設配置
@@ -118,61 +183,6 @@ flyto-index outline /path/to/project
 
 # 查詢相關代碼（給 AI 用）
 flyto-index query "儲值頁面的 API 呼叫"
-```
-
-## Qdrant 向量庫整合
-
-### 設定環境變數
-
-```bash
-# 必須（Qdrant Cloud）
-export QDRANT_URL="https://xxx.cloud.qdrant.io:6333"
-export QDRANT_API_KEY="your-api-key"
-
-# 可選（如果沒有本地 Ollama）
-export OPENAI_API_KEY="sk-xxx"
-```
-
-### 同步到 Qdrant
-
-```bash
-# 先掃描專案
-flyto-index scan /path/to/project
-
-# 同步到向量庫（增量）
-flyto-index sync /path/to/project
-
-# 全量同步
-flyto-index sync /path/to/project --full
-```
-
-### 語義搜尋
-
-```bash
-# 搜尋相關代碼
-flyto-index search "儲值頁面的 API 呼叫" --path /path/to/project
-
-# 過濾類型
-flyto-index search "user authentication" --path . --type function
-
-# 調整閾值
-flyto-index search "database query" --path . --threshold 0.6
-```
-
-### Python API
-
-```python
-from flyto_indexer.store import SyncManager
-
-# 同步
-sync = SyncManager("my-project")
-result = sync.sync_symbols(symbols, incremental=True)
-
-# 搜尋
-results = sync.search("API authentication", limit=10)
-for r in results["results"]:
-    print(f"[{r['type']}] {r['name']} ({r['score']})")
-    print(f"  {r['path']}:{r['line']}")
 ```
 
 ## LLM 審計 + AI 工作流程
@@ -294,9 +304,4 @@ jobs:
       - uses: actions/checkout@v4
       - run: pip install flyto-indexer
       - run: flyto-index scan . --incremental
-      - run: flyto-index sync .  # 同步到向量庫
-        env:
-          QDRANT_URL: ${{ secrets.QDRANT_URL }}
-          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```

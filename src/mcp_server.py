@@ -47,57 +47,110 @@ def load_index() -> dict:
     return {}
 
 # 工具實現
-def search_by_keyword(query: str, max_results: int = 10) -> dict:
+def search_by_keyword(
+    query: str,
+    max_results: int = 20,
+    symbol_type: str = None,
+    project: str = None,
+    include_content: bool = False
+) -> dict:
     """
-    關鍵字搜尋
+    跨專案搜尋
 
-    從 PROJECT_MAP 的 keyword_index 和 categories 搜尋相關檔案
+    Args:
+        query: 搜尋關鍵字
+        max_results: 最多返回幾筆
+        symbol_type: 只搜特定類型 (function/class/composable/component/method/interface/type)
+        project: 只搜特定專案 (flyto-core/flyto-cloud/flyto-pro/...)
+        include_content: 是否包含程式碼片段
     """
-    project_map = load_project_map()
+    index = load_index()
     results = []
     query_lower = query.lower()
     query_words = query_lower.split()
 
-    # 搜尋 keyword_index
-    keyword_index = project_map.get("keyword_index", {})
-    for keyword, paths in keyword_index.items():
-        if any(w in keyword or keyword in w for w in query_words):
-            for path in paths:
-                file_info = project_map.get("files", {}).get(path, {})
-                results.append({
-                    "path": path,
-                    "purpose": file_info.get("purpose", ""),
-                    "category": file_info.get("category", ""),
-                    "match_type": "keyword",
-                    "match_value": keyword,
-                })
+    # 搜尋 symbols
+    for symbol_id, symbol in index.get("symbols", {}).items():
+        # 專案篩選
+        sym_project = symbol_id.split(":")[0] if ":" in symbol_id else ""
+        if project and project.lower() not in sym_project.lower():
+            continue
 
-    # 搜尋 categories
-    categories = project_map.get("categories", {})
-    for category, paths in categories.items():
-        if any(w in category or category in w for w in query_words):
-            for path in paths:
-                if not any(r["path"] == path for r in results):
-                    file_info = project_map.get("files", {}).get(path, {})
-                    results.append({
-                        "path": path,
-                        "purpose": file_info.get("purpose", ""),
-                        "category": category,
-                        "match_type": "category",
-                        "match_value": category,
-                    })
+        # 類型篩選
+        sym_type = symbol.get("type", "")
+        if symbol_type and symbol_type.lower() != sym_type.lower():
+            continue
+
+        score = 0
+        match_reason = []
+
+        # 名稱匹配（高權重）
+        name = symbol.get("name", "").lower()
+        if any(w in name for w in query_words):
+            score += 10
+            match_reason.append("name")
+
+        # 精確匹配加分
+        if query_lower == name:
+            score += 20
+
+        # 摘要匹配
+        summary = symbol.get("summary", "").lower()
+        if any(w in summary for w in query_words):
+            score += 5
+            match_reason.append("summary")
+
+        # 內容匹配
+        content = symbol.get("content", "").lower()
+        if any(w in content for w in query_words):
+            score += 1
+            match_reason.append("content")
+
+        if score > 0:
+            result = {
+                "project": sym_project,
+                "path": symbol.get("path", ""),
+                "symbol_id": symbol_id,
+                "name": symbol.get("name", ""),
+                "type": sym_type,
+                "line": symbol.get("start_line", 0),
+                "summary": symbol.get("summary", "")[:150],
+                "score": score,
+                "match": ", ".join(match_reason),
+            }
+            if include_content:
+                # 取前 500 字元的程式碼
+                result["snippet"] = symbol.get("content", "")[:500]
+            results.append(result)
+
+    # 排序
+    results.sort(key=lambda x: -x.get("score", 0))
 
     # 去重
     seen = set()
     unique = []
     for r in results:
-        if r["path"] not in seen:
-            seen.add(r["path"])
+        if r["symbol_id"] not in seen:
+            seen.add(r["symbol_id"])
             unique.append(r)
+
+    # 按專案分組
+    by_project = {}
+    for r in unique[:max_results]:
+        proj = r["project"]
+        if proj not in by_project:
+            by_project[proj] = []
+        by_project[proj].append(r)
 
     return {
         "query": query,
+        "filters": {
+            "symbol_type": symbol_type,
+            "project": project,
+        },
         "total": len(unique),
+        "showing": min(len(unique), max_results),
+        "by_project": by_project,
         "results": unique[:max_results],
     }
 
@@ -225,16 +278,644 @@ def list_apis() -> dict:
     }
 
 
+def list_projects() -> dict:
+    """
+    列出所有已索引的專案和統計
+    """
+    index = load_index()
+    projects = index.get("projects", [])
+
+    # 統計每個專案的 symbols
+    stats = {}
+    for sid, sym in index.get("symbols", {}).items():
+        project = sid.split(":")[0] if ":" in sid else "unknown"
+        if project not in stats:
+            stats[project] = {"files": set(), "symbols": 0, "by_type": {}}
+        stats[project]["files"].add(sym.get("path", ""))
+        stats[project]["symbols"] += 1
+        sym_type = sym.get("type", "unknown")
+        stats[project]["by_type"][sym_type] = stats[project]["by_type"].get(sym_type, 0) + 1
+
+    result = []
+    for proj in projects:
+        s = stats.get(proj, {"files": set(), "symbols": 0, "by_type": {}})
+        result.append({
+            "project": proj,
+            "files": len(s["files"]),
+            "symbols": s["symbols"],
+            "by_type": s["by_type"],
+        })
+
+    # 按 symbols 數量排序
+    result.sort(key=lambda x: -x["symbols"])
+
+    return {
+        "total_projects": len(projects),
+        "total_symbols": len(index.get("symbols", {})),
+        "projects": result,
+    }
+
+
+def get_symbol_content(symbol_id: str) -> dict:
+    """
+    取得 symbol 的完整程式碼
+    """
+    index = load_index()
+    symbol = index.get("symbols", {}).get(symbol_id)
+
+    if not symbol:
+        # 嘗試模糊匹配
+        for sid, sym in index.get("symbols", {}).items():
+            if symbol_id in sid or sid.endswith(symbol_id):
+                symbol = sym
+                symbol_id = sid
+                break
+
+    if not symbol:
+        return {"error": f"Symbol not found: {symbol_id}"}
+
+    return {
+        "symbol_id": symbol_id,
+        "project": symbol_id.split(":")[0] if ":" in symbol_id else "",
+        "path": symbol.get("path", ""),
+        "name": symbol.get("name", ""),
+        "type": symbol.get("type", ""),
+        "line_start": symbol.get("start_line", 0),
+        "line_end": symbol.get("end_line", 0),
+        "summary": symbol.get("summary", ""),
+        "content": symbol.get("content", ""),
+    }
+
+
+def find_references(symbol_id: str) -> dict:
+    """
+    Find all places that reference this symbol.
+
+    Searches for:
+    1. CALLS dependencies pointing to this symbol
+    2. Content matches in other symbols
+    """
+    import re
+
+    index = load_index()
+    symbols = index.get("symbols", {})
+    dependencies = index.get("dependencies", {})
+
+    # Resolve symbol_id if partial
+    resolved_id = symbol_id
+    if symbol_id not in symbols:
+        # Try exact name match first
+        name_matches = []
+        partial_matches = []
+        for sid, sym in symbols.items():
+            sym_name = sym.get("name", "")
+            if sym_name == symbol_id:
+                name_matches.append(sid)
+            elif symbol_id in sid or sid.endswith(symbol_id):
+                partial_matches.append(sid)
+
+        if name_matches:
+            # Prefer composables/functions over methods
+            for sid in name_matches:
+                sym = symbols[sid]
+                if sym.get("type") in ("composable", "function"):
+                    resolved_id = sid
+                    break
+            else:
+                resolved_id = name_matches[0]
+        elif partial_matches:
+            resolved_id = partial_matches[0]
+
+    target_symbol = symbols.get(resolved_id)
+    if not target_symbol:
+        return {"error": f"Symbol not found: {symbol_id}"}
+
+    target_name = target_symbol.get("name", "")
+    target_path = target_symbol.get("path", "")
+    references = []
+    seen_keys = set()  # Use (path, line) as key to avoid duplicates
+
+    def extract_path_from_source_id(source_id: str) -> str:
+        """Extract file path from source_id like project:path:type:name"""
+        parts = source_id.split(":")
+        if len(parts) >= 2:
+            return parts[1]
+        return ""
+
+    # Method 1: Search CALLS dependencies
+    for dep_id, dep in dependencies.items():
+        dep_type = dep.get("type", "")
+        target = dep.get("target", "")
+
+        # Check if this dependency targets our symbol
+        if dep_type == "calls":
+            # Match by symbol_id or by name
+            if target == resolved_id or target == target_name:
+                source_id = dep.get("source", "")
+                source_symbol = symbols.get(source_id, {})
+
+                # Get path from symbol or extract from source_id
+                from_path = source_symbol.get("path", "") or extract_path_from_source_id(source_id)
+
+                # Skip self-references (same file)
+                if from_path == target_path:
+                    continue
+
+                line = dep.get("line", 0)
+                key = (from_path, line)
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+
+                references.append({
+                    "type": "call",
+                    "from_symbol": source_id,
+                    "from_path": from_path,
+                    "from_name": source_symbol.get("name", ""),
+                    "line": line,
+                })
+
+    # Method 2: Search content for symbol name usage
+    if target_name and len(target_name) >= 3:  # Avoid short names
+        pattern = rf'\b{re.escape(target_name)}\s*\('
+
+        for sym_id, sym in symbols.items():
+            if sym_id == resolved_id:
+                continue
+
+            sym_path = sym.get("path", "")
+            # Skip same file (self-references)
+            if sym_path == target_path:
+                continue
+
+            content = sym.get("content", "")
+            matches = list(re.finditer(pattern, content))
+
+            if matches:
+                # Find line number of first match
+                first_match = matches[0]
+                line_offset = content[:first_match.start()].count('\n')
+                line = sym.get("start_line", 0) + line_offset
+
+                key = (sym_path, line)
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+
+                references.append({
+                    "type": "usage",
+                    "from_symbol": sym_id,
+                    "from_path": sym_path,
+                    "from_name": sym.get("name", ""),
+                    "line": line,
+                    "occurrences": len(matches),
+                })
+
+    # Sort by path for better readability
+    references.sort(key=lambda x: (x.get("from_path", ""), x.get("line", 0)))
+
+    # Group by project
+    by_project = {}
+    for ref in references:
+        project = ref["from_symbol"].split(":")[0] if ":" in ref["from_symbol"] else "unknown"
+        if project not in by_project:
+            by_project[project] = []
+        by_project[project].append(ref)
+
+    return {
+        "symbol": resolved_id,
+        "name": target_name,
+        "total": len(references),
+        "by_project": by_project,
+        "references": references,
+    }
+
+
+def dependency_graph(
+    file_path: str = None,
+    symbol_id: str = None,
+    project: str = None,
+    direction: str = "both",
+    max_depth: int = 2
+) -> dict:
+    """
+    Get dependency graph for a file, symbol, or project.
+
+    Shows what a module depends on (imports) and what depends on it (dependents).
+    """
+    index = load_index()
+    symbols = index.get("symbols", {})
+    dependencies = index.get("dependencies", {})
+
+    # Build dependency maps
+    imports_map = {}  # source -> [targets]
+    dependents_map = {}  # target -> [sources]
+
+    for dep_id, dep in dependencies.items():
+        source = dep.get("source", "")
+        target = dep.get("target", "")
+        dep_type = dep.get("type", "")
+
+        # Extract file paths
+        source_path = source.split(":")[1] if ":" in source and len(source.split(":")) > 1 else ""
+
+        if source_path:
+            if source_path not in imports_map:
+                imports_map[source_path] = []
+            imports_map[source_path].append({
+                "target": target,
+                "type": dep_type,
+                "line": dep.get("line", 0),
+            })
+
+            # For dependents map, we need to resolve target to a path
+            # If target looks like a module name, try to find it
+            target_path = ""
+            if ":" in target and len(target.split(":")) > 1:
+                target_path = target.split(":")[1]
+
+            if target_path:
+                if target_path not in dependents_map:
+                    dependents_map[target_path] = []
+                dependents_map[target_path].append({
+                    "source": source_path,
+                    "type": dep_type,
+                    "line": dep.get("line", 0),
+                })
+
+    result = {
+        "query": {
+            "file_path": file_path,
+            "symbol_id": symbol_id,
+            "project": project,
+            "direction": direction,
+            "max_depth": max_depth,
+        },
+        "imports": [],
+        "dependents": [],
+        "summary": {},
+    }
+
+    target_paths = set()
+
+    # Determine target paths based on query
+    if file_path:
+        target_paths.add(file_path)
+    elif symbol_id:
+        # Extract path from symbol_id
+        if ":" in symbol_id and len(symbol_id.split(":")) > 1:
+            target_paths.add(symbol_id.split(":")[1])
+    elif project:
+        # Get all paths in project
+        for sid, sym in symbols.items():
+            if sid.startswith(project + ":"):
+                target_paths.add(sym.get("path", ""))
+
+    if not target_paths:
+        return {"error": "No valid target specified. Provide file_path, symbol_id, or project."}
+
+    # Collect imports (what target depends on)
+    if direction in ("both", "imports"):
+        seen_imports = set()
+        for path in target_paths:
+            for imp in imports_map.get(path, []):
+                target = imp["target"]
+                if target not in seen_imports:
+                    seen_imports.add(target)
+                    result["imports"].append({
+                        "from": path,
+                        "to": target,
+                        "type": imp["type"],
+                    })
+
+    # Collect dependents (what depends on target)
+    if direction in ("both", "dependents"):
+        seen_dependents = set()
+        for path in target_paths:
+            for dep in dependents_map.get(path, []):
+                source = dep["source"]
+                if source not in seen_dependents and source not in target_paths:
+                    seen_dependents.add(source)
+                    result["dependents"].append({
+                        "from": source,
+                        "to": path,
+                        "type": dep["type"],
+                    })
+
+    # Generate summary
+    result["summary"] = {
+        "target_files": len(target_paths),
+        "imports_count": len(result["imports"]),
+        "dependents_count": len(result["dependents"]),
+        "import_types": {},
+        "dependent_types": {},
+    }
+
+    for imp in result["imports"]:
+        t = imp["type"]
+        result["summary"]["import_types"][t] = result["summary"]["import_types"].get(t, 0) + 1
+
+    for dep in result["dependents"]:
+        t = dep["type"]
+        result["summary"]["dependent_types"][t] = result["summary"]["dependent_types"].get(t, 0) + 1
+
+    return result
+
+
+def fulltext_search(
+    query: str,
+    search_type: str = "all",
+    project: str = None,
+    max_results: int = 50
+) -> dict:
+    """
+    Full-text search across all indexed code.
+
+    Searches in comments, strings, TODOs, and general content.
+    """
+    import re
+
+    index = load_index()
+    symbols = index.get("symbols", {})
+    results = []
+
+    query_lower = query.lower()
+    query_pattern = re.compile(re.escape(query), re.IGNORECASE)
+
+    for sym_id, sym in symbols.items():
+        # Project filter
+        sym_project = sym_id.split(":")[0] if ":" in sym_id else ""
+        if project and project.lower() not in sym_project.lower():
+            continue
+
+        content = sym.get("content", "")
+        if not content:
+            continue
+
+        matches = []
+
+        # Search based on type
+        if search_type in ("all", "todo"):
+            # Find TODOs, FIXMEs, XXX, HACK, NOTE
+            todo_pattern = r'(?:#|//|/\*|\*)\s*(TODO|FIXME|XXX|HACK|NOTE|BUG)[\s:]+([^\n\r]*)'
+            for m in re.finditer(todo_pattern, content, re.IGNORECASE):
+                if query_lower in m.group(0).lower():
+                    line_num = content[:m.start()].count('\n') + 1
+                    matches.append({
+                        "type": "todo",
+                        "tag": m.group(1).upper(),
+                        "text": m.group(2).strip()[:100],
+                        "line": sym.get("start_line", 0) + line_num - 1,
+                    })
+
+        if search_type in ("all", "comment"):
+            # Find comments containing query
+            # Python comments
+            py_comment = r'#\s*([^\n]*)'
+            for m in re.finditer(py_comment, content):
+                if query_lower in m.group(1).lower():
+                    line_num = content[:m.start()].count('\n') + 1
+                    matches.append({
+                        "type": "comment",
+                        "text": m.group(1).strip()[:100],
+                        "line": sym.get("start_line", 0) + line_num - 1,
+                    })
+
+            # JS/TS single-line comments
+            js_comment = r'//\s*([^\n]*)'
+            for m in re.finditer(js_comment, content):
+                if query_lower in m.group(1).lower():
+                    line_num = content[:m.start()].count('\n') + 1
+                    matches.append({
+                        "type": "comment",
+                        "text": m.group(1).strip()[:100],
+                        "line": sym.get("start_line", 0) + line_num - 1,
+                    })
+
+            # Multi-line comments
+            multi_comment = r'/\*[\s\S]*?\*/'
+            for m in re.finditer(multi_comment, content):
+                if query_lower in m.group(0).lower():
+                    line_num = content[:m.start()].count('\n') + 1
+                    text = m.group(0).replace('/*', '').replace('*/', '').strip()
+                    matches.append({
+                        "type": "comment",
+                        "text": text[:100],
+                        "line": sym.get("start_line", 0) + line_num - 1,
+                    })
+
+        if search_type in ("all", "string"):
+            # Find strings containing query
+            string_patterns = [
+                r'"([^"\\]*(?:\\.[^"\\]*)*)"',  # Double-quoted
+                r"'([^'\\]*(?:\\.[^'\\]*)*)'",  # Single-quoted
+                r'`([^`]*)`',  # Template literals
+            ]
+            for pattern in string_patterns:
+                for m in re.finditer(pattern, content):
+                    if query_lower in m.group(1).lower():
+                        line_num = content[:m.start()].count('\n') + 1
+                        matches.append({
+                            "type": "string",
+                            "text": m.group(1)[:100],
+                            "line": sym.get("start_line", 0) + line_num - 1,
+                        })
+
+        if search_type == "all" and not matches:
+            # General content search if no specific matches
+            for m in query_pattern.finditer(content):
+                line_num = content[:m.start()].count('\n') + 1
+                # Get context around match
+                start = max(0, m.start() - 30)
+                end = min(len(content), m.end() + 30)
+                context = content[start:end].replace('\n', ' ').strip()
+                matches.append({
+                    "type": "content",
+                    "text": context[:100],
+                    "line": sym.get("start_line", 0) + line_num - 1,
+                })
+                break  # Only first match per symbol for general search
+
+        if matches:
+            results.append({
+                "symbol_id": sym_id,
+                "project": sym_project,
+                "path": sym.get("path", ""),
+                "name": sym.get("name", ""),
+                "matches": matches[:5],  # Limit matches per symbol
+            })
+
+    # Sort by project and path
+    results.sort(key=lambda x: (x["project"], x["path"]))
+
+    # Group by project
+    by_project = {}
+    for r in results[:max_results]:
+        proj = r["project"]
+        if proj not in by_project:
+            by_project[proj] = []
+        by_project[proj].append(r)
+
+    # Count match types
+    type_counts = {}
+    for r in results:
+        for m in r.get("matches", []):
+            t = m.get("type", "unknown")
+            type_counts[t] = type_counts.get(t, 0) + 1
+
+    return {
+        "query": query,
+        "search_type": search_type,
+        "project_filter": project,
+        "total": len(results),
+        "showing": min(len(results), max_results),
+        "type_counts": type_counts,
+        "by_project": by_project,
+        "results": results[:max_results],
+    }
+
+
+def check_index_status() -> dict:
+    """
+    Check if the index is stale and needs to be updated.
+
+    Compares file modification times and hashes with indexed data.
+    """
+    import os
+    import hashlib
+    from datetime import datetime
+
+    index = load_index()
+    project_map = load_project_map()
+
+    # Get index metadata
+    index_file = INDEX_DIR / "index.json"
+    if not index_file.exists():
+        return {
+            "status": "missing",
+            "message": "Index does not exist. Run 'python index_all.py' to create it.",
+            "indexed_at": None,
+        }
+
+    index_mtime = datetime.fromtimestamp(index_file.stat().st_mtime)
+    indexed_at = index.get("indexed_at", "")
+
+    # Get project roots from project map
+    projects = index.get("projects", [])
+    project_roots = {
+        "flyto-core": "/Library/其他專案/flytohub/flyto-core",
+        "flyto-pro": "/Library/其他專案/flytohub/flyto-pro",
+        "flyto-cloud": "/Library/其他專案/flytohub/flyto-cloud",
+        "flyto-cloud-dev": "/Library/其他專案/flytohub/flyto-cloud-dev",
+        "flyto-indexer": "/Library/其他專案/flytohub/flyto-indexer",
+        "flyto-i18n": "/Library/其他專案/flytohub/flyto-i18n",
+        "flyto-landing-page": "/Library/其他專案/flytohub/flyto-landing-page",
+        "flyto-modules-pro": "/Library/其他專案/flytohub/flyto-modules-pro",
+        "templates": "/Library/其他專案/flytohub/templates",
+    }
+
+    # Sample check: look at a few files from each project
+    stale_files = []
+    checked_count = 0
+    total_symbols = len(index.get("symbols", {}))
+
+    # Group symbols by project
+    by_project = {}
+    for sym_id, sym in index.get("symbols", {}).items():
+        proj = sym_id.split(":")[0] if ":" in sym_id else ""
+        if proj not in by_project:
+            by_project[proj] = []
+        by_project[proj].append(sym)
+
+    # Check sample files from each project
+    for proj, proj_symbols in by_project.items():
+        if proj not in project_roots:
+            continue
+
+        root = project_roots[proj]
+        if not os.path.exists(root):
+            continue
+
+        # Sample up to 10 files per project
+        checked_paths = set()
+        for sym in proj_symbols[:50]:
+            path = sym.get("path", "")
+            if path in checked_paths:
+                continue
+            checked_paths.add(path)
+
+            full_path = os.path.join(root, path)
+            if not os.path.exists(full_path):
+                stale_files.append({
+                    "project": proj,
+                    "path": path,
+                    "reason": "file_deleted",
+                })
+                continue
+
+            # Check if file was modified after index
+            try:
+                file_mtime = datetime.fromtimestamp(os.path.getmtime(full_path))
+                if file_mtime > index_mtime:
+                    stale_files.append({
+                        "project": proj,
+                        "path": path,
+                        "reason": "modified_after_index",
+                        "file_mtime": file_mtime.isoformat(),
+                    })
+            except OSError:
+                pass
+
+            checked_count += 1
+            if len(checked_paths) >= 10:
+                break
+
+    # Determine status
+    if len(stale_files) == 0:
+        status = "fresh"
+        message = "Index is up to date."
+    elif len(stale_files) <= 5:
+        status = "slightly_stale"
+        message = f"Index has {len(stale_files)} stale files. Consider re-indexing."
+    else:
+        status = "stale"
+        message = f"Index has {len(stale_files)}+ stale files. Re-indexing recommended."
+
+    return {
+        "status": status,
+        "message": message,
+        "indexed_at": indexed_at,
+        "index_file_mtime": index_mtime.isoformat(),
+        "total_symbols": total_symbols,
+        "total_projects": len(projects),
+        "files_checked": checked_count,
+        "stale_files": stale_files[:20],
+        "stale_count": len(stale_files),
+        "recommendation": "Run 'python index_all.py' to update the index." if status != "fresh" else None,
+    }
+
+
 # MCP 工具定義
 TOOLS = [
     {
         "name": "search_code",
-        "description": "搜尋程式碼。輸入關鍵字（中英文皆可），返回相關檔案列表。例如：搜尋「購物車」會找到 Cart.vue, useCart.ts 等。",
+        "description": "跨專案搜尋程式碼。支援關鍵字搜尋、類型篩選、專案篩選。結果按專案分組顯示。",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "搜尋關鍵字，例如：購物車、payment、auth"},
-                "max_results": {"type": "integer", "default": 10, "description": "最多返回幾筆結果"},
+                "query": {"type": "string", "description": "搜尋關鍵字，例如：useModuleSchema、WorkflowCanvas、execute"},
+                "max_results": {"type": "integer", "default": 20, "description": "最多返回幾筆結果"},
+                "symbol_type": {
+                    "type": "string",
+                    "enum": ["function", "class", "method", "composable", "component", "interface", "type"],
+                    "description": "只搜特定類型"
+                },
+                "project": {
+                    "type": "string",
+                    "enum": ["flyto-core", "flyto-pro", "flyto-cloud", "flyto-cloud-dev", "flyto-indexer", "flyto-i18n", "flyto-landing-page", "flyto-modules-pro", "templates"],
+                    "description": "只搜特定專案"
+                },
+                "include_content": {"type": "boolean", "default": False, "description": "是否包含程式碼片段"},
             },
             "required": ["query"],
         },
@@ -288,6 +969,82 @@ TOOLS = [
             "properties": {},
         },
     },
+    {
+        "name": "list_projects",
+        "description": "列出所有已索引的專案，包括檔案數、symbol 數、各類型統計。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "get_symbol_content",
+        "description": "取得 symbol 的完整程式碼。可用於查看函數、類、組件的實作細節。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "symbol_id": {"type": "string", "description": "Symbol ID，例如：flyto-cloud:src/composables/useModuleSchema.js:composable:useModuleSchema"},
+            },
+            "required": ["symbol_id"],
+        },
+    },
+    {
+        "name": "find_references",
+        "description": "找出所有引用此 symbol 的地方。幫助了解函數、組件被哪些地方使用。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "symbol_id": {"type": "string", "description": "Symbol ID，例如：flyto-cloud:src/composables/useModuleSchema.js:composable:useModuleSchema"},
+            },
+            "required": ["symbol_id"],
+        },
+    },
+    {
+        "name": "dependency_graph",
+        "description": "取得模組依賴關係圖。顯示檔案/模組之間的依賴關係（imports 和 dependents）。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "檔案路徑，例如：src/composables/useToast.js"},
+                "symbol_id": {"type": "string", "description": "Symbol ID，會自動提取檔案路徑"},
+                "project": {"type": "string", "description": "專案名稱，顯示整個專案的依賴"},
+                "direction": {
+                    "type": "string",
+                    "enum": ["both", "imports", "dependents"],
+                    "default": "both",
+                    "description": "查詢方向：both=雙向, imports=此檔案依賴什麼, dependents=什麼依賴此檔案"
+                },
+                "max_depth": {"type": "integer", "default": 2, "description": "最大深度"},
+            },
+        },
+    },
+    {
+        "name": "fulltext_search",
+        "description": "全文搜尋：搜尋註解、字串、TODO/FIXME 標記。可用於找出特定的註解或待辦事項。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "搜尋關鍵字"},
+                "search_type": {
+                    "type": "string",
+                    "enum": ["all", "todo", "comment", "string"],
+                    "default": "all",
+                    "description": "搜尋類型：all=全部, todo=TODO/FIXME, comment=註解, string=字串"
+                },
+                "project": {"type": "string", "description": "只搜特定專案"},
+                "max_results": {"type": "integer", "default": 50, "description": "最多返回幾筆"},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "check_index_status",
+        "description": "檢查索引是否過期。比較檔案修改時間，判斷是否需要重新索引。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
 ]
 
 
@@ -316,7 +1073,13 @@ def handle_request(request: dict):
 
         try:
             if tool_name == "search_code":
-                result = search_by_keyword(arguments.get("query", ""), arguments.get("max_results", 10))
+                result = search_by_keyword(
+                    query=arguments.get("query", ""),
+                    max_results=arguments.get("max_results", 20),
+                    symbol_type=arguments.get("symbol_type"),
+                    project=arguments.get("project"),
+                    include_content=arguments.get("include_content", False),
+                )
             elif tool_name == "get_file_info":
                 result = get_file_info(arguments.get("path", ""))
             elif tool_name == "get_file_symbols":
@@ -327,6 +1090,29 @@ def handle_request(request: dict):
                 result = list_categories()
             elif tool_name == "list_apis":
                 result = list_apis()
+            elif tool_name == "list_projects":
+                result = list_projects()
+            elif tool_name == "get_symbol_content":
+                result = get_symbol_content(arguments.get("symbol_id", ""))
+            elif tool_name == "find_references":
+                result = find_references(arguments.get("symbol_id", ""))
+            elif tool_name == "dependency_graph":
+                result = dependency_graph(
+                    file_path=arguments.get("file_path"),
+                    symbol_id=arguments.get("symbol_id"),
+                    project=arguments.get("project"),
+                    direction=arguments.get("direction", "both"),
+                    max_depth=arguments.get("max_depth", 2),
+                )
+            elif tool_name == "fulltext_search":
+                result = fulltext_search(
+                    query=arguments.get("query", ""),
+                    search_type=arguments.get("search_type", "all"),
+                    project=arguments.get("project"),
+                    max_results=arguments.get("max_results", 50),
+                )
+            elif tool_name == "check_index_status":
+                result = check_index_status()
             else:
                 send_error(id, -32601, f"Unknown tool: {tool_name}")
                 return

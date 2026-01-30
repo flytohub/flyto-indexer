@@ -40,14 +40,6 @@ jobs:
           path: .flyto-index/
           retention-days: 7
 
-      # Optional: Push to vector database
-      # - name: Sync to vector DB
-      #   env:
-      #     QDRANT_URL: ${{ secrets.QDRANT_URL }}
-      #     QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
-      #   run: |
-      #     flyto-index sync --push
-
       # Optional: Comment impact analysis on PR
       - name: Analyze PR impact
         if: github.event_name == 'pull_request'

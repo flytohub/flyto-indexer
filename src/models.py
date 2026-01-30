@@ -97,6 +97,7 @@ class Symbol:
             "name": self.name,
             "start_line": self.start_line,
             "end_line": self.end_line,
+            "content": self.content,
             "content_hash": self.content_hash,
             "summary": self.summary,
             "language": self.language,

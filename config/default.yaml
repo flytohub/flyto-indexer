@@ -42,22 +42,6 @@ index:
   # Symbol 摘要最大長度
   summary_max_length: 200
 
-# 向量資料庫設定 (可選)
-vector_store:
-  enabled: false
-  provider: qdrant  # qdrant, pinecone, weaviate
-
-  qdrant:
-    url: ${QDRANT_URL}
-    api_key: ${QDRANT_API_KEY}
-    collection: flyto_code_index
-
-  # 嵌入模型
-  embedding:
-    provider: ollama  # ollama, openai
-    model: nomic-embed-text
-    dimensions: 768
-
 # 影響分析設定
 impact:
   # 最大追溯深度

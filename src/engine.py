@@ -13,7 +13,7 @@ from typing import Optional
 from datetime import datetime
 
 from .models import ProjectIndex, Symbol, Dependency, FileManifest, SymbolType
-from .scanner import PythonScanner, VueScanner, ScanResult
+from .scanner import PythonScanner, VueScanner, TypeScriptScanner, ScanResult
 from .indexer import IncrementalIndexer, scan_directory_hashes, compute_file_hash
 from .context.loader import ContextLoader, L0Context, L1Context, L2Context
 
@@ -42,6 +42,7 @@ class IndexEngine:
         self.scanners = [
             PythonScanner(project_name),
             VueScanner(project_name),
+            TypeScriptScanner(project_name),
         ]
         self.incremental = IncrementalIndexer(self.project_root, self.index_dir)
 
@@ -381,6 +382,7 @@ class IndexEngine:
                 name=sdata["name"],
                 start_line=sdata.get("start_line", 0),
                 end_line=sdata.get("end_line", 0),
+                content=sdata.get("content", ""),
                 content_hash=sdata.get("content_hash", ""),
                 summary=sdata.get("summary", ""),
                 language=sdata.get("language", ""),
