@@ -783,6 +783,9 @@ def dependency_graph(
     imports_map = {}  # source -> [targets]
     dependents_map = {}  # target -> [sources]
 
+    # Also use reverse_index for accurate dependents
+    reverse_index = index.get("reverse_index", {})
+
     for dep_id, dep in dependencies.items():
         source = dep.get("source", "")
         target = dep.get("target", "")
@@ -800,20 +803,19 @@ def dependency_graph(
                 "line": dep.get("line", 0),
             })
 
-            # For dependents map, we need to resolve target to a path
-            # If target looks like a module name, try to find it
-            target_path = ""
-            if ":" in target and len(target.split(":")) > 1:
-                target_path = target.split(":")[1]
-
-            if target_path:
-                if target_path not in dependents_map:
-                    dependents_map[target_path] = []
-                dependents_map[target_path].append({
-                    "source": source_path,
-                    "type": dep_type,
-                    "line": dep.get("line", 0),
-                })
+            # Use resolved_target for accurate dependents mapping
+            resolved_target = dep.get("metadata", {}).get("resolved_target", "")
+            if resolved_target:
+                target_path = resolved_target.split(":")[1] if ":" in resolved_target else ""
+                if target_path:
+                    if target_path not in dependents_map:
+                        dependents_map[target_path] = []
+                    dependents_map[target_path].append({
+                        "source": source_path,
+                        "source_id": source,
+                        "type": dep_type,
+                        "line": dep.get("line", 0),
+                    })
 
     result = {
         "query": {
