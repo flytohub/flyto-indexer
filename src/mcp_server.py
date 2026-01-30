@@ -1179,6 +1179,282 @@ def check_index_status() -> dict:
     }
 
 
+def find_dead_code(
+    project: str = None,
+    symbol_type: str = None,
+    min_lines: int = 5
+) -> dict:
+    """
+    找出沒有被任何地方引用的函數/組件（死代碼）。
+
+    這些代碼可以考慮刪除以減少維護負擔。
+    """
+    index = load_index()
+    symbols = index.get("symbols", {})
+    reverse_index = index.get("reverse_index", {})
+
+    dead_code = []
+
+    # 應該被引用的類型（排除 file, variable 等）
+    should_be_referenced = {"function", "method", "composable", "component", "class"}
+
+    # 入口點類型（不需要被引用）
+    entry_point_patterns = [
+        "main", "index", "app", "App", "Main",
+        "__init__", "setup", "teardown",
+        "test_", "Test", "_test",
+    ]
+
+    for sym_id, sym in symbols.items():
+        sym_type = sym.get("type", "")
+        sym_name = sym.get("name", "")
+        sym_project = sym_id.split(":")[0] if ":" in sym_id else ""
+        sym_path = sym.get("path", "")
+
+        # 過濾條件
+        if project and project.lower() not in sym_project.lower():
+            continue
+        if symbol_type and sym_type != symbol_type:
+            continue
+        if sym_type not in should_be_referenced:
+            continue
+
+        # 跳過太短的代碼
+        lines = sym.get("end_line", 0) - sym.get("start_line", 0)
+        if lines < min_lines:
+            continue
+
+        # 跳過入口點
+        is_entry_point = any(p in sym_name for p in entry_point_patterns)
+        if is_entry_point:
+            continue
+
+        # 跳過導出的符號（可能被外部使用）
+        if sym.get("exports"):
+            continue
+
+        # 檢查是否有引用
+        ref_count = sym.get("ref_count", 0)
+        callers = reverse_index.get(sym_id, [])
+
+        if ref_count == 0 and len(callers) == 0:
+            dead_code.append({
+                "symbol_id": sym_id,
+                "name": sym_name,
+                "type": sym_type,
+                "path": sym_path,
+                "project": sym_project,
+                "lines": lines,
+                "start_line": sym.get("start_line", 0),
+            })
+
+    # 按行數排序（大的死代碼優先）
+    dead_code.sort(key=lambda x: x["lines"], reverse=True)
+
+    # 按專案分組
+    by_project = {}
+    for item in dead_code:
+        proj = item["project"]
+        if proj not in by_project:
+            by_project[proj] = []
+        by_project[proj].append(item)
+
+    total_dead_lines = sum(item["lines"] for item in dead_code)
+
+    return {
+        "total": len(dead_code),
+        "total_dead_lines": total_dead_lines,
+        "by_project": {k: len(v) for k, v in by_project.items()},
+        "top_20": dead_code[:20],
+        "suggestion": f"發現 {len(dead_code)} 個未被引用的符號，共 {total_dead_lines} 行代碼可考慮刪除。"
+    }
+
+
+def find_todos(
+    project: str = None,
+    priority: str = None,
+    max_results: int = 100
+) -> dict:
+    """
+    找出所有 TODO、FIXME、HACK、XXX 標記。
+
+    幫助追蹤技術債和待辦事項。
+    """
+    import re
+
+    index = load_index()
+    symbols = index.get("symbols", {})
+
+    # TODO 模式
+    patterns = {
+        "FIXME": (re.compile(r'#\s*FIXME[:\s]*(.*)$|//\s*FIXME[:\s]*(.*)$|/\*\s*FIXME[:\s]*(.*?)\*/', re.MULTILINE | re.IGNORECASE), "high"),
+        "TODO": (re.compile(r'#\s*TODO[:\s]*(.*)$|//\s*TODO[:\s]*(.*)$|/\*\s*TODO[:\s]*(.*?)\*/', re.MULTILINE | re.IGNORECASE), "medium"),
+        "HACK": (re.compile(r'#\s*HACK[:\s]*(.*)$|//\s*HACK[:\s]*(.*)$|/\*\s*HACK[:\s]*(.*?)\*/', re.MULTILINE | re.IGNORECASE), "high"),
+        "XXX": (re.compile(r'#\s*XXX[:\s]*(.*)$|//\s*XXX[:\s]*(.*)$|/\*\s*XXX[:\s]*(.*?)\*/', re.MULTILINE | re.IGNORECASE), "medium"),
+        "NOTE": (re.compile(r'#\s*NOTE[:\s]*(.*)$|//\s*NOTE[:\s]*(.*)$|/\*\s*NOTE[:\s]*(.*?)\*/', re.MULTILINE | re.IGNORECASE), "low"),
+    }
+
+    todos = []
+    seen_files = set()
+
+    for sym_id, sym in symbols.items():
+        sym_project = sym_id.split(":")[0] if ":" in sym_id else ""
+        sym_path = sym.get("path", "")
+
+        # 過濾專案
+        if project and project.lower() not in sym_project.lower():
+            continue
+
+        # 每個檔案只處理一次
+        file_key = f"{sym_project}:{sym_path}"
+        if file_key in seen_files:
+            continue
+        seen_files.add(file_key)
+
+        content = get_symbol_content_text(sym_id, sym)
+        if not content:
+            continue
+
+        for tag, (pattern, tag_priority) in patterns.items():
+            if priority and priority != tag_priority:
+                continue
+
+            for match in pattern.finditer(content):
+                # 取得匹配的文字
+                text = match.group(1) or match.group(2) or match.group(3) or ""
+                text = text.strip()[:100]  # 限制長度
+
+                # 計算行號
+                line_num = content[:match.start()].count('\n') + sym.get("start_line", 1)
+
+                todos.append({
+                    "tag": tag,
+                    "priority": tag_priority,
+                    "text": text,
+                    "path": sym_path,
+                    "project": sym_project,
+                    "line": line_num,
+                })
+
+    # 按優先級排序
+    priority_order = {"high": 0, "medium": 1, "low": 2}
+    todos.sort(key=lambda x: (priority_order.get(x["priority"], 9), x["project"], x["path"]))
+
+    # 統計
+    by_priority = {"high": 0, "medium": 0, "low": 0}
+    by_project = {}
+    by_tag = {}
+
+    for todo in todos:
+        by_priority[todo["priority"]] = by_priority.get(todo["priority"], 0) + 1
+        by_project[todo["project"]] = by_project.get(todo["project"], 0) + 1
+        by_tag[todo["tag"]] = by_tag.get(todo["tag"], 0) + 1
+
+    return {
+        "total": len(todos),
+        "by_priority": by_priority,
+        "by_project": by_project,
+        "by_tag": by_tag,
+        "todos": todos[:max_results],
+        "has_more": len(todos) > max_results,
+    }
+
+
+def cross_project_impact(
+    symbol_name: str,
+    source_project: str = None
+) -> dict:
+    """
+    跨專案 API 變更追蹤。
+
+    當某個專案的函數/類改變時，找出其他專案哪些地方需要更新。
+    """
+    index = load_index()
+    symbols = index.get("symbols", {})
+    reverse_index = index.get("reverse_index", {})
+    dependencies = index.get("dependencies", {})
+
+    # 找到源符號
+    source_symbols = []
+    for sym_id, sym in symbols.items():
+        if sym.get("name") == symbol_name:
+            sym_project = sym_id.split(":")[0] if ":" in sym_id else ""
+            if source_project and source_project.lower() not in sym_project.lower():
+                continue
+            source_symbols.append({
+                "id": sym_id,
+                "project": sym_project,
+                "path": sym.get("path", ""),
+                "type": sym.get("type", ""),
+            })
+
+    if not source_symbols:
+        return {"error": f"Symbol '{symbol_name}' not found"}
+
+    # 找出跨專案的引用
+    cross_project_refs = []
+
+    for source in source_symbols:
+        source_project = source["project"]
+        source_id = source["id"]
+
+        # 從 reverse_index 找引用
+        callers = reverse_index.get(source_id, [])
+
+        for caller_id in callers:
+            caller_project = caller_id.split(":")[0] if ":" in caller_id else ""
+
+            # 只關心跨專案的引用
+            if caller_project == source_project:
+                continue
+
+            # 跳過 fork 專案（flyto-cloud-dev 是 flyto-cloud 的 fork）
+            if (source_project == "flyto-cloud" and caller_project == "flyto-cloud-dev") or \
+               (source_project == "flyto-cloud-dev" and caller_project == "flyto-cloud"):
+                continue
+
+            caller_sym = symbols.get(caller_id, {})
+            cross_project_refs.append({
+                "caller_id": caller_id,
+                "caller_project": caller_project,
+                "caller_path": caller_sym.get("path", ""),
+                "caller_name": caller_sym.get("name", ""),
+                "caller_type": caller_sym.get("type", ""),
+                "source_project": source_project,
+                "source_id": source_id,
+            })
+
+    # 按專案分組
+    by_affected_project = {}
+    for ref in cross_project_refs:
+        proj = ref["caller_project"]
+        if proj not in by_affected_project:
+            by_affected_project[proj] = []
+        by_affected_project[proj].append(ref)
+
+    # 生成建議
+    if len(cross_project_refs) == 0:
+        suggestion = f"'{symbol_name}' 沒有跨專案的引用，可以安全修改。"
+        risk = "low"
+    elif len(by_affected_project) == 1:
+        suggestion = f"修改 '{symbol_name}' 會影響 1 個其他專案的 {len(cross_project_refs)} 處調用。"
+        risk = "medium"
+    else:
+        suggestion = f"⚠️ 修改 '{symbol_name}' 會影響 {len(by_affected_project)} 個其他專案！"
+        risk = "high"
+
+    return {
+        "symbol_name": symbol_name,
+        "source_symbols": source_symbols,
+        "cross_project_refs": cross_project_refs,
+        "by_affected_project": {k: len(v) for k, v in by_affected_project.items()},
+        "affected_projects": list(by_affected_project.keys()),
+        "total_cross_refs": len(cross_project_refs),
+        "risk": risk,
+        "suggestion": suggestion,
+    }
+
+
 # MCP 工具定義
 TOOLS = [
     {
@@ -1328,6 +1604,70 @@ TOOLS = [
             "properties": {},
         },
     },
+    {
+        "name": "find_dead_code",
+        "description": "找出沒有被任何地方引用的函數/組件（死代碼）。這些代碼可以考慮刪除以減少維護負擔。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {
+                    "type": "string",
+                    "description": "只搜特定專案",
+                },
+                "symbol_type": {
+                    "type": "string",
+                    "description": "只搜特定類型",
+                    "enum": ["function", "method", "composable", "component", "class"],
+                },
+                "min_lines": {
+                    "type": "integer",
+                    "description": "最少行數（過濾太小的函數）",
+                    "default": 5,
+                },
+            },
+        },
+    },
+    {
+        "name": "find_todos",
+        "description": "找出所有 TODO、FIXME、HACK、XXX 標記。幫助追蹤技術債和待辦事項。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {
+                    "type": "string",
+                    "description": "只搜特定專案",
+                },
+                "priority": {
+                    "type": "string",
+                    "description": "只搜特定優先級",
+                    "enum": ["high", "medium", "low"],
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "最多返回幾筆",
+                    "default": 100,
+                },
+            },
+        },
+    },
+    {
+        "name": "cross_project_impact",
+        "description": "跨專案 API 變更追蹤。當某個專案的函數/類改變時，找出其他專案哪些地方需要更新。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "symbol_name": {
+                    "type": "string",
+                    "description": "要追蹤的符號名稱,例如:useModuleSchema、ValidationError",
+                },
+                "source_project": {
+                    "type": "string",
+                    "description": "源專案（可選，用於限定範圍）",
+                },
+            },
+            "required": ["symbol_name"],
+        },
+    },
 ]
 
 
@@ -1396,6 +1736,23 @@ def handle_request(request: dict):
                 )
             elif tool_name == "check_index_status":
                 result = check_index_status()
+            elif tool_name == "find_dead_code":
+                result = find_dead_code(
+                    project=arguments.get("project"),
+                    symbol_type=arguments.get("symbol_type"),
+                    min_lines=arguments.get("min_lines", 5),
+                )
+            elif tool_name == "find_todos":
+                result = find_todos(
+                    project=arguments.get("project"),
+                    priority=arguments.get("priority"),
+                    max_results=arguments.get("max_results", 100),
+                )
+            elif tool_name == "cross_project_impact":
+                result = cross_project_impact(
+                    symbol_name=arguments.get("symbol_name", ""),
+                    source_project=arguments.get("source_project"),
+                )
             else:
                 send_error(id, -32601, f"Unknown tool: {tool_name}")
                 return
