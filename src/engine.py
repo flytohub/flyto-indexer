@@ -348,18 +348,9 @@ class IndexEngine:
         """
         解析依賴關係，將原始呼叫名稱轉換為完整 symbol ID
 
-        這讓 impact analysis 和 find_references 更準確
+        改進版：只有當 source 檔案真的 import 了 target 時才解析
         """
-        from .resolver import SymbolResolver
-
-        # 建立 index dict 給 resolver 用
-        index_dict = {
-            "symbols": {sid: s.to_dict() for sid, s in self.index.symbols.items()},
-            "dependencies": {did: d.to_dict() for did, d in self.index.dependencies.items()},
-        }
-        resolver = SymbolResolver(index_dict)
-
-        # 建立 symbol name -> symbol_id 的快速查詢表
+        # 建立 symbol name -> symbol_id 的查詢表
         name_to_ids = {}
         for sid, symbol in self.index.symbols.items():
             name = symbol.name
@@ -367,87 +358,180 @@ class IndexEngine:
                 name_to_ids[name] = []
             name_to_ids[name].append(sid)
 
-        # 解析每個依賴
+        # 建立 file path -> imports 的對應表
+        # imports 格式: {imported_name: module_path}
+        file_imports = {}  # path -> {name: module}
+        for dep_id, dep in self.index.dependencies.items():
+            if dep.dep_type.value != "imports":
+                continue
+
+            source_path = self._extract_path(dep.source_id)
+            if not source_path:
+                continue
+
+            if source_path not in file_imports:
+                file_imports[source_path] = {}
+
+            module = dep.target_id
+            names = dep.metadata.get("names", [])
+            for name in names:
+                file_imports[source_path][name] = module
+
+        # 建立 module path -> symbol_ids 的對應
+        # 用來從 import path 找到實際的 symbol
+        module_to_symbols = {}
+        for sid, symbol in self.index.symbols.items():
+            path = symbol.path
+            # 從 path 生成可能的 module 名稱
+            # e.g., src/composables/useToast.js -> useToast, composables/useToast
+            base = path.rsplit('/', 1)[-1].rsplit('.', 1)[0]  # useToast
+            parent = path.rsplit('.', 1)[0]  # src/composables/useToast
+
+            for mod_key in [base, parent, path]:
+                if mod_key not in module_to_symbols:
+                    module_to_symbols[mod_key] = []
+                if sid not in module_to_symbols[mod_key]:
+                    module_to_symbols[mod_key].append(sid)
+
+        # 解析每個 call 依賴
         for dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "calls":
                 continue
 
             target = dep.target_id
-            source_path = ""
+            source_path = self._extract_path(dep.source_id)
+            if not source_path:
+                continue
 
-            # 從 source_id 提取檔案路徑
-            if ":" in dep.source_id:
-                parts = dep.source_id.split(":")
-                if len(parts) >= 2:
-                    source_path = parts[1]
-
-            # 嘗試解析 target
             resolved = None
+            imports = file_imports.get(source_path, {})
 
-            # 方法 1: 直接匹配 symbol name
-            if target in name_to_ids:
-                candidates = name_to_ids[target]
-                # 優先選同檔案或同專案的
-                for cid in candidates:
-                    if source_path and source_path in cid:
-                        resolved = cid
-                        break
-                if not resolved and candidates:
-                    resolved = candidates[0]
+            # 處理簡單呼叫: useToast()
+            call_name = target.split('.')[0]  # 取第一部分
 
-            # 方法 2: 處理 method 呼叫 (obj.method)
+            if call_name in imports:
+                # 找到 import，用 module path 來解析
+                module = imports[call_name]
+
+                # 方法 1: 從 module_to_symbols 找
+                for mod_key in [module, module.split('/')[-1], call_name]:
+                    if mod_key in module_to_symbols:
+                        candidates = module_to_symbols[mod_key]
+                        # 找名稱匹配的
+                        for cid in candidates:
+                            sym = self.index.symbols.get(cid)
+                            if sym and sym.name == call_name:
+                                resolved = cid
+                                break
+                        if resolved:
+                            break
+
+                # 方法 2: 從 name_to_ids 找，但要檢查路徑相似度
+                if not resolved and call_name in name_to_ids:
+                    candidates = name_to_ids[call_name]
+                    for cid in candidates:
+                        sym = self.index.symbols.get(cid)
+                        if sym:
+                            # 檢查 module path 是否和 symbol path 相關
+                            norm_module = module.replace('@/', 'src/').replace('./', '')
+                            if norm_module in sym.path or sym.path.endswith(f"/{call_name}."):
+                                resolved = cid
+                                break
+
+            # 處理 method 呼叫: obj.method()
             if not resolved and "." in target:
                 parts = target.split(".")
+                obj_name = parts[0]
                 method_name = parts[-1]
-                # 找 Class.method 格式的 symbol
-                for sid in self.index.symbols:
-                    if sid.endswith(f":{target}") or sid.endswith(f".{method_name}"):
-                        resolved = sid
-                        break
 
-            # 更新 dependency 的 resolved_target
+                # 檢查 obj_name 是否有 import
+                if obj_name in imports:
+                    # 找 Class.method 格式的 symbol
+                    for sid, sym in self.index.symbols.items():
+                        if sym.name == target or sym.name.endswith(f".{method_name}"):
+                            resolved = sid
+                            break
+
+            # 更新 resolved_target
             if resolved:
                 dep.metadata["resolved_target"] = resolved
+
+    def _extract_path(self, source_id: str) -> str:
+        """從 source_id 提取檔案路徑"""
+        if ":" in source_id:
+            parts = source_id.split(":")
+            if len(parts) >= 2:
+                return parts[1]
+        return ""
+
+    # 太通用的名稱，不計入引用追蹤
+    GENERIC_NAMES = {
+        # 內建/常用
+        'module', 'api', 'data', 'result', 'response', 'request', 'error',
+        'value', 'key', 'item', 'items', 'list', 'map', 'set', 'get',
+        'check', 'run', 'call', 'init', 'load', 'save', 'read', 'write',
+        'start', 'stop', 'open', 'close', 'add', 'remove', 'delete', 'update',
+        'create', 'find', 'search', 'filter', 'sort', 'parse', 'format',
+        'log', 'print', 'debug', 'info', 'warn', 'error',
+        # Python 內建
+        'str', 'int', 'float', 'bool', 'dict', 'list', 'tuple', 'set',
+        'len', 'range', 'type', 'isinstance', 'hasattr', 'getattr', 'setattr',
+        'open', 'file', 'path', 'join', 'split', 'strip', 'replace',
+        # JS 內建
+        'console', 'window', 'document', 'Array', 'Object', 'String', 'Number',
+        'JSON', 'Math', 'Date', 'Promise', 'fetch', 'setTimeout', 'setInterval',
+        # Vue/React
+        'ref', 'reactive', 'computed', 'watch', 'onMounted', 'onUnmounted',
+        'useState', 'useEffect', 'useCallback', 'useMemo', 'props', 'emit',
+    }
 
     def _build_reverse_index(self):
         """
         建立反向索引：symbol_id -> 被誰引用
 
-        同時計算每個 symbol 的引用次數
+        改進版：
+        - 只計算有 resolved_target 的依賴
+        - 過濾掉太通用的名稱
+        - 不再用名稱模糊匹配
         """
-        # 初始化反向索引
         reverse_index = {}  # symbol_id -> [caller_ids]
 
         for dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "calls":
                 continue
 
-            # 優先使用 resolved_target
-            target = dep.metadata.get("resolved_target") or dep.target_id
+            # 只使用已解析的 target
+            resolved = dep.metadata.get("resolved_target")
+            if not resolved:
+                continue
+
+            # 檢查 target symbol 是否存在且不是通用名稱
+            target_symbol = self.index.symbols.get(resolved)
+            if not target_symbol:
+                continue
+
+            target_name = target_symbol.name.split('.')[-1]  # 取最後一部分
+            if target_name.lower() in self.GENERIC_NAMES:
+                continue
+
+            # 名稱太短也跳過
+            if len(target_name) < 4:
+                continue
+
             source = dep.source_id
 
-            # 從 source_id 提取實際的 caller symbol
-            # source_id 格式: project:path:type:name
-            caller_id = source
+            if resolved not in reverse_index:
+                reverse_index[resolved] = []
 
-            if target not in reverse_index:
-                reverse_index[target] = []
-
-            if caller_id not in reverse_index[target]:
-                reverse_index[target].append(caller_id)
+            if source not in reverse_index[resolved]:
+                reverse_index[resolved].append(source)
 
         # 儲存反向索引
         self.index.reverse_index = reverse_index
 
-        # 計算每個 symbol 的引用次數
+        # 計算每個 symbol 的引用次數（只計算在 reverse_index 中的）
         for sid, symbol in self.index.symbols.items():
-            ref_count = len(reverse_index.get(sid, []))
-            # 也檢查 name match（有些依賴沒解析成功）
-            for callers in reverse_index.values():
-                for caller in callers:
-                    if symbol.name in caller:
-                        ref_count += 1
-            symbol.reference_count = ref_count
+            symbol.reference_count = len(reverse_index.get(sid, []))
 
     def _save_index(self, separate_content: bool = True):
         """
