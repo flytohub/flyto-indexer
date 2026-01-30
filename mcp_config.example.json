@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "flyto-indexer": {
+      "command": "python3",
+      "args": ["-m", "src.mcp_server"],
+      "cwd": "/Library/其他專案/flytohub/flyto-indexer"
+    }
+  }
+}

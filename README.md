@@ -4,6 +4,43 @@
 
 讓 AI 精準定位、改了會影響什麼一目了然。
 
+## AI 工具整合
+
+| 工具 | 整合方式 | 文件 |
+|------|----------|------|
+| **Claude Code** | MCP Server | 自動載入 |
+| **Cursor** | HTTP API / Rules | [integrations/cursor.md](integrations/cursor.md) |
+| **OpenAI GPTs** | HTTP API + OpenAPI | [integrations/openai_gpts.md](integrations/openai_gpts.md) |
+| **ChatGPT** | HTTP API | 同上 |
+| **VSCode/Copilot** | Tasks / Extension | [integrations/vscode.md](integrations/vscode.md) |
+| **任何 AI** | REST API | 見下方 |
+
+### 快速啟動 API Server
+
+```bash
+# 啟動 HTTP API（所有工具都能用）
+python -m src.api_server --port 8765
+
+# 測試
+curl http://localhost:8765/health
+curl -X POST http://localhost:8765/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "購物車"}'
+```
+
+### API 端點
+
+| 端點 | 方法 | 說明 |
+|------|------|------|
+| `/search` | POST | 關鍵字搜尋程式碼 |
+| `/file/info` | POST | 取得檔案語意資訊 |
+| `/file/symbols` | POST | 取得檔案 symbols |
+| `/impact` | POST | 影響分析 |
+| `/categories` | GET | 列出分類 |
+| `/apis` | GET | 列出 API |
+| `/stats` | GET | 索引統計 |
+| `/openapi.json` | GET | OpenAPI 規格（GPTs 用） |
+
 ## 核心概念
 
 ### 1. Symbol ID 系統（學校_年級_班級_座號）
@@ -136,6 +173,110 @@ results = sync.search("API authentication", limit=10)
 for r in results["results"]:
     print(f"[{r['type']}] {r['name']} ({r['score']})")
     print(f"  {r['path']}:{r['line']}")
+```
+
+## LLM 審計 + AI 工作流程
+
+### 審計專案（生成 PROJECT_MAP）
+
+```bash
+# 設定 OpenAI API Key
+export OPENAI_API_KEY="sk-xxx"
+
+# 執行 LLM 審計
+python examples/audit_all.py
+```
+
+這會為每個檔案生成語意描述：
+```json
+{
+  "path": "src/pages/Cart.vue",
+  "purpose": "購物車頁面 - 顯示商品、修改數量、結帳",
+  "category": "cart",
+  "keywords": ["購物車", "cart", "結帳", "checkout"],
+  "apis": ["/api/cart", "/api/checkout"],
+  "dependencies": ["useCart", "usePayment"]
+}
+```
+
+### AI 工作流程（大向 → 中向 → 細項 → 影響分析）
+
+```python
+from auditor.workflow import AIWorkflow
+
+workflow = AIWorkflow(project_map_path, index_path)
+
+# 1. 大向搜尋：用戶說「我要修改購物車功能」
+l0 = workflow.search_l0("購物車")
+# → 找到：Cart.vue, useCart.ts, Product.vue
+
+# 2. 中向查看：選擇要看的檔案
+l1 = workflow.search_l1("src/composables/useCart.ts")
+# → 列出該檔案的所有 symbols
+
+# 3. 細項查看：選擇具體函數
+l2 = workflow.search_l2("flyto-cloud:useCart.ts:function:addToCart")
+# → 顯示函數內容
+
+# 4. 影響分析：修改前確認
+impact = workflow.impact_analysis("flyto-cloud:useCart.ts:function:addToCart")
+# → 告訴你：Cart.vue, Product.vue 都在呼叫這個函數
+```
+
+## Claude Code MCP 整合
+
+讓 Claude 可以直接查詢索引、執行影響分析。
+
+### 設定 MCP Server
+
+編輯 `~/.claude/settings.json`，加入：
+
+```json
+{
+  "mcpServers": {
+    "flyto-indexer": {
+      "command": "python3",
+      "args": ["-m", "src.mcp_server"],
+      "cwd": "/Library/其他專案/flytohub/flyto-indexer"
+    }
+  }
+}
+```
+
+### 可用工具
+
+設定後，Claude 可以使用：
+
+| 工具 | 說明 | 範例 |
+|------|------|------|
+| `search_code` | 關鍵字搜尋 | `search_code("購物車")` |
+| `get_file_info` | 取得檔案語意資訊 | `get_file_info("src/pages/Cart.vue")` |
+| `get_file_symbols` | 列出檔案的所有 symbols | `get_file_symbols("src/composables/useCart.ts")` |
+| `impact_analysis` | 影響分析 | `impact_analysis("project:path:function:name")` |
+| `list_categories` | 列出所有分類 | `list_categories()` |
+| `list_apis` | 列出所有 API | `list_apis()` |
+
+### 使用範例
+
+```
+你：我要修改購物車的結帳功能
+
+Claude：讓我先查詢相關程式碼...
+[呼叫 search_code("購物車 結帳")]
+
+找到 3 個相關檔案：
+1. src/pages/Cart.vue - 購物車頁面，處理結帳流程
+2. src/composables/useCart.ts - 購物車狀態管理
+3. src/api/checkout.ts - 結帳 API 呼叫
+
+讓我分析影響範圍...
+[呼叫 impact_analysis("flyto-cloud:useCart.ts:function:checkout")]
+
+⚠️ 修改 checkout() 會影響：
+- Cart.vue (直接呼叫)
+- QuickBuy.vue (快速購買流程)
+
+建議：先確認 QuickBuy 頁面的結帳邏輯是否需要同步修改。
 ```
 
 ## CI/CD 整合
