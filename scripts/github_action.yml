@@ -1,0 +1,85 @@
+# GitHub Actions workflow for automatic indexing on push
+# Copy this to .github/workflows/index.yml in your project
+
+name: Code Index
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better analysis
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install flyto-indexer
+        run: |
+          pip install flyto-indexer
+          # Or if not published: pip install git+https://github.com/flytohub/flyto-indexer.git
+
+      - name: Run incremental index
+        run: |
+          flyto-index scan . --name ${{ github.event.repository.name }}
+
+      - name: Upload index artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-index
+          path: .flyto-index/
+          retention-days: 7
+
+      # Optional: Push to vector database
+      # - name: Sync to vector DB
+      #   env:
+      #     QDRANT_URL: ${{ secrets.QDRANT_URL }}
+      #     QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+      #   run: |
+      #     flyto-index sync --push
+
+      # Optional: Comment impact analysis on PR
+      - name: Analyze PR impact
+        if: github.event_name == 'pull_request'
+        run: |
+          # Get changed files
+          git diff --name-only origin/${{ github.base_ref }}...HEAD > changed_files.txt
+
+          # Run impact analysis
+          echo "## Impact Analysis" > impact_report.md
+          echo "" >> impact_report.md
+
+          while read file; do
+            if [[ -f "$file" ]]; then
+              echo "### $file" >> impact_report.md
+              flyto-index impact "$file:*" --path . --depth 2 >> impact_report.md || true
+              echo "" >> impact_report.md
+            fi
+          done < changed_files.txt
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('impact_report.md', 'utf8');
+
+            if (report.trim().length > 50) {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: report
+              });
+            }

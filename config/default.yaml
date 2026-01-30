@@ -1,0 +1,78 @@
+# Flyto Indexer Configuration
+
+# 專案設定
+project:
+  name: auto  # 自動使用目錄名稱，或指定名稱
+
+# 掃描設定
+scan:
+  # 要掃描的語言/副檔名
+  languages:
+    - python
+    - vue
+    - typescript
+    - javascript
+
+  # 忽略的路徑模式
+  ignore_patterns:
+    - node_modules
+    - __pycache__
+    - .git
+    - dist
+    - build
+    - .venv
+    - venv
+    - .pytest_cache
+    - .mypy_cache
+    - .flyto-index
+    - "*.min.js"
+    - "*.min.css"
+
+  # 最大檔案大小 (bytes)
+  max_file_size: 1048576  # 1MB
+
+# 索引設定
+index:
+  # 索引存放位置
+  output_dir: .flyto-index
+
+  # 是否生成 L0 大綱檔案
+  generate_outline: true
+
+  # Symbol 摘要最大長度
+  summary_max_length: 200
+
+# 向量資料庫設定 (可選)
+vector_store:
+  enabled: false
+  provider: qdrant  # qdrant, pinecone, weaviate
+
+  qdrant:
+    url: ${QDRANT_URL}
+    api_key: ${QDRANT_API_KEY}
+    collection: flyto_code_index
+
+  # 嵌入模型
+  embedding:
+    provider: ollama  # ollama, openai
+    model: nomic-embed-text
+    dimensions: 768
+
+# 影響分析設定
+impact:
+  # 最大追溯深度
+  max_depth: 5
+
+  # 是否包含測試檔案
+  include_tests: false
+
+# 上下文設定
+context:
+  # L0 最大檔案數
+  l0_max_files: 100
+
+  # L1 最大 symbols 數
+  l1_max_symbols: 50
+
+  # L2 最大 token 估算
+  l2_max_tokens: 4000
