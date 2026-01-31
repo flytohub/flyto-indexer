@@ -18,11 +18,23 @@ Claude Code config (~/.claude/mcp_servers.json):
 }
 """
 
+import asyncio
 import gzip
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
+
+# Import Dual-AI module
+from .dual_ai import (
+    dual_ai_task,
+    dual_ai_review,
+    dual_ai_consensus,
+    dual_ai_security,
+    dual_ai_test_gen,
+    dual_ai_agents,
+)
 
 # MCP Protocol
 def send_response(id: Any, result: Any):
@@ -1791,6 +1803,158 @@ TOOLS = [
             "required": ["symbol_name"],
         },
     },
+    # =========================================================================
+    # Dual-AI Tools - Multi-model collaboration
+    # =========================================================================
+    {
+        "name": "dual_ai_task",
+        "description": "Execute a Dual-AI collaborative task. GPT-4 plans, Claude executes, GPT-4 verifies.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "task": {
+                    "type": "string",
+                    "description": "Task description to execute",
+                },
+                "project_path": {
+                    "type": "string",
+                    "description": "Project directory path (default: current directory)",
+                    "default": ".",
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["sequential", "parallel", "consensus"],
+                    "default": "sequential",
+                    "description": "Collaboration mode: sequential (GPT->Claude->GPT), parallel (simultaneous), consensus (voting)",
+                },
+                "agents": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Agent IDs to use (default: planner, executor, reviewer)",
+                },
+                "max_iterations": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Maximum iteration count",
+                },
+            },
+            "required": ["task"],
+        },
+    },
+    {
+        "name": "dual_ai_review",
+        "description": "Multi-model code review. Uses Claude and GPT-4 simultaneously to review code, then merges results.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "Path to file to review",
+                },
+                "review_type": {
+                    "type": "string",
+                    "enum": ["security", "performance", "style", "all"],
+                    "default": "all",
+                    "description": "Type of review to perform",
+                },
+                "models": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Models to use (default: claude, gpt4)",
+                },
+            },
+            "required": ["file_path"],
+        },
+    },
+    {
+        "name": "dual_ai_consensus",
+        "description": "Multi-AI consensus voting for important decisions. Multiple AI models vote and explain their reasoning.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "Question to vote on",
+                },
+                "options": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of options to choose from",
+                },
+                "context": {
+                    "type": "string",
+                    "description": "Additional context for the decision",
+                    "default": "",
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["majority", "unanimous", "weighted"],
+                    "default": "majority",
+                    "description": "Voting mode: majority (>50%), unanimous (100%), weighted (by confidence)",
+                },
+                "voters": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Voter IDs (default: claude, gpt4)",
+                },
+            },
+            "required": ["question", "options"],
+        },
+    },
+    {
+        "name": "dual_ai_security",
+        "description": "Professional security audit. Checks for SQL injection, XSS, CSRF, sensitive data leaks, auth issues, and more.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "description": "File path or code snippet to audit",
+                },
+                "scan_type": {
+                    "type": "string",
+                    "enum": ["quick", "full", "deep"],
+                    "default": "full",
+                    "description": "Scan depth: quick (fast), full (standard), deep (thorough)",
+                },
+            },
+            "required": ["target"],
+        },
+    },
+    {
+        "name": "dual_ai_test_gen",
+        "description": "Automatic test case generation. Analyzes code and generates comprehensive tests with edge cases.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "description": "File path or code to generate tests for",
+                },
+                "test_type": {
+                    "type": "string",
+                    "enum": ["unit", "integration", "e2e"],
+                    "default": "unit",
+                    "description": "Type of tests to generate",
+                },
+                "framework": {
+                    "type": "string",
+                    "enum": ["auto", "pytest", "jest", "vitest"],
+                    "default": "auto",
+                    "description": "Test framework (auto-detected if not specified)",
+                },
+            },
+            "required": ["target"],
+        },
+    },
+    {
+        "name": "dual_ai_agents",
+        "description": "List all available Dual-AI agents and their capabilities.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
 ]
 
 
@@ -1876,6 +2040,44 @@ def handle_request(request: dict):
                     symbol_name=arguments.get("symbol_name", ""),
                     source_project=arguments.get("source_project"),
                 )
+            # =========================================================
+            # Dual-AI Tools
+            # =========================================================
+            elif tool_name == "dual_ai_task":
+                result = asyncio.run(dual_ai_task(
+                    task=arguments.get("task", ""),
+                    project_path=arguments.get("project_path", "."),
+                    mode=arguments.get("mode", "sequential"),
+                    agents=arguments.get("agents"),
+                    max_iterations=arguments.get("max_iterations", 10),
+                ))
+            elif tool_name == "dual_ai_review":
+                result = asyncio.run(dual_ai_review(
+                    file_path=arguments.get("file_path", ""),
+                    review_type=arguments.get("review_type", "all"),
+                    models=arguments.get("models"),
+                ))
+            elif tool_name == "dual_ai_consensus":
+                result = asyncio.run(dual_ai_consensus(
+                    question=arguments.get("question", ""),
+                    options=arguments.get("options", []),
+                    context=arguments.get("context", ""),
+                    mode=arguments.get("mode", "majority"),
+                    voters=arguments.get("voters"),
+                ))
+            elif tool_name == "dual_ai_security":
+                result = asyncio.run(dual_ai_security(
+                    target=arguments.get("target", ""),
+                    scan_type=arguments.get("scan_type", "full"),
+                ))
+            elif tool_name == "dual_ai_test_gen":
+                result = asyncio.run(dual_ai_test_gen(
+                    target=arguments.get("target", ""),
+                    test_type=arguments.get("test_type", "unit"),
+                    framework=arguments.get("framework", "auto"),
+                ))
+            elif tool_name == "dual_ai_agents":
+                result = dual_ai_agents()
             else:
                 send_error(id, -32601, f"Unknown tool: {tool_name}")
                 return
@@ -1895,13 +2097,23 @@ def handle_request(request: dict):
 
 def main():
     """MCP Server 主程式"""
+    import sys
+    # Debug logging to stderr
+    sys.stderr.write(f"[flyto-indexer] Starting MCP server (pid={os.getpid()})\n")
+    sys.stderr.flush()
+
     for line in sys.stdin:
         try:
+            sys.stderr.write(f"[flyto-indexer] Received: {line[:100]}...\n")
+            sys.stderr.flush()
             request = json.loads(line.strip())
             handle_request(request)
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as e:
+            sys.stderr.write(f"[flyto-indexer] JSON decode error: {e}\n")
+            sys.stderr.flush()
         except Exception as e:
+            sys.stderr.write(f"[flyto-indexer] Error: {e}\n")
+            sys.stderr.flush()
             print(json.dumps({"jsonrpc": "2.0", "error": {"code": -32000, "message": str(e)}}), flush=True)
 
 
