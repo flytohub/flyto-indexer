@@ -1353,6 +1353,25 @@ def find_dead_code(
         if file_basename in imported_files or sym_path in imported_files:
             continue
 
+        # 對於 composable，檢查是否被任何文件導入
+        # composable 通常以 use 開頭，文件名和函數名相同
+        if sym_type == "composable":
+            is_imported = False
+            for dep in dependencies.values():
+                if dep.get("type") == "imports":
+                    target = dep.get("target", "")
+                    names = dep.get("metadata", {}).get("names", [])
+                    # 檢查導入路徑是否包含 composable 名稱
+                    if sym_name in target or file_basename in target:
+                        is_imported = True
+                        break
+                    # 檢查具名導入
+                    if sym_name in names:
+                        is_imported = True
+                        break
+            if is_imported:
+                continue
+
         # 對於 JS/TS 類和組件，檢查文件名是否與類名匹配並被導入
         # 例如 OutputRendererPlugin.js 定義了 OutputRendererPlugin
         if sym_type in ("class", "component") and file_basename == sym_name:
