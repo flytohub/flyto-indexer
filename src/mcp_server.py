@@ -26,15 +26,25 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# Import Dual-AI module
-from .dual_ai import (
-    dual_ai_task,
-    dual_ai_review,
-    dual_ai_consensus,
-    dual_ai_security,
-    dual_ai_test_gen,
-    dual_ai_agents,
-)
+# Import Dual-AI module (optional - may not be available in embedded contexts)
+try:
+    from .dual_ai import (
+        dual_ai_task,
+        dual_ai_review,
+        dual_ai_consensus,
+        dual_ai_security,
+        dual_ai_test_gen,
+        dual_ai_agents,
+    )
+    _dual_ai_available = True
+except ImportError:
+    _dual_ai_available = False
+    dual_ai_task = None
+    dual_ai_review = None
+    dual_ai_consensus = None
+    dual_ai_security = None
+    dual_ai_test_gen = None
+    dual_ai_agents = None
 
 # MCP Protocol
 def send_response(id: Any, result: Any):
@@ -45,8 +55,11 @@ def send_error(id: Any, code: int, message: str):
     response = {"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}
     print(json.dumps(response), flush=True)
 
-# 載入索引
-INDEX_DIR = Path(__file__).parent.parent / ".flyto-index"
+# 載入索引 (可透過環境變數設定，用於嵌入其他專案時)
+INDEX_DIR = Path(os.environ.get(
+    "FLYTO_INDEX_DIR",
+    str(Path(__file__).parent.parent / ".flyto-index")
+))
 
 # Content cache for lazy loading
 _content_cache: dict = {}
