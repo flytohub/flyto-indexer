@@ -20,58 +20,109 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Flyto Indexer - Code audit and smart indexing"
+        prog="flyto-index",
+        description="Flyto Indexer - Code indexing, search, and impact analysis for AI-assisted development",
+        epilog=(
+            "Examples:\n"
+            "  flyto-index init .                  Initialize indexing for current project\n"
+            "  flyto-index scan . --full            Full re-index of current project\n"
+            "  flyto-index status                   Check index freshness\n"
+            "  flyto-index impact useAuth --path .  See what depends on useAuth\n"
+            "  flyto-index tools                    List all commands as JSON (for AI integration)\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    subparsers = parser.add_subparsers(dest="command", help="Commands")
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # init 命令
-    init_parser = subparsers.add_parser("init", help="Initialize .flyto/ in a project")
+    # init
+    init_parser = subparsers.add_parser(
+        "init",
+        help="Initialize .flyto/ in a project",
+        description="Create the .flyto/ directory structure for a project. This is required before scanning.",
+    )
     init_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
     init_parser.add_argument("--name", help="Project name (default: directory name)")
     init_parser.add_argument("--no-gitignore", action="store_true", help="Do not add .flyto/ to .gitignore")
     init_parser.add_argument("--index", action="store_true", help="Run indexer immediately after init")
 
-    # scan 命令
-    scan_parser = subparsers.add_parser("scan", help="Scan project and build index")
+    # scan
+    scan_parser = subparsers.add_parser(
+        "scan",
+        help="Scan project and build/update code index",
+        description="Parse all source files, extract symbols (functions, classes, components), build dependency graph, and detect dead code.",
+    )
     scan_parser.add_argument("path", help="Project root path")
-    scan_parser.add_argument("--full", action="store_true", help="Full rebuild (not incremental)")
+    scan_parser.add_argument("--full", action="store_true", help="Full rebuild instead of incremental update")
     scan_parser.add_argument("--name", help="Project name (default: directory name)")
-    scan_parser.add_argument("--output", help="Index output directory")
+    scan_parser.add_argument("--output", help="Index output directory (default: .flyto/)")
 
-    # impact 命令
-    impact_parser = subparsers.add_parser("impact", help="Query impact of a symbol")
-    impact_parser.add_argument("symbol_id", help="Symbol ID to check")
+    # impact
+    impact_parser = subparsers.add_parser(
+        "impact",
+        help="Analyze what would be affected by changing a symbol",
+        description="Show all code that depends on a given symbol. Use before modifying shared functions or components.",
+    )
+    impact_parser.add_argument("symbol_id", help="Symbol ID or name (e.g., 'useAuth' or 'project:path:type:name')")
     impact_parser.add_argument("--path", required=True, help="Project root path")
-    impact_parser.add_argument("--depth", type=int, default=3, help="Max depth")
+    impact_parser.add_argument("--depth", type=int, default=3, help="Max analysis depth (default: 3)")
 
-    # context 命令
-    context_parser = subparsers.add_parser("context", help="Get context for AI")
+    # context
+    context_parser = subparsers.add_parser(
+        "context",
+        help="Get AI-ready context for a project",
+        description="Extract structured context (symbols, summaries, dependencies) suitable for feeding to an LLM.",
+    )
     context_parser.add_argument("--path", required=True, help="Project root path")
-    context_parser.add_argument("--query", help="Natural language query")
-    context_parser.add_argument("--files", nargs="+", help="Specific files to get L1")
-    context_parser.add_argument("--symbols", nargs="+", help="Specific symbols to get L2")
-    context_parser.add_argument("--level", choices=["l0", "l1", "l2", "auto"], default="auto")
+    context_parser.add_argument("--query", help="Natural language query to focus context on")
+    context_parser.add_argument("--files", nargs="+", help="Specific files to include (L1 detail)")
+    context_parser.add_argument("--symbols", nargs="+", help="Specific symbols to include (L2 detail)")
+    context_parser.add_argument("--level", choices=["l0", "l1", "l2", "auto"], default="auto", help="Detail level: l0=outline, l1=file, l2=symbol, auto=adaptive (default: auto)")
 
-    # status 命令
-    status_parser = subparsers.add_parser("status", help="Show .flyto/ status for a project")
+    # status
+    status_parser = subparsers.add_parser(
+        "status",
+        help="Show index status (file count, symbol count, staleness)",
+        description="Display .flyto/ index statistics and check if re-indexing is needed.",
+    )
     status_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
-    status_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
+    status_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON instead of human-readable text")
 
-    # brief 命令
-    brief_parser = subparsers.add_parser("brief", help="Generate < 500 token project overview")
+    # brief
+    brief_parser = subparsers.add_parser(
+        "brief",
+        help="Generate a brief (<500 token) project summary",
+        description="Create a concise project overview from .flyto/ data, suitable for LLM system prompts.",
+    )
     brief_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
 
-    # describe 命令
-    describe_parser = subparsers.add_parser("describe", help="Read or write file descriptions")
+    # describe
+    describe_parser = subparsers.add_parser(
+        "describe",
+        help="Read or write a one-liner semantic description for a file",
+        description="Manage file descriptions stored in .flyto/descriptions.jsonl. Omit --summary to read, include it to write.",
+    )
     describe_parser.add_argument("file_path", help="File path relative to project root (e.g., src/api/auth.py)")
-    describe_parser.add_argument("--summary", help="One-liner description to write")
+    describe_parser.add_argument("--summary", help="One-liner description to write (omit to read existing)")
     describe_parser.add_argument("--path", default=".", help="Project root path (default: current directory)")
-    describe_parser.add_argument("--source", default="ai", help="Description source (default: ai)")
+    describe_parser.add_argument("--source", default="ai", help="Description source tag (default: ai)")
 
-    # outline 命令
-    outline_parser = subparsers.add_parser("outline", help="Generate project outline (L0)")
+    # outline
+    outline_parser = subparsers.add_parser(
+        "outline",
+        help="Generate project outline (L0 structure overview)",
+        description="Create a high-level map of project structure, categories, and key entry points.",
+    )
     outline_parser.add_argument("path", help="Project root path")
-    outline_parser.add_argument("--name", help="Project name")
+    outline_parser.add_argument("--name", help="Project name (default: directory name)")
+
+    # tools
+    tools_parser = subparsers.add_parser(
+        "tools",
+        help="List all commands as structured JSON (for AI/LLM integration)",
+        description="Output machine-readable JSON describing all available commands, their arguments, expected outputs, side effects, and examples. Feed this to an LLM so it knows how to use flyto-index.",
+    )
+    tools_parser.add_argument("--json", action="store_true", dest="as_json", default=True, help="Output as JSON (default)")
+    tools_parser.add_argument("--compact", action="store_true", help="Compact output: names and one-liner summaries only")
 
     args = parser.parse_args()
 
@@ -96,6 +147,8 @@ def main():
             result = cmd_describe(args)
         elif args.command == "outline":
             result = cmd_outline(args)
+        elif args.command == "tools":
+            result = cmd_tools(args)
         else:
             parser.print_help()
             return
@@ -489,6 +542,151 @@ def cmd_describe(args):
             print(f"  Updated: {latest.get('updatedAt', 'unknown')}")
         else:
             print(f"No description found for: {file_path}")
+
+
+def cmd_tools(args):
+    """Output structured JSON describing all available CLI commands and their arguments."""
+    from datetime import datetime, timezone
+
+    commands = [
+        {
+            "name": "init",
+            "summary": "Initialize .flyto/ directory in a project for indexing",
+            "args": [
+                {"name": "path", "type": "string", "required": False, "default": ".", "description": "Project root path"},
+                {"name": "--name", "type": "string", "required": False, "description": "Project name (default: directory name)"},
+                {"name": "--no-gitignore", "type": "boolean", "required": False, "default": False, "description": "Do not add .flyto/ to .gitignore"},
+                {"name": "--index", "type": "boolean", "required": False, "default": False, "description": "Run indexing immediately after init"},
+            ],
+            "outputs": [".flyto/flyto.json", ".flyto/nav/map.json", ".flyto/descriptions.jsonl", ".flyto/index/summary.json"],
+            "side_effects": ["creates .flyto/ directory", "may modify .gitignore"],
+            "examples": ["flyto-index init", "flyto-index init ./my-project --name myapp --index"],
+            "exit_codes": {"0": "success", "1": "error"},
+        },
+        {
+            "name": "scan",
+            "summary": "Scan a project and build/update the code index",
+            "args": [
+                {"name": "path", "type": "string", "required": True, "description": "Project root path"},
+                {"name": "--full", "type": "boolean", "required": False, "default": False, "description": "Full rebuild (not incremental)"},
+                {"name": "--name", "type": "string", "required": False, "description": "Project name (default: directory name)"},
+                {"name": "--output", "type": "string", "required": False, "description": "Index output directory"},
+            ],
+            "outputs": [".flyto/index/", ".flyto/tags/", ".flyto/descriptions.jsonl"],
+            "side_effects": ["writes index files to .flyto/"],
+            "examples": ["flyto-index scan .", "flyto-index scan ./my-project --full --name myapp"],
+            "exit_codes": {"0": "success", "1": "error"},
+        },
+        {
+            "name": "status",
+            "summary": "Show .flyto/ index status: file count, symbol count, staleness",
+            "args": [
+                {"name": "path", "type": "string", "required": False, "default": ".", "description": "Project root path"},
+                {"name": "--json", "type": "boolean", "required": False, "default": False, "description": "Output as JSON"},
+            ],
+            "outputs": [],
+            "side_effects": [],
+            "examples": ["flyto-index status", "flyto-index status ./my-project --json"],
+            "exit_codes": {"0": "success", "1": "no .flyto/ found"},
+        },
+        {
+            "name": "impact",
+            "summary": "Analyze what would be affected by changing a symbol",
+            "args": [
+                {"name": "symbol_id", "type": "string", "required": True, "description": "Symbol ID (format: project:path:type:name)"},
+                {"name": "--path", "type": "string", "required": True, "description": "Project root path"},
+                {"name": "--depth", "type": "integer", "required": False, "default": 3, "description": "Max analysis depth"},
+            ],
+            "outputs": [],
+            "side_effects": [],
+            "examples": ["flyto-index impact useAuth --path ."],
+            "exit_codes": {"0": "success", "1": "symbol not found"},
+        },
+        {
+            "name": "context",
+            "summary": "Get AI-ready context for a project (symbols, files, summaries)",
+            "args": [
+                {"name": "--path", "type": "string", "required": True, "description": "Project root path"},
+                {"name": "--query", "type": "string", "required": False, "description": "Natural language query to focus context"},
+                {"name": "--files", "type": "string[]", "required": False, "description": "Specific files to include"},
+                {"name": "--symbols", "type": "string[]", "required": False, "description": "Specific symbols to include"},
+                {"name": "--level", "type": "string", "required": False, "default": "auto", "description": "Detail level: l0 (outline), l1 (file), l2 (symbol), auto"},
+            ],
+            "outputs": [],
+            "side_effects": [],
+            "examples": ["flyto-index context --path . --query 'authentication flow'"],
+            "exit_codes": {"0": "success", "1": "error"},
+        },
+        {
+            "name": "outline",
+            "summary": "Generate a project outline (L0 overview of structure and categories)",
+            "args": [
+                {"name": "path", "type": "string", "required": True, "description": "Project root path"},
+                {"name": "--name", "type": "string", "required": False, "description": "Project name"},
+            ],
+            "outputs": [],
+            "side_effects": [],
+            "examples": ["flyto-index outline ."],
+            "exit_codes": {"0": "success", "1": "error"},
+        },
+        {
+            "name": "brief",
+            "summary": "Generate a brief (<500 token) project summary from .flyto/ data",
+            "args": [
+                {"name": "path", "type": "string", "required": False, "default": ".", "description": "Project root path"},
+            ],
+            "outputs": [],
+            "side_effects": [],
+            "examples": ["flyto-index brief", "flyto-index brief ./my-project"],
+            "exit_codes": {"0": "success", "1": "no .flyto/ found"},
+        },
+        {
+            "name": "describe",
+            "summary": "Read or write a one-liner semantic description for a file",
+            "args": [
+                {"name": "file_path", "type": "string", "required": True, "description": "File path relative to project root"},
+                {"name": "--summary", "type": "string", "required": False, "description": "Description to write (omit to read existing)"},
+                {"name": "--path", "type": "string", "required": False, "default": ".", "description": "Project root path"},
+                {"name": "--source", "type": "string", "required": False, "default": "ai", "description": "Description source tag"},
+            ],
+            "outputs": [],
+            "side_effects": ["appends to .flyto/descriptions.jsonl (write mode only)"],
+            "examples": [
+                "flyto-index describe src/api/auth.py",
+                "flyto-index describe src/api/auth.py --summary 'User auth: login, register, JWT'",
+            ],
+            "exit_codes": {"0": "success", "1": "error"},
+        },
+        {
+            "name": "tools",
+            "summary": "List all available commands with arguments, examples, and side effects (this output)",
+            "args": [
+                {"name": "--json", "type": "boolean", "required": False, "default": True, "description": "Output as JSON (default)"},
+                {"name": "--compact", "type": "boolean", "required": False, "default": False, "description": "Compact output (names and summaries only)"},
+            ],
+            "outputs": [],
+            "side_effects": [],
+            "examples": ["flyto-index tools", "flyto-index tools --compact"],
+            "exit_codes": {"0": "success"},
+        },
+    ]
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    if hasattr(args, "compact") and args.compact:
+        return {
+            "binary": "flyto-index",
+            "generatedAt": now,
+            "commands": [{"name": c["name"], "summary": c["summary"]} for c in commands],
+        }
+
+    return {
+        "binary": "flyto-index",
+        "version": "0.1.0",
+        "generatedAt": now,
+        "usage": "flyto-index <command> [args]",
+        "commands": commands,
+    }
 
 
 if __name__ == "__main__":

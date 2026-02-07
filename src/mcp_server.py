@@ -1754,64 +1754,222 @@ def update_description(path: str, summary: str, project: str = None) -> dict:
 
 # MCP 工具定義
 TOOLS = [
+    # =========================================================================
+    # Code Search & Discovery
+    # =========================================================================
     {
         "name": "search_code",
-        "description": "跨專案搜尋程式碼。支援關鍵字搜尋、類型篩選、專案篩選。結果按專案分組顯示。",
+        "description": (
+            "Search for functions, classes, components, and composables across all indexed projects. "
+            "Use this as the FIRST step when you need to find code by name or keyword. "
+            "Results are ranked by relevance (name match > summary match > content match) "
+            "and grouped by project. "
+            "Returns: symbol_id, path, line number, type, summary, score. "
+            "Use the symbol_id in follow-up calls to get_symbol_content, find_references, or impact_analysis."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Search keyword (function name, class name, etc.)"},
-                "max_results": {"type": "integer", "default": 20, "description": "最多返回幾筆結果"},
+                "query": {"type": "string", "description": "Keyword to search (function name, class name, etc.). Example: 'useAuth', 'LoginForm', 'validate'"},
+                "max_results": {"type": "integer", "default": 20, "description": "Max results to return (default 20)"},
                 "symbol_type": {
                     "type": "string",
                     "enum": ["function", "class", "method", "composable", "component", "interface", "type"],
-                    "description": "只搜特定類型"
+                    "description": "Filter by symbol type. Omit to search all types.",
                 },
                 "project": {
                     "type": "string",
-                    "description": "Filter by project name (use list_projects to see available)"
+                    "description": "Filter by project name. Use list_projects to see available projects.",
                 },
-                "include_content": {"type": "boolean", "default": False, "description": "是否包含程式碼片段"},
+                "include_content": {"type": "boolean", "default": False, "description": "Include first 500 chars of source code in results"},
             },
             "required": ["query"],
         },
     },
     {
-        "name": "get_file_info",
-        "description": "取得檔案的語意資訊，包括用途說明、分類、關鍵字、使用的 API、依賴的模組等。",
+        "name": "get_symbol_content",
+        "description": (
+            "Get the full source code of a specific symbol (function, class, component). "
+            "Use this AFTER search_code to read the actual implementation. "
+            "Supports fuzzy matching: you can pass a partial symbol_id and it will find the best match. "
+            "Returns: full source code, file path, line range, summary."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "File path (e.g., project/src/file.py)"},
-            },
-            "required": ["path"],
-        },
-    },
-    {
-        "name": "get_file_symbols",
-        "description": "取得檔案中的所有 symbols（函數、類、組件），包括行號和摘要。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "檔案路徑"},
-            },
-            "required": ["path"],
-        },
-    },
-    {
-        "name": "impact_analysis",
-        "description": "影響分析：修改某個函數或組件會影響哪些地方。幫助評估修改風險。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "symbol_id": {"type": "string", "description": "Symbol ID，格式：project:path:type:name"},
+                "symbol_id": {
+                    "type": "string",
+                    "description": "Symbol ID from search_code results. Format: project:path:type:name. Example: 'flyto-core:src/modules/string/uppercase.py:class:StringUppercase'",
+                },
             },
             "required": ["symbol_id"],
         },
     },
     {
+        "name": "get_file_symbols",
+        "description": (
+            "List all symbols (functions, classes, methods, components) defined in a specific file. "
+            "Use this to get an overview of what a file contains before diving deeper. "
+            "Returns: symbol id, name, type, line number, and summary for each symbol."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path relative to project root. Example: 'src/composables/useAuth.js'"},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "get_file_info",
+        "description": (
+            "Get semantic metadata for a file: purpose, category, keywords, APIs used, and dependencies. "
+            "Use this to quickly understand what a file does without reading its source code. "
+            "Returns: purpose description, category (e.g. 'auth', 'payment'), keywords, API endpoints, dependencies."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path. Example: 'src/api/auth.py' or 'frontend/src/views/Login.vue'"},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "fulltext_search",
+        "description": (
+            "Full-text search across all indexed source code. Searches inside comments, strings, and TODO/FIXME markers. "
+            "Use this when search_code doesn't find what you need (search_code matches symbol names; this searches content). "
+            "Use search_type='todo' to find all TODO/FIXME items, 'comment' for comments only, 'string' for string literals. "
+            "Returns: matching symbols with context snippets, grouped by project."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Text to search for. Example: 'deprecated', 'workaround', 'api/v2'"},
+                "search_type": {
+                    "type": "string",
+                    "enum": ["all", "todo", "comment", "string"],
+                    "default": "all",
+                    "description": "What to search: 'all' = everything, 'todo' = TODO/FIXME/HACK/XXX markers, 'comment' = code comments, 'string' = string literals",
+                },
+                "project": {"type": "string", "description": "Filter to a specific project"},
+                "max_results": {"type": "integer", "default": 50, "description": "Max results to return"},
+            },
+            "required": ["query"],
+        },
+    },
+    # =========================================================================
+    # Reference & Dependency Analysis
+    # =========================================================================
+    {
+        "name": "find_references",
+        "description": (
+            "Find all places that call or import a specific symbol. "
+            "Use this BEFORE modifying a function/component to understand who depends on it. "
+            "Uses pre-computed reverse index for fast, accurate results. "
+            "Each reference includes confidence level: high (from dependency analysis), medium (from imports), low (from content regex). "
+            "Returns: list of callers with file path, line number, and confidence, grouped by project."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "symbol_id": {
+                    "type": "string",
+                    "description": "Symbol ID or just the symbol name. Examples: 'flyto-pro:src/agent/browser_agent.py:class:BrowserAgent' or just 'useToast'",
+                },
+            },
+            "required": ["symbol_id"],
+        },
+    },
+    {
+        "name": "impact_analysis",
+        "description": (
+            "Analyze the blast radius of modifying a symbol. "
+            "Use this to assess risk BEFORE making changes to shared code. "
+            "Returns: count of affected locations, list of affected symbols with paths, "
+            "and a risk assessment (safe / moderate / high risk) with suggestions."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "symbol_id": {
+                    "type": "string",
+                    "description": "Symbol ID or name to analyze. Format: project:path:type:name",
+                },
+            },
+            "required": ["symbol_id"],
+        },
+    },
+    {
+        "name": "dependency_graph",
+        "description": (
+            "Get the dependency graph for a file, symbol, or entire project. "
+            "Shows what a module imports (dependencies) and what imports it (dependents). "
+            "Use direction='imports' to see what a file depends on, 'dependents' to see what depends on it, 'both' for full picture. "
+            "Returns: lists of import and dependent relationships with file paths and dependency types."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "File path to analyze. Example: 'src/composables/useToast.js'"},
+                "symbol_id": {"type": "string", "description": "Symbol ID (file path is auto-extracted from it)"},
+                "project": {"type": "string", "description": "Project name to show all dependencies for the entire project"},
+                "direction": {
+                    "type": "string",
+                    "enum": ["both", "imports", "dependents"],
+                    "default": "both",
+                    "description": "'imports' = what this file depends on, 'dependents' = what depends on this file, 'both' = full graph",
+                },
+                "max_depth": {"type": "integer", "default": 2, "description": "Max traversal depth"},
+            },
+        },
+    },
+    {
+        "name": "cross_project_impact",
+        "description": (
+            "Track cross-project API usage. When a function/class in one project changes, "
+            "find all other projects that need to be updated. "
+            "Use this before changing shared APIs (e.g. a function in flyto-core used by flyto-pro and flyto-cloud). "
+            "Returns: list of cross-project references, affected projects, and risk level (low/medium/high)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "symbol_name": {
+                    "type": "string",
+                    "description": "Symbol name to track. Example: 'useModuleSchema', 'ValidationError', 'BaseModule'",
+                },
+                "source_project": {
+                    "type": "string",
+                    "description": "Limit search to symbols defined in this project (optional)",
+                },
+            },
+            "required": ["symbol_name"],
+        },
+    },
+    # =========================================================================
+    # Project Overview & Status
+    # =========================================================================
+    {
+        "name": "list_projects",
+        "description": (
+            "List all indexed projects with statistics. "
+            "Use this FIRST to discover available projects and their sizes. "
+            "Returns: project names, file counts, symbol counts, and breakdown by symbol type (function/class/component/etc)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
         "name": "list_categories",
-        "description": "列出所有程式碼分類，例如：payment, auth, product, order 等。",
+        "description": (
+            "List all code categories (e.g. auth, payment, product, order) and how many files belong to each. "
+            "Use this to understand the high-level structure of indexed projects. "
+            "Returns: category names sorted by file count."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {},
@@ -1819,106 +1977,54 @@ TOOLS = [
     },
     {
         "name": "list_apis",
-        "description": "列出所有 API 端點，以及哪些檔案使用它們。",
+        "description": (
+            "List all API endpoints found in indexed code, along with which files use them. "
+            "Use this to discover available backend endpoints or see API usage patterns. "
+            "Returns: API paths sorted by usage count."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {},
-        },
-    },
-    {
-        "name": "list_projects",
-        "description": "列出所有已索引的專案，包括檔案數、symbol 數、各類型統計。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
-    {
-        "name": "get_symbol_content",
-        "description": "取得 symbol 的完整程式碼。可用於查看函數、類、組件的實作細節。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "symbol_id": {"type": "string", "description": "Symbol ID (format: project:path:type:name)"},
-            },
-            "required": ["symbol_id"],
-        },
-    },
-    {
-        "name": "find_references",
-        "description": "找出所有引用此 symbol 的地方。幫助了解函數、組件被哪些地方使用。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "symbol_id": {"type": "string", "description": "Symbol ID (format: project:path:type:name)"},
-            },
-            "required": ["symbol_id"],
-        },
-    },
-    {
-        "name": "dependency_graph",
-        "description": "取得模組依賴關係圖。顯示檔案/模組之間的依賴關係（imports 和 dependents）。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "file_path": {"type": "string", "description": "檔案路徑，例如：src/composables/useToast.js"},
-                "symbol_id": {"type": "string", "description": "Symbol ID，會自動提取檔案路徑"},
-                "project": {"type": "string", "description": "專案名稱，顯示整個專案的依賴"},
-                "direction": {
-                    "type": "string",
-                    "enum": ["both", "imports", "dependents"],
-                    "default": "both",
-                    "description": "查詢方向：both=雙向, imports=此檔案依賴什麼, dependents=什麼依賴此檔案"
-                },
-                "max_depth": {"type": "integer", "default": 2, "description": "最大深度"},
-            },
-        },
-    },
-    {
-        "name": "fulltext_search",
-        "description": "全文搜尋：搜尋註解、字串、TODO/FIXME 標記。可用於找出特定的註解或待辦事項。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "搜尋關鍵字"},
-                "search_type": {
-                    "type": "string",
-                    "enum": ["all", "todo", "comment", "string"],
-                    "default": "all",
-                    "description": "搜尋類型：all=全部, todo=TODO/FIXME, comment=註解, string=字串"
-                },
-                "project": {"type": "string", "description": "只搜特定專案"},
-                "max_results": {"type": "integer", "default": 50, "description": "最多返回幾筆"},
-            },
-            "required": ["query"],
         },
     },
     {
         "name": "check_index_status",
-        "description": "檢查索引是否過期。比較檔案修改時間，判斷是否需要重新索引。",
+        "description": (
+            "Check if the code index is up-to-date or stale. "
+            "Compares file modification times against the last index time. "
+            "Returns: status (fresh/slightly_stale/stale), list of changed files, and recommendation to re-index if needed."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {},
         },
     },
+    # =========================================================================
+    # Code Quality
+    # =========================================================================
     {
         "name": "find_dead_code",
-        "description": "找出沒有被任何地方引用的函數/組件（死代碼）。這些代碼可以考慮刪除以減少維護負擔。",
+        "description": (
+            "Find unreferenced functions, classes, and components (dead code). "
+            "These symbols are never imported or called by any other code and can likely be removed. "
+            "Automatically excludes entry points, lifecycle hooks, private methods, and test files. "
+            "Returns: list of dead symbols sorted by line count (largest first), with total dead lines."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "project": {
                     "type": "string",
-                    "description": "只搜特定專案",
+                    "description": "Filter to a specific project",
                 },
                 "symbol_type": {
                     "type": "string",
-                    "description": "只搜特定類型",
+                    "description": "Filter to a specific symbol type",
                     "enum": ["function", "method", "composable", "component", "class"],
                 },
                 "min_lines": {
                     "type": "integer",
-                    "description": "最少行數（過濾太小的函數）",
+                    "description": "Minimum line count to report (filters out tiny functions). Default: 5",
                     "default": 5,
                 },
             },
@@ -1926,52 +2032,46 @@ TOOLS = [
     },
     {
         "name": "find_todos",
-        "description": "找出所有 TODO、FIXME、HACK、XXX 標記。幫助追蹤技術債和待辦事項。",
+        "description": (
+            "Find all TODO, FIXME, HACK, and XXX markers across indexed code. "
+            "Use this to track technical debt and pending work items. "
+            "Priority: FIXME/HACK = high, TODO/XXX = medium, NOTE = low. "
+            "Returns: list of markers with text, file path, line number, grouped by priority and project."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "project": {
                     "type": "string",
-                    "description": "只搜特定專案",
+                    "description": "Filter to a specific project",
                 },
                 "priority": {
                     "type": "string",
-                    "description": "只搜特定優先級",
+                    "description": "Filter by priority level",
                     "enum": ["high", "medium", "low"],
                 },
                 "max_results": {
                     "type": "integer",
-                    "description": "最多返回幾筆",
+                    "description": "Max results to return. Default: 100",
                     "default": 100,
                 },
             },
         },
     },
-    {
-        "name": "cross_project_impact",
-        "description": "跨專案 API 變更追蹤。當某個專案的函數/類改變時，找出其他專案哪些地方需要更新。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "symbol_name": {
-                    "type": "string",
-                    "description": "要追蹤的符號名稱,例如:useModuleSchema、ValidationError",
-                },
-                "source_project": {
-                    "type": "string",
-                    "description": "源專案（可選，用於限定範圍）",
-                },
-            },
-            "required": ["symbol_name"],
-        },
-    },
+    # =========================================================================
+    # File Descriptions
+    # =========================================================================
     {
         "name": "get_description",
-        "description": "Get the semantic description for a file. Returns one_liner, staleness status, and metadata.",
+        "description": (
+            "Get the semantic one-liner description for a file. "
+            "Returns the latest human or AI-written summary, staleness status (whether the file changed since description was written), and metadata. "
+            "Use this to quickly understand what a file does."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "File path relative to project root (e.g., src/api/auth.py)"},
+                "path": {"type": "string", "description": "File path relative to project root. Example: 'src/api/auth.py'"},
                 "project": {"type": "string", "description": "Project name (optional, auto-detected if omitted)"},
             },
             "required": ["path"],
@@ -1979,12 +2079,17 @@ TOOLS = [
     },
     {
         "name": "update_description",
-        "description": "Write or update a semantic description for a file. Use this after reading/modifying a file to record what it does.",
+        "description": (
+            "Write or update a semantic description for a file. "
+            "Call this after reading or modifying a file to record what it does. "
+            "The description is stored in .flyto/descriptions.jsonl with a content hash for staleness tracking. "
+            "Side effects: appends one line to .flyto/descriptions.jsonl."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "File path relative to project root (e.g., src/api/auth.py)"},
-                "summary": {"type": "string", "description": "One-liner semantic description (e.g., 'User auth core: login/register/rate limiting')"},
+                "path": {"type": "string", "description": "File path relative to project root. Example: 'src/api/auth.py'"},
+                "summary": {"type": "string", "description": "One-liner description. Example: 'User auth core: login, register, rate limiting, JWT token management'"},
                 "project": {"type": "string", "description": "Project name (optional, auto-detected if omitted)"},
             },
             "required": ["path", "summary"],
@@ -1995,24 +2100,28 @@ TOOLS = [
     # =========================================================================
     {
         "name": "dual_ai_task",
-        "description": "Execute a Dual-AI collaborative task. GPT-4 plans, Claude executes, GPT-4 verifies.",
+        "description": (
+            "Run a collaborative Dual-AI task: GPT-4 plans the approach, Claude executes it, GPT-4 verifies the result. "
+            "Use this for complex tasks that benefit from multiple AI perspectives (refactoring, architecture decisions, etc). "
+            "Returns: execution result with plan, actions taken, and verification status."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "task": {
                     "type": "string",
-                    "description": "Task description to execute",
+                    "description": "Task description. Example: 'Refactor the auth module to use JWT instead of sessions'",
                 },
                 "project_path": {
                     "type": "string",
-                    "description": "Project directory path (default: current directory)",
+                    "description": "Project directory path",
                     "default": ".",
                 },
                 "mode": {
                     "type": "string",
                     "enum": ["sequential", "parallel", "consensus"],
                     "default": "sequential",
-                    "description": "Collaboration mode: sequential (GPT->Claude->GPT), parallel (simultaneous), consensus (voting)",
+                    "description": "'sequential' = GPT plans -> Claude executes -> GPT verifies. 'parallel' = both work simultaneously. 'consensus' = both vote.",
                 },
                 "agents": {
                     "type": "array",
@@ -2030,19 +2139,23 @@ TOOLS = [
     },
     {
         "name": "dual_ai_review",
-        "description": "Multi-model code review. Uses Claude and GPT-4 simultaneously to review code, then merges results.",
+        "description": (
+            "Multi-model code review: Claude and GPT-4 independently review the same code, then results are merged. "
+            "Use this for thorough code review covering security, performance, and style issues. "
+            "Returns: merged review with findings from both models."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "file_path": {
                     "type": "string",
-                    "description": "Path to file to review",
+                    "description": "Path to the file to review",
                 },
                 "review_type": {
                     "type": "string",
                     "enum": ["security", "performance", "style", "all"],
                     "default": "all",
-                    "description": "Type of review to perform",
+                    "description": "Focus area: 'security' for vulnerabilities, 'performance' for bottlenecks, 'style' for code quality, 'all' for everything",
                 },
                 "models": {
                     "type": "array",
@@ -2055,29 +2168,33 @@ TOOLS = [
     },
     {
         "name": "dual_ai_consensus",
-        "description": "Multi-AI consensus voting for important decisions. Multiple AI models vote and explain their reasoning.",
+        "description": (
+            "Multi-AI voting for important decisions. Multiple models independently vote on options and explain their reasoning. "
+            "Use this when choosing between approaches, architectures, or trade-offs. "
+            "Returns: vote tally, each model's reasoning, and final recommendation."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "question": {
                     "type": "string",
-                    "description": "Question to vote on",
+                    "description": "Decision question. Example: 'Should we use Redis or in-memory caching for session storage?'",
                 },
                 "options": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of options to choose from",
+                    "description": "Options to vote on. Example: ['Redis', 'In-memory', 'File-based']",
                 },
                 "context": {
                     "type": "string",
-                    "description": "Additional context for the decision",
+                    "description": "Additional context for the decision (constraints, requirements, etc)",
                     "default": "",
                 },
                 "mode": {
                     "type": "string",
                     "enum": ["majority", "unanimous", "weighted"],
                     "default": "majority",
-                    "description": "Voting mode: majority (>50%), unanimous (100%), weighted (by confidence)",
+                    "description": "'majority' = >50% wins, 'unanimous' = all must agree, 'weighted' = by confidence score",
                 },
                 "voters": {
                     "type": "array",
@@ -2090,19 +2207,23 @@ TOOLS = [
     },
     {
         "name": "dual_ai_security",
-        "description": "Professional security audit. Checks for SQL injection, XSS, CSRF, sensitive data leaks, auth issues, and more.",
+        "description": (
+            "Security audit using multiple AI models. Checks for OWASP Top 10 vulnerabilities: "
+            "SQL injection, XSS, CSRF, auth bypasses, sensitive data exposure, and more. "
+            "Returns: vulnerability findings with severity, location, and fix suggestions."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "target": {
                     "type": "string",
-                    "description": "File path or code snippet to audit",
+                    "description": "File path to audit. Example: 'src/api/auth.py'",
                 },
                 "scan_type": {
                     "type": "string",
                     "enum": ["quick", "full", "deep"],
                     "default": "full",
-                    "description": "Scan depth: quick (fast), full (standard), deep (thorough)",
+                    "description": "'quick' = fast surface scan, 'full' = standard OWASP check, 'deep' = thorough with data flow analysis",
                 },
             },
             "required": ["target"],
@@ -2110,25 +2231,29 @@ TOOLS = [
     },
     {
         "name": "dual_ai_test_gen",
-        "description": "Automatic test case generation. Analyzes code and generates comprehensive tests with edge cases.",
+        "description": (
+            "Auto-generate test cases for a file or function. "
+            "Analyzes the code to create comprehensive tests including edge cases, error paths, and boundary conditions. "
+            "Returns: generated test code ready to save to a file."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "target": {
                     "type": "string",
-                    "description": "File path or code to generate tests for",
+                    "description": "File path to generate tests for. Example: 'src/utils/validator.py'",
                 },
                 "test_type": {
                     "type": "string",
                     "enum": ["unit", "integration", "e2e"],
                     "default": "unit",
-                    "description": "Type of tests to generate",
+                    "description": "'unit' = isolated function tests, 'integration' = module interaction tests, 'e2e' = full flow tests",
                 },
                 "framework": {
                     "type": "string",
                     "enum": ["auto", "pytest", "jest", "vitest"],
                     "default": "auto",
-                    "description": "Test framework (auto-detected if not specified)",
+                    "description": "Test framework. 'auto' detects from project config.",
                 },
             },
             "required": ["target"],
@@ -2136,7 +2261,10 @@ TOOLS = [
     },
     {
         "name": "dual_ai_agents",
-        "description": "List all available Dual-AI agents and their capabilities.",
+        "description": (
+            "List all available Dual-AI agents with their roles and capabilities. "
+            "Returns: agent IDs, model assignments, and what each agent specializes in."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {},

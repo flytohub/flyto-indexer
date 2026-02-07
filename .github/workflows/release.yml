@@ -1,0 +1,78 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            artifact: flyto-index-darwin-x64
+          - os: ubuntu-latest
+            artifact: flyto-index-linux-x64
+          - os: windows-latest
+            artifact: flyto-index-windows-x64.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Nuitka
+        run: pip install nuitka
+
+      # Linux needs patchelf for --onefile
+      - name: Install patchelf (Linux)
+        if: runner.os == 'Linux'
+        run: pip install patchelf
+
+      - name: Build binary
+        run: |
+          python -m nuitka \
+            --onefile \
+            --standalone \
+            --follow-imports \
+            --output-filename=${{ matrix.artifact }} \
+            src/cli.py
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f | head -20
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/flyto-index-darwin-x64/flyto-index-darwin-x64
+            artifacts/flyto-index-linux-x64/flyto-index-linux-x64
+            artifacts/flyto-index-windows-x64.exe/flyto-index-windows-x64.exe
