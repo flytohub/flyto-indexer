@@ -1622,6 +1622,136 @@ def cross_project_impact(
     }
 
 
+def get_description(path: str, project: str = None) -> dict:
+    """
+    Get the latest description for a file path.
+
+    Searches all indexed projects' .flyto/descriptions.jsonl files.
+    Returns the latest entry matching the path (bottom-up, last wins).
+    """
+    import hashlib
+
+    # Determine which project roots to search
+    index = load_index()
+    project_roots = index.get("project_roots", {})
+
+    if project and project in project_roots:
+        roots_to_search = {project: project_roots[project]}
+    else:
+        roots_to_search = project_roots
+
+    # Search each project's descriptions.jsonl
+    for proj_name, root in roots_to_search.items():
+        desc_path = Path(root) / ".flyto" / "descriptions.jsonl"
+        if not desc_path.exists():
+            continue
+
+        latest = None
+        for line in desc_path.read_text(encoding="utf-8").strip().split("\n"):
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+                if entry.get("path") == path:
+                    latest = entry
+            except json.JSONDecodeError:
+                pass
+
+        if latest:
+            # Check staleness
+            full_path = Path(root) / path
+            stale = False
+            if full_path.exists() and latest.get("hash"):
+                import hashlib
+                current_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()[:16]
+                if current_hash != latest["hash"]:
+                    stale = True
+
+            return {
+                "project": proj_name,
+                "path": path,
+                "one_liner": latest.get("one_liner", ""),
+                "source": latest.get("source", "unknown"),
+                "updatedAt": latest.get("updatedAt", ""),
+                "stale": stale,
+                "category": latest.get("category", ""),
+                "refs": latest.get("refs", 0),
+                "hotspot": latest.get("hotspot", False),
+            }
+
+    return {"error": f"No description found for: {path}"}
+
+
+def update_description(path: str, summary: str, project: str = None) -> dict:
+    """
+    Write or update a file description.
+
+    Appends a new entry to the project's .flyto/descriptions.jsonl.
+    Hash is computed from the current file content for staleness tracking.
+    """
+    import hashlib
+    from datetime import datetime, timezone
+
+    index = load_index()
+    project_roots = index.get("project_roots", {})
+
+    # Find the right project root
+    target_root = None
+    target_project = None
+
+    if project and project in project_roots:
+        target_root = project_roots[project]
+        target_project = project
+    else:
+        # Try to find which project contains this path
+        for proj_name, root in project_roots.items():
+            if (Path(root) / path).exists():
+                target_root = root
+                target_project = proj_name
+                break
+
+    if not target_root:
+        return {"error": f"Cannot find project containing: {path}"}
+
+    desc_path = Path(target_root) / ".flyto" / "descriptions.jsonl"
+    if not desc_path.parent.exists():
+        return {"error": f"No .flyto/ found in {target_project}. Run 'flyto-index init' first."}
+
+    # Compute file hash
+    full_path = Path(target_root) / path
+    file_hash = ""
+    if full_path.exists():
+        file_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()[:16]
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    entry = {
+        "path": path,
+        "hash": file_hash,
+        "one_liner": summary,
+        "source": "ai",
+        "updatedAt": now,
+    }
+    line = json.dumps(entry, ensure_ascii=False)
+
+    # Append
+    with open(desc_path, "a", encoding="utf-8") as f:
+        if desc_path.exists() and desc_path.stat().st_size > 0:
+            with open(desc_path, "rb") as check:
+                check.seek(-1, 2)
+                if check.read(1) != b"\n":
+                    f.write("\n")
+        f.write(line + "\n")
+
+    return {
+        "ok": True,
+        "project": target_project,
+        "path": path,
+        "one_liner": summary,
+        "hash": file_hash,
+        "updatedAt": now,
+    }
+
+
 # MCP 工具定義
 TOOLS = [
     {
@@ -1833,6 +1963,31 @@ TOOLS = [
                 },
             },
             "required": ["symbol_name"],
+        },
+    },
+    {
+        "name": "get_description",
+        "description": "Get the semantic description for a file. Returns one_liner, staleness status, and metadata.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path relative to project root (e.g., src/api/auth.py)"},
+                "project": {"type": "string", "description": "Project name (optional, auto-detected if omitted)"},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "update_description",
+        "description": "Write or update a semantic description for a file. Use this after reading/modifying a file to record what it does.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path relative to project root (e.g., src/api/auth.py)"},
+                "summary": {"type": "string", "description": "One-liner semantic description (e.g., 'User auth core: login/register/rate limiting')"},
+                "project": {"type": "string", "description": "Project name (optional, auto-detected if omitted)"},
+            },
+            "required": ["path", "summary"],
         },
     },
     # =========================================================================
@@ -2071,6 +2226,17 @@ def handle_request(request: dict):
                 result = cross_project_impact(
                     symbol_name=arguments.get("symbol_name", ""),
                     source_project=arguments.get("source_project"),
+                )
+            elif tool_name == "get_description":
+                result = get_description(
+                    path=arguments.get("path", ""),
+                    project=arguments.get("project"),
+                )
+            elif tool_name == "update_description":
+                result = update_description(
+                    path=arguments.get("path", ""),
+                    summary=arguments.get("summary", ""),
+                    project=arguments.get("project"),
                 )
             # =========================================================
             # Dual-AI Tools

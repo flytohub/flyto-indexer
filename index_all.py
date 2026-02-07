@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from src.engine import IndexEngine
 from src.mapper.project_map import ProjectMapGenerator
+from src.flyto_output import generate_flyto_folder
 
 
 # Workspace manifest for incremental indexing
@@ -144,6 +145,13 @@ def index_project(project_name: str, project_path: Path, output_dir: Path, incre
         result = engine.scan(incremental=incremental)
 
         print(f"     Files: {result['files_scanned']}, Symbols: {result['symbols_found']}")
+
+        # Generate per-project .flyto/ folder (Schema v1)
+        try:
+            flyto_dir = generate_flyto_folder(engine.index, project_path)
+            print(f"     .flyto/ generated at {flyto_dir}")
+        except Exception as e:
+            print(f"     [!] .flyto/ generation failed: {e}")
 
         return {
             "project": project_name,

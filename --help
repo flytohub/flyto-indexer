@@ -1,0 +1,6 @@
+projects:
+- name: example-project
+  path: /path/to/your/project
+workspace:
+  name: my-workspace
+  output_dir: .flyto-index
