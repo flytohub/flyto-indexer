@@ -25,6 +25,9 @@ projects:
   - name: flyto-cloud-dev
     path: /Library/其他專案/flytohub/flyto-cloud-dev
 
+  - name: flyto-vscode
+    path: /Library/其他專案/flytohub/flyto-vscode
+
   - name: flyto-indexer
     path: /Library/其他專案/flytohub/flyto-indexer
 

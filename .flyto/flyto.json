@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-02-06T15:49:08Z",
+  "generatedAt": "2026-02-08T17:29:51Z",
   "project": {
     "name": "flyto-indexer",
     "root": ".",
@@ -14,6 +14,7 @@
   },
   "paths": {
     "map": "nav/map.json",
+    "brief": "brief.md",
     "descriptions": "descriptions.jsonl",
     "indexSummary": "index/summary.json"
   }

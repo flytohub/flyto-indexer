@@ -8,9 +8,12 @@ Main indexing engine - orchestrates the entire flow.
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from .models import ProjectIndex, Symbol, Dependency, FileManifest, SymbolType
 from .scanner import (
@@ -97,6 +100,12 @@ class IndexEngine:
             if not file_path.exists():
                 continue
 
+            # 檢查檔案大小（跳過超過 1MB 的檔案）
+            file_size = file_path.stat().st_size
+            if file_size > 1_048_576:
+                result.add_error(rel_path, f"File too large: {file_size:,} bytes (max 1MB)")
+                continue
+
             # 找到對應的 scanner
             scanner = self._get_scanner(file_path)
             if not scanner:
@@ -107,7 +116,7 @@ class IndexEngine:
                 symbols, deps = scanner.scan_file(Path(rel_path), content)
                 manifest = scanner.create_file_manifest(Path(rel_path), content, symbols)
                 result.add_file_result(symbols, deps, manifest)
-            except Exception as e:
+            except (SyntaxError, UnicodeDecodeError, OSError, ValueError) as e:
                 result.add_error(rel_path, str(e))
 
         # 更新索引
@@ -284,9 +293,9 @@ class IndexEngine:
         if full_id in self.index.symbols:
             return full_id
 
-        # 模糊匹配
+        # 精確名稱匹配（取 : 分隔的最後部分）
         for sid in self.index.symbols:
-            if sid.endswith(symbol_id):
+            if sid.endswith(f":{symbol_id}"):
                 return sid
 
         return None
@@ -298,8 +307,8 @@ class IndexEngine:
             try:
                 data = json.loads(index_file.read_text())
                 return self._deserialize_index(data)
-            except Exception:
-                pass
+            except (json.JSONDecodeError, KeyError, OSError) as e:
+                logger.warning("Failed to load index from %s: %s", index_file, e)
         return self._create_empty_index()
 
     def _create_empty_index(self) -> ProjectIndex:
@@ -681,6 +690,6 @@ class IndexEngine:
                     if line:
                         record = json.loads(line)
                         content_map[record["id"]] = record["content"]
-        except Exception:
-            pass
+        except (json.JSONDecodeError, KeyError, OSError) as e:
+            logger.warning("Failed to load content file %s: %s", content_file, e)
         return content_map

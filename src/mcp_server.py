@@ -22,6 +22,7 @@ import asyncio
 import gzip
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -46,6 +47,24 @@ except ImportError:
     dual_ai_test_gen = None
     dual_ai_agents = None
 
+# Pre-compiled regex patterns for TODO/FIXME markers
+_TODO_PATTERNS = {
+    "FIXME": (re.compile(r'#\s*FIXME[:\s]*(.*)$|//\s*FIXME[:\s]*(.*)$|/\*\s*FIXME[:\s]*(.*?)\*/', re.MULTILINE | re.IGNORECASE), "high"),
+    "TODO": (re.compile(r'#\s*TODO[:\s]*(.*)$|//\s*TODO[:\s]*(.*)$|/\*\s*TODO[:\s]*(.*?)\*/', re.MULTILINE | re.IGNORECASE), "medium"),
+    "HACK": (re.compile(r'#\s*HACK[:\s]*(.*)$|//\s*HACK[:\s]*(.*)$|/\*\s*HACK[:\s]*(.*?)\*/', re.MULTILINE | re.IGNORECASE), "high"),
+    "XXX": (re.compile(r'#\s*XXX[:\s]*(.*)$|//\s*XXX[:\s]*(.*)$|/\*\s*XXX[:\s]*(.*?)\*/', re.MULTILINE | re.IGNORECASE), "medium"),
+    "NOTE": (re.compile(r'#\s*NOTE[:\s]*(.*)$|//\s*NOTE[:\s]*(.*)$|/\*\s*NOTE[:\s]*(.*?)\*/', re.MULTILINE | re.IGNORECASE), "low"),
+}
+_FULLTEXT_TODO_PATTERN = re.compile(r'(?:#|//|/\*|\*)\s*(TODO|FIXME|XXX|HACK|NOTE|BUG)[\s:]+([^\n\r]*)', re.IGNORECASE)
+_PY_COMMENT_PATTERN = re.compile(r'#\s*([^\n]*)')
+_JS_COMMENT_PATTERN = re.compile(r'//\s*([^\n]*)')
+_MULTI_COMMENT_PATTERN = re.compile(r'/\*[\s\S]*?\*/')
+_STRING_PATTERNS = [
+    re.compile(r'"([^"\\]*(?:\\.[^"\\]*)*)"'),
+    re.compile(r"'([^'\\]*(?:\\.[^'\\]*)*)'"),
+    re.compile(r'`([^`]*)`'),
+]
+
 # MCP Protocol
 def send_response(id: Any, result: Any):
     response = {"jsonrpc": "2.0", "id": id, "result": result}
@@ -64,6 +83,12 @@ INDEX_DIR = Path(os.environ.get(
 # Content cache for lazy loading
 _content_cache: dict = {}
 _content_loaded: bool = False
+
+# Test mapper cache (lazy init)
+_test_mapper = None
+
+# Session store (in-memory, survives across MCP calls within same process)
+_session_store = None
 
 
 def load_project_map() -> dict:
@@ -159,7 +184,8 @@ def search_by_keyword(
     max_results: int = 20,
     symbol_type: str = None,
     project: str = None,
-    include_content: bool = False
+    include_content: bool = False,
+    session_id: str = None,
 ) -> dict:
     """
     跨專案搜尋（智能排序）
@@ -184,6 +210,15 @@ def search_by_keyword(
     results = []
     query_lower = query.lower()
     query_words = query_lower.split()
+
+    # Session boost paths
+    boost_paths: set = set()
+    if session_id:
+        store = _get_session_store()
+        session = store.get(session_id)
+        if session:
+            boost_paths = session.get_boost_paths()
+            session.add_query(query)
 
     # 搜尋 symbols
     for symbol_id, symbol in index.get("symbols", {}).items():
@@ -245,6 +280,12 @@ def search_by_keyword(
         # 4. Export 權重（公開 API 加分）
         if symbol.get("exports"):
             score += 3
+
+        # 5. Session boost（最近看過的檔案加分）
+        if boost_paths and path:
+            raw_path = symbol.get("path", "")
+            if raw_path in boost_paths:
+                score += 8
 
         result = {
             "project": sym_project,
@@ -969,8 +1010,6 @@ def fulltext_search(
 
     Searches in comments, strings, TODOs, and general content.
     """
-    import re
-
     index = load_index()
     symbols = index.get("symbols", {})
     results = []
@@ -993,8 +1032,7 @@ def fulltext_search(
         # Search based on type
         if search_type in ("all", "todo"):
             # Find TODOs, FIXMEs, XXX, HACK, NOTE
-            todo_pattern = r'(?:#|//|/\*|\*)\s*(TODO|FIXME|XXX|HACK|NOTE|BUG)[\s:]+([^\n\r]*)'
-            for m in re.finditer(todo_pattern, content, re.IGNORECASE):
+            for m in _FULLTEXT_TODO_PATTERN.finditer(content):
                 if query_lower in m.group(0).lower():
                     line_num = content[:m.start()].count('\n') + 1
                     matches.append({
@@ -1007,8 +1045,7 @@ def fulltext_search(
         if search_type in ("all", "comment"):
             # Find comments containing query
             # Python comments
-            py_comment = r'#\s*([^\n]*)'
-            for m in re.finditer(py_comment, content):
+            for m in _PY_COMMENT_PATTERN.finditer(content):
                 if query_lower in m.group(1).lower():
                     line_num = content[:m.start()].count('\n') + 1
                     matches.append({
@@ -1018,8 +1055,7 @@ def fulltext_search(
                     })
 
             # JS/TS single-line comments
-            js_comment = r'//\s*([^\n]*)'
-            for m in re.finditer(js_comment, content):
+            for m in _JS_COMMENT_PATTERN.finditer(content):
                 if query_lower in m.group(1).lower():
                     line_num = content[:m.start()].count('\n') + 1
                     matches.append({
@@ -1029,8 +1065,7 @@ def fulltext_search(
                     })
 
             # Multi-line comments
-            multi_comment = r'/\*[\s\S]*?\*/'
-            for m in re.finditer(multi_comment, content):
+            for m in _MULTI_COMMENT_PATTERN.finditer(content):
                 if query_lower in m.group(0).lower():
                     line_num = content[:m.start()].count('\n') + 1
                     text = m.group(0).replace('/*', '').replace('*/', '').strip()
@@ -1042,13 +1077,8 @@ def fulltext_search(
 
         if search_type in ("all", "string"):
             # Find strings containing query
-            string_patterns = [
-                r'"([^"\\]*(?:\\.[^"\\]*)*)"',  # Double-quoted
-                r"'([^'\\]*(?:\\.[^'\\]*)*)'",  # Single-quoted
-                r'`([^`]*)`',  # Template literals
-            ]
-            for pattern in string_patterns:
-                for m in re.finditer(pattern, content):
+            for pattern in _STRING_PATTERNS:
+                for m in pattern.finditer(content):
                     if query_lower in m.group(1).lower():
                         line_num = content[:m.start()].count('\n') + 1
                         matches.append({
@@ -1447,19 +1477,10 @@ def find_todos(
 
     幫助追蹤技術債和待辦事項。
     """
-    import re
-
     index = load_index()
     symbols = index.get("symbols", {})
 
-    # TODO 模式
-    patterns = {
-        "FIXME": (re.compile(r'#\s*FIXME[:\s]*(.*)$|//\s*FIXME[:\s]*(.*)$|/\*\s*FIXME[:\s]*(.*?)\*/', re.MULTILINE | re.IGNORECASE), "high"),
-        "TODO": (re.compile(r'#\s*TODO[:\s]*(.*)$|//\s*TODO[:\s]*(.*)$|/\*\s*TODO[:\s]*(.*?)\*/', re.MULTILINE | re.IGNORECASE), "medium"),
-        "HACK": (re.compile(r'#\s*HACK[:\s]*(.*)$|//\s*HACK[:\s]*(.*)$|/\*\s*HACK[:\s]*(.*?)\*/', re.MULTILINE | re.IGNORECASE), "high"),
-        "XXX": (re.compile(r'#\s*XXX[:\s]*(.*)$|//\s*XXX[:\s]*(.*)$|/\*\s*XXX[:\s]*(.*?)\*/', re.MULTILINE | re.IGNORECASE), "medium"),
-        "NOTE": (re.compile(r'#\s*NOTE[:\s]*(.*)$|//\s*NOTE[:\s]*(.*)$|/\*\s*NOTE[:\s]*(.*?)\*/', re.MULTILINE | re.IGNORECASE), "low"),
-    }
+    patterns = _TODO_PATTERNS
 
     todos = []
     seen_files = set()
@@ -1752,6 +1773,408 @@ def update_description(path: str, summary: str, project: str = None) -> dict:
     }
 
 
+def _get_test_mapper():
+    """Get or create the TestMapper singleton."""
+    global _test_mapper
+    if _test_mapper is None:
+        try:
+            from .test_mapper import TestMapper
+        except ImportError:
+            from test_mapper import TestMapper
+        _test_mapper = TestMapper(load_index())
+    return _test_mapper
+
+
+def _get_session_store():
+    """Get or create the SessionStore singleton."""
+    global _session_store
+    if _session_store is None:
+        try:
+            from .session import SessionStore
+        except ImportError:
+            from session import SessionStore
+        _session_store = SessionStore()
+    return _session_store
+
+
+def find_test_file(path: str) -> dict:
+    """
+    Find the corresponding test file for a source file, or vice versa.
+
+    Uses naming convention (primary) and import analysis (fallback).
+    """
+    mapper = _get_test_mapper()
+
+    try:
+        from .test_mapper import TestMapper
+    except ImportError:
+        from test_mapper import TestMapper
+    if TestMapper._is_test_file(path):
+        source = mapper.find_source(path)
+        return {
+            "query_path": path,
+            "is_test_file": True,
+            "source_file": source,
+            "test_file": path,
+        }
+    else:
+        test = mapper.find_test(path)
+        return {
+            "query_path": path,
+            "is_test_file": False,
+            "source_file": path,
+            "test_file": test,
+        }
+
+
+def get_file_context(path: str, include_content: bool = False) -> dict:
+    """
+    One-call context package: returns everything an agent needs about a file.
+
+    Aggregates: file info, symbols, imports, dependents, test file, related files.
+    All from cached data, zero I/O.
+    """
+    index = load_index()
+    symbols_map = index.get("symbols", {})
+    dependencies = index.get("dependencies", {})
+    reverse_index = index.get("reverse_index", {})
+
+    # 1. File info
+    info = get_file_info(path)
+    if "error" in info:
+        info = {"purpose": "", "category": "", "keywords": []}
+
+    # 2. Symbols in this file
+    file_symbols = get_file_symbols(path)
+    symbols_list = file_symbols.get("symbols", [])
+
+    # 3. Imports (dependencies where source is in this file)
+    imports = []
+    seen_imports = set()
+    for dep_id, dep in dependencies.items():
+        source_id = dep.get("source", "")
+        if ":" in source_id:
+            source_path = source_id.split(":")[1] if len(source_id.split(":")) >= 2 else ""
+            if source_path == path and dep.get("type") == "imports":
+                target = dep.get("target", "")
+                if target not in seen_imports:
+                    seen_imports.add(target)
+                    names = dep.get("metadata", {}).get("names", [])
+                    imports.append({"target": target, "names": names})
+
+    # 4. Dependents (who references symbols in this file)
+    dependents = []
+    seen_deps = set()
+    for sym_id, callers in reverse_index.items():
+        if ":" not in sym_id:
+            continue
+        sym_path = sym_id.split(":")[1] if len(sym_id.split(":")) >= 2 else ""
+        if sym_path != path:
+            continue
+        sym_name = sym_id.split(":")[-1] if ":" in sym_id else sym_id
+        for caller_id in callers:
+            if ":" in caller_id:
+                caller_path = caller_id.split(":")[1] if len(caller_id.split(":")) >= 2 else ""
+                if caller_path != path and caller_id not in seen_deps:
+                    seen_deps.add(caller_id)
+                    caller_sym = symbols_map.get(caller_id, {})
+                    dependents.append({
+                        "from_path": caller_path,
+                        "symbol_used": sym_name,
+                        "confidence": "high",
+                    })
+
+    # 5. Test file
+    mapper = _get_test_mapper()
+    test_file = mapper.find_test(path)
+
+    # 6. Related files (1-hop import graph neighbors)
+    related_files = []
+    related_seen = set()
+    # Import targets
+    for imp in imports:
+        target = imp["target"]
+        # Try to resolve to a file path
+        for sid, sym in symbols_map.items():
+            if sym.get("path", "") and target in sid:
+                rpath = sym["path"]
+                if rpath != path and rpath not in related_seen:
+                    related_seen.add(rpath)
+                    related_files.append({"path": rpath, "relation": "imports"})
+                break
+    # Dependents as related
+    for dep in dependents[:10]:
+        rpath = dep["from_path"]
+        if rpath not in related_seen:
+            related_seen.add(rpath)
+            related_files.append({"path": rpath, "relation": "imported_by"})
+
+    # 7. Optional: include content
+    if include_content:
+        for sym_entry in symbols_list:
+            sid = sym_entry.get("id", "")
+            sym_data = symbols_map.get(sid, {})
+            content = get_symbol_content_text(sid, sym_data)
+            sym_entry["content"] = content[:500] if content else ""
+
+    return {
+        "path": path,
+        "info": info,
+        "symbols": symbols_list,
+        "imports": imports,
+        "dependents": dependents[:30],
+        "test_file": test_file,
+        "related_files": related_files[:20],
+        "summary": {
+            "total_symbols": len(symbols_list),
+            "total_imports": len(imports),
+            "total_dependents": len(dependents),
+        },
+    }
+
+
+def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
+    """
+    Preview the impact of editing a symbol before making changes.
+
+    Shows all call sites with actual code lines, risk assessment, and suggestions.
+    """
+    index = load_index()
+    symbols = index.get("symbols", {})
+    reverse_index = index.get("reverse_index", {})
+    dependencies = index.get("dependencies", {})
+
+    # Resolve symbol_id (same pattern as find_references)
+    resolved_id = symbol_id
+    if symbol_id not in symbols:
+        for sid, sym in symbols.items():
+            if sym.get("name") == symbol_id:
+                if sym.get("type") in ("composable", "function", "class", "component"):
+                    resolved_id = sid
+                    break
+        else:
+            for sid in symbols:
+                if symbol_id in sid:
+                    resolved_id = sid
+                    break
+
+    target_symbol = symbols.get(resolved_id)
+    if not target_symbol:
+        return {"error": f"Symbol not found: {symbol_id}"}
+
+    target_name = target_symbol.get("name", "")
+    target_path = target_symbol.get("path", "")
+
+    # Collect call sites
+    call_sites = []
+    seen_keys = set()
+
+    def get_dedup_key(source_id: str) -> str:
+        parts = source_id.split(":")
+        if len(parts) >= 4:
+            basename = parts[1].rsplit("/", 1)[-1]
+            return f"{basename}:{parts[2]}:{parts[3]}"
+        return source_id
+
+    # From reverse_index
+    for caller_id in reverse_index.get(resolved_id, []):
+        dedup_key = get_dedup_key(caller_id)
+        if dedup_key in seen_keys:
+            continue
+        seen_keys.add(dedup_key)
+
+        caller_sym = symbols.get(caller_id, {})
+        caller_path = caller_sym.get("path", "")
+        if caller_path == target_path:
+            continue
+
+        # Get the actual code line
+        content = get_symbol_content_text(caller_id, caller_sym)
+        code_line = ""
+        line_num = 0
+        if content and target_name:
+            for i, line in enumerate(content.split("\n")):
+                if target_name in line:
+                    code_line = line.strip()[:120]
+                    line_num = caller_sym.get("start_line", 0) + i
+                    break
+
+        call_sites.append({
+            "file": caller_path,
+            "line": line_num,
+            "code": code_line,
+            "caller_name": caller_sym.get("name", ""),
+            "confidence": "high",
+        })
+
+    # Also check by name in reverse_index
+    for caller_id in reverse_index.get(target_name, []):
+        dedup_key = get_dedup_key(caller_id)
+        if dedup_key in seen_keys:
+            continue
+        seen_keys.add(dedup_key)
+
+        caller_sym = symbols.get(caller_id, {})
+        caller_path = caller_sym.get("path", "")
+        if caller_path == target_path:
+            continue
+
+        content = get_symbol_content_text(caller_id, caller_sym)
+        code_line = ""
+        line_num = 0
+        if content and target_name:
+            for i, line in enumerate(content.split("\n")):
+                if target_name in line:
+                    code_line = line.strip()[:120]
+                    line_num = caller_sym.get("start_line", 0) + i
+                    break
+
+        call_sites.append({
+            "file": caller_path,
+            "line": line_num,
+            "code": code_line,
+            "caller_name": caller_sym.get("name", ""),
+            "confidence": "medium",
+        })
+
+    # Limit to 30
+    call_sites = call_sites[:30]
+
+    # Group by project
+    by_project: dict[str, int] = {}
+    for cs in call_sites:
+        # Try to determine project from file path
+        for sid, sym in symbols.items():
+            if sym.get("path") == cs["file"]:
+                proj = sid.split(":")[0] if ":" in sid else "unknown"
+                by_project[proj] = by_project.get(proj, 0) + 1
+                break
+
+    total = len(call_sites)
+
+    # Risk assessment
+    change_risk_map = {
+        "rename": ("All call sites must update the name.", ["Update all call sites in a single commit", "Use find-and-replace across all files"]),
+        "delete": ("All call sites will break.", ["Ensure no code depends on this before deleting", "Consider deprecation first"]),
+        "signature_change": ("Call sites may need parameter updates.", ["Review each call site for compatibility", "Consider adding default parameters for backward compatibility"]),
+        "add_param": ("Call sites may need to pass the new argument.", ["Add default value to new parameter if possible", "Update call sites that need the new parameter"]),
+        "modify": ("Internal logic change only.", ["Run tests to verify behavior", "Check if return type/shape changed"]),
+    }
+    risk_info = change_risk_map.get(change_type, ("Unknown change type.", []))
+
+    if total == 0:
+        risk = "safe"
+        risk_reason = "No call sites found, safe to change."
+    elif total <= 3 and len(by_project) <= 1:
+        risk = "low"
+        risk_reason = f"{total} call site(s) in {len(by_project)} project(s)"
+    elif total <= 10:
+        risk = "moderate"
+        risk_reason = f"{total} call sites across {len(by_project)} project(s)"
+    else:
+        risk = "high"
+        risk_reason = f"{total} call sites across {len(by_project)} project(s)"
+
+    # For delete/rename, risk is always elevated
+    if change_type in ("delete", "rename") and total > 0:
+        risk = "high" if total > 3 else "moderate"
+
+    return {
+        "symbol": resolved_id,
+        "symbol_name": target_name,
+        "change_type": change_type,
+        "total_call_sites": total,
+        "call_sites": call_sites,
+        "by_project": by_project,
+        "risk": risk,
+        "risk_reason": risk_reason,
+        "change_description": risk_info[0],
+        "suggestions": risk_info[1],
+    }
+
+
+def check_and_reindex(dry_run: bool = True, project: str = None) -> dict:
+    """
+    Detect file changes and optionally clear caches for re-indexing.
+
+    dry_run=True: only report changes
+    dry_run=False: clear caches + report changes (user should run index_all.py after)
+    """
+    global _index_cache, _content_cache, _content_loaded, _test_mapper
+
+    try:
+        from .watcher import FileWatcher
+    except ImportError:
+        from watcher import FileWatcher
+
+    index = load_index()
+    watcher = FileWatcher(index)
+    changes = watcher.detect_changes(project=project)
+    summary = watcher.get_summary(changes)
+
+    result = {
+        "dry_run": dry_run,
+        "total_changes": summary["total"],
+        "by_type": summary["by_type"],
+        "by_project": summary["by_project"],
+        "changes": [
+            {"path": c.path, "project": c.project, "type": c.change_type}
+            for c in changes[:50]
+        ],
+        "has_more": len(changes) > 50,
+    }
+
+    if not dry_run and changes:
+        _index_cache = None
+        _content_cache = {}
+        _content_loaded = False
+        _test_mapper = None
+        result["caches_cleared"] = True
+        result["recommendation"] = "Run 'python index_all.py' to rebuild the index."
+    elif changes:
+        result["recommendation"] = "Run with dry_run=false to clear caches, then 'python index_all.py' to rebuild."
+    else:
+        result["recommendation"] = "Index is up to date."
+
+    return result
+
+
+def session_track(session_id: str, event_type: str, target: str, workspace_root: str = "") -> dict:
+    """
+    Track a workspace event (file_open, query, edit).
+
+    Creates session if it doesn't exist.
+    """
+    store = _get_session_store()
+    session = store.get_or_create(session_id, workspace_root)
+
+    if event_type == "file_open":
+        session.add_file(target)
+    elif event_type == "query":
+        session.add_query(target)
+    elif event_type == "edit":
+        session.add_edit(target)
+    else:
+        return {"error": f"Unknown event_type: {event_type}. Use: file_open, query, edit"}
+
+    return {
+        "ok": True,
+        "session_id": session_id,
+        "event_type": event_type,
+        "target": target,
+        "boost_paths_count": len(session.get_boost_paths()),
+    }
+
+
+def session_get(session_id: str) -> dict:
+    """Get the current state of a session."""
+    store = _get_session_store()
+    session = store.get(session_id)
+    if not session:
+        return {"error": f"Session not found or expired: {session_id}"}
+    return session.to_dict()
+
+
 # MCP 工具定義
 TOOLS = [
     # =========================================================================
@@ -1782,6 +2205,7 @@ TOOLS = [
                     "description": "Filter by project name. Use list_projects to see available projects.",
                 },
                 "include_content": {"type": "boolean", "default": False, "description": "Include first 500 chars of source code in results"},
+                "session_id": {"type": "string", "description": "Optional session ID for search boost. Files recently opened/edited in the session get +8 score boost."},
             },
             "required": ["query"],
         },
@@ -2096,6 +2520,121 @@ TOOLS = [
         },
     },
     # =========================================================================
+    # VSCode Agent Helpers
+    # =========================================================================
+    {
+        "name": "get_file_context",
+        "description": (
+            "Get a complete context package for a file in one call. "
+            "Returns file info (purpose, category), symbols, imports, dependents, "
+            "test file mapping, and related files. "
+            "Use this instead of calling get_file_info + get_file_symbols + find_references separately. "
+            "All data comes from cached index, zero I/O."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path relative to project root. Example: 'src/composables/useAuth.js'"},
+                "include_content": {"type": "boolean", "default": False, "description": "Include first 500 chars of each symbol's source code"},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "find_test_file",
+        "description": (
+            "Find the corresponding test file for a source file, or the source file for a test file. "
+            "Uses naming conventions (test_foo.py, Foo.spec.ts) and import analysis as fallback. "
+            "Returns the matched file path or null if no match found."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Source or test file path. Example: 'src/engine.py' or 'tests/test_engine.py'"},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "edit_impact_preview",
+        "description": (
+            "Preview the impact of editing a symbol before making changes. "
+            "Shows all call sites with actual code lines, risk assessment, and suggestions. "
+            "Use this BEFORE renaming, deleting, or changing a function/class signature. "
+            "change_type: rename, delete, signature_change, add_param, modify."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "symbol_id": {
+                    "type": "string",
+                    "description": "Symbol ID or name. Example: 'useAuth' or 'flyto-cloud:src/composables/useAuth.js:composable:useAuth'",
+                },
+                "change_type": {
+                    "type": "string",
+                    "enum": ["rename", "delete", "signature_change", "add_param", "modify"],
+                    "default": "modify",
+                    "description": "Type of change: rename, delete, signature_change, add_param, modify",
+                },
+            },
+            "required": ["symbol_id"],
+        },
+    },
+    {
+        "name": "check_and_reindex",
+        "description": (
+            "Detect file changes since last index and optionally clear caches. "
+            "dry_run=true (default): only report which files changed. "
+            "dry_run=false: clear all caches (must run 'python index_all.py' after). "
+            "Returns: changed files grouped by type (modified/added/deleted) and project."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "dry_run": {"type": "boolean", "default": True, "description": "If true, only report changes. If false, also clear caches."},
+                "project": {"type": "string", "description": "Filter to a specific project"},
+            },
+        },
+    },
+    {
+        "name": "session_track",
+        "description": (
+            "Track a workspace event for search boosting. "
+            "Events: file_open (opened a file), query (searched), edit (edited a file/symbol). "
+            "Tracked files get +8 score boost in search_code results. "
+            "Sessions are in-memory and expire after 24h."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "session_id": {"type": "string", "description": "Unique session identifier (e.g. workspace folder name or UUID)"},
+                "event_type": {
+                    "type": "string",
+                    "enum": ["file_open", "query", "edit"],
+                    "description": "Type of event: file_open, query, edit",
+                },
+                "target": {"type": "string", "description": "Target of the event (file path for file_open/edit, query string for query)"},
+                "workspace_root": {"type": "string", "description": "Workspace root path (optional, used when creating new session)"},
+            },
+            "required": ["session_id", "event_type", "target"],
+        },
+    },
+    {
+        "name": "session_get",
+        "description": (
+            "Get the current state of a workspace session. "
+            "Returns: open files, recent queries, recent edits, and boost path count. "
+            "Use this to inspect what the session is tracking."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "session_id": {"type": "string", "description": "Session identifier"},
+            },
+            "required": ["session_id"],
+        },
+    },
+    # =========================================================================
     # Dual-AI Tools - Multi-model collaboration
     # =========================================================================
     {
@@ -2304,6 +2843,7 @@ def handle_request(request: dict):
                     symbol_type=arguments.get("symbol_type"),
                     project=arguments.get("project"),
                     include_content=arguments.get("include_content", False),
+                    session_id=arguments.get("session_id"),
                 )
             elif tool_name == "get_file_info":
                 result = get_file_info(arguments.get("path", ""))
@@ -2365,6 +2905,39 @@ def handle_request(request: dict):
                     path=arguments.get("path", ""),
                     summary=arguments.get("summary", ""),
                     project=arguments.get("project"),
+                )
+            # =========================================================
+            # VSCode Agent Helpers
+            # =========================================================
+            elif tool_name == "get_file_context":
+                result = get_file_context(
+                    path=arguments.get("path", ""),
+                    include_content=arguments.get("include_content", False),
+                )
+            elif tool_name == "find_test_file":
+                result = find_test_file(
+                    path=arguments.get("path", ""),
+                )
+            elif tool_name == "edit_impact_preview":
+                result = edit_impact_preview(
+                    symbol_id=arguments.get("symbol_id", ""),
+                    change_type=arguments.get("change_type", "modify"),
+                )
+            elif tool_name == "check_and_reindex":
+                result = check_and_reindex(
+                    dry_run=arguments.get("dry_run", True),
+                    project=arguments.get("project"),
+                )
+            elif tool_name == "session_track":
+                result = session_track(
+                    session_id=arguments.get("session_id", ""),
+                    event_type=arguments.get("event_type", ""),
+                    target=arguments.get("target", ""),
+                    workspace_root=arguments.get("workspace_root", ""),
+                )
+            elif tool_name == "session_get":
+                result = session_get(
+                    session_id=arguments.get("session_id", ""),
                 )
             # =========================================================
             # Dual-AI Tools
