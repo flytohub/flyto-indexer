@@ -74,6 +74,30 @@ def send_error(id: Any, code: int, message: str):
     response = {"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}
     print(json.dumps(response), flush=True)
 
+
+# =============================================================================
+# Rate Limiting (per-process, sliding window)
+# =============================================================================
+import time as _time
+
+_RATE_LIMIT_MAX = int(os.environ.get("FLYTO_INDEXER_RATE_LIMIT", "100"))  # requests per window
+_RATE_LIMIT_WINDOW = 60.0  # seconds
+_rate_limit_timestamps: list = []
+
+
+def _check_rate_limit() -> bool:
+    """Return True if request is allowed, False if rate-limited."""
+    now = _time.monotonic()
+    cutoff = now - _RATE_LIMIT_WINDOW
+    # Remove expired entries
+    while _rate_limit_timestamps and _rate_limit_timestamps[0] < cutoff:
+        _rate_limit_timestamps.pop(0)
+    if len(_rate_limit_timestamps) >= _RATE_LIMIT_MAX:
+        return False
+    _rate_limit_timestamps.append(now)
+    return True
+
+
 # 載入索引 (可透過環境變數設定，用於嵌入其他專案時)
 INDEX_DIR = Path(os.environ.get(
     "FLYTO_INDEX_DIR",
@@ -2832,6 +2856,11 @@ def handle_request(request: dict):
         send_response(id, {"tools": TOOLS})
 
     elif method == "tools/call":
+        # Rate limiting: reject if too many requests in window
+        if not _check_rate_limit():
+            send_error(id, -32000, f"Rate limit exceeded ({_RATE_LIMIT_MAX} req/{int(_RATE_LIMIT_WINDOW)}s). Please slow down.")
+            return
+
         tool_name = params.get("name", "")
         arguments = params.get("arguments", {})
 
