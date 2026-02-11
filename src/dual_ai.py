@@ -22,6 +22,63 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# =============================================================================
+# File Path Security
+# =============================================================================
+
+# Patterns that are ALWAYS blocked from reading (even within allowed roots)
+_BLOCKED_FILE_PATTERNS = [
+    '.env', '.env.local', '.env.production', '.env.staging',
+    '.pem', '.key', '.crt', '.p12', '.pfx', '.jks',
+    'id_rsa', 'id_ed25519', 'id_ecdsa',
+    'service-account-key.json', 'credentials.json',
+]
+_BLOCKED_DIR_PATTERNS = ['.git', 'secrets', '.ssh']
+
+
+def _validate_file_path(file_path: str, project_path: str = ".") -> str:
+    """
+    Validate that a file path is safe to read.
+
+    - Resolves to real path (follows symlinks)
+    - Checks path is under allowed project roots
+    - Blocks sensitive file patterns (.env, *.key, *.pem, etc.)
+
+    Args:
+        file_path: The file path to validate
+        project_path: The project root directory
+
+    Returns:
+        The resolved real path
+
+    Raises:
+        ValueError: If the path is blocked or escapes the project root
+    """
+    real_path = os.path.realpath(file_path)
+    real_project = os.path.realpath(project_path)
+
+    # Check path is under project root
+    if not (real_path.startswith(real_project + os.sep) or real_path == real_project):
+        raise ValueError(
+            f"Path traversal blocked: '{file_path}' resolves to '{real_path}' "
+            f"which is outside project root '{real_project}'"
+        )
+
+    # Check blocked file patterns
+    basename = os.path.basename(real_path).lower()
+    for pattern in _BLOCKED_FILE_PATTERNS:
+        if basename == pattern or real_path.lower().endswith(pattern):
+            raise ValueError(f"Access denied: '{basename}' matches blocked pattern")
+
+    # Check blocked directory patterns
+    path_parts = real_path.lower().split(os.sep)
+    for part in path_parts:
+        if part in _BLOCKED_DIR_PATTERNS:
+            raise ValueError(f"Access denied: path contains blocked directory '{part}'")
+
+    return real_path
+
+
 # VPS API Configuration
 VPS_API_URL = os.getenv("FLYTO_VPS_URL", "https://api.flyto2.net/api/v1/pro")
 VPS_TIMEOUT = int(os.getenv("FLYTO_VPS_TIMEOUT", "60"))
@@ -396,10 +453,13 @@ async def dual_ai_review(
     if models is None:
         models = ["claude", "gpt4"]
 
-    # Read file content
+    # Validate and read file content
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        validated_path = _validate_file_path(file_path)
+        with open(validated_path, 'r', encoding='utf-8') as f:
             code = f.read()
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
     except FileNotFoundError:
         return {"ok": False, "error": f"File not found: {file_path}"}
     except Exception as e:
@@ -706,9 +766,12 @@ async def dual_ai_security(
 
     if is_file:
         try:
-            with open(target, 'r', encoding='utf-8') as f:
+            validated_path = _validate_file_path(target)
+            with open(validated_path, 'r', encoding='utf-8') as f:
                 code = f.read()
             file_path = target
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
         except Exception as e:
             return {"ok": False, "error": str(e)}
     else:
@@ -837,9 +900,12 @@ async def dual_ai_test_gen(
 
     if is_file:
         try:
-            with open(target, 'r', encoding='utf-8') as f:
+            validated_path = _validate_file_path(target)
+            with open(validated_path, 'r', encoding='utf-8') as f:
                 code = f.read()
             file_path = target
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
         except Exception as e:
             return {"ok": False, "error": str(e)}
     else:

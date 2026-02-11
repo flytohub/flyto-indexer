@@ -5,9 +5,34 @@ Sessions are in-memory only. MCP server restart clears all sessions.
 This is acceptable — sessions are boost, not required.
 """
 
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Optional
+
+# Session ID validation: alphanumeric, hyphens, underscores only, max 64 chars
+_SESSION_ID_PATTERN = re.compile(r'^[a-zA-Z0-9_-]{1,64}$')
+
+
+def validate_session_id(session_id: str) -> str:
+    """
+    Validate session ID format.
+
+    Args:
+        session_id: The session ID to validate
+
+    Returns:
+        The validated session ID
+
+    Raises:
+        ValueError: If the session ID format is invalid
+    """
+    if not isinstance(session_id, str) or not _SESSION_ID_PATTERN.match(session_id):
+        raise ValueError(
+            f"Invalid session_id: must be 1-64 characters, alphanumeric/hyphens/underscores only. "
+            f"Got: {repr(session_id)[:80]}"
+        )
+    return session_id
 
 
 @dataclass
@@ -89,6 +114,7 @@ class SessionStore:
 
     def get_or_create(self, session_id: str, workspace_root: str = "") -> Session:
         """Get existing session or create new one."""
+        validate_session_id(session_id)
         if session_id in self._sessions:
             session = self._sessions[session_id]
             if not session.is_expired():
@@ -106,6 +132,7 @@ class SessionStore:
 
     def get(self, session_id: str) -> Optional[Session]:
         """Get session by ID, or None if not found/expired."""
+        validate_session_id(session_id)
         session = self._sessions.get(session_id)
         if session and not session.is_expired():
             return session

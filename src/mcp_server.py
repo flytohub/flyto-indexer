@@ -80,21 +80,42 @@ def send_error(id: Any, code: int, message: str):
 # =============================================================================
 import time as _time
 
-_RATE_LIMIT_MAX = int(os.environ.get("FLYTO_INDEXER_RATE_LIMIT", "100"))  # requests per window
+_RATE_LIMIT_MAX = int(os.environ.get("FLYTO_INDEXER_RATE_LIMIT", "100"))  # requests per window (global)
+_RATE_LIMIT_SESSION_MAX = int(os.environ.get("FLYTO_INDEXER_SESSION_RATE_LIMIT", "30"))  # per-session per window
 _RATE_LIMIT_WINDOW = 60.0  # seconds
 _rate_limit_timestamps: list = []
+_session_rate_limits: dict = {}  # session_id -> list of timestamps
 
 
-def _check_rate_limit() -> bool:
-    """Return True if request is allowed, False if rate-limited."""
+def _check_rate_limit(session_id: str = "") -> bool:
+    """Return True if request is allowed, False if rate-limited.
+    Checks both global and per-session limits."""
     now = _time.monotonic()
     cutoff = now - _RATE_LIMIT_WINDOW
-    # Remove expired entries
+
+    # Global rate limit
     while _rate_limit_timestamps and _rate_limit_timestamps[0] < cutoff:
         _rate_limit_timestamps.pop(0)
     if len(_rate_limit_timestamps) >= _RATE_LIMIT_MAX:
         return False
     _rate_limit_timestamps.append(now)
+
+    # Per-session rate limit
+    if session_id:
+        if session_id not in _session_rate_limits:
+            _session_rate_limits[session_id] = []
+        session_ts = _session_rate_limits[session_id]
+        while session_ts and session_ts[0] < cutoff:
+            session_ts.pop(0)
+        if len(session_ts) >= _RATE_LIMIT_SESSION_MAX:
+            return False
+        session_ts.append(now)
+
+        # Evict old session buckets (prevent memory leak)
+        if len(_session_rate_limits) > 200:
+            oldest_key = min(_session_rate_limits, key=lambda k: _session_rate_limits[k][-1] if _session_rate_limits[k] else 0)
+            del _session_rate_limits[oldest_key]
+
     return True
 
 
@@ -2856,48 +2877,97 @@ def handle_request(request: dict):
         send_response(id, {"tools": TOOLS})
 
     elif method == "tools/call":
-        # Rate limiting: reject if too many requests in window
-        if not _check_rate_limit():
-            send_error(id, -32000, f"Rate limit exceeded ({_RATE_LIMIT_MAX} req/{int(_RATE_LIMIT_WINDOW)}s). Please slow down.")
-            return
-
         tool_name = params.get("name", "")
         arguments = params.get("arguments", {})
+
+        # Extract session_id from arguments if available (for per-session rate limiting)
+        _session_id = str(arguments.get("session_id", ""))[:64] if isinstance(arguments.get("session_id"), str) else ""
+
+        # Rate limiting: reject if too many requests in window
+        if not _check_rate_limit(session_id=_session_id):
+            send_error(id, -32000, f"Rate limit exceeded ({_RATE_LIMIT_MAX} req/{int(_RATE_LIMIT_WINDOW)}s). Please slow down.")
+            return
 
         try:
             # Dual-AI tools require asyncio.run (they are async)
             if tool_name == "dual_ai_task":
+                _task = arguments.get("task", "")
+                if not isinstance(_task, str) or not _task.strip():
+                    send_error(id, -32602, "dual_ai_task: 'task' must be a non-empty string")
+                    return
+                _mode = arguments.get("mode", "sequential")
+                if _mode not in ("sequential", "parallel", "consensus"):
+                    send_error(id, -32602, f"dual_ai_task: invalid mode '{_mode}'")
+                    return
+                _max_iter = arguments.get("max_iterations", 10)
+                if not isinstance(_max_iter, int) or _max_iter < 1 or _max_iter > 100:
+                    _max_iter = 10
                 result = asyncio.run(dual_ai_task(
-                    task=arguments.get("task", ""),
-                    project_path=arguments.get("project_path", "."),
-                    mode=arguments.get("mode", "sequential"),
+                    task=_task,
+                    project_path=str(arguments.get("project_path", "."))[:500],
+                    mode=_mode,
                     agents=arguments.get("agents"),
-                    max_iterations=arguments.get("max_iterations", 10),
+                    max_iterations=_max_iter,
                 ))
             elif tool_name == "dual_ai_review":
+                _fp = arguments.get("file_path", "")
+                if not isinstance(_fp, str) or not _fp.strip():
+                    send_error(id, -32602, "dual_ai_review: 'file_path' must be a non-empty string")
+                    return
+                _rt = arguments.get("review_type", "all")
+                if _rt not in ("security", "performance", "style", "all"):
+                    _rt = "all"
                 result = asyncio.run(dual_ai_review(
-                    file_path=arguments.get("file_path", ""),
-                    review_type=arguments.get("review_type", "all"),
+                    file_path=_fp,
+                    review_type=_rt,
                     models=arguments.get("models"),
                 ))
             elif tool_name == "dual_ai_consensus":
+                _q = arguments.get("question", "")
+                _opts = arguments.get("options", [])
+                if not isinstance(_q, str) or not _q.strip():
+                    send_error(id, -32602, "dual_ai_consensus: 'question' must be a non-empty string")
+                    return
+                if not isinstance(_opts, list) or len(_opts) < 2:
+                    send_error(id, -32602, "dual_ai_consensus: 'options' must be a list with >= 2 items")
+                    return
+                _cm = arguments.get("mode", "majority")
+                if _cm not in ("majority", "unanimous", "weighted"):
+                    _cm = "majority"
                 result = asyncio.run(dual_ai_consensus(
-                    question=arguments.get("question", ""),
-                    options=arguments.get("options", []),
-                    context=arguments.get("context", ""),
-                    mode=arguments.get("mode", "majority"),
+                    question=_q[:2000],
+                    options=[str(o)[:500] for o in _opts[:10]],
+                    context=str(arguments.get("context", ""))[:2000],
+                    mode=_cm,
                     voters=arguments.get("voters"),
                 ))
             elif tool_name == "dual_ai_security":
+                _target = arguments.get("target", "")
+                if not isinstance(_target, str) or not _target.strip():
+                    send_error(id, -32602, "dual_ai_security: 'target' must be a non-empty string")
+                    return
+                _st = arguments.get("scan_type", "full")
+                if _st not in ("quick", "full", "deep"):
+                    _st = "full"
                 result = asyncio.run(dual_ai_security(
-                    target=arguments.get("target", ""),
-                    scan_type=arguments.get("scan_type", "full"),
+                    target=_target,
+                    scan_type=_st,
                 ))
             elif tool_name == "dual_ai_test_gen":
+                _target = arguments.get("target", "")
+                if not isinstance(_target, str) or not _target.strip():
+                    send_error(id, -32602, "dual_ai_test_gen: 'target' must be a non-empty string")
+                    return
+                _tt = arguments.get("test_type", "unit")
+                if _tt not in ("unit", "integration", "e2e"):
+                    _tt = "unit"
+                _fw = arguments.get("framework", "auto")
+                if _fw not in ("auto", "pytest", "jest", "vitest"):
+                    _fw = "auto"
                 result = asyncio.run(dual_ai_test_gen(
-                    target=arguments.get("target", ""),
-                    test_type=arguments.get("test_type", "unit"),
-                    framework=arguments.get("framework", "auto"),
+                    target=_target,
+                    test_type=_tt,
+                    framework=_fw,
                 ))
             elif tool_name == "dual_ai_agents":
                 result = dual_ai_agents()
