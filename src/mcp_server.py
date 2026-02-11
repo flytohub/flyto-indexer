@@ -2865,113 +2865,8 @@ def handle_request(request: dict):
         arguments = params.get("arguments", {})
 
         try:
-            if tool_name == "search_code":
-                result = search_by_keyword(
-                    query=arguments.get("query", ""),
-                    max_results=arguments.get("max_results", 20),
-                    symbol_type=arguments.get("symbol_type"),
-                    project=arguments.get("project"),
-                    include_content=arguments.get("include_content", False),
-                    session_id=arguments.get("session_id"),
-                )
-            elif tool_name == "get_file_info":
-                result = get_file_info(arguments.get("path", ""))
-            elif tool_name == "get_file_symbols":
-                result = get_file_symbols(arguments.get("path", ""))
-            elif tool_name == "impact_analysis":
-                result = impact_analysis(arguments.get("symbol_id", ""))
-            elif tool_name == "list_categories":
-                result = list_categories()
-            elif tool_name == "list_apis":
-                result = list_apis()
-            elif tool_name == "list_projects":
-                result = list_projects()
-            elif tool_name == "get_symbol_content":
-                result = get_symbol_content(arguments.get("symbol_id", ""))
-            elif tool_name == "find_references":
-                result = find_references(arguments.get("symbol_id", ""))
-            elif tool_name == "dependency_graph":
-                result = dependency_graph(
-                    file_path=arguments.get("file_path"),
-                    symbol_id=arguments.get("symbol_id"),
-                    project=arguments.get("project"),
-                    direction=arguments.get("direction", "both"),
-                    max_depth=arguments.get("max_depth", 2),
-                )
-            elif tool_name == "fulltext_search":
-                result = fulltext_search(
-                    query=arguments.get("query", ""),
-                    search_type=arguments.get("search_type", "all"),
-                    project=arguments.get("project"),
-                    max_results=arguments.get("max_results", 50),
-                )
-            elif tool_name == "check_index_status":
-                result = check_index_status()
-            elif tool_name == "find_dead_code":
-                result = find_dead_code(
-                    project=arguments.get("project"),
-                    symbol_type=arguments.get("symbol_type"),
-                    min_lines=arguments.get("min_lines", 5),
-                )
-            elif tool_name == "find_todos":
-                result = find_todos(
-                    project=arguments.get("project"),
-                    priority=arguments.get("priority"),
-                    max_results=arguments.get("max_results", 100),
-                )
-            elif tool_name == "cross_project_impact":
-                result = cross_project_impact(
-                    symbol_name=arguments.get("symbol_name", ""),
-                    source_project=arguments.get("source_project"),
-                )
-            elif tool_name == "get_description":
-                result = get_description(
-                    path=arguments.get("path", ""),
-                    project=arguments.get("project"),
-                )
-            elif tool_name == "update_description":
-                result = update_description(
-                    path=arguments.get("path", ""),
-                    summary=arguments.get("summary", ""),
-                    project=arguments.get("project"),
-                )
-            # =========================================================
-            # VSCode Agent Helpers
-            # =========================================================
-            elif tool_name == "get_file_context":
-                result = get_file_context(
-                    path=arguments.get("path", ""),
-                    include_content=arguments.get("include_content", False),
-                )
-            elif tool_name == "find_test_file":
-                result = find_test_file(
-                    path=arguments.get("path", ""),
-                )
-            elif tool_name == "edit_impact_preview":
-                result = edit_impact_preview(
-                    symbol_id=arguments.get("symbol_id", ""),
-                    change_type=arguments.get("change_type", "modify"),
-                )
-            elif tool_name == "check_and_reindex":
-                result = check_and_reindex(
-                    dry_run=arguments.get("dry_run", True),
-                    project=arguments.get("project"),
-                )
-            elif tool_name == "session_track":
-                result = session_track(
-                    session_id=arguments.get("session_id", ""),
-                    event_type=arguments.get("event_type", ""),
-                    target=arguments.get("target", ""),
-                    workspace_root=arguments.get("workspace_root", ""),
-                )
-            elif tool_name == "session_get":
-                result = session_get(
-                    session_id=arguments.get("session_id", ""),
-                )
-            # =========================================================
-            # Dual-AI Tools
-            # =========================================================
-            elif tool_name == "dual_ai_task":
+            # Dual-AI tools require asyncio.run (they are async)
+            if tool_name == "dual_ai_task":
                 result = asyncio.run(dual_ai_task(
                     task=arguments.get("task", ""),
                     project_path=arguments.get("project_path", "."),
@@ -3007,8 +2902,16 @@ def handle_request(request: dict):
             elif tool_name == "dual_ai_agents":
                 result = dual_ai_agents()
             else:
-                send_error(id, -32601, f"Unknown tool: {tool_name}")
-                return
+                # All non-Dual-AI tools dispatched via tool_registry
+                try:
+                    from .tool_registry import execute_tool as _registry_execute
+                except ImportError:
+                    from tool_registry import execute_tool as _registry_execute  # type: ignore[no-redef]
+                try:
+                    result = _registry_execute(tool_name, arguments)
+                except KeyError:
+                    send_error(id, -32601, f"Unknown tool: {tool_name}")
+                    return
 
             send_response(id, {
                 "content": [{"type": "text", "text": json.dumps(result, ensure_ascii=False, indent=2)}],
