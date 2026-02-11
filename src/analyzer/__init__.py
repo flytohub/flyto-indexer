@@ -1,4 +1,4 @@
-"""程式碼分析器"""
+"""Code analyzers"""
 from .dead_code import DeadCodeDetector, DeadCodeReport, detect_dead_code
 from .stale_files import StaleFileDetector, StaleReport, detect_stale_files
 from .complexity import ComplexityAnalyzer, ComplexityReport, analyze_complexity

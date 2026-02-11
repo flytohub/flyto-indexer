@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-測試程式碼品質分析
+Test code quality analysis.
 
-1. 複雜度分析 - 找出過度複雜的函數
-2. 測試覆蓋 - 找出沒有測試的模組
+1. Complexity analysis - find overly complex functions
+2. Test coverage - find modules without tests
 """
 
 import sys
@@ -15,11 +15,11 @@ sys.path.insert(0, str(project_root / "src"))
 from analyzer.complexity import ComplexityAnalyzer
 from analyzer.coverage import CoverageAnalyzer
 
-FLYTOHUB_ROOT = Path("/Library/其他專案/flytohub")
+FLYTOHUB_ROOT = Path("/path/to/your/projects")
 
 
 def test_complexity(project_name: str):
-    """測試複雜度分析"""
+    """Test complexity analysis"""
     project_path = FLYTOHUB_ROOT / project_name
 
     if not project_path.exists():
@@ -44,7 +44,7 @@ def test_complexity(project_name: str):
 
 
 def test_coverage(project_name: str):
-    """測試覆蓋分析"""
+    """Test coverage analysis"""
     project_path = FLYTOHUB_ROOT / project_name
 
     if not project_path.exists():

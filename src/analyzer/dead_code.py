@@ -1,13 +1,13 @@
 """
-死碼偵測器 - 找出沒被引用的檔案和函數
+Dead code detector -- find unreferenced files and functions
 
-功能：
-1. 掃描所有 import/require 語句
-2. 建立「誰引用誰」的關係圖
-3. 找出從未被引用的檔案（孤兒檔案）
-4. 找出從未被呼叫的 export 函數（孤兒函數）
+Features:
+1. Scan all import/require statements
+2. Build reference graph (who references whom)
+3. Find files never referenced (orphan files)
+4. Find exported functions never called (orphan functions)
 
-支援語言：Python, TypeScript/JavaScript, Vue
+Supported languages: Python, TypeScript/JavaScript, Vue
 """
 
 import re
@@ -20,7 +20,7 @@ from typing import Optional
 
 @dataclass
 class DeadCodeReport:
-    """死碼分析報告"""
+    """Dead code analysis report"""
     total_files: int = 0
     orphan_files: list[str] = field(default_factory=list)
     low_reference_files: list[tuple[str, int]] = field(default_factory=list)  # (path, ref_count)
@@ -29,7 +29,7 @@ class DeadCodeReport:
 
 
 class DeadCodeDetector:
-    """死碼偵測器"""
+    """Dead code detector"""
 
     def __init__(
         self,
@@ -45,19 +45,19 @@ class DeadCodeDetector:
             ".venv", "venv", ".pytest_cache", ".nuxt", ".output",
             "test", "tests", "spec", "__tests__",
         ]
-        # 入口點（這些檔案不算孤兒）
+        # Entry points (these files are not considered orphans)
         self.entry_points = entry_points or [
             "main", "index", "app", "__main__", "cli", "server",
             "setup", "conftest", "manage", "wsgi", "asgi",
             "run", "start", "config", "settings",
         ]
-        # 特殊目錄（這些不算孤兒）
+        # Special directories (these are not considered orphans)
         self.special_dirs = [
             "scripts", "examples", "cli", "commands", "bin",
             "migrations", "fixtures", "seeds", "functions",
         ]
 
-        # 關係圖
+        # Reference graph
         self.imports: dict[str, set[str]] = defaultdict(set)  # file -> set of imported files
         self.imported_by: dict[str, set[str]] = defaultdict(set)  # file -> set of files that import it
         self.exports: dict[str, set[str]] = defaultdict(set)  # file -> set of exported names
@@ -70,44 +70,44 @@ class DeadCodeDetector:
         return False
 
     def _is_entry_point(self, path: str) -> bool:
-        """檢查是否為入口點（不應被標記為孤兒）"""
+        """Check if file is an entry point (should not be flagged as orphan)"""
         p = Path(path)
         stem = p.stem.lower()
 
-        # __init__.py 不算孤兒
+        # __init__.py is not an orphan
         if stem == "__init__":
             return True
 
-        # 入口點名稱
+        # Entry point names
         if any(ep in stem for ep in self.entry_points):
             return True
 
-        # 特殊目錄下的檔案不算孤兒
+        # Files under special directories are not orphans
         parts = p.parts
         for special in self.special_dirs:
             if special in parts:
                 return True
 
-        # API routes 不算孤兒 (frameworks auto-load)
+        # API routes are not orphans (frameworks auto-load)
         if "api" in parts or "routes" in parts or "routers" in parts:
             return True
 
-        # Pages/views 不算孤兒 (frameworks auto-load)
+        # Pages/views are not orphans (frameworks auto-load)
         if "pages" in parts or "views" in parts:
             return True
 
-        # Components 不算孤兒 (may be lazy loaded)
+        # Components are not orphans (may be lazy loaded)
         if "components" in parts:
             return True
 
-        # Composables/hooks 不算孤兒 (may be used dynamically)
+        # Composables/hooks are not orphans (may be used dynamically)
         if "composables" in parts or "hooks" in parts:
             return True
 
         return False
 
     def scan_directory(self) -> list[str]:
-        """掃描目錄，返回所有檔案"""
+        """Scan directory, return all files"""
         files = []
         for ext in self.extensions:
             for file_path in self.project_root.rglob(f"*{ext}"):
@@ -117,7 +117,7 @@ class DeadCodeDetector:
         return files
 
     def analyze_file(self, rel_path: str):
-        """分析單個檔案的 import/export"""
+        """Analyze a single file's imports/exports"""
         full_path = self.project_root / rel_path
         if not full_path.exists():
             return
@@ -137,7 +137,7 @@ class DeadCodeDetector:
             self._analyze_vue(rel_path, content)
 
     def _analyze_python(self, rel_path: str, content: str):
-        """分析 Python 檔案"""
+        """Analyze Python file"""
         try:
             tree = ast.parse(content)
         except SyntaxError:
@@ -164,7 +164,7 @@ class DeadCodeDetector:
                     self.exports[rel_path].add(node.name)
 
     def _analyze_typescript(self, rel_path: str, content: str):
-        """分析 TypeScript/JavaScript 檔案"""
+        """Analyze TypeScript/JavaScript file"""
         dir_path = str(Path(rel_path).parent)
 
         # import patterns
@@ -197,21 +197,21 @@ class DeadCodeDetector:
                             self.exports[rel_path].add(name)
 
     def _analyze_vue(self, rel_path: str, content: str):
-        """分析 Vue 檔案"""
-        # 提取 <script> 區塊
+        """Analyze Vue file"""
+        # Extract <script> block
         script_match = re.search(r'<script[^>]*>(.*?)</script>', content, re.DOTALL)
         if script_match:
             script_content = script_match.group(1)
             self._analyze_typescript(rel_path, script_content)
 
-        # Vue 組件本身是 export
+        # Vue component itself is an export
         self.exports[rel_path].add(Path(rel_path).stem)
 
     def _add_import(self, from_file: str, module: str, dir_path: str):
-        """添加 import 關係"""
-        # 解析相對路徑
+        """Add import relationship"""
+        # Resolve relative path
         if module.startswith("."):
-            # 相對 import
+            # Relative import
             if module.startswith("./"):
                 target = str(Path(dir_path) / module[2:])
             elif module.startswith("../"):
@@ -222,10 +222,10 @@ class DeadCodeDetector:
             # alias import (src/xxx)
             target = f"src/{module[2:]}"
         else:
-            # 外部模組，跳過
+            # External module, skip
             return
 
-        # 嘗試不同副檔名
+        # Try different file extensions
         for ext in self.extensions:
             candidate = target + ext
             if (self.project_root / candidate).exists():
@@ -233,7 +233,7 @@ class DeadCodeDetector:
                 self.imported_by[candidate].add(from_file)
                 return
 
-            # 嘗試 index 檔案
+            # Try index file
             index_candidate = f"{target}/index{ext}"
             if (self.project_root / index_candidate).exists():
                 self.imports[from_file].add(index_candidate)
@@ -241,44 +241,44 @@ class DeadCodeDetector:
                 return
 
     def analyze(self) -> DeadCodeReport:
-        """執行完整分析"""
+        """Run full analysis"""
         report = DeadCodeReport()
 
-        # 掃描所有檔案
+        # Scan all files
         files = self.scan_directory()
         report.total_files = len(files)
 
-        # 分析每個檔案
+        # Analyze each file
         for rel_path in files:
             self.analyze_file(rel_path)
 
-        # 找出孤兒檔案（沒有被任何檔案引用）
+        # Find orphan files (not referenced by any file)
         for rel_path in files:
             ref_count = len(self.imported_by.get(rel_path, set()))
 
             if ref_count == 0:
-                # 檢查是否為入口點
+                # Check if it is an entry point
                 if not self._is_entry_point(rel_path):
                     report.orphan_files.append(rel_path)
             elif ref_count <= 1:
-                # 低引用檔案
+                # Low-reference file
                 report.low_reference_files.append((rel_path, ref_count))
 
-        # 找出循環依賴
+        # Find circular dependencies
         for file_a in self.imports:
             for file_b in self.imports[file_a]:
                 if file_a in self.imports.get(file_b, set()):
                     if (file_b, file_a) not in report.circular_deps:
                         report.circular_deps.append((file_a, file_b))
 
-        # 排序
+        # Sort
         report.orphan_files.sort()
         report.low_reference_files.sort(key=lambda x: x[1])
 
         return report
 
     def print_report(self, report: DeadCodeReport):
-        """印出報告"""
+        """Print report"""
         print(f"\n{'=' * 60}")
         print("Dead Code Analysis Report")
         print(f"{'=' * 60}")
@@ -316,6 +316,6 @@ class DeadCodeDetector:
 
 
 def detect_dead_code(project_path: Path) -> DeadCodeReport:
-    """便捷函數：偵測死碼"""
+    """Convenience function: detect dead code"""
     detector = DeadCodeDetector(project_path)
     return detector.analyze()

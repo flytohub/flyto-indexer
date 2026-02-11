@@ -9,39 +9,21 @@
 #   python index_all.py --discover /path   # Auto-discover projects
 
 workspace:
-  name: flytohub
+  name: my-workspace
   output_dir: .flyto-index
 
-projects:
-  - name: flyto-core
-    path: /Library/其他專案/flytohub/flyto-core
+# Configure your projects below.
+# Each project needs a unique name and an absolute path.
+#
+# Example:
+#   projects:
+#     - name: my-frontend
+#       path: /home/user/projects/my-frontend
+#
+#     - name: my-backend
+#       path: /home/user/projects/my-backend
+#
+# Or use auto-discovery:
+#   python index_all.py --discover /home/user/projects
 
-  - name: flyto-pro
-    path: /Library/其他專案/flytohub/flyto-pro
-
-  - name: flyto-cloud
-    path: /Library/其他專案/flytohub/flyto-cloud
-
-  - name: flyto-cloud-dev
-    path: /Library/其他專案/flytohub/flyto-cloud-dev
-
-  - name: flyto-vscode
-    path: /Library/其他專案/flytohub/flyto-vscode
-
-  - name: flyto-indexer
-    path: /Library/其他專案/flytohub/flyto-indexer
-
-  - name: flyto-i18n
-    path: /Library/其他專案/flytohub/flyto-i18n
-
-  - name: flyto-landing-page
-    path: /Library/其他專案/flytohub/flyto-landing-page
-
-  - name: flyto-modules-pro
-    path: /Library/其他專案/flytohub/flyto-modules-pro
-
-  - name: flyto-evolution-log
-    path: /Library/其他專案/flytohub/flyto-evolution-log
-
-  - name: templates
-    path: /Library/其他專案/flytohub/templates
+projects: []

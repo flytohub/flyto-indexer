@@ -1,10 +1,10 @@
 """
 Main indexing engine - orchestrates the entire flow.
 
-使用流程：
-1. engine.scan() - 掃描專案，建立索引
-2. engine.impact(symbol_id) - 查詢影響範圍
-3. engine.context(query) - 取得相關上下文（L0→L1→L2）
+Usage:
+1. engine.scan() - Scan project, build index
+2. engine.impact(symbol_id) - Query impact scope
+3. engine.context(query) - Get relevant context (L0->L1->L2)
 """
 
 import json
@@ -26,12 +26,12 @@ from .context.loader import ContextLoader, L0Context, L1Context, L2Context
 
 class IndexEngine:
     """
-    索引引擎
+    Indexing engine
 
-    主要功能：
-    1. scan() - 掃描專案，增量更新索引
-    2. impact() - 查詢影響範圍
-    3. context() - 取得上下文（由淺入深）
+    Main features:
+    1. scan() - Scan project, incrementally update index
+    2. impact() - Query impact scope
+    3. context() - Get context (from shallow to deep)
     """
 
     def __init__(
@@ -44,7 +44,7 @@ class IndexEngine:
         self.project_root = Path(project_root)
         self.index_dir = index_dir or (self.project_root / ".flyto-index")
 
-        # 初始化組件
+        # Initialize components
         self.scanners = [
             PythonScanner(project_name),
             VueScanner(project_name),
@@ -55,25 +55,25 @@ class IndexEngine:
         ]
         self.incremental = IncrementalIndexer(self.project_root, self.index_dir)
 
-        # 載入或初始化索引
+        # Load or initialize index
         self.index = self._load_or_create_index()
 
     def scan(self, incremental: bool = True) -> dict:
         """
-        掃描專案，建立/更新索引
+        Scan project, build/update index
 
         Args:
-            incremental: 是否增量更新（只更新變化的檔案）
+            incremental: Whether to perform incremental update (only update changed files)
 
         Returns:
-            掃描結果摘要
+            Scan result summary
         """
-        # 收集所有支援的副檔名
+        # Collect all supported extensions
         extensions = []
         for scanner in self.scanners:
             extensions.extend(scanner.supported_extensions)
 
-        # 掃描目錄取得所有檔案 hash
+        # Scan directory to get all file hashes
         current_hashes = scan_directory_hashes(
             self.project_root,
             extensions,
@@ -83,30 +83,30 @@ class IndexEngine:
             ]
         )
 
-        # 偵測變更
+        # Detect changes
         if incremental:
             changes = self.incremental.detect_changes(current_hashes)
             files_to_scan = changes.all_changed()
         else:
-            # 全量重建
+            # Full rebuild
             changes = None
             files_to_scan = list(current_hashes.keys())
             self.index = self._create_empty_index()
 
-        # 掃描檔案
+        # Scan files
         result = ScanResult()
         for rel_path in files_to_scan:
             file_path = self.project_root / rel_path
             if not file_path.exists():
                 continue
 
-            # 檢查檔案大小（跳過超過 1MB 的檔案）
+            # Check file size (skip files larger than 1MB)
             file_size = file_path.stat().st_size
             if file_size > 1_048_576:
                 result.add_error(rel_path, f"File too large: {file_size:,} bytes (max 1MB)")
                 continue
 
-            # 找到對應的 scanner
+            # Find the matching scanner
             scanner = self._get_scanner(file_path)
             if not scanner:
                 continue
@@ -119,17 +119,17 @@ class IndexEngine:
             except (SyntaxError, UnicodeDecodeError, OSError, ValueError) as e:
                 result.add_error(rel_path, str(e))
 
-        # 更新索引
+        # Update index
         self._update_index(result, changes)
 
-        # 解析依賴並建立反向索引
+        # Resolve dependencies and build reverse index
         self._resolve_dependencies()
         self._build_reverse_index()
 
-        # 保存索引
+        # Save index
         self._save_index()
 
-        # 應用增量變更到 manifest
+        # Apply incremental changes to manifest
         if incremental and changes:
             self.incremental.apply_changes(
                 changes,
@@ -149,26 +149,26 @@ class IndexEngine:
 
     def impact(self, symbol_id: str, max_depth: int = 3) -> dict:
         """
-        查詢影響範圍
+        Query impact scope
 
-        改了這個 symbol，會影響哪些其他 symbols
+        If this symbol is changed, which other symbols are affected?
 
         Args:
-            symbol_id: Symbol ID（完整或短格式）
-            max_depth: 最大追溯深度
+            symbol_id: Symbol ID (full or short format)
+            max_depth: Maximum traversal depth
 
         Returns:
-            影響鏈結構
+            Impact chain structure
         """
-        # 嘗試補全 symbol_id
+        # Try to resolve symbol_id
         full_id = self._resolve_symbol_id(symbol_id)
         if not full_id:
             return {"error": f"Symbol not found: {symbol_id}"}
 
-        # 取得影響鏈
+        # Get impact chain
         chain = self.index.get_impact_chain(full_id, max_depth)
 
-        # 加上 symbol 資訊
+        # Add symbol info
         result = {
             "symbol": full_id,
             "symbol_info": self.index.symbols[full_id].to_dict() if full_id in self.index.symbols else None,
@@ -201,20 +201,20 @@ class IndexEngine:
         level: str = "auto"
     ) -> dict:
         """
-        取得上下文（由淺入深）
+        Get context (from shallow to deep)
 
         Args:
-            query: 自然語言查詢（會用 L0 定位，再取 L1/L2）
-            paths: 指定檔案路徑（直接取 L1）
-            symbols: 指定 symbol IDs（直接取 L2）
-            level: "l0", "l1", "l2", 或 "auto"
+            query: Natural language query (uses L0 to locate, then fetches L1/L2)
+            paths: Specified file paths (directly fetches L1)
+            symbols: Specified symbol IDs (directly fetches L2)
+            level: "l0", "l1", "l2", or "auto"
 
         Returns:
-            上下文內容
+            Context content
         """
         loader = ContextLoader(self.index)
 
-        # L0 永遠先載入（作為定位用）
+        # Always load L0 first (used for locating)
         l0 = loader.load_l0()
 
         if level == "l0" or (level == "auto" and not query and not paths and not symbols):
@@ -224,7 +224,7 @@ class IndexEngine:
                 "token_estimate": l0.token_estimate(),
             }
 
-        # 如果有指定 symbols，直接取 L2
+        # If symbols are specified, directly fetch L2
         if symbols:
             l2_list = []
             for sid in symbols:
@@ -239,7 +239,7 @@ class IndexEngine:
                 "symbols": [l2.symbol_id for l2 in l2_list],
             }
 
-        # 如果有指定 paths，取 L1
+        # If paths are specified, fetch L1
         if paths:
             l1_list = []
             for path in paths:
@@ -252,7 +252,7 @@ class IndexEngine:
                 "files": [l1.path for l1 in l1_list],
             }
 
-        # 如果有 query，用 L0 定位後取 L2
+        # If query is provided, use L0 to locate then fetch L2
         if query:
             l2_list = loader.load_l2_by_query(query, top_k=5)
             return {
@@ -267,33 +267,33 @@ class IndexEngine:
 
     def outline(self) -> str:
         """
-        生成專案大綱（L0）文字版
+        Generate project outline (L0) as text
 
-        這是給 AI 看的，用來快速定位
+        This is for AI consumption, used for quick navigation
         """
         loader = ContextLoader(self.index)
         l0 = loader.load_l0()
         return l0.to_text()
 
     def _get_scanner(self, file_path: Path):
-        """取得對應的 scanner"""
+        """Get the matching scanner"""
         for scanner in self.scanners:
             if scanner.can_scan(file_path):
                 return scanner
         return None
 
     def _resolve_symbol_id(self, symbol_id: str) -> Optional[str]:
-        """解析 symbol ID（支援短格式）"""
-        # 完整格式
+        """Resolve symbol ID (supports short format)"""
+        # Full format
         if symbol_id in self.index.symbols:
             return symbol_id
 
-        # 短格式：補上 project
+        # Short format: prepend project name
         full_id = f"{self.project_name}:{symbol_id}"
         if full_id in self.index.symbols:
             return full_id
 
-        # 精確名稱匹配（取 : 分隔的最後部分）
+        # Exact name match (match the last colon-separated segment)
         for sid in self.index.symbols:
             if sid.endswith(f":{symbol_id}"):
                 return sid
@@ -301,7 +301,7 @@ class IndexEngine:
         return None
 
     def _load_or_create_index(self) -> ProjectIndex:
-        """載入或建立索引"""
+        """Load or create index"""
         index_file = self.index_dir / "index.json"
         if index_file.exists():
             try:
@@ -312,18 +312,18 @@ class IndexEngine:
         return self._create_empty_index()
 
     def _create_empty_index(self) -> ProjectIndex:
-        """建立空索引"""
+        """Create empty index"""
         return ProjectIndex(
             project=self.project_name,
             root_path=str(self.project_root),
         )
 
     def _update_index(self, result: ScanResult, changes=None):
-        """更新索引"""
-        # 如果是增量更新，先刪除變化檔案的舊資料
+        """Update index"""
+        # For incremental update, first remove old data for changed files
         if changes:
             for path in changes.all_changed() + changes.deleted:
-                # 刪除舊 symbols
+                # Remove old symbols
                 to_remove = [
                     sid for sid in self.index.symbols
                     if self.index.symbols[sid].path == path
@@ -331,7 +331,7 @@ class IndexEngine:
                 for sid in to_remove:
                     del self.index.symbols[sid]
 
-                # 刪除舊 dependencies
+                # Remove old dependencies
                 to_remove = [
                     did for did, dep in self.index.dependencies.items()
                     if dep.source_id.startswith(f"{self.project_name}:{path}:")
@@ -339,11 +339,11 @@ class IndexEngine:
                 for did in to_remove:
                     del self.index.dependencies[did]
 
-                # 刪除舊 manifest
+                # Remove old manifest
                 if path in self.index.files:
                     del self.index.files[path]
 
-        # 新增新資料
+        # Add new data
         for symbol in result.symbols:
             self.index.symbols[symbol.id] = symbol
 
@@ -355,11 +355,11 @@ class IndexEngine:
 
     def _resolve_dependencies(self):
         """
-        解析依賴關係，將原始呼叫名稱轉換為完整 symbol ID
+        Resolve dependencies, converting raw call names to full symbol IDs
 
-        改進版：只有當 source 檔案真的 import 了 target 時才解析
+        Improved: only resolves when the source file actually imports the target
         """
-        # 建立 symbol name -> symbol_id 的查詢表
+        # Build symbol name -> symbol_id lookup table
         name_to_ids = {}
         for sid, symbol in self.index.symbols.items():
             name = symbol.name
@@ -367,8 +367,8 @@ class IndexEngine:
                 name_to_ids[name] = []
             name_to_ids[name].append(sid)
 
-        # 建立 file path -> imports 的對應表
-        # imports 格式: {imported_name: module_path}
+        # Build file path -> imports mapping
+        # imports format: {imported_name: module_path}
         file_imports = {}  # path -> {name: module}
         for dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "imports":
@@ -386,12 +386,12 @@ class IndexEngine:
             for name in names:
                 file_imports[source_path][name] = module
 
-        # 建立 module path -> symbol_ids 的對應
-        # 用來從 import path 找到實際的 symbol
+        # Build module path -> symbol_ids mapping
+        # Used to find actual symbols from import paths
         module_to_symbols = {}
         for sid, symbol in self.index.symbols.items():
             path = symbol.path
-            # 從 path 生成可能的 module 名稱
+            # Generate possible module names from path
             # e.g., src/composables/useToast.js -> useToast, composables/useToast
             base = path.rsplit('/', 1)[-1].rsplit('.', 1)[0]  # useToast
             parent = path.rsplit('.', 1)[0]  # src/composables/useToast
@@ -402,7 +402,7 @@ class IndexEngine:
                 if sid not in module_to_symbols[mod_key]:
                     module_to_symbols[mod_key].append(sid)
 
-        # 解析每個 call 依賴
+        # Resolve each call dependency
         for dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "calls":
                 continue
@@ -415,18 +415,18 @@ class IndexEngine:
             resolved = None
             imports = file_imports.get(source_path, {})
 
-            # 處理簡單呼叫: useToast()
-            call_name = target.split('.')[0]  # 取第一部分
+            # Handle simple calls: useToast()
+            call_name = target.split('.')[0]  # Take the first part
 
             if call_name in imports:
-                # 找到 import，用 module path 來解析
+                # Found import, resolve using module path
                 module = imports[call_name]
 
-                # 方法 1: 從 module_to_symbols 找
+                # Method 1: Look up from module_to_symbols
                 for mod_key in [module, module.split('/')[-1], call_name]:
                     if mod_key in module_to_symbols:
                         candidates = module_to_symbols[mod_key]
-                        # 找名稱匹配的
+                        # Find name match
                         for cid in candidates:
                             sym = self.index.symbols.get(cid)
                             if sym and sym.name == call_name:
@@ -435,105 +435,105 @@ class IndexEngine:
                         if resolved:
                             break
 
-                # 方法 2: 從 name_to_ids 找，但要檢查路徑相似度
+                # Method 2: Look up from name_to_ids, but check path similarity
                 if not resolved and call_name in name_to_ids:
                     candidates = name_to_ids[call_name]
                     for cid in candidates:
                         sym = self.index.symbols.get(cid)
                         if sym:
-                            # 檢查 module path 是否和 symbol path 相關
+                            # Check if module path is related to symbol path
                             norm_module = module.replace('@/', 'src/').replace('./', '')
                             if norm_module in sym.path or sym.path.endswith(f"/{call_name}."):
                                 resolved = cid
                                 break
 
-            # 處理 method 呼叫: obj.method()
+            # Handle method calls: obj.method()
             if not resolved and "." in target:
                 parts = target.split(".")
                 obj_name = parts[0]
                 method_name = parts[-1]
 
-                # 檢查 obj_name 是否有 import
+                # Check if obj_name has an import
                 if obj_name in imports:
-                    # 找 Class.method 格式的 symbol
+                    # Find symbol in Class.method format
                     for sid, sym in self.index.symbols.items():
                         if sym.name == target or sym.name.endswith(f".{method_name}"):
                             resolved = sid
                             break
 
-            # 更新 resolved_target
+            # Update resolved_target
             if resolved:
                 dep.metadata["resolved_target"] = resolved
 
     def _extract_path(self, source_id: str) -> str:
-        """從 source_id 提取檔案路徑"""
+        """Extract file path from source_id"""
         if ":" in source_id:
             parts = source_id.split(":")
             if len(parts) >= 2:
                 return parts[1]
         return ""
 
-    # 語言內建名稱，不計入引用追蹤（因為無法追蹤到定義）
+    # Language built-in names, excluded from reference tracking (cannot trace to definition)
     BUILTIN_NAMES = {
-        # Python 內建
+        # Python built-ins
         'str', 'int', 'float', 'bool', 'dict', 'list', 'tuple', 'set',
         'len', 'range', 'type', 'isinstance', 'hasattr', 'getattr', 'setattr',
         'open', 'print', 'input', 'format', 'sorted', 'filter', 'map', 'zip',
         'min', 'max', 'sum', 'abs', 'round', 'enumerate', 'reversed',
-        # JS 內建
+        # JS built-ins
         'console', 'window', 'document', 'Array', 'Object', 'String', 'Number',
         'JSON', 'Math', 'Date', 'Promise', 'fetch', 'setTimeout', 'setInterval',
         'parseInt', 'parseFloat', 'isNaN', 'isFinite', 'encodeURI', 'decodeURI',
-        # Vue/React 內建 hooks
+        # Vue/React built-in hooks
         'ref', 'reactive', 'computed', 'watch', 'watchEffect',
         'onMounted', 'onUnmounted', 'onBeforeMount', 'onBeforeUnmount',
         'useState', 'useEffect', 'useCallback', 'useMemo', 'useRef', 'useContext',
         'defineProps', 'defineEmits', 'defineExpose',
     }
 
-    # 追蹤的依賴類型（不只是 calls）
+    # Tracked dependency types (not just calls)
     TRACKED_DEP_TYPES = {'calls', 'extends', 'implements', 'uses'}
 
     def _build_reverse_index(self):
         """
-        建立反向索引：symbol_id -> 被誰引用
+        Build reverse index: symbol_id -> referenced by whom
 
-        改進版：
-        - 追蹤多種依賴類型（calls, extends, implements, uses）
-        - 只過濾語言內建名稱
-        - 按專案去重（避免 fork 造成重複計算）
+        Improved:
+        - Tracks multiple dependency types (calls, extends, implements, uses)
+        - Only filters language built-in names
+        - Deduplicates by project path (avoids double-counting from forks)
         """
         reverse_index = {}  # symbol_id -> [caller_ids]
 
         for dep_id, dep in self.index.dependencies.items():
-            # 追蹤多種依賴類型
+            # Track multiple dependency types
             if dep.dep_type.value not in self.TRACKED_DEP_TYPES:
                 continue
 
-            # 取得 target（優先使用 resolved，否則用原始 target）
+            # Get target (prefer resolved, otherwise use raw target)
             resolved = dep.metadata.get("resolved_target")
 
-            # 對於 extends/implements，直接使用 target_id
+            # For extends/implements, use target_id directly
             if not resolved and dep.dep_type.value in ('extends', 'implements'):
-                # 嘗試從 name_to_ids 解析
+                # Try to resolve from name_to_ids
                 target_name = dep.target_id
                 for sid, sym in self.index.symbols.items():
                     if sym.name == target_name:
                         resolved = sid
                         break
 
-            # 對於 uses 類型，嘗試從 target_id 解析
-            # target_id 格式如：@/composables/useToast:composable:useToast
-            # 或：../composables/useToast:composable:useToast
+            # For uses type, try to resolve from target_id
+            # target_id format e.g.: @/composables/useToast:composable:useToast
+            # or: ../composables/useToast:composable:useToast
             if not resolved and dep.dep_type.value == 'uses':
                 target = dep.target_id
                 if ':' in target:
-                    # 提取 type:name 部分
+                    # Extract type:name portion
                     parts = target.split(':')
                     if len(parts) >= 3:
                         sym_type = parts[-2]
                         sym_name = parts[-1]
-                        # 在 symbols 中查找匹配的 symbol
+                        # Find matching symbol in symbols
                         for sid, sym in self.index.symbols.items():
                             if (sym.name == sym_name and
                                 sym.symbol_type.value == sym_type and
@@ -544,14 +544,14 @@ class IndexEngine:
             if not resolved:
                 continue
 
-            # 檢查 target symbol 是否存在
+            # Check if target symbol exists
             target_symbol = self.index.symbols.get(resolved)
             if not target_symbol:
                 continue
 
-            target_name = target_symbol.name.split('.')[-1]  # 取最後一部分
+            target_name = target_symbol.name.split('.')[-1]  # Take the last part
 
-            # 只過濾語言內建（這些無法追蹤到定義）
+            # Only filter language built-ins (cannot trace to definition)
             if target_name.lower() in self.BUILTIN_NAMES:
                 continue
 
@@ -563,25 +563,25 @@ class IndexEngine:
             if source not in reverse_index[resolved]:
                 reverse_index[resolved].append(source)
 
-        # 儲存反向索引
+        # Save reverse index
         self.index.reverse_index = reverse_index
 
-        # 計算每個 symbol 的引用次數
-        # 按專案路徑去重（避免 fork 重複計算）
+        # Calculate reference count for each symbol
+        # Deduplicate by project path (avoids double-counting from forks)
         for sid, symbol in self.index.symbols.items():
             callers = reverse_index.get(sid, [])
-            # 提取唯一的檔案路徑（去掉專案前綴）
+            # Extract unique file paths (strip project prefix)
             unique_paths = set()
             for caller_id in callers:
                 parts = caller_id.split(":", 2)
                 if len(parts) >= 2:
-                    # 用 path:type:name 作為唯一標識
+                    # Use path:type:name as unique identifier
                     unique_paths.add(":".join(parts[1:]))
             symbol.reference_count = len(unique_paths)
 
     def _save_index(self, separate_content: bool = True):
         """
-        保存索引
+        Save index
 
         Args:
             separate_content: If True, save content to content.jsonl separately
@@ -619,7 +619,7 @@ class IndexEngine:
         index_file.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 
     def _deserialize_index(self, data: dict) -> ProjectIndex:
-        """從 JSON 還原索引"""
+        """Deserialize index from JSON"""
         index = ProjectIndex(
             project=data["project"],
             root_path=data["root_path"],
@@ -629,7 +629,7 @@ class IndexEngine:
             reverse_index=data.get("reverse_index", {}),
         )
 
-        # 還原 files
+        # Restore files
         for path, fdata in data.get("files", {}).items():
             index.files[path] = FileManifest(
                 path=fdata["path"],
@@ -646,7 +646,7 @@ class IndexEngine:
             if content_file.exists():
                 content_map = self._load_content_file(content_file)
 
-        # 還原 symbols
+        # Restore symbols
         for sid, sdata in data.get("symbols", {}).items():
             # Get content from content_map or from inline data
             content = content_map.get(sid, sdata.get("content", ""))
@@ -667,7 +667,7 @@ class IndexEngine:
                 reference_count=sdata.get("ref_count", 0),
             )
 
-        # 還原 dependencies
+        # Restore dependencies
         for did, ddata in data.get("dependencies", {}).items():
             from .models import DependencyType
             index.dependencies[did] = Dependency(

@@ -15,11 +15,11 @@ except ImportError:
 
 class BaseScanner(ABC):
     """
-    掃描器基類
+    Scanner base class
 
-    子類需要實現：
-    - scan_file(): 掃描單個檔案，提取 symbols 和 dependencies
-    - supported_extensions: 支援的副檔名列表
+    Subclasses must implement:
+    - scan_file(): Scan a single file and extract symbols and dependencies
+    - supported_extensions: List of supported file extensions
     """
 
     supported_extensions: list[str] = []
@@ -30,7 +30,7 @@ class BaseScanner(ABC):
     @abstractmethod
     def scan_file(self, file_path: Path, content: str) -> tuple[list[Symbol], list[Dependency]]:
         """
-        掃描單個檔案
+        Scan a single file
 
         Returns:
             (symbols, dependencies)
@@ -38,11 +38,11 @@ class BaseScanner(ABC):
         pass
 
     def can_scan(self, file_path: Path) -> bool:
-        """檢查是否支援此檔案類型"""
+        """Check if this file type is supported"""
         return file_path.suffix in self.supported_extensions
 
     def compute_file_hash(self, content: str) -> str:
-        """計算檔案內容 hash"""
+        """Compute content hash for the file"""
         return hashlib.sha256(content.encode()).hexdigest()[:16]
 
     def create_file_manifest(
@@ -51,7 +51,7 @@ class BaseScanner(ABC):
         content: str,
         symbols: list[Symbol]
     ) -> FileManifest:
-        """建立檔案指紋"""
+        """Create file manifest"""
         from datetime import datetime
         return FileManifest(
             path=str(file_path),
@@ -62,12 +62,12 @@ class BaseScanner(ABC):
         )
 
     def extract_imports(self, content: str) -> list[str]:
-        """提取 import 語句（子類可覆寫）"""
+        """Extract import statements (subclasses may override)"""
         return []
 
 
 class ScanResult:
-    """掃描結果容器"""
+    """Scan result container"""
 
     def __init__(self):
         self.symbols: list[Symbol] = []

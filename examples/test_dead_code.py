@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-測試死碼偵測
+Test dead code detection.
 """
 
 import sys
 from pathlib import Path
 
-# 設定路徑
+# Set up paths
 project_root = Path(__file__).parent.parent
 src_path = project_root / "src"
 sys.path.insert(0, str(src_path))
 
 from analyzer.dead_code import DeadCodeDetector
 
-# 測試專案
-FLYTOHUB_ROOT = Path("/Library/其他專案/flytohub")
+# Test projects
+FLYTOHUB_ROOT = Path("/path/to/your/projects")
 
 def main():
     projects = [

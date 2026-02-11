@@ -1,14 +1,14 @@
 """
-Progressive Context Loading (由淺入深上下文載入)
+Progressive Context Loading
 
-L0: 專案大綱（目錄樹 + 每個檔案一句話）→ 幾百~一千 tokens
-L1: 檔案摘要（exports/imports/主要功能）→ 命中檔的詳細資訊
-L2: 片段原文（只取需要的 chunk）→ 真正要看的程式碼
+L0: Project outline (directory tree + one line per file) -> a few hundred to ~1000 tokens
+L1: File summary (exports/imports/main features) -> detailed info for matched files
+L2: Code snippets (only the needed chunks) -> actual code to examine
 
-使用流程：
-1. AI 先讀 L0，決定要看哪些檔案
-2. 讀 L1（只讀候選檔案）
-3. 讀 L2（只取必要片段）
+Usage flow:
+1. AI reads L0 first, decides which files to look at
+2. Read L1 (only for candidate files)
+3. Read L2 (only necessary snippets)
 """
 
 import json
@@ -24,16 +24,16 @@ except ImportError:
 
 @dataclass
 class L0Context:
-    """L0 專案大綱"""
+    """L0 Project outline"""
     project: str
-    tree: str              # 目錄樹（文字格式）
+    tree: str              # Directory tree (text format)
     file_map: dict         # {path: one_line_summary}
-    entry_points: list     # 入口點
-    routes: dict           # 路由表
-    api_endpoints: list    # API 列表
+    entry_points: list     # Entry points
+    routes: dict           # Route table
+    api_endpoints: list    # API list
 
     def to_text(self, max_files: int = 100) -> str:
-        """轉成文字（給 AI 看）"""
+        """Convert to text (for AI consumption)"""
         lines = [
             f"# Project: {self.project}",
             "",
@@ -45,7 +45,7 @@ class L0Context:
             "## File Map",
         ]
 
-        # 按目錄分組顯示
+        # Display grouped by directory
         sorted_files = sorted(self.file_map.items())[:max_files]
         current_dir = ""
         for path, summary in sorted_files:
@@ -80,21 +80,21 @@ class L0Context:
         return "\n".join(lines)
 
     def token_estimate(self) -> int:
-        """估算 token 數"""
+        """Estimate token count"""
         text = self.to_text()
-        return len(text) // 4  # 粗估
+        return len(text) // 4  # Rough estimate
 
 
 @dataclass
 class L1Context:
-    """L1 檔案摘要"""
+    """L1 File summary"""
     path: str
     language: str
     summary: str
     imports: list[str]
     exports: list[str]
     symbols: list[dict]    # [{name, type, summary, line}]
-    dependencies: list[str]  # 依賴的其他檔案
+    dependencies: list[str]  # Dependencies on other files
 
     def to_text(self) -> str:
         lines = [
@@ -141,7 +141,7 @@ class L1Context:
 
 @dataclass
 class L2Context:
-    """L2 片段原文"""
+    """L2 Code snippets"""
     symbol_id: str
     path: str
     name: str
@@ -162,9 +162,9 @@ Lines: {self.start_line}-{self.end_line}
 
 class ContextLoader:
     """
-    上下文載入器
+    Context loader
 
-    實現由淺入深的載入策略
+    Implements progressive loading strategy
     """
 
     def __init__(self, index: ProjectIndex):
@@ -172,17 +172,17 @@ class ContextLoader:
 
     def load_l0(self) -> L0Context:
         """
-        載入 L0 大綱
+        Load L0 outline
 
-        這是最輕量的，先讓 AI 定位要看哪些檔案
+        This is the lightest level, letting AI locate which files to examine
         """
-        # 生成目錄樹
+        # Generate directory tree
         tree = self._generate_tree()
 
-        # 生成 file map（每個檔案一句話）
+        # Generate file map (one line per file)
         file_map = {}
         for path, manifest in self.index.files.items():
-            # 找到這個檔案的主要 symbol
+            # Find the main symbol for this file
             main_symbol = self._find_main_symbol(path)
             if main_symbol:
                 file_map[path] = main_symbol.summary or f"{main_symbol.symbol_type.value}: {main_symbol.name}"
@@ -200,16 +200,16 @@ class ContextLoader:
 
     def load_l1(self, path: str) -> Optional[L1Context]:
         """
-        載入 L1 檔案摘要
+        Load L1 file summary
 
-        只在確定要看這個檔案時才載入
+        Only loaded when the file is confirmed to be needed
         """
         if path not in self.index.files:
             return None
 
         manifest = self.index.files[path]
 
-        # 收集這個檔案的 symbols
+        # Collect symbols for this file
         symbols = []
         imports = []
         exports = []
@@ -227,17 +227,17 @@ class ContextLoader:
                 imports.extend(symbol.imports)
                 exports.extend(symbol.exports)
 
-                # 主要 symbol 的摘要作為檔案摘要
+                # Use main symbol's summary as file summary
                 if symbol.symbol_type in (SymbolType.COMPONENT, SymbolType.CLASS):
                     main_summary = symbol.summary
 
-        # 收集依賴
+        # Collect dependencies
         dependencies = []
         for dep in self.index.dependencies.values():
             if dep.source_id.startswith(f"{self.index.project}:{path}:"):
                 dependencies.append(dep.target_id)
 
-        # 推斷語言
+        # Infer language
         ext = Path(path).suffix
         lang_map = {".py": "python", ".vue": "vue", ".ts": "typescript", ".js": "javascript"}
         language = lang_map.get(ext, ext[1:])
@@ -254,9 +254,9 @@ class ContextLoader:
 
     def load_l2(self, symbol_id: str) -> Optional[L2Context]:
         """
-        載入 L2 片段原文
+        Load L2 code snippets
 
-        只在真正需要看程式碼時才載入
+        Only loaded when code actually needs to be examined
         """
         if symbol_id not in self.index.symbols:
             return None
@@ -275,12 +275,12 @@ class ContextLoader:
 
     def load_l2_by_query(self, query: str, top_k: int = 5) -> list[L2Context]:
         """
-        根據查詢載入相關的 L2 片段
+        Load relevant L2 snippets based on query
 
-        這會用向量檢索（需要外部向量庫）
+        Uses vector search (requires external vector store)
         """
-        # TODO: 整合向量檢索
-        # 目前用簡單的關鍵字匹配
+        # TODO: Integrate vector search
+        # Currently using simple keyword matching
         results = []
         query_lower = query.lower()
 
@@ -289,30 +289,30 @@ class ContextLoader:
                 continue
 
             score = 0
-            # 名稱匹配
+            # Name match
             if query_lower in symbol.name.lower():
                 score += 10
-            # 摘要匹配
+            # Summary match
             if symbol.summary and query_lower in symbol.summary.lower():
                 score += 5
-            # 內容匹配
+            # Content match
             if query_lower in symbol.content.lower():
                 score += 1
 
             if score > 0:
                 results.append((score, symbol_id))
 
-        # 排序取 top_k
+        # Sort and take top_k
         results.sort(reverse=True)
         return [self.load_l2(sid) for _, sid in results[:top_k]]
 
     def _generate_tree(self, max_depth: int = 3) -> str:
-        """生成目錄樹"""
+        """Generate directory tree"""
         paths = sorted(self.index.files.keys())
         if not paths:
             return "(empty)"
 
-        # 簡化：只顯示到指定深度
+        # Simplified: only show up to specified depth
         tree_lines = []
         seen_dirs = set()
 
@@ -325,10 +325,10 @@ class ContextLoader:
                     indent = "  " * i
                     tree_lines.append(f"{indent}{part}/")
 
-        return "\n".join(tree_lines[:50])  # 限制行數
+        return "\n".join(tree_lines[:50])  # Limit line count
 
     def _find_main_symbol(self, path: str) -> Optional[Symbol]:
-        """找到檔案的主要 symbol（component/class）"""
+        """Find the main symbol of a file (component/class)"""
         for symbol in self.index.symbols.values():
             if symbol.path == path:
                 if symbol.symbol_type in (SymbolType.COMPONENT, SymbolType.CLASS):
@@ -336,7 +336,7 @@ class ContextLoader:
         return None
 
     def _infer_file_purpose(self, path: str) -> str:
-        """從路徑推斷檔案用途"""
+        """Infer file purpose from path"""
         path_lower = path.lower()
 
         if "test" in path_lower:

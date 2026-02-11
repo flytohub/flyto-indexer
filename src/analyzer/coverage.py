@@ -1,11 +1,11 @@
 """
-測試覆蓋分析 - 找出沒有對應測試的程式碼
+Test coverage analysis - find code without corresponding tests
 
-策略：
-1. 掃描 src 目錄找出所有模組
-2. 掃描 test/tests 目錄找出所有測試
-3. 比對：哪些模組沒有測試？
-4. 分析：哪些公開函數沒有被測試引用？
+Strategy:
+1. Scan the src directory to find all modules
+2. Scan test/tests directories to find all tests
+3. Compare: which modules have no tests?
+4. Analyze: which public functions are not referenced by tests?
 """
 
 import ast
@@ -17,16 +17,16 @@ from collections import defaultdict
 
 @dataclass
 class UncoveredModule:
-    """沒有測試的模組"""
+    """Module without tests"""
     path: str
-    functions: list[str]  # 公開函數
-    classes: list[str]    # 公開類別
+    functions: list[str]  # Public functions
+    classes: list[str]    # Public classes
     importance: str       # high/medium/low
 
 
 @dataclass
 class CoverageReport:
-    """測試覆蓋報告"""
+    """Test coverage report"""
     total_modules: int = 0
     total_tests: int = 0
     covered_modules: int = 0
@@ -41,7 +41,7 @@ class CoverageReport:
 
 
 class CoverageAnalyzer:
-    """測試覆蓋分析器"""
+    """Test coverage analyzer"""
 
     def __init__(
         self,
@@ -58,7 +58,7 @@ class CoverageAnalyzer:
             ".venv", "venv", ".nuxt", ".output",
         ]
 
-        # 索引
+        # Index
         self.modules: dict[str, dict] = {}  # path -> {functions, classes}
         self.tests: dict[str, set[str]] = defaultdict(set)  # test_path -> imported modules
         self.test_coverage: dict[str, set[str]] = defaultdict(set)  # module -> tested functions
@@ -70,7 +70,7 @@ class CoverageAnalyzer:
         return False
 
     def _is_test_file(self, path: str) -> bool:
-        """判斷是否為測試檔案"""
+        """Determine if a file is a test file"""
         name = Path(path).stem.lower()
         return (
             name.startswith("test_") or
@@ -83,9 +83,9 @@ class CoverageAnalyzer:
         )
 
     def _get_module_name(self, path: str) -> str:
-        """取得模組名稱（用於匹配）"""
+        """Get module name (for matching)"""
         p = Path(path)
-        # 移除副檔名和 test 前綴
+        # Remove extension and test prefix
         name = p.stem.lower()
         if name.startswith("test_"):
             name = name[5:]
@@ -94,7 +94,7 @@ class CoverageAnalyzer:
         return name
 
     def scan_modules(self):
-        """掃描所有模組"""
+        """Scan all modules"""
         for ext in [".py", ".ts", ".tsx", ".js", ".jsx", ".java", ".go"]:
             for file_path in self.project_root.rglob(f"*{ext}"):
                 rel_path = str(file_path.relative_to(self.project_root))
@@ -105,7 +105,7 @@ class CoverageAnalyzer:
                 if self._is_test_file(rel_path):
                     continue
 
-                # 只看 src 目錄下的檔案（或根目錄）
+                # Only look at files under src directories (or root level)
                 parts = Path(rel_path).parts
                 is_src = any(d in parts for d in self.src_dirs) or len(parts) <= 2
 
@@ -117,7 +117,7 @@ class CoverageAnalyzer:
                 except Exception:
                     continue
 
-                # 提取公開函數和類別
+                # Extract public functions and classes
                 if ext == ".py":
                     exports = self._extract_python_exports(content)
                 elif ext == ".java":
@@ -131,7 +131,7 @@ class CoverageAnalyzer:
                     self.modules[rel_path] = exports
 
     def _extract_python_exports(self, content: str) -> dict:
-        """提取 Python 公開匯出"""
+        """Extract Python public exports"""
         try:
             tree = ast.parse(content)
         except SyntaxError:
@@ -151,7 +151,7 @@ class CoverageAnalyzer:
         return {"functions": functions, "classes": classes}
 
     def _extract_ts_exports(self, content: str) -> dict:
-        """提取 TypeScript 公開匯出"""
+        """Extract TypeScript public exports"""
         functions = []
         classes = []
 
@@ -176,7 +176,7 @@ class CoverageAnalyzer:
         return {"functions": functions, "classes": classes}
 
     def _extract_java_exports(self, content: str) -> dict:
-        """提取 Java 公開匯出"""
+        """Extract Java public exports"""
         functions = []
         classes = []
 
@@ -191,16 +191,16 @@ class CoverageAnalyzer:
         # public method (not constructor)
         for match in re.finditer(r'public\s+(?:static\s+)?(?:\w+(?:<[^>]+>)?)\s+(\w+)\s*\([^)]*\)', content):
             name = match.group(1)
-            # 跳過建構子（首字母大寫且不是常見方法名）
+            # Skip constructors (uppercase first letter and not common method names)
             if not (name[0].isupper() and name not in ["ToString", "GetHashCode", "Equals"]):
                 functions.append(name)
 
         return {"functions": functions, "classes": classes}
 
     def _extract_go_exports(self, content: str) -> dict:
-        """提取 Go 公開匯出（首字母大寫）"""
+        """Extract Go public exports (uppercase first letter)"""
         functions = []
-        classes = []  # Go 用 struct 當類別
+        classes = []  # Go uses structs as classes
 
         # func Name (exported if uppercase)
         for match in re.finditer(r'func\s+(?:\([^)]+\)\s+)?([A-Z]\w*)\s*\(', content):
@@ -217,7 +217,7 @@ class CoverageAnalyzer:
         return {"functions": functions, "classes": classes}
 
     def scan_tests(self):
-        """掃描所有測試檔案"""
+        """Scan all test files"""
         for ext in [".py", ".ts", ".tsx", ".js", ".jsx", ".java", ".go"]:
             for file_path in self.project_root.rglob(f"*{ext}"):
                 rel_path = str(file_path.relative_to(self.project_root))
@@ -233,7 +233,7 @@ class CoverageAnalyzer:
                 except Exception:
                     continue
 
-                # 找出測試引用了哪些模組
+                # Find which modules the test references
                 if ext == ".py":
                     imports = self._extract_python_imports(content)
                 else:
@@ -241,7 +241,7 @@ class CoverageAnalyzer:
 
                 self.tests[rel_path] = imports
 
-                # 找出測試呼叫了哪些函數
+                # Find which functions the test calls
                 for module_path, exports in self.modules.items():
                     for func in exports["functions"]:
                         if re.search(rf'\b{func}\s*\(', content):
@@ -251,7 +251,7 @@ class CoverageAnalyzer:
                             self.test_coverage[module_path].add(cls)
 
     def _extract_python_imports(self, content: str) -> set[str]:
-        """提取 Python import"""
+        """Extract Python imports"""
         imports = set()
 
         try:
@@ -270,7 +270,7 @@ class CoverageAnalyzer:
         return imports
 
     def _extract_ts_imports(self, content: str) -> set[str]:
-        """提取 TypeScript import"""
+        """Extract TypeScript imports"""
         imports = set()
 
         patterns = [
@@ -281,9 +281,9 @@ class CoverageAnalyzer:
         for pattern in patterns:
             for match in re.finditer(pattern, content):
                 module = match.group(1)
-                # 取得模組名稱
+                # Get module name
                 if module.startswith("."):
-                    # 相對路徑
+                    # Relative path
                     name = Path(module).stem
                 else:
                     name = module.split("/")[0]
@@ -292,17 +292,17 @@ class CoverageAnalyzer:
         return imports
 
     def _assess_importance(self, path: str, exports: dict) -> str:
-        """評估模組重要性"""
+        """Assess module importance"""
         parts = Path(path).parts
         name = Path(path).stem.lower()
 
-        # 高重要性
+        # High importance
         if any(kw in name for kw in ["auth", "pay", "order", "user", "api", "core"]):
             return "high"
         if any(kw in parts for kw in ["api", "core", "services", "auth"]):
             return "high"
 
-        # 中等重要性
+        # Medium importance
         if len(exports["functions"]) > 5 or len(exports["classes"]) > 2:
             return "medium"
         if any(kw in parts for kw in ["utils", "helpers", "lib"]):
@@ -311,7 +311,7 @@ class CoverageAnalyzer:
         return "low"
 
     def analyze(self) -> CoverageReport:
-        """執行分析"""
+        """Run the analysis"""
         self.scan_modules()
         self.scan_tests()
 
@@ -319,13 +319,13 @@ class CoverageAnalyzer:
         report.total_modules = len(self.modules)
         report.total_tests = len(self.tests)
 
-        # 分析覆蓋情況
+        # Analyze coverage
         for path, exports in self.modules.items():
             module_name = self._get_module_name(path)
             all_exports = set(exports["functions"] + exports["classes"])
             tested = self.test_coverage.get(path, set())
 
-            # 檢查是否有對應測試
+            # Check if there is a corresponding test
             has_test = False
             for test_path in self.tests:
                 test_name = self._get_module_name(test_path)
@@ -347,14 +347,14 @@ class CoverageAnalyzer:
                     importance=importance,
                 ))
 
-        # 排序：高重要性優先
+        # Sort: high importance first
         importance_order = {"high": 0, "medium": 1, "low": 2}
         report.uncovered_modules.sort(key=lambda x: importance_order.get(x.importance, 2))
 
         return report
 
     def print_report(self, report: CoverageReport):
-        """印出報告"""
+        """Print the report"""
         print(f"\n{'='*70}")
         print("Test Coverage Analysis")
         print(f"{'='*70}")
@@ -368,7 +368,7 @@ class CoverageAnalyzer:
             print("UNCOVERED MODULES (need tests)")
             print(f"{'='*70}")
 
-            # 按重要性分組
+            # Group by importance
             for importance in ["high", "medium", "low"]:
                 modules = [m for m in report.uncovered_modules if m.importance == importance]
                 if not modules:
@@ -401,6 +401,6 @@ class CoverageAnalyzer:
 
 
 def analyze_coverage(project_path: Path) -> CoverageReport:
-    """便捷函數"""
+    """Convenience function"""
     analyzer = CoverageAnalyzer(project_path)
     return analyzer.analyze()

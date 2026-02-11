@@ -16,46 +16,46 @@ except ImportError:
 
 class PythonScanner(BaseScanner):
     """
-    Python 程式碼掃描器
+    Python code scanner
 
-    提取：
-    - classes（含 methods）
+    Extracts:
+    - classes (including methods)
     - functions
     - imports
-    - calls（函數呼叫）
-    - 變數（module level）
+    - calls (function invocations)
+    - variables (module level)
     """
 
     supported_extensions = [".py"]
 
     def scan_file(self, file_path: Path, content: str) -> tuple[list[Symbol], list[Dependency]]:
-        """掃描 Python 檔案"""
+        """Scan a Python file"""
         symbols = []
         dependencies = []
 
         try:
             tree = ast.parse(content)
         except SyntaxError as e:
-            # 語法錯誤，返回空結果
+            # Syntax error, return empty result
             return [], []
 
         lines = content.splitlines()
         rel_path = str(file_path)
         file_source_id = f"{self.project}:{rel_path}:file:{file_path.stem}"
 
-        # 提取 imports（建立 dependencies）
+        # Extract imports (create dependencies)
         imports = self._extract_imports(tree)
         for imp in imports:
             dep = Dependency(
                 source_id=file_source_id,
-                target_id=imp["module"],  # 會在後處理時解析
+                target_id=imp["module"],  # Resolved during post-processing
                 dep_type=DependencyType.IMPORTS,
                 source_line=imp["line"],
                 metadata={"names": imp["names"]},
             )
             dependencies.append(dep)
 
-        # 提取 calls（函數呼叫）
+        # Extract calls (function invocations)
         calls = self._extract_calls(tree)
         for call in calls:
             dep = Dependency(
@@ -67,7 +67,7 @@ class PythonScanner(BaseScanner):
             )
             dependencies.append(dep)
 
-        # 遍歷 AST
+        # Walk the AST
         for node in ast.walk(tree):
             # Classes
             if isinstance(node, ast.ClassDef):
@@ -86,21 +86,21 @@ class PythonScanner(BaseScanner):
 
             # Top-level functions
             elif isinstance(node, ast.FunctionDef):
-                # 確保是 top-level（不是 method）
+                # Ensure it is top-level (not a method)
                 if self._is_top_level(node, tree):
                     func_symbol = self._create_function_symbol(
                         node, rel_path, lines
                     )
                     symbols.append(func_symbol)
 
-        # 為每個 symbol 計算 hash
+        # Compute hash for each symbol
         for symbol in symbols:
             symbol.compute_hash()
 
         return symbols, dependencies
 
     def _extract_imports(self, tree: ast.AST) -> list[dict]:
-        """提取 import 語句"""
+        """Extract import statements"""
         imports = []
 
         for node in ast.walk(tree):
@@ -129,18 +129,18 @@ class PythonScanner(BaseScanner):
         rel_path: str,
         lines: list[str]
     ) -> Symbol:
-        """建立 class symbol"""
-        # 取得類內容
+        """Create class symbol"""
+        # Get class content
         start = node.lineno - 1
         end = node.end_lineno or node.lineno
         content = "\n".join(lines[start:end])
 
-        # 取得 docstring 作為摘要
+        # Get docstring as summary
         summary = ast.get_docstring(node) or ""
         if len(summary) > 200:
             summary = summary[:200] + "..."
 
-        # 取得 base classes
+        # Get base classes
         bases = []
         for base in node.bases:
             if isinstance(base, ast.Name):
@@ -168,7 +168,7 @@ class PythonScanner(BaseScanner):
         rel_path: str,
         lines: list[str]
     ) -> Symbol:
-        """建立 function symbol"""
+        """Create function symbol"""
         start = node.lineno - 1
         end = node.end_lineno or node.lineno
         content = "\n".join(lines[start:end])
@@ -177,12 +177,12 @@ class PythonScanner(BaseScanner):
         if len(summary) > 200:
             summary = summary[:200] + "..."
 
-        # 取得參數
+        # Get parameters
         params = []
         for arg in node.args.args:
             params.append(arg.arg)
 
-        # 取得返回類型
+        # Get return type
         returns = ""
         if node.returns:
             returns = ast.unparse(node.returns)
@@ -209,7 +209,7 @@ class PythonScanner(BaseScanner):
         rel_path: str,
         lines: list[str]
     ) -> Symbol:
-        """建立 method symbol"""
+        """Create method symbol"""
         start = node.lineno - 1
         end = node.end_lineno or node.lineno
         content = "\n".join(lines[start:end])
@@ -218,7 +218,7 @@ class PythonScanner(BaseScanner):
         if len(summary) > 200:
             summary = summary[:200] + "..."
 
-        # 取得參數（排除 self/cls）
+        # Get parameters (excluding self/cls)
         params = []
         for arg in node.args.args:
             if arg.arg not in ("self", "cls"):
@@ -243,7 +243,7 @@ class PythonScanner(BaseScanner):
         )
 
     def _is_top_level(self, node: ast.FunctionDef, tree: ast.Module) -> bool:
-        """檢查 function 是否是 top-level"""
+        """Check if a function is top-level"""
         for item in tree.body:
             if item is node:
                 return True
@@ -251,7 +251,7 @@ class PythonScanner(BaseScanner):
 
     def _extract_calls(self, tree: ast.AST) -> list[dict]:
         """
-        提取函數/方法呼叫
+        Extract function/method calls
 
         Returns:
             List of dicts with 'name' and 'line' keys
@@ -275,7 +275,7 @@ class PythonScanner(BaseScanner):
 
     def _get_call_name(self, node: ast.Call) -> Optional[str]:
         """
-        從 ast.Call 節點提取呼叫名稱
+        Extract call name from an ast.Call node
 
         Handles:
         - foo() → "foo"

@@ -1,21 +1,21 @@
 """
 Flyto Indexer - Code audit and smart indexing system.
 
-讓 AI 精準定位、改了會影響什麼一目了然。
+Enables AI to precisely locate code and clearly see what is affected by changes.
 
 Usage:
     from flyto_indexer import IndexEngine
 
     engine = IndexEngine("my-project", "/path/to/project")
 
-    # 掃描專案
+    # Scan project
     result = engine.scan()
 
-    # 查詢影響範圍
+    # Query impact scope
     impact = engine.impact("src/utils.py:function:helper")
 
-    # 取得上下文
-    context = engine.context(query="儲值頁面")
+    # Get context
+    context = engine.context(query="top-up page")
 """
 
 from .engine import IndexEngine

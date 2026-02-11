@@ -98,7 +98,7 @@ def _check_rate_limit(session_id: str = "") -> bool:
     return True
 
 
-# 載入索引 (可透過環境變數設定，用於嵌入其他專案時)
+# Load index (path configurable via env var, for embedding in other projects)
 INDEX_DIR = Path(os.environ.get(
     "FLYTO_INDEX_DIR",
     str(Path(__file__).parent.parent / ".flyto-index")
@@ -212,14 +212,14 @@ def search_by_keyword(
     session_id: str = None,
 ) -> dict:
     """
-    跨專案搜尋（智能排序）
+    Cross-project search with smart ranking.
 
     Args:
-        query: 搜尋關鍵字
-        max_results: 最多返回幾筆
-        symbol_type: 只搜特定類型 (function/class/composable/component/method/interface/type)
-        project: 只搜特定專案 (flyto-core/flyto-cloud/flyto-pro/...)
-        include_content: 是否包含程式碼片段
+        query: Search keyword
+        max_results: Maximum number of results to return
+        symbol_type: Filter by type (function/class/composable/component/method/interface/type)
+        project: Filter by project (flyto-core/flyto-cloud/flyto-pro/...)
+        include_content: Whether to include code snippets
 
     Scoring:
         - Name match: +10 (exact: +20)
@@ -244,14 +244,14 @@ def search_by_keyword(
             boost_paths = session.get_boost_paths()
             session.add_query(query)
 
-    # 搜尋 symbols
+    # Search symbols
     for symbol_id, symbol in index.get("symbols", {}).items():
-        # 專案篩選
+        # Project filter
         sym_project = symbol_id.split(":")[0] if ":" in symbol_id else ""
         if project and project.lower() not in sym_project.lower():
             continue
 
-        # 類型篩選
+        # Type filter
         sym_type = symbol.get("type", "")
         if symbol_type and symbol_type.lower() != sym_type.lower():
             continue
@@ -260,52 +260,52 @@ def search_by_keyword(
         match_reason = []
         path = symbol.get("path", "").lower()
 
-        # === 文字匹配 ===
-        # 名稱匹配（高權重）
+        # === Text matching ===
+        # Name match (high weight)
         name = symbol.get("name", "").lower()
         if any(w in name for w in query_words):
             score += 10
             match_reason.append("name")
 
-        # 精確匹配加分
+        # Exact match bonus
         if query_lower == name:
             score += 20
 
-        # 摘要匹配
+        # Summary match
         summary = symbol.get("summary", "").lower()
         if any(w in summary for w in query_words):
             score += 5
             match_reason.append("summary")
 
-        # 內容匹配 (load from content.jsonl if needed)
+        # Content match (load from content.jsonl if needed)
         content = get_symbol_content_text(symbol_id, symbol).lower()
         if any(w in content for w in query_words):
             score += 1
             match_reason.append("content")
 
-        # 沒有任何匹配就跳過
+        # Skip if no match at all
         if score == 0:
             continue
 
-        # === 智能加權 ===
-        # 1. Symbol 類型權重
+        # === Smart weighting ===
+        # 1. Symbol type weight
         type_weight = TYPE_WEIGHTS.get(sym_type, 0)
         score += type_weight
 
-        # 2. 引用次數權重（被引用越多越重要）
+        # 2. Reference count weight (more refs = more important)
         ref_count = symbol.get("ref_count", 0)
-        ref_bonus = min(ref_count * 0.5, 10)  # 最多 +10
+        ref_bonus = min(ref_count * 0.5, 10)  # capped at +10
         score += ref_bonus
 
-        # 3. 路徑權重（tests 降權）
+        # 3. Path weight (demote test files)
         if any(p in path for p in LOW_PRIORITY_PATHS):
             score -= 5
 
-        # 4. Export 權重（公開 API 加分）
+        # 4. Export weight (bonus for public APIs)
         if symbol.get("exports"):
             score += 3
 
-        # 5. Session boost（最近看過的檔案加分）
+        # 5. Session boost (bonus for recently viewed files)
         if boost_paths and path:
             raw_path = symbol.get("path", "")
             if raw_path in boost_paths:
@@ -324,15 +324,15 @@ def search_by_keyword(
             "match": ", ".join(match_reason),
         }
         if include_content:
-            # 取前 500 字元的程式碼
+            # Take first 500 characters of code
             full_content = get_symbol_content_text(symbol_id, symbol)
             result["snippet"] = full_content[:500]
         results.append(result)
 
-    # 排序
+    # Sort by score
     results.sort(key=lambda x: -x.get("score", 0))
 
-    # 去重
+    # Deduplicate
     seen = set()
     unique = []
     for r in results:
@@ -340,7 +340,7 @@ def search_by_keyword(
             seen.add(r["symbol_id"])
             unique.append(r)
 
-    # 按專案分組
+    # Group by project
     by_project = {}
     for r in unique[:max_results]:
         proj = r["project"]
@@ -363,9 +363,9 @@ def search_by_keyword(
 
 def get_file_info(path: str) -> dict:
     """
-    取得檔案資訊
+    Get file information.
 
-    包括用途、分類、關鍵字、API、依賴等
+    Includes purpose, category, keywords, APIs, dependencies, etc.
     """
     project_map = load_project_map()
     file_info = project_map.get("files", {}).get(path, {})
@@ -386,9 +386,9 @@ def get_file_info(path: str) -> dict:
 
 def get_file_symbols(path: str) -> dict:
     """
-    取得檔案的 symbols
+    Get symbols defined in a file.
 
-    列出該檔案中的所有函數、類、組件
+    Lists all functions, classes, and components in the file.
     """
     index = load_index()
     symbols = []
@@ -412,10 +412,10 @@ def get_file_symbols(path: str) -> dict:
 
 def impact_analysis(symbol_id: str) -> dict:
     """
-    影響分析
+    Impact analysis.
 
-    修改某個 symbol 會影響哪些地方
-    使用 reverse_index 進行準確查詢
+    Determine which locations would be affected by modifying a symbol.
+    Uses the reverse_index for accurate lookups.
     """
     index = load_index()
     symbols = index.get("symbols", {})
@@ -460,7 +460,7 @@ def impact_analysis(symbol_id: str) -> dict:
                 "path": caller_symbol.get("path", ""),
                 "name": caller_symbol.get("name", ""),
                 "type": caller_symbol.get("type", ""),
-                "reason": "直接調用",
+                "reason": "Direct call",
             })
 
     # Method 2: Check resolved_target in dependencies
@@ -479,21 +479,21 @@ def impact_analysis(symbol_id: str) -> dict:
                 "path": source_symbol.get("path", ""),
                 "name": source_symbol.get("name", ""),
                 "type": dep.get("type", ""),
-                "reason": f"透過 {dep.get('type', 'unknown')} 依賴",
+                "reason": f"Via {dep.get('type', 'unknown')} dependency",
             })
 
     warning = ""
     if len(affected) == 0:
-        suggestion = "這個 symbol 沒有被其他地方引用，可以安全修改。"
+        suggestion = "This symbol is not referenced anywhere else and can be safely modified."
     elif len(affected) <= 3:
-        warning = f"修改會影響 {len(affected)} 個地方"
-        suggestion = "影響範圍較小，建議逐一檢查這些調用處。"
+        warning = f"Modification affects {len(affected)} locations"
+        suggestion = "Impact is small. Recommend checking each call site individually."
     elif len(affected) <= 10:
-        warning = f"⚠️ 修改會影響 {len(affected)} 個地方"
-        suggestion = "影響範圍中等，建議仔細評估。"
+        warning = f"⚠️ Modification affects {len(affected)} locations"
+        suggestion = "Moderate impact. Recommend careful evaluation."
     else:
-        warning = f"⚠️ 修改會影響 {len(affected)} 個地方！"
-        suggestion = "影響範圍較大，建議謹慎修改並做好測試。"
+        warning = f"⚠️ Modification affects {len(affected)} locations!"
+        suggestion = "High impact. Recommend cautious modification and thorough testing."
 
     return {
         "symbol": resolved_id,
@@ -507,7 +507,7 @@ def impact_analysis(symbol_id: str) -> dict:
 
 def list_categories() -> dict:
     """
-    列出所有分類
+    List all categories.
     """
     project_map = load_project_map()
     categories = project_map.get("categories", {})
@@ -523,7 +523,7 @@ def list_categories() -> dict:
 
 def list_apis() -> dict:
     """
-    列出所有 API
+    List all API endpoints.
     """
     project_map = load_project_map()
     api_map = project_map.get("api_map", {})
@@ -539,12 +539,12 @@ def list_apis() -> dict:
 
 def list_projects() -> dict:
     """
-    列出所有已索引的專案和統計
+    List all indexed projects with statistics.
     """
     index = load_index()
     projects = index.get("projects", [])
 
-    # 統計每個專案的 symbols
+    # Count symbols per project
     stats = {}
     for sid, sym in index.get("symbols", {}).items():
         project = sid.split(":")[0] if ":" in sid else "unknown"
@@ -565,7 +565,7 @@ def list_projects() -> dict:
             "by_type": s["by_type"],
         })
 
-    # 按 symbols 數量排序
+    # Sort by symbol count
     result.sort(key=lambda x: -x["symbols"])
 
     return {
@@ -577,7 +577,7 @@ def list_projects() -> dict:
 
 def get_symbol_content(symbol_id: str) -> dict:
     """
-    取得 symbol 的完整程式碼
+    Get the full source code of a symbol.
 
     Loads content from content.jsonl if not in main index.
     """
@@ -586,7 +586,7 @@ def get_symbol_content(symbol_id: str) -> dict:
     resolved_id = symbol_id
 
     if not symbol:
-        # 嘗試模糊匹配
+        # Try fuzzy matching
         for sid, sym in index.get("symbols", {}).items():
             if symbol_id in sid or sid.endswith(symbol_id):
                 symbol = sym
@@ -1281,63 +1281,63 @@ def find_dead_code(
     min_lines: int = 5
 ) -> dict:
     """
-    找出沒有被任何地方引用的函數/組件（死代碼）。
+    Find functions/components that are never referenced anywhere (dead code).
 
-    這些代碼可以考慮刪除以減少維護負擔。
+    These can potentially be removed to reduce maintenance burden.
     """
     index = load_index()
     symbols = index.get("symbols", {})
     reverse_index = index.get("reverse_index", {})
     dependencies = index.get("dependencies", {})
 
-    # 建立被引用的名稱集合
+    # Build the set of referenced names
     referenced_names = set()
-    imported_files = set()  # 被導入的文件
-    referenced_classes = set()  # 被引用的類名（其方法不算死代碼）
+    imported_files = set()  # Files that are imported
+    referenced_classes = set()  # Referenced class names (their methods are not dead code)
 
     for dep_id, dep in dependencies.items():
         dep_type = dep.get("type", "")
 
         if dep_type == "imports":
-            # 收集所有被導入的名稱
+            # Collect all imported names
             names = dep.get("metadata", {}).get("names", [])
             for name in names:
                 referenced_names.add(name)
-                # 如果名稱首字母大寫，可能是類名
+                # If name starts with uppercase, it's likely a class name
                 if name and name[0].isupper():
                     referenced_classes.add(name)
-            # 收集被導入的模塊路徑
+            # Collect imported module paths
             target = dep.get("target", "")
             if target:
                 imported_files.add(target)
                 basename = target.rsplit("/", 1)[-1].rsplit(".", 1)[0]
                 imported_files.add(basename)
-                # 對於 Python 模塊路徑（如 src.pro.meta.multi_pass_refiner）
-                # 也加入最後一個部分
+                # For Python module paths (e.g. src.pro.meta.multi_pass_refiner),
+                # also add the last segment
                 if "." in target:
                     last_part = target.rsplit(".", 1)[-1]
                     imported_files.add(last_part)
 
         elif dep_type == "calls":
-            # 收集被調用的名稱（未 resolve 的）
+            # Collect called names (unresolved)
             target = dep.get("target", "")
             if target and not target.startswith("__"):
                 referenced_names.add(target)
-                # 也加入各個部分（處理 obj.method 的情況）
+                # Also add individual parts (handles obj.method cases)
                 parts = target.split(".")
                 for part in parts:
                     if part and len(part) > 2:
                         referenced_names.add(part)
-                        # 首字母大寫的部分可能是類名
+                        # Uppercase parts are likely class names
                         if part[0].isupper():
                             referenced_classes.add(part)
 
     dead_code = []
 
-    # 應該被引用的類型（排除 file, variable 等）
+    # Types that should be referenced (excludes file, variable, etc.)
     should_be_referenced = {"function", "method", "composable", "component", "class"}
 
-    # 入口點模式（不需要被引用）
+    # Entry point patterns (don't need to be referenced)
     entry_point_patterns = [
         "main", "index", "app", "App", "Main",
         "__init__", "setup", "teardown",
@@ -1348,7 +1348,7 @@ def find_dead_code(
         "do_HEAD", "do_OPTIONS", "do_PATCH",
     ]
 
-    # Vue/React 生命週期和特殊方法
+    # Vue/React lifecycle hooks and special methods
     lifecycle_methods = {
         "created", "mounted", "updated", "destroyed",
         "beforeCreate", "beforeMount", "beforeUpdate", "beforeDestroy",
@@ -1363,7 +1363,7 @@ def find_dead_code(
         sym_project = sym_id.split(":")[0] if ":" in sym_id else ""
         sym_path = sym.get("path", "")
 
-        # 過濾條件
+        # Filter conditions
         if project and project.lower() not in sym_project.lower():
             continue
         if symbol_type and sym_type != symbol_type:
@@ -1371,90 +1371,90 @@ def find_dead_code(
         if sym_type not in should_be_referenced:
             continue
 
-        # 跳過太短的代碼
+        # Skip code that's too short
         lines = sym.get("end_line", 0) - sym.get("start_line", 0)
         if lines < min_lines:
             continue
 
-        # 跳過入口點
+        # Skip entry points
         is_entry_point = any(p in sym_name for p in entry_point_patterns)
         if is_entry_point:
             continue
 
-        # 跳過生命週期方法
+        # Skip lifecycle methods
         if sym_name in lifecycle_methods:
             continue
 
-        # 跳過 Vue 組件內的函數（可能被模板 @click 等使用，難以追蹤）
+        # Skip functions inside Vue components (may be used by template @click etc., hard to track)
         if sym_type == "function" and sym_path.endswith(".vue"):
             continue
 
-        # 跳過導出的符號
+        # Skip exported symbols
         if sym.get("exports"):
             continue
 
-        # 跳過私有方法（以 _ 開頭但不是 __）
+        # Skip private methods (starts with _ but not __)
         if sym_name.startswith("_") and not sym_name.startswith("__"):
             continue
 
-        # 檢查是否被引用（導入或調用）
+        # Check if referenced (imported or called)
         if sym_name in referenced_names:
             continue
 
-        # 對於方法，也檢查方法名本身（不帶類名）
+        # For methods, also check the method name alone (without class name)
         if sym_type == "method" and "." in sym_name:
             method_only = sym_name.split(".")[-1]
             if method_only in referenced_names:
                 continue
-            # 如果類名被引用，方法也不算死代碼
+            # If the class name is referenced, its methods are not dead code
             class_name = sym_name.split(".")[0]
             if class_name in referenced_classes or class_name in referenced_names:
                 continue
 
-        # 對於類，如果類名被引用則不是死代碼
+        # For classes, not dead code if the class name is referenced
         if sym_type == "class" and sym_name in referenced_classes:
             continue
 
-        # 檢查文件是否被導入（對於類/組件）
+        # Check if the file is imported (for classes/components)
         file_basename = sym_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
         if file_basename in imported_files or sym_path in imported_files:
             continue
 
-        # 對於 composable，檢查是否被任何文件導入
-        # composable 通常以 use 開頭，文件名和函數名相同
+        # For composables, check if imported by any file
+        # Composables usually start with "use", filename matches function name
         if sym_type == "composable":
             is_imported = False
             for dep in dependencies.values():
                 if dep.get("type") == "imports":
                     target = dep.get("target", "")
                     names = dep.get("metadata", {}).get("names", [])
-                    # 檢查導入路徑是否包含 composable 名稱
+                    # Check if import path contains the composable name
                     if sym_name in target or file_basename in target:
                         is_imported = True
                         break
-                    # 檢查具名導入
+                    # Check named imports
                     if sym_name in names:
                         is_imported = True
                         break
             if is_imported:
                 continue
 
-        # 對於 JS/TS 類和組件，檢查文件名是否與類名匹配並被導入
-        # 例如 OutputRendererPlugin.js 定義了 OutputRendererPlugin
+        # For JS/TS classes and components, check if filename matches class name and is imported
+        # e.g. OutputRendererPlugin.js defines OutputRendererPlugin
         if sym_type in ("class", "component") and file_basename == sym_name:
-            # 檢查是否有任何導入指向這個文件路徑
+            # Check if any import points to this file path
             is_imported = False
             for dep in dependencies.values():
                 if dep.get("type") == "imports":
                     target = dep.get("target", "")
-                    # 檢查相對路徑導入（如 ./renderers/OutputRendererPlugin）
+                    # Check relative path imports (e.g. ./renderers/OutputRendererPlugin)
                     if sym_name in target or file_basename in target:
                         is_imported = True
                         break
             if is_imported:
                 continue
 
-        # 檢查 reverse_index
+        # Check reverse_index
         ref_count = sym.get("ref_count", 0)
         callers = reverse_index.get(sym_id, [])
 
@@ -1469,10 +1469,10 @@ def find_dead_code(
                 "start_line": sym.get("start_line", 0),
             })
 
-    # 按行數排序（大的死代碼優先）
+    # Sort by line count (largest dead code first)
     dead_code.sort(key=lambda x: x["lines"], reverse=True)
 
-    # 按專案分組
+    # Group by project
     by_project = {}
     for item in dead_code:
         proj = item["project"]
@@ -1487,7 +1487,7 @@ def find_dead_code(
         "total_dead_lines": total_dead_lines,
         "by_project": {k: len(v) for k, v in by_project.items()},
         "top_20": dead_code[:20],
-        "suggestion": f"發現 {len(dead_code)} 個未被引用的符號，共 {total_dead_lines} 行代碼可考慮刪除。"
+        "suggestion": f"Found {len(dead_code)} unreferenced symbols, {total_dead_lines} total lines of code that can be considered for removal."
     }
 
 
@@ -1497,9 +1497,9 @@ def find_todos(
     max_results: int = 100
 ) -> dict:
     """
-    找出所有 TODO、FIXME、HACK、XXX 標記。
+    Find all TODO, FIXME, HACK, XXX markers.
 
-    幫助追蹤技術債和待辦事項。
+    Helps track technical debt and pending items.
     """
     index = load_index()
     symbols = index.get("symbols", {})
@@ -1513,11 +1513,11 @@ def find_todos(
         sym_project = sym_id.split(":")[0] if ":" in sym_id else ""
         sym_path = sym.get("path", "")
 
-        # 過濾專案
+        # Filter by project
         if project and project.lower() not in sym_project.lower():
             continue
 
-        # 每個檔案只處理一次
+        # Process each file only once
         file_key = f"{sym_project}:{sym_path}"
         if file_key in seen_files:
             continue
@@ -1532,11 +1532,11 @@ def find_todos(
                 continue
 
             for match in pattern.finditer(content):
-                # 取得匹配的文字
+                # Get matching text
                 text = match.group(1) or match.group(2) or match.group(3) or ""
-                text = text.strip()[:100]  # 限制長度
+                text = text.strip()[:100]  # Limit length
 
-                # 計算行號
+                # Calculate line number
                 line_num = content[:match.start()].count('\n') + sym.get("start_line", 1)
 
                 todos.append({
@@ -1548,11 +1548,11 @@ def find_todos(
                     "line": line_num,
                 })
 
-    # 按優先級排序
+    # Sort by priority
     priority_order = {"high": 0, "medium": 1, "low": 2}
     todos.sort(key=lambda x: (priority_order.get(x["priority"], 9), x["project"], x["path"]))
 
-    # 統計
+    # Statistics
     by_priority = {"high": 0, "medium": 0, "low": 0}
     by_project = {}
     by_tag = {}
@@ -1577,16 +1577,16 @@ def cross_project_impact(
     source_project: str = None
 ) -> dict:
     """
-    跨專案 API 變更追蹤。
+    Cross-project API change tracking.
 
-    當某個專案的函數/類改變時，找出其他專案哪些地方需要更新。
+    When a function/class in one project changes, find which locations in other projects need updating.
     """
     index = load_index()
     symbols = index.get("symbols", {})
     reverse_index = index.get("reverse_index", {})
     dependencies = index.get("dependencies", {})
 
-    # 找到源符號
+    # Find source symbols
     source_symbols = []
     for sym_id, sym in symbols.items():
         if sym.get("name") == symbol_name:
@@ -1603,24 +1603,24 @@ def cross_project_impact(
     if not source_symbols:
         return {"error": f"Symbol '{symbol_name}' not found"}
 
-    # 找出跨專案的引用
+    # Find cross-project references
     cross_project_refs = []
 
     for source in source_symbols:
         source_project = source["project"]
         source_id = source["id"]
 
-        # 從 reverse_index 找引用
+        # Find references from reverse_index
         callers = reverse_index.get(source_id, [])
 
         for caller_id in callers:
             caller_project = caller_id.split(":")[0] if ":" in caller_id else ""
 
-            # 只關心跨專案的引用
+            # Only care about cross-project references
             if caller_project == source_project:
                 continue
 
-            # 跳過 fork 專案（flyto-cloud-dev 是 flyto-cloud 的 fork）
+            # Skip forked projects (flyto-cloud-dev is a fork of flyto-cloud)
             if (source_project == "flyto-cloud" and caller_project == "flyto-cloud-dev") or \
                (source_project == "flyto-cloud-dev" and caller_project == "flyto-cloud"):
                 continue
@@ -1636,7 +1636,7 @@ def cross_project_impact(
                 "source_id": source_id,
             })
 
-    # 按專案分組
+    # Group by project
     by_affected_project = {}
     for ref in cross_project_refs:
         proj = ref["caller_project"]
@@ -1644,15 +1644,15 @@ def cross_project_impact(
             by_affected_project[proj] = []
         by_affected_project[proj].append(ref)
 
-    # 生成建議
+    # Generate suggestions
     if len(cross_project_refs) == 0:
-        suggestion = f"'{symbol_name}' 沒有跨專案的引用，可以安全修改。"
+        suggestion = f"'{symbol_name}' has no cross-project references and can be safely modified."
         risk = "low"
     elif len(by_affected_project) == 1:
-        suggestion = f"修改 '{symbol_name}' 會影響 1 個其他專案的 {len(cross_project_refs)} 處調用。"
+        suggestion = f"Modifying '{symbol_name}' will affect {len(cross_project_refs)} call sites in 1 other project."
         risk = "medium"
     else:
-        suggestion = f"⚠️ 修改 '{symbol_name}' 會影響 {len(by_affected_project)} 個其他專案！"
+        suggestion = f"⚠️ Modifying '{symbol_name}' will affect {len(by_affected_project)} other projects!"
         risk = "high"
 
     return {
@@ -2199,7 +2199,7 @@ def session_get(session_id: str) -> dict:
     return session.to_dict()
 
 
-# MCP 工具定義
+# MCP tool definitions
 TOOLS = [
     # =========================================================================
     # Code Search & Discovery
@@ -2662,7 +2662,7 @@ TOOLS = [
 
 
 def handle_request(request: dict):
-    """處理 MCP 請求"""
+    """Handle MCP request"""
     method = request.get("method", "")
     id = request.get("id")
     params = request.get("params", {})
@@ -2718,7 +2718,7 @@ def handle_request(request: dict):
 
 
 def main():
-    """MCP Server 主程式"""
+    """MCP Server main program"""
     import sys
     # Debug logging to stderr
     sys.stderr.write(f"[flyto-indexer] Starting MCP server (pid={os.getpid()})\n")

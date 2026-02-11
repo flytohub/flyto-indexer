@@ -1,20 +1,20 @@
 """
-LLM Auditor - 用 LLM 理解代碼用途
+LLM Auditor - Use LLM to understand code purpose
 
-核心功能：
-1. audit_file() - 審計單個檔案，生成用途描述
-2. audit_project() - 審計整個專案，生成 PROJECT_MAP
-3. 增量審計 - 只審計變化的檔案
+Core features:
+1. audit_file() - Audit a single file, generate a purpose description
+2. audit_project() - Audit an entire project, generate PROJECT_MAP
+3. Incremental audit - Only audit files that have changed
 
-輸出格式（存入向量庫）：
+Output format (stored in vector database):
 {
     "path": "src/pages/TopUp.vue",
-    "purpose": "儲值頁面 - 顯示方案列表、處理付款、跳轉成功頁",
+    "purpose": "Top-up page - displays plan list, handles payment, redirects to success page",
     "category": "payment",
-    "keywords": ["儲值", "付款", "wallet", "topup"],
+    "keywords": ["top-up", "payment", "wallet", "topup"],
     "apis": ["/api/wallet/topup", "/api/wallet/plans"],
     "dependencies": ["useWallet", "usePayment"],
-    "ui_elements": ["方案卡片", "付款按鈕", "loading 狀態"]
+    "ui_elements": ["plan card", "payment button", "loading state"]
 }
 """
 
@@ -26,66 +26,66 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# 審計 prompt
-AUDIT_FILE_PROMPT = """你是代碼審計專家。分析以下代碼，用**繁體中文**回答。
+# Audit prompt
+AUDIT_FILE_PROMPT = """You are a code audit expert. Analyze the following code and respond in **English**.
 
-檔案路徑：{path}
-語言：{language}
+File path: {path}
+Language: {language}
 
-代碼內容：
+Code content:
 ```
 {content}
 ```
 
-請回答（JSON 格式）：
+Please respond (JSON format):
 {{
-    "purpose": "一句話描述這個檔案在做什麼（例如：儲值頁面 - 顯示方案、處理付款）",
-    "category": "分類（例如：payment, auth, user, product, order, admin, util）",
-    "keywords": ["相關關鍵字，中英文都要，例如：儲值, 付款, topup, wallet"],
-    "apis": ["呼叫的 API 路徑，例如：/api/wallet/topup"],
-    "dependencies": ["依賴的 composable/store/service，例如：useWallet"],
-    "ui_elements": ["主要 UI 元素，例如：方案卡片, 付款按鈕"]
+    "purpose": "One-line description of what this file does (e.g. top-up page - display plans, handle payments)",
+    "category": "Category (e.g. payment, auth, user, product, order, admin, util)",
+    "keywords": ["Related keywords, e.g. topup, wallet, payment"],
+    "apis": ["Called API paths, e.g. /api/wallet/topup"],
+    "dependencies": ["Dependent composable/store/service, e.g. useWallet"],
+    "ui_elements": ["Main UI elements, e.g. plan card, payment button"]
 }}
 
-只輸出 JSON，不要其他文字。
+Output JSON only, no other text.
 """
 
-AUDIT_SYMBOL_PROMPT = """你是代碼審計專家。分析以下函數/類，用**繁體中文**回答。
+AUDIT_SYMBOL_PROMPT = """You are a code audit expert. Analyze the following function/class and respond in **English**.
 
-檔案：{path}
-名稱：{name}
-類型：{type}
+File: {path}
+Name: {name}
+Type: {type}
 
-代碼：
+Code:
 ```
 {content}
 ```
 
-請回答（JSON 格式）：
+Please respond (JSON format):
 {{
-    "purpose": "一句話描述這個 {type} 在做什麼",
-    "params": ["參數說明"],
-    "returns": "返回值說明",
-    "side_effects": ["副作用，例如：修改資料庫、呼叫 API"],
-    "keywords": ["相關關鍵字"]
+    "purpose": "One-line description of what this {type} does",
+    "params": ["Parameter descriptions"],
+    "returns": "Return value description",
+    "side_effects": ["Side effects, e.g. modify database, call API"],
+    "keywords": ["Related keywords"]
 }}
 
-只輸出 JSON，不要其他文字。
+Output JSON only, no other text.
 """
 
 
 class LLMAuditor:
     """
-    LLM 審計器
+    LLM Auditor
 
-    使用 LLM 理解代碼用途，生成語義描述
+    Uses LLM to understand code purpose and generate semantic descriptions
     """
 
     def __init__(self, provider: str = "openai", model: str = None):
         """
         Args:
-            provider: "openai" 或 "ollama"
-            model: 模型名稱（預設 gpt-4o-mini 或 llama3）
+            provider: "openai" or "ollama"
+            model: Model name (defaults to gpt-4o-mini or llama3)
         """
         self.provider = provider
         self.model = model or self._default_model()
@@ -98,7 +98,7 @@ class LLMAuditor:
             return "llama3"
 
     def _get_client(self):
-        """取得 LLM client"""
+        """Get LLM client"""
         if self._client:
             return self._client
 
@@ -114,7 +114,7 @@ class LLMAuditor:
         language: str = "unknown"
     ) -> dict:
         """
-        審計單個檔案
+        Audit a single file
 
         Returns:
             {
@@ -128,7 +128,7 @@ class LLMAuditor:
                 "error": str or None
             }
         """
-        # 截斷過長的內容（最多 4000 字符）
+        # Truncate overly long content (max 4000 characters)
         if len(content) > 4000:
             content = content[:4000] + "\n... (truncated)"
 
@@ -165,7 +165,7 @@ class LLMAuditor:
         content: str
     ) -> dict:
         """
-        審計單個 symbol（function/class/component）
+        Audit a single symbol (function/class/component)
 
         Returns:
             {
@@ -177,7 +177,7 @@ class LLMAuditor:
                 "error": str or None
             }
         """
-        # 截斷過長的內容
+        # Truncate overly long content
         if len(content) > 2000:
             content = content[:2000] + "\n... (truncated)"
 
@@ -205,14 +205,14 @@ class LLMAuditor:
             }
 
     def _call_llm(self, prompt: str) -> str:
-        """呼叫 LLM"""
+        """Call LLM"""
         if self.provider == "openai":
             return self._call_openai(prompt)
         else:
             return self._call_ollama(prompt)
 
     def _call_openai(self, prompt: str) -> str:
-        """呼叫 OpenAI"""
+        """Call OpenAI"""
         client = self._get_client()
         response = client.chat.completions.create(
             model=self.model,
@@ -226,7 +226,7 @@ class LLMAuditor:
         return response.choices[0].message.content.strip()
 
     def _call_ollama(self, prompt: str) -> str:
-        """呼叫 Ollama"""
+        """Call Ollama"""
         import requests
         response = requests.post(
             "http://localhost:11434/api/generate",
@@ -243,7 +243,7 @@ class LLMAuditor:
 
 
 def audit_file(path: str, content: str, language: str = "unknown") -> dict:
-    """便捷函數：審計單個檔案"""
+    """Convenience function: audit a single file"""
     auditor = LLMAuditor()
     return auditor.audit_file(path, content, language)
 
@@ -256,14 +256,14 @@ def audit_project(
     show_progress: bool = True
 ) -> dict:
     """
-    審計整個專案
+    Audit an entire project
 
     Args:
-        project_path: 專案根目錄
-        symbols: 已掃描的 symbols 列表
-        output_file: 輸出 PROJECT_MAP.json 路徑
-        max_files: 最多審計幾個檔案
-        show_progress: 是否顯示進度
+        project_path: Project root directory
+        symbols: List of already-scanned symbols
+        output_file: Output path for PROJECT_MAP.json
+        max_files: Maximum number of files to audit
+        show_progress: Whether to show progress
 
     Returns:
         {
@@ -276,14 +276,14 @@ def audit_project(
     """
     auditor = LLMAuditor()
 
-    # 收集唯一檔案
+    # Collect unique files
     files = {}
     for symbol in symbols:
         path = symbol.get("path")
         if path and path not in files:
             files[path] = symbol.get("content", "")
 
-    # 限制數量
+    # Limit count
     file_list = list(files.items())[:max_files]
 
     result = {
@@ -294,7 +294,7 @@ def audit_project(
         "keyword_index": {}
     }
 
-    # 審計每個檔案
+    # Audit each file
     iterator = enumerate(file_list)
     if show_progress:
         try:
@@ -304,12 +304,12 @@ def audit_project(
             pass
 
     for i, (path, content) in iterator:
-        # 推斷語言
+        # Infer language
         ext = Path(path).suffix
         lang_map = {".py": "python", ".vue": "vue", ".ts": "typescript", ".js": "javascript"}
         language = lang_map.get(ext, ext[1:] if ext else "unknown")
 
-        # 讀取完整內容（如果 content 為空）
+        # Read full content (if content is empty)
         if not content:
             full_path = project_path / path
             if full_path.exists():
@@ -318,11 +318,11 @@ def audit_project(
                 except Exception:
                     continue
 
-        # 審計
+        # Audit
         audit = auditor.audit_file(path, content, language)
         result["files"][path] = audit
 
-        # 建立索引
+        # Build indexes
         category = audit.get("category", "unknown")
         if category not in result["categories"]:
             result["categories"][category] = []
@@ -339,7 +339,7 @@ def audit_project(
                 result["keyword_index"][kw_lower] = []
             result["keyword_index"][kw_lower].append(path)
 
-    # 輸出到檔案
+    # Write to file
     if output_file:
         output_file.parent.mkdir(parents=True, exist_ok=True)
         output_file.write_text(json.dumps(result, indent=2, ensure_ascii=False))

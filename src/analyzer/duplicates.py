@@ -1,11 +1,11 @@
 """
-重複程式碼偵測 - 找出 copy-paste 的程式碼
+Duplicate code detection - find copy-pasted code
 
-策略：
-1. 將程式碼切成 chunk（連續 N 行）
-2. 正規化（移除空白、註解）
-3. 計算 hash，找出重複
-4. 合併相鄰的重複區塊
+Strategy:
+1. Split code into chunks (N consecutive lines)
+2. Normalize (remove whitespace, comments)
+3. Compute hash, find duplicates
+4. Merge adjacent duplicate blocks
 """
 
 import re
@@ -17,7 +17,7 @@ from collections import defaultdict
 
 @dataclass
 class DuplicateBlock:
-    """重複程式碼區塊"""
+    """Duplicate code block"""
     file1: str
     start1: int
     end1: int
@@ -31,7 +31,7 @@ class DuplicateBlock:
 
 @dataclass
 class DuplicateReport:
-    """重複程式碼報告"""
+    """Duplicate code report"""
     total_files: int = 0
     total_lines: int = 0
     duplicate_blocks: list[DuplicateBlock] = field(default_factory=list)
@@ -45,12 +45,12 @@ class DuplicateReport:
 
 
 class DuplicateDetector:
-    """重複程式碼偵測器"""
+    """Duplicate code detector"""
 
     def __init__(
         self,
         project_root: Path,
-        min_lines: int = 6,  # 最少重複行數
+        min_lines: int = 6,  # Minimum duplicate line count
         extensions: list[str] = None,
         ignore_patterns: list[str] = None,
     ):
@@ -73,48 +73,48 @@ class DuplicateDetector:
         return False
 
     def _normalize_line(self, line: str) -> str:
-        """正規化程式碼行（移除空白和註解）"""
+        """Normalize code line (remove whitespace and comments)"""
         line = line.strip()
 
-        # 移除單行註解
+        # Remove single-line comments
         if line.startswith("#") or line.startswith("//"):
             return ""
 
-        # 移除行尾註解
+        # Remove trailing comments
         for comment_start in ["#", "//"]:
             if comment_start in line:
-                # 簡單處理，不考慮字串內的 #
+                # Simple handling, ignoring # inside strings
                 idx = line.find(comment_start)
                 if idx > 0:
                     line = line[:idx].strip()
 
-        # 移除多餘空白
+        # Remove extra whitespace
         line = re.sub(r'\s+', ' ', line)
 
         return line
 
     def _extract_chunks(self, rel_path: str, content: str) -> list[tuple[int, str, list[str]]]:
-        """提取程式碼 chunks"""
+        """Extract code chunks"""
         lines = content.split("\n")
         chunks = []
 
-        # 正規化所有行
+        # Normalize all lines
         normalized = []
         for i, line in enumerate(lines):
             norm = self._normalize_line(line)
-            if norm:  # 只保留有內容的行
+            if norm:  # Only keep lines with content
                 normalized.append((i + 1, norm, line))
 
-        # 滑動窗口提取 chunks
+        # Sliding window extract chunks
         for i in range(len(normalized) - self.min_lines + 1):
             chunk_lines = normalized[i:i + self.min_lines]
             start_line = chunk_lines[0][0]
 
-            # 計算 hash
+            # Compute hash
             chunk_text = "\n".join(line[1] for line in chunk_lines)
             chunk_hash = hashlib.md5(chunk_text.encode()).hexdigest()
 
-            # 原始程式碼
+            # Original source code
             original_lines = [line[2] for line in chunk_lines]
 
             chunks.append((start_line, chunk_hash, original_lines))
@@ -122,7 +122,7 @@ class DuplicateDetector:
         return chunks
 
     def scan_directory(self) -> list[str]:
-        """掃描目錄"""
+        """Scan directory"""
         files = []
         for ext in self.extensions:
             for file_path in self.project_root.rglob(f"*{ext}"):
@@ -132,13 +132,13 @@ class DuplicateDetector:
         return files
 
     def analyze(self) -> DuplicateReport:
-        """執行分析"""
+        """Run analysis"""
         report = DuplicateReport()
 
         files = self.scan_directory()
         report.total_files = len(files)
 
-        # 第一遍：建立 chunk 索引
+        # First pass: build chunk index
         for rel_path in files:
             full_path = self.project_root / rel_path
             try:
@@ -151,7 +151,7 @@ class DuplicateDetector:
             for start_line, chunk_hash, original_lines in chunks:
                 self.chunk_index[chunk_hash].append((rel_path, start_line, original_lines))
 
-        # 第二遍：找出重複
+        # Second pass: find duplicates
         seen_pairs = set()
         duplicates_raw = []
 
@@ -159,14 +159,14 @@ class DuplicateDetector:
             if len(locations) < 2:
                 continue
 
-            # 找出所有配對
+            # Find all pairs
             for i, (file1, start1, lines1) in enumerate(locations):
                 for file2, start2, lines2 in locations[i + 1:]:
-                    # 跳過同一檔案內相鄰的重複
+                    # Skip adjacent duplicates within the same file
                     if file1 == file2 and abs(start1 - start2) < self.min_lines:
                         continue
 
-                    # 去重
+                    # Deduplicate
                     pair_key = tuple(sorted([(file1, start1), (file2, start2)]))
                     if pair_key in seen_pairs:
                         continue
@@ -182,7 +182,7 @@ class DuplicateDetector:
                         "lines": lines1,
                     })
 
-        # 合併相鄰的重複區塊
+        # Merge adjacent duplicate blocks
         merged = self._merge_adjacent(duplicates_raw)
 
         for dup in merged:
@@ -200,17 +200,17 @@ class DuplicateDetector:
             report.duplicate_blocks.append(block)
             report.duplicate_lines += block.lines
 
-        # 按行數排序
+        # Sort by line count
         report.duplicate_blocks.sort(key=lambda x: x.lines, reverse=True)
 
         return report
 
     def _merge_adjacent(self, duplicates: list[dict]) -> list[dict]:
-        """合併相鄰的重複區塊"""
+        """Merge adjacent duplicate blocks"""
         if not duplicates:
             return []
 
-        # 按檔案和起始行排序
+        # Sort by file and start line
         duplicates.sort(key=lambda x: (x["file1"], x["file2"], x["start1"], x["start2"]))
 
         merged = []
@@ -221,13 +221,13 @@ class DuplicateDetector:
                 current = dup.copy()
                 continue
 
-            # 檢查是否相鄰
+            # Check if adjacent
             same_files = (current["file1"] == dup["file1"] and current["file2"] == dup["file2"])
             adjacent1 = abs(dup["start1"] - current["end1"]) <= 2
             adjacent2 = abs(dup["start2"] - current["end2"]) <= 2
 
             if same_files and adjacent1 and adjacent2:
-                # 合併
+                # Merge
                 current["end1"] = max(current["end1"], dup["end1"])
                 current["end2"] = max(current["end2"], dup["end2"])
                 current["lines"] = current.get("lines", []) + dup.get("lines", [])
@@ -241,7 +241,7 @@ class DuplicateDetector:
         return merged
 
     def print_report(self, report: DuplicateReport):
-        """印出報告"""
+        """Print the report"""
         print(f"\n{'='*70}")
         print("Duplicate Code Analysis")
         print(f"{'='*70}")
@@ -270,6 +270,6 @@ class DuplicateDetector:
 
 
 def detect_duplicates(project_path: Path, min_lines: int = 6) -> DuplicateReport:
-    """便捷函數"""
+    """Convenience function"""
     detector = DuplicateDetector(project_path, min_lines)
     return detector.analyze()

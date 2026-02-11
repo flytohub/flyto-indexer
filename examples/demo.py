@@ -2,31 +2,31 @@
 """
 Demo script for flyto-indexer.
 
-使用方式：
+Usage:
     python demo.py /path/to/your/project
 
-這會：
-1. 掃描專案，建立索引
-2. 輸出 L0 大綱
-3. 示範影響分析
+This will:
+1. Scan the project and build an index
+2. Output the L0 outline
+3. Demonstrate impact analysis
 """
 
 import sys
 import os
 from pathlib import Path
 
-# 設定路徑，讓相對 import 可以工作
+# Set up paths so relative imports work
 project_root = Path(__file__).parent.parent
 src_path = project_root / "src"
 
-# 建立一個臨時的 package 結構
+# Create a temporary package structure
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-# 修改模組搜尋路徑
+# Modify module search path
 os.chdir(src_path)
 
-# 現在可以 import 了
+# Now we can import
 from models import ProjectIndex, Symbol, Dependency, FileManifest, SymbolType, DependencyType
 from scanner.python import PythonScanner
 from scanner.vue import VueScanner
@@ -36,7 +36,7 @@ from context.loader import ContextLoader
 
 
 class SimpleIndexEngine:
-    """簡化版 IndexEngine（用於 demo）"""
+    """Simplified IndexEngine (for demo purposes)"""
 
     def __init__(self, project_name: str, project_root: Path, index_dir: Path = None):
         self.project_name = project_name
@@ -51,7 +51,7 @@ class SimpleIndexEngine:
         self.index = ProjectIndex(project=project_name, root_path=str(self.project_root))
 
     def scan(self, incremental: bool = True) -> dict:
-        """掃描專案"""
+        """Scan the project"""
         extensions = []
         for scanner in self.scanners:
             extensions.extend(scanner.supported_extensions)
@@ -90,7 +90,7 @@ class SimpleIndexEngine:
             except Exception as e:
                 result.add_error(rel_path, str(e))
 
-        # 更新索引
+        # Update the index
         for symbol in result.symbols:
             self.index.symbols[symbol.id] = symbol
         for dep in result.dependencies:
@@ -108,13 +108,13 @@ class SimpleIndexEngine:
         }
 
     def outline(self) -> str:
-        """生成 L0 大綱"""
+        """Generate the L0 outline"""
         loader = ContextLoader(self.index)
         l0 = loader.load_l0()
         return l0.to_text()
 
     def impact(self, symbol_id: str, max_depth: int = 3) -> dict:
-        """查詢影響範圍"""
+        """Query the impact scope"""
         full_id = self._resolve_symbol_id(symbol_id)
         if not full_id:
             return {"error": f"Symbol not found: {symbol_id}"}
@@ -161,7 +161,7 @@ class SimpleIndexEngine:
 def main():
     if len(sys.argv) < 2:
         print("Usage: python demo.py <project_path>")
-        print("Example: python demo.py /Library/其他專案/flytohub/flyto-core")
+        print("Example: python demo.py /path/to/your/projects/flyto-core")
         return
 
     project_path = Path(sys.argv[1]).resolve()
@@ -176,19 +176,19 @@ def main():
     print(f"Path: {project_path}")
     print(f"{'='*60}\n")
 
-    # 1. 建立引擎
+    # 1. Initialize the engine
     print("[1/4] Initializing engine...")
     engine = SimpleIndexEngine(project_name, project_path)
 
-    # 2. 掃描專案
+    # 2. Scan the project
     print("[2/4] Scanning project...")
-    result = engine.scan(incremental=False)  # 第一次用 full scan
+    result = engine.scan(incremental=False)  # First time uses full scan
     print(f"  - Files scanned: {result['files_scanned']}")
     print(f"  - Symbols found: {result['symbols_found']}")
     print(f"  - Dependencies: {result['dependencies_found']}")
     print(f"  - Changes: {result['changes']}")
 
-    # 3. 輸出 L0 大綱
+    # 3. Output L0 outline
     print("\n[3/4] Generating L0 outline...")
     outline = engine.outline()
     print("\n" + "="*60)
@@ -198,7 +198,7 @@ def main():
     if len(outline) > 2000:
         print(f"\n... (truncated, total {len(outline)} chars)")
 
-    # 4. 示範影響分析
+    # 4. Demonstrate impact analysis
     print("\n[4/4] Impact analysis demo...")
     if engine.index.symbols:
         sample_symbol = None

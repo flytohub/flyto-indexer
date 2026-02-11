@@ -1,9 +1,9 @@
 """
-Symbol 索引 - 函數和類別的精確定位
+Symbol index — precise location of functions and classes
 
-讓 AI 能找到：
-- 「topUp 函數在哪？」→ src/composables/useWallet.ts:45
-- 「PaymentService 類別」→ src/services/payment.py:12
+Enables AI to find:
+- "Where is the topUp function?" -> src/composables/useWallet.ts:45
+- "PaymentService class" -> src/services/payment.py:12
 """
 
 import ast
@@ -16,13 +16,13 @@ import json
 
 @dataclass
 class Symbol:
-    """程式碼符號（函數/類別/方法）"""
+    """Code symbol (function/class/method)"""
     name: str
     kind: str  # function, class, method, const, interface, type
     file: str
     line: int
     end_line: int = 0
-    parent: str = ""  # 所屬類別（如果是方法）
+    parent: str = ""  # Parent class (if this is a method)
     params: list[str] = field(default_factory=list)
     returns: str = ""
     docstring: str = ""
@@ -30,7 +30,7 @@ class Symbol:
 
 
 class SymbolIndexer:
-    """Symbol 索引器"""
+    """Symbol indexer"""
 
     def __init__(
         self,
@@ -56,7 +56,7 @@ class SymbolIndexer:
         return False
 
     def extract_python_symbols(self, rel_path: str, content: str) -> list[Symbol]:
-        """提取 Python symbols"""
+        """Extract Python symbols"""
         symbols = []
 
         try:
@@ -65,7 +65,7 @@ class SymbolIndexer:
             return symbols
 
         for node in ast.iter_child_nodes(tree):
-            # 類別
+            # Class
             if isinstance(node, ast.ClassDef):
                 docstring = ast.get_docstring(node) or ""
                 symbols.append(Symbol(
@@ -78,7 +78,7 @@ class SymbolIndexer:
                     exported=not node.name.startswith("_"),
                 ))
 
-                # 類別方法
+                # Class methods
                 for item in node.body:
                     if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         if not item.name.startswith("_") or item.name in ["__init__", "__call__"]:
@@ -96,7 +96,7 @@ class SymbolIndexer:
                                 exported=not item.name.startswith("_"),
                             ))
 
-            # 頂層函數
+            # Top-level functions
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if not node.name.startswith("_"):
                     params = [arg.arg for arg in node.args.args]
@@ -115,7 +115,7 @@ class SymbolIndexer:
         return symbols
 
     def extract_typescript_symbols(self, rel_path: str, content: str) -> list[Symbol]:
-        """提取 TypeScript/JavaScript symbols"""
+        """Extract TypeScript/JavaScript symbols"""
         symbols = []
         lines = content.split("\n")
 
@@ -126,7 +126,7 @@ class SymbolIndexer:
             line_num = i + 1
             stripped = line.strip()
 
-            # 追蹤大括號深度（簡化版）
+            # Track brace depth (simplified)
             brace_depth += line.count("{") - line.count("}")
 
             # export class Name
@@ -197,7 +197,7 @@ class SymbolIndexer:
                 ))
                 continue
 
-            # 類別方法（在類別內部）
+            # Class methods (inside a class)
             if current_class and brace_depth > 0:
                 method_match = re.match(r'(?:async\s+)?(\w+)\s*\(([^)]*)\)', stripped)
                 if method_match and not stripped.startswith(("if", "for", "while", "switch", "//")):
@@ -214,17 +214,17 @@ class SymbolIndexer:
                             exported=True,
                         ))
 
-            # 重置類別追蹤
+            # Reset class tracking
             if brace_depth == 0:
                 current_class = None
 
         return symbols
 
     def extract_vue_symbols(self, rel_path: str, content: str) -> list[Symbol]:
-        """提取 Vue symbols"""
+        """Extract Vue symbols"""
         symbols = []
 
-        # 組件名稱
+        # Component name
         component_name = Path(rel_path).stem
         symbols.append(Symbol(
             name=component_name,
@@ -234,13 +234,13 @@ class SymbolIndexer:
             exported=True,
         ))
 
-        # 提取 script 區塊
+        # Extract script block
         script_match = re.search(r'<script[^>]*>(.*?)</script>', content, re.DOTALL)
         if script_match:
             script_content = script_match.group(1)
             script_start = content[:content.find("<script")].count("\n") + 1
 
-            # 調整行號
+            # Adjust line numbers
             ts_symbols = self.extract_typescript_symbols(rel_path, script_content)
             for sym in ts_symbols:
                 sym.line += script_start
@@ -249,7 +249,7 @@ class SymbolIndexer:
         return symbols
 
     def extract_java_symbols(self, rel_path: str, content: str) -> list[Symbol]:
-        """提取 Java symbols"""
+        """Extract Java symbols"""
         symbols = []
         lines = content.split("\n")
 
@@ -295,10 +295,10 @@ class SymbolIndexer:
                         if len(parts) >= 2:
                             params.append(parts[-1])
 
-                # 判斷是建構子還是方法
+                # Determine if constructor or method
                 kind = "constructor" if current_class and name == current_class else "method"
                 if kind == "constructor":
-                    continue  # 跳過建構子
+                    continue  # Skip constructors
 
                 symbols.append(Symbol(
                     name=name,
@@ -313,7 +313,7 @@ class SymbolIndexer:
         return symbols
 
     def extract_go_symbols(self, rel_path: str, content: str) -> list[Symbol]:
-        """提取 Go symbols"""
+        """Extract Go symbols"""
         symbols = []
         lines = content.split("\n")
 
@@ -372,7 +372,7 @@ class SymbolIndexer:
         return symbols
 
     def index_file(self, rel_path: str) -> list[Symbol]:
-        """索引單個檔案"""
+        """Index a single file"""
         full_path = self.project_root / rel_path
 
         try:
@@ -396,10 +396,10 @@ class SymbolIndexer:
             return []
 
     def build_index(self) -> dict:
-        """建立完整索引"""
+        """Build complete index"""
         all_symbols = []
 
-        # 掃描所有檔案
+        # Scan all files
         for ext in self.extensions:
             for file_path in self.project_root.rglob(f"*{ext}"):
                 rel_path = str(file_path.relative_to(self.project_root))
@@ -410,7 +410,7 @@ class SymbolIndexer:
                 symbols = self.index_file(rel_path)
                 all_symbols.extend(symbols)
 
-        # 建立索引結構
+        # Build index structure
         index = {
             "project": self.project_root.name,
             "total_symbols": len(all_symbols),
@@ -421,7 +421,7 @@ class SymbolIndexer:
         }
 
         for sym in all_symbols:
-            # 按名稱索引
+            # Index by name
             if sym.name not in index["symbols"]:
                 index["symbols"][sym.name] = []
             index["symbols"][sym.name].append({
@@ -431,7 +431,7 @@ class SymbolIndexer:
                 "parent": sym.parent,
             })
 
-            # 按檔案索引
+            # Index by file
             if sym.file not in index["by_file"]:
                 index["by_file"][sym.file] = []
             index["by_file"][sym.file].append({
@@ -442,7 +442,7 @@ class SymbolIndexer:
                 "params": sym.params,
             })
 
-            # 類別索引
+            # Class index
             if sym.kind == "class":
                 index["classes"][sym.name] = {
                     "file": sym.file,
@@ -457,7 +457,7 @@ class SymbolIndexer:
                         "params": sym.params,
                     })
 
-            # 函數索引
+            # Function index
             if sym.kind == "function":
                 if sym.name not in index["functions"]:
                     index["functions"][sym.name] = []
@@ -470,7 +470,7 @@ class SymbolIndexer:
         return index
 
     def search(self, index: dict, query: str, limit: int = 10) -> list[dict]:
-        """搜尋 symbol"""
+        """Search for a symbol"""
         query_lower = query.lower()
         results = []
 
@@ -495,7 +495,7 @@ class SymbolIndexer:
 
 
 def build_symbol_index(project_path: Path, output_path: Path = None) -> dict:
-    """便捷函數：建立 symbol 索引"""
+    """Convenience function: build symbol index"""
     indexer = SymbolIndexer(project_path)
     index = indexer.build_index()
 
@@ -506,7 +506,7 @@ def build_symbol_index(project_path: Path, output_path: Path = None) -> dict:
 
 
 def search_symbol(project_path: Path, query: str, limit: int = 10) -> list[dict]:
-    """便捷函數：搜尋 symbol"""
+    """Convenience function: search for a symbol"""
     index_file = project_path / ".flyto-index" / "SYMBOL_INDEX.json"
 
     if index_file.exists():

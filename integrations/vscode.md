@@ -1,11 +1,11 @@
-# VSCode / GitHub Copilot 整合指南
+# VSCode / GitHub Copilot Integration
 
-## 方式 1：Copilot Chat 參與者 (@workspace)
+## Option 1: Copilot Chat (@workspace)
 
-Copilot 會自動讀取專案內容。加入 `.github/copilot-instructions.md`：
+Copilot automatically reads project files. Add `.github/copilot-instructions.md`:
 
 ```markdown
-# Flyto Project Context
+# Project Context
 
 This project has a semantic code index at `.flyto-index/PROJECT_MAP.json`.
 
@@ -22,7 +22,7 @@ When asked about code locations:
 The PROJECT_MAP contains semantic information:
 - `purpose`: What the file does
 - `category`: Classification (payment, auth, user, etc.)
-- `keywords`: Related keywords (Chinese and English)
+- `keywords`: Related keywords
 - `apis`: API endpoints used
 - `dependencies`: Imported modules
 
@@ -36,9 +36,9 @@ Before modifying code:
 
 ---
 
-## 方式 2：VSCode Tasks
+## Option 2: VSCode Tasks
 
-建立 `.vscode/tasks.json`：
+Create `.vscode/tasks.json`:
 
 ```json
 {
@@ -75,7 +75,7 @@ Before modifying code:
     {
       "id": "searchQuery",
       "type": "promptString",
-      "description": "搜尋關鍵字"
+      "description": "Search keyword"
     }
   ]
 }
@@ -83,9 +83,9 @@ Before modifying code:
 
 ---
 
-## 方式 3：VSCode Extension（進階）
+## Option 3: Custom VSCode Extension
 
-建立自定義 extension：
+Create a custom extension for a richer experience:
 
 ```typescript
 // extension.ts
@@ -95,11 +95,11 @@ import fetch from 'node-fetch';
 const API_URL = 'http://localhost:8765';
 
 export function activate(context: vscode.ExtensionContext) {
-  // 搜尋命令
+  // Search command
   let searchCmd = vscode.commands.registerCommand('flyto.search', async () => {
     const query = await vscode.window.showInputBox({
-      prompt: '搜尋關鍵字',
-      placeHolder: '例如：購物車、payment、auth'
+      prompt: 'Search keyword',
+      placeHolder: 'e.g., authentication, payment, cart'
     });
 
     if (query) {
@@ -110,15 +110,15 @@ export function activate(context: vscode.ExtensionContext) {
       });
       const data = await res.json();
 
-      // 顯示結果
+      // Show results
       const items = data.results.map((r: any) => ({
         label: r.path,
         description: r.purpose,
-        detail: `分類: ${r.category}`
+        detail: `Category: ${r.category}`
       }));
 
       const selected = await vscode.window.showQuickPick(items, {
-        placeHolder: '選擇檔案開啟'
+        placeHolder: 'Select a file to open'
       });
 
       if (selected) {
@@ -128,7 +128,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
 
-  // 影響分析命令
+  // Impact analysis command
   let impactCmd = vscode.commands.registerCommand('flyto.impact', async () => {
     const editor = vscode.window.activeTextEditor;
     if (!editor) return;
@@ -146,7 +146,7 @@ export function activate(context: vscode.ExtensionContext) {
       });
       const data = await res.json();
 
-      // 顯示警告
+      // Show warning
       if (data.affected_count > 0) {
         vscode.window.showWarningMessage(
           `${data.warning}\n${data.affected.map((a: any) => a.path).join(', ')}`
@@ -163,9 +163,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 ---
 
-## 方式 4：Continue.dev 整合
+## Option 4: Continue.dev Integration
 
-如果使用 Continue.dev，在 `~/.continue/config.json` 加入：
+If you use Continue.dev, add to `~/.continue/config.json`:
 
 ```json
 {
@@ -180,13 +180,13 @@ export function activate(context: vscode.ExtensionContext) {
   "customCommands": [
     {
       "name": "search",
-      "description": "搜尋 Flyto 程式碼",
-      "prompt": "搜尋與 {{{ input }}} 相關的程式碼並列出檔案"
+      "description": "Search code with flyto-indexer",
+      "prompt": "Search for code related to {{{ input }}} and list relevant files"
     },
     {
       "name": "impact",
-      "description": "分析修改影響",
-      "prompt": "分析修改 {{{ input }}} 會影響哪些檔案"
+      "description": "Analyze modification impact",
+      "prompt": "Analyze what files are affected if I modify {{{ input }}}"
     }
   ]
 }

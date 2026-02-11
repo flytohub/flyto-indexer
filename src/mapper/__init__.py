@@ -1,4 +1,4 @@
-"""PROJECT_MAP 產生器"""
+"""PROJECT_MAP generator"""
 from .project_map import (
     ProjectMapGenerator,
     FileInfo,

@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
 """
-程式碼品質分析 CLI
+Code quality analysis CLI
 
-用法：
+Usage:
   python analyze.py <command> /path/to/project [args]
 
-基礎命令：
-  ls          - 列出目錄內容（如: ls src/）
-  read        - 讀取檔案內容（如: read src/main.py）
-  grep        - 搜尋檔案內容（如: grep . "pattern"）
+Basic commands:
+  ls          - List directory contents (e.g. ls src/)
+  read        - Read file contents (e.g. read src/main.py)
+  grep        - Search file contents (e.g. grep . "pattern")
 
-索引命令：
-  map         - 產生 PROJECT_MAP（檔案層級）
-  outline     - 產生專案大綱（簡潔版）
-  symbols     - 產生 Symbol 索引（函數/類別層級）
-  search      - 搜尋檔案（如: search . payment）
-  find        - 搜尋函數/類別（如: find . topUp）
+Index commands:
+  map         - Generate PROJECT_MAP (file level)
+  outline     - Generate project outline (concise)
+  symbols     - Generate symbol index (function/class level)
+  search      - Search files (e.g. search . payment)
+  find        - Search functions/classes (e.g. find . topUp)
 
-分析命令：
-  complexity  - 複雜度分析（找出過度複雜的函數）
-  coverage    - 測試覆蓋分析（找出沒有測試的模組）
-  duplicates  - 重複碼偵測（找出 copy-paste 的程式碼）
-  api         - API 格式一致性檢查
-  security    - 安全掃描
-  all         - 執行所有分析
+Analysis commands:
+  complexity  - Complexity analysis (find overly complex functions)
+  coverage    - Test coverage analysis (find untested modules)
+  duplicates  - Duplicate code detection (find copy-pasted code)
+  api         - API format consistency check
+  security    - Security scan
+  all         - Run all analyses
 """
 
 import sys
@@ -41,14 +41,14 @@ from analyzer.security import SecurityScanner
 from mapper.project_map import ProjectMapGenerator, quick_search
 from mapper.symbol_index import SymbolIndexer, search_symbol
 
-# 忽略的目錄
+# Ignored directories
 IGNORE_DIRS = {
     'node_modules', '__pycache__', '.git', 'dist', 'build',
     '.venv', 'venv', '.pytest_cache', '.mypy_cache', '.flyto-index',
     'vendor', 'static', '.next', '.nuxt', 'coverage'
 }
 
-# 支援的副檔名
+# Supported file extensions
 CODE_EXTENSIONS = {
     '.py', '.js', '.ts', '.jsx', '.tsx', '.vue',
     '.java', '.go', '.rs', '.rb', '.php',
@@ -58,7 +58,7 @@ CODE_EXTENSIONS = {
 
 
 def cmd_ls(target_path: Path):
-    """列出目錄內容"""
+    """List directory contents"""
     if not target_path.is_dir():
         print(f"Error: {target_path} is not a directory")
         return
@@ -79,7 +79,7 @@ def cmd_ls(target_path: Path):
         else:
             files.append(item)
 
-    # 顯示目錄
+    # Display directories
     if dirs:
         print("Directories:")
         for d in dirs:
@@ -87,7 +87,7 @@ def cmd_ls(target_path: Path):
             print(f"  📁 {d.name}/ ({count} files)")
         print()
 
-    # 顯示檔案
+    # Display files
     if files:
         print("Files:")
         for f in files:
@@ -104,7 +104,7 @@ def cmd_ls(target_path: Path):
 
 
 def cmd_read(file_path: Path):
-    """讀取檔案內容"""
+    """Read file contents"""
     if not file_path.is_file():
         print(f"Error: {file_path} is not a file")
         return
@@ -122,7 +122,7 @@ def cmd_read(file_path: Path):
     lines = content.split('\n')
     total_lines = len(lines)
 
-    # 顯示行號
+    # Display line numbers
     width = len(str(total_lines))
     for i, line in enumerate(lines, 1):
         print(f"{i:>{width}}│ {line}")
@@ -132,7 +132,7 @@ def cmd_read(file_path: Path):
 
 
 def cmd_grep(project_path: Path, pattern: str = None):
-    """搜尋檔案內容"""
+    """Search file contents"""
     if not pattern:
         if len(sys.argv) > 3:
             pattern = sys.argv[3]
@@ -189,9 +189,9 @@ def cmd_grep(project_path: Path, pattern: str = None):
         print(f"No matches found (searched {files_searched} files)")
         return
 
-    # 按檔案分組顯示
+    # Display grouped by file
     current_file = None
-    for m in matches[:100]:  # 限制顯示 100 筆
+    for m in matches[:100]:  # Limit display to 100 matches
         if m['file'] != current_file:
             current_file = m['file']
             print(f"\n{current_file}:")
@@ -204,7 +204,7 @@ def cmd_grep(project_path: Path, pattern: str = None):
 
 
 def analyze_complexity(project_path: Path):
-    """分析複雜度"""
+    """Analyze complexity"""
     analyzer = ComplexityAnalyzer(project_path)
     report = analyzer.analyze()
     analyzer.print_report(report)
@@ -212,7 +212,7 @@ def analyze_complexity(project_path: Path):
 
 
 def analyze_coverage(project_path: Path):
-    """分析測試覆蓋"""
+    """Analyze test coverage"""
     analyzer = CoverageAnalyzer(project_path)
     report = analyzer.analyze()
     analyzer.print_report(report)
@@ -220,7 +220,7 @@ def analyze_coverage(project_path: Path):
 
 
 def analyze_duplicates(project_path: Path):
-    """分析重複碼"""
+    """Analyze duplicate code"""
     detector = DuplicateDetector(project_path, min_lines=6)
     report = detector.analyze()
     detector.print_report(report)
@@ -228,7 +228,7 @@ def analyze_duplicates(project_path: Path):
 
 
 def analyze_api(project_path: Path):
-    """分析 API 一致性"""
+    """Analyze API consistency"""
     checker = APIConsistencyChecker(project_path)
     report = checker.analyze()
     checker.print_report(report)
@@ -236,7 +236,7 @@ def analyze_api(project_path: Path):
 
 
 def analyze_security(project_path: Path):
-    """安全掃描"""
+    """Security scan"""
     scanner = SecurityScanner(project_path)
     report = scanner.analyze()
     scanner.print_report(report)
@@ -244,11 +244,11 @@ def analyze_security(project_path: Path):
 
 
 def generate_map(project_path: Path):
-    """產生 PROJECT_MAP"""
+    """Generate PROJECT_MAP"""
     generator = ProjectMapGenerator(project_path)
     project_map = generator.generate()
 
-    # 輸出到檔案
+    # Output to file
     output_dir = project_path / ".flyto-index"
     output_dir.mkdir(exist_ok=True)
     output_file = output_dir / "PROJECT_MAP.json"
@@ -261,7 +261,7 @@ def generate_map(project_path: Path):
     print(f"Categories: {len(project_map['categories'])}")
     print(f"\nSaved to: {output_file}")
 
-    # 顯示分類統計
+    # Display category statistics
     print(f"\n{'='*70}")
     print("Categories:")
     print(f"{'='*70}")
@@ -272,11 +272,11 @@ def generate_map(project_path: Path):
 
 
 def generate_outline(project_path: Path):
-    """產生專案大綱"""
+    """Generate project outline"""
     generator = ProjectMapGenerator(project_path)
     outline = generator.generate_outline()
 
-    # 輸出到檔案
+    # Output to file
     output_dir = project_path / ".flyto-index"
     output_dir.mkdir(exist_ok=True)
     output_file = output_dir / "OUTLINE.md"
@@ -289,7 +289,7 @@ def generate_outline(project_path: Path):
 
 
 def search_files(project_path: Path, query: str = None):
-    """搜尋檔案"""
+    """Search files"""
     if not query:
         if len(sys.argv) > 3:
             query = " ".join(sys.argv[3:])
@@ -322,11 +322,11 @@ def search_files(project_path: Path, query: str = None):
 
 
 def generate_symbols(project_path: Path):
-    """產生 Symbol 索引"""
+    """Generate symbol index"""
     indexer = SymbolIndexer(project_path)
     index = indexer.build_index()
 
-    # 輸出到檔案
+    # Output to file
     output_dir = project_path / ".flyto-index"
     output_dir.mkdir(exist_ok=True)
     output_file = output_dir / "SYMBOL_INDEX.json"
@@ -341,7 +341,7 @@ def generate_symbols(project_path: Path):
     print(f"Files indexed: {len(index['by_file'])}")
     print(f"\nSaved to: {output_file}")
 
-    # 顯示一些統計
+    # Display some statistics
     print(f"\n{'='*70}")
     print("Top Classes (by method count):")
     print(f"{'='*70}")
@@ -358,7 +358,7 @@ def generate_symbols(project_path: Path):
 
 
 def find_symbol(project_path: Path, query: str = None):
-    """搜尋函數/類別"""
+    """Search functions/classes"""
     if not query:
         if len(sys.argv) > 3:
             query = " ".join(sys.argv[3:])
@@ -393,7 +393,7 @@ def find_symbol(project_path: Path, query: str = None):
 
 
 def analyze_all(project_path: Path):
-    """執行所有分析"""
+    """Run all analyses"""
     print(f"\n{'#'*70}")
     print(f"# Full Analysis: {project_path.name}")
     print(f"{'#'*70}")
@@ -415,7 +415,7 @@ def analyze_all(project_path: Path):
     print("\n[5/5] Security Scan...")
     results["security"] = analyze_security(project_path)
 
-    # 總結
+    # Summary
     print(f"\n{'#'*70}")
     print("# SUMMARY")
     print(f"{'#'*70}")
@@ -441,14 +441,14 @@ def main():
         print(f"Error: {target_path} not found")
         sys.exit(1)
 
-    # 基礎命令（操作檔案/目錄）
+    # Basic commands (file/directory operations)
     basic_commands = {
         "ls": cmd_ls,
         "read": cmd_read,
         "grep": cmd_grep,
     }
 
-    # 專案命令（操作專案目錄）
+    # Project commands (project directory operations)
     project_commands = {
         "map": generate_map,
         "outline": generate_outline,

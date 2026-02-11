@@ -1,11 +1,11 @@
 """
-PROJECT_MAP 產生器 - 讓 AI 快速理解專案結構
+PROJECT_MAP generator — helps AI quickly understand project structure
 
-不用 LLM，純靜態分析產生有意義的檔案描述：
-1. 從路徑推斷分類 (api/, services/, components/)
-2. 從 exports 推斷用途
-3. 從 imports 推斷依賴
-4. 產生一句話描述
+No LLM, pure static analysis to produce meaningful file descriptions:
+1. Infer category from path (api/, services/, components/)
+2. Infer purpose from exports
+3. Infer dependencies from imports
+4. Generate a one-line description
 """
 
 import ast
@@ -18,7 +18,7 @@ import json
 
 @dataclass
 class FileInfo:
-    """檔案資訊"""
+    """File info"""
     path: str
     category: str
     purpose: str
@@ -29,7 +29,7 @@ class FileInfo:
     lines: int = 0
 
 
-# 路徑關鍵字 → 分類映射
+# Path keyword -> category mapping
 PATH_CATEGORY_MAP = {
     # API / Routes
     "api": "api",
@@ -101,7 +101,7 @@ PATH_CATEGORY_MAP = {
     "migrations": "migration",
 }
 
-# 檔名關鍵字 → 用途
+# Filename keyword -> purpose
 FILENAME_PURPOSE_MAP = {
     "auth": "authentication",
     "login": "login",
@@ -181,7 +181,7 @@ FILENAME_PURPOSE_MAP = {
 
 
 class ProjectMapGenerator:
-    """PROJECT_MAP 產生器"""
+    """PROJECT_MAP generator"""
 
     def __init__(
         self,
@@ -207,16 +207,16 @@ class ProjectMapGenerator:
         return False
 
     def _infer_category(self, rel_path: str) -> str:
-        """從路徑推斷分類"""
+        """Infer category from path"""
         parts = Path(rel_path).parts
 
-        # 檢查路徑中的關鍵字
+        # Check for keywords in path
         for part in parts:
             part_lower = part.lower()
             if part_lower in PATH_CATEGORY_MAP:
                 return PATH_CATEGORY_MAP[part_lower]
 
-        # 從檔名推斷
+        # Infer from filename
         stem = Path(rel_path).stem.lower()
         for keyword, category in PATH_CATEGORY_MAP.items():
             if keyword in stem:
@@ -225,31 +225,31 @@ class ProjectMapGenerator:
         return "module"
 
     def _infer_purpose(self, rel_path: str, exports: list[str], classes: list[str]) -> str:
-        """從路徑和 exports 推斷用途"""
+        """Infer purpose from path and exports"""
         stem = Path(rel_path).stem.lower()
         parts = Path(rel_path).parts
 
-        # 1. 從檔名關鍵字推斷
+        # 1. Infer from filename keywords
         purposes = []
         for keyword, purpose in FILENAME_PURPOSE_MAP.items():
             if keyword in stem:
                 purposes.append(purpose)
 
-        # 2. 從路徑推斷類型
+        # 2. Infer type from path
         category = self._infer_category(rel_path)
 
-        # 3. 組合描述
+        # 3. Compose description
         if purposes:
             main_purpose = purposes[0]
         elif exports:
-            # 從 exports 推斷
+            # Infer from exports
             main_purpose = self._purpose_from_exports(exports)
         elif classes:
             main_purpose = self._purpose_from_classes(classes)
         else:
             main_purpose = stem.replace("_", " ").replace("-", " ")
 
-        # 組合完整描述
+        # Compose full description
         category_prefix = {
             "api": "API endpoint:",
             "service": "Service:",
@@ -275,24 +275,24 @@ class ProjectMapGenerator:
         return main_purpose.capitalize()
 
     def _purpose_from_exports(self, exports: list[str]) -> str:
-        """從 exports 推斷用途"""
+        """Infer purpose from exports"""
         if not exports:
             return "module"
 
-        # 取前幾個有意義的 export
+        # Take the first few meaningful exports
         meaningful = [e for e in exports if not e.startswith("_") and len(e) > 2][:3]
         if meaningful:
             return ", ".join(meaningful)
         return exports[0]
 
     def _purpose_from_classes(self, classes: list[str]) -> str:
-        """從 classes 推斷用途"""
+        """Infer purpose from classes"""
         if not classes:
             return "module"
         return classes[0]
 
     def analyze_python(self, content: str) -> tuple[list[str], list[str], list[str]]:
-        """分析 Python 檔案"""
+        """Analyze a Python file"""
         exports = []
         imports = []
         classes = []
@@ -324,13 +324,13 @@ class ProjectMapGenerator:
             elif isinstance(node, ast.Assign):
                 for target in node.targets:
                     if isinstance(target, ast.Name) and not target.id.startswith("_"):
-                        if target.id.isupper():  # 常數
+                        if target.id.isupper():  # Constants
                             exports.append(target.id)
 
         return exports, list(set(imports)), classes
 
     def analyze_typescript(self, content: str) -> tuple[list[str], list[str], list[str]]:
-        """分析 TypeScript/JavaScript 檔案"""
+        """Analyze a TypeScript/JavaScript file"""
         exports = []
         imports = []
         classes = []
@@ -369,15 +369,15 @@ class ProjectMapGenerator:
         return exports, list(set(imports)), classes
 
     def analyze_vue(self, content: str) -> tuple[list[str], list[str], list[str]]:
-        """分析 Vue 檔案"""
-        # 提取 script 區塊
+        """Analyze a Vue file"""
+        # Extract script block
         script_match = re.search(r'<script[^>]*>(.*?)</script>', content, re.DOTALL)
         if script_match:
             exports, imports, classes = self.analyze_typescript(script_match.group(1))
         else:
             exports, imports, classes = [], [], []
 
-        # 組件名稱
+        # Component name
         name_match = re.search(r'name:\s*[\'"](\w+)[\'"]', content)
         if name_match:
             exports.insert(0, name_match.group(1))
@@ -385,7 +385,7 @@ class ProjectMapGenerator:
         return exports, imports, classes
 
     def analyze_java(self, content: str) -> tuple[list[str], list[str], list[str]]:
-        """分析 Java 檔案"""
+        """Analyze a Java file"""
         exports = []
         imports = []
         classes = []
@@ -403,13 +403,13 @@ class ProjectMapGenerator:
         # Public methods
         for match in re.finditer(r'public\s+(?:static\s+)?(?:\w+(?:<[^>]+>)?)\s+(\w+)\s*\(', content):
             name = match.group(1)
-            if not name[0].isupper():  # 排除建構子
+            if not name[0].isupper():  # Exclude constructors
                 exports.append(name)
 
         return exports, list(set(imports)), classes
 
     def analyze_go(self, content: str) -> tuple[list[str], list[str], list[str]]:
-        """分析 Go 檔案"""
+        """Analyze a Go file"""
         exports = []
         imports = []
         classes = []
@@ -422,7 +422,7 @@ class ProjectMapGenerator:
         for match in re.finditer(r'import\s+[\'"]([^\'"]+)[\'"]', content):
             imports.append(match.group(1).split("/")[-1])
 
-        # Exported functions (首字母大寫)
+        # Exported functions (capitalized first letter)
         for match in re.finditer(r'func\s+(?:\([^)]+\)\s+)?([A-Z]\w*)\s*\(', content):
             exports.append(match.group(1))
 
@@ -435,7 +435,7 @@ class ProjectMapGenerator:
         return exports, list(set(imports)), classes
 
     def analyze_file(self, rel_path: str) -> Optional[FileInfo]:
-        """分析單個檔案"""
+        """Analyze a single file"""
         full_path = self.project_root / rel_path
 
         try:
@@ -446,7 +446,7 @@ class ProjectMapGenerator:
         lines = len(content.split("\n"))
         ext = Path(rel_path).suffix
 
-        # 根據語言分析
+        # Analyze by language
         if ext == ".py":
             exports, imports, classes = self.analyze_python(content)
         elif ext in [".ts", ".tsx", ".js", ".jsx"]:
@@ -467,7 +467,7 @@ class ProjectMapGenerator:
             path=rel_path,
             category=category,
             purpose=purpose,
-            exports=exports[:10],  # 限制數量
+            exports=exports[:10],  # Limit count
             imports=imports[:10],
             classes=classes,
             functions=[e for e in exports if e not in classes][:10],
@@ -475,11 +475,11 @@ class ProjectMapGenerator:
         )
 
     def generate(self) -> dict:
-        """產生 PROJECT_MAP"""
+        """Generate PROJECT_MAP"""
         files = {}
         categories = {}
 
-        # 掃描所有檔案
+        # Scan all files
         for ext in self.extensions:
             for file_path in self.project_root.rglob(f"*{ext}"):
                 rel_path = str(file_path.relative_to(self.project_root))
@@ -497,7 +497,7 @@ class ProjectMapGenerator:
                         "lines": info.lines,
                     }
 
-                    # 分類索引
+                    # Category index
                     if info.category not in categories:
                         categories[info.category] = []
                     categories[info.category].append(rel_path)
@@ -510,7 +510,7 @@ class ProjectMapGenerator:
         }
 
     def generate_outline(self) -> str:
-        """產生簡潔的大綱（給 AI 快速掃描）"""
+        """Generate concise outline (for AI quick scanning)"""
         project_map = self.generate()
 
         lines = [
@@ -518,10 +518,10 @@ class ProjectMapGenerator:
             "",
         ]
 
-        # 按分類列出
+        # List by category
         for category, paths in sorted(project_map["categories"].items()):
             lines.append(f"## [{category}] ({len(paths)} files)")
-            for path in sorted(paths)[:20]:  # 每類最多 20 個
+            for path in sorted(paths)[:20]:  # Max 20 per category
                 info = project_map["files"][path]
                 lines.append(f"  - {path}: {info['purpose']}")
             if len(paths) > 20:
@@ -532,7 +532,7 @@ class ProjectMapGenerator:
 
 
 def generate_project_map(project_path: Path, output_path: Path = None) -> dict:
-    """便捷函數：產生 PROJECT_MAP"""
+    """Convenience function: generate PROJECT_MAP"""
     generator = ProjectMapGenerator(project_path)
     project_map = generator.generate()
 
@@ -543,21 +543,21 @@ def generate_project_map(project_path: Path, output_path: Path = None) -> dict:
 
 
 def generate_outline(project_path: Path) -> str:
-    """便捷函數：產生大綱"""
+    """Convenience function: generate outline"""
     generator = ProjectMapGenerator(project_path)
     return generator.generate_outline()
 
 
 def search_project_map(project_map: dict, query: str, limit: int = 10) -> list[dict]:
-    """搜尋 PROJECT_MAP
+    """Search PROJECT_MAP
 
     Args:
-        project_map: 已產生的 PROJECT_MAP
-        query: 搜尋關鍵字（如 "payment", "auth login", "購物車"）
-        limit: 最多返回幾個結果
+        project_map: Previously generated PROJECT_MAP
+        query: Search keyword (e.g. "payment", "auth login")
+        limit: Maximum number of results to return
 
     Returns:
-        相關檔案列表，按相關度排序
+        List of related files, sorted by relevance
     """
     query_words = query.lower().split()
     results = []
@@ -566,28 +566,28 @@ def search_project_map(project_map: dict, query: str, limit: int = 10) -> list[d
         score = 0
         matches = []
 
-        # 搜尋路徑
+        # Search path
         path_lower = path.lower()
         for word in query_words:
             if word in path_lower:
                 score += 3
                 matches.append(f"path contains '{word}'")
 
-        # 搜尋 purpose
+        # Search purpose
         purpose_lower = info.get("purpose", "").lower()
         for word in query_words:
             if word in purpose_lower:
                 score += 2
                 matches.append(f"purpose contains '{word}'")
 
-        # 搜尋 exports
+        # Search exports
         exports_str = " ".join(info.get("exports", [])).lower()
         for word in query_words:
             if word in exports_str:
                 score += 2
                 matches.append(f"exports contains '{word}'")
 
-        # 搜尋 category
+        # Search category
         category = info.get("category", "").lower()
         for word in query_words:
             if word in category:
@@ -604,13 +604,13 @@ def search_project_map(project_map: dict, query: str, limit: int = 10) -> list[d
                 "matches": matches,
             })
 
-    # 按分數排序
+    # Sort by score
     results.sort(key=lambda x: x["score"], reverse=True)
     return results[:limit]
 
 
 def quick_search(project_path: Path, query: str, limit: int = 10) -> list[dict]:
-    """快速搜尋（自動載入或產生 PROJECT_MAP）"""
+    """Quick search (automatically loads or generates PROJECT_MAP)"""
     map_file = project_path / ".flyto-index" / "PROJECT_MAP.json"
 
     if map_file.exists():

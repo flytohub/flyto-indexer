@@ -2,27 +2,27 @@
 """
 Flyto Indexer HTTP API Server
 
-通用 API 服務，讓任何 AI 工具都能查詢索引。
+General-purpose API service that allows any AI tool to query the index.
 
-支援：
+Supports:
 - Cursor (HTTP API)
 - OpenAI GPTs (OpenAPI spec)
 - ChatGPT (HTTP API)
-- 任何能發 HTTP 請求的工具
+- Any tool that can make HTTP requests
 
 Usage:
     python -m src.api_server [--port 8765]
 
 API Endpoints:
-    GET  /health              - 健康檢查
-    GET  /openapi.json        - OpenAPI 規格（給 GPTs 用）
-    POST /search              - 關鍵字搜尋
-    POST /file/info           - 取得檔案資訊
-    POST /file/symbols        - 取得檔案 symbols
-    POST /impact              - 影響分析
-    GET  /categories          - 列出分類
-    GET  /apis                - 列出 API
-    GET  /stats               - 索引統計
+    GET  /health              - Health check
+    GET  /openapi.json        - OpenAPI spec (for GPTs)
+    POST /search              - Keyword search
+    POST /file/info           - Get file info
+    POST /file/symbols        - Get file symbols
+    POST /impact              - Impact analysis
+    GET  /categories          - List categories
+    GET  /apis                - List APIs
+    GET  /stats               - Index statistics
 """
 
 import json
@@ -35,15 +35,15 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 索引目錄
+# Index directory
 INDEX_DIR = Path(__file__).parent.parent / ".flyto-index"
 
-# OpenAPI 規格
+# OpenAPI spec
 OPENAPI_SPEC = {
     "openapi": "3.1.0",
     "info": {
         "title": "Flyto Indexer API",
-        "description": "程式碼語意索引 API。搜尋程式碼、取得檔案資訊、分析修改影響。",
+        "description": "Code semantic indexing API. Search code, get file info, analyze change impact.",
         "version": "1.0.0",
     },
     "servers": [
@@ -53,8 +53,8 @@ OPENAPI_SPEC = {
         "/search": {
             "post": {
                 "operationId": "searchCode",
-                "summary": "搜尋程式碼",
-                "description": "用關鍵字搜尋相關程式碼檔案。支援中英文。",
+                "summary": "Search code",
+                "description": "Search for relevant code files by keyword.",
                 "requestBody": {
                     "required": True,
                     "content": {
@@ -62,7 +62,7 @@ OPENAPI_SPEC = {
                             "schema": {
                                 "type": "object",
                                 "properties": {
-                                    "query": {"type": "string", "description": "搜尋關鍵字"},
+                                    "query": {"type": "string", "description": "Search keyword"},
                                     "max_results": {"type": "integer", "default": 10},
                                 },
                                 "required": ["query"],
@@ -72,7 +72,7 @@ OPENAPI_SPEC = {
                 },
                 "responses": {
                     "200": {
-                        "description": "搜尋結果",
+                        "description": "Search results",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -92,8 +92,8 @@ OPENAPI_SPEC = {
         "/file/info": {
             "post": {
                 "operationId": "getFileInfo",
-                "summary": "取得檔案資訊",
-                "description": "取得檔案的語意資訊：用途、分類、關鍵字、API、依賴等。",
+                "summary": "Get file info",
+                "description": "Get semantic info for a file: purpose, category, keywords, APIs, dependencies, etc.",
                 "requestBody": {
                     "required": True,
                     "content": {
@@ -101,21 +101,21 @@ OPENAPI_SPEC = {
                             "schema": {
                                 "type": "object",
                                 "properties": {
-                                    "path": {"type": "string", "description": "檔案路徑"},
+                                    "path": {"type": "string", "description": "File path"},
                                 },
                                 "required": ["path"],
                             }
                         }
                     },
                 },
-                "responses": {"200": {"description": "檔案資訊"}},
+                "responses": {"200": {"description": "File info"}},
             }
         },
         "/file/symbols": {
             "post": {
                 "operationId": "getFileSymbols",
-                "summary": "取得檔案 symbols",
-                "description": "列出檔案中的所有函數、類、組件。",
+                "summary": "Get file symbols",
+                "description": "List all functions, classes, and components in a file.",
                 "requestBody": {
                     "required": True,
                     "content": {
@@ -130,14 +130,14 @@ OPENAPI_SPEC = {
                         }
                     },
                 },
-                "responses": {"200": {"description": "Symbols 列表"}},
+                "responses": {"200": {"description": "Symbols list"}},
             }
         },
         "/impact": {
             "post": {
                 "operationId": "impactAnalysis",
-                "summary": "影響分析",
-                "description": "分析修改某個函數或組件會影響哪些地方。",
+                "summary": "Impact analysis",
+                "description": "Analyze which locations are affected by modifying a function or component.",
                 "requestBody": {
                     "required": True,
                     "content": {
@@ -152,31 +152,31 @@ OPENAPI_SPEC = {
                         }
                     },
                 },
-                "responses": {"200": {"description": "影響分析結果"}},
+                "responses": {"200": {"description": "Impact analysis results"}},
             }
         },
         "/categories": {
             "get": {
                 "operationId": "listCategories",
-                "summary": "列出分類",
-                "description": "列出所有程式碼分類及檔案數量。",
-                "responses": {"200": {"description": "分類列表"}},
+                "summary": "List categories",
+                "description": "List all code categories and file counts.",
+                "responses": {"200": {"description": "Category list"}},
             }
         },
         "/apis": {
             "get": {
                 "operationId": "listApis",
-                "summary": "列出 API",
-                "description": "列出所有 API 端點及使用情況。",
-                "responses": {"200": {"description": "API 列表"}},
+                "summary": "List APIs",
+                "description": "List all API endpoints and their usage.",
+                "responses": {"200": {"description": "API list"}},
             }
         },
         "/stats": {
             "get": {
                 "operationId": "getStats",
-                "summary": "索引統計",
-                "description": "取得索引的統計資訊。",
-                "responses": {"200": {"description": "統計資訊"}},
+                "summary": "Index statistics",
+                "description": "Get index statistics.",
+                "responses": {"200": {"description": "Statistics"}},
             }
         },
     },
@@ -198,13 +198,13 @@ def load_index() -> dict:
 
 
 def search_by_keyword(query: str, max_results: int = 10) -> dict:
-    """關鍵字搜尋"""
+    """Keyword search"""
     project_map = load_project_map()
     results = []
     query_lower = query.lower()
     query_words = query_lower.split()
 
-    # 搜尋 keyword_index
+    # Search keyword_index
     keyword_index = project_map.get("keyword_index", {})
     for keyword, paths in keyword_index.items():
         if any(w in keyword or keyword in w for w in query_words):
@@ -218,7 +218,7 @@ def search_by_keyword(query: str, max_results: int = 10) -> dict:
                     "match_value": keyword,
                 })
 
-    # 搜尋 categories
+    # Search categories
     categories = project_map.get("categories", {})
     for category, paths in categories.items():
         if any(w in category or category in w for w in query_words):
@@ -233,7 +233,7 @@ def search_by_keyword(query: str, max_results: int = 10) -> dict:
                         "match_value": category,
                     })
 
-    # 去重
+    # Deduplicate
     seen = set()
     unique = []
     for r in results:
@@ -245,7 +245,7 @@ def search_by_keyword(query: str, max_results: int = 10) -> dict:
 
 
 def get_file_info(path: str) -> dict:
-    """取得檔案資訊"""
+    """Get file info"""
     project_map = load_project_map()
     file_info = project_map.get("files", {}).get(path, {})
     if not file_info:
@@ -262,7 +262,7 @@ def get_file_info(path: str) -> dict:
 
 
 def get_file_symbols(path: str) -> dict:
-    """取得檔案 symbols"""
+    """Get file symbols"""
     index = load_index()
     symbols = []
     for symbol_id, symbol in index.get("symbols", {}).items():
@@ -278,7 +278,7 @@ def get_file_symbols(path: str) -> dict:
 
 
 def impact_analysis(symbol_id: str) -> dict:
-    """影響分析"""
+    """Impact analysis"""
     index = load_index()
     dependencies = index.get("dependencies", {})
     affected = []
@@ -292,18 +292,18 @@ def impact_analysis(symbol_id: str) -> dict:
                 "path": source_symbol.get("path", ""),
                 "name": source_symbol.get("name", ""),
                 "type": dep.get("type", ""),
-                "reason": f"透過 {dep.get('type', 'unknown')} 依賴",
+                "reason": f"via {dep.get('type', 'unknown')} dependency",
             })
 
     warning = ""
     if len(affected) == 0:
-        suggestion = "這個 symbol 沒有被其他地方引用，可以安全修改。"
+        suggestion = "This symbol is not referenced elsewhere, safe to modify."
     elif len(affected) <= 3:
-        warning = f"修改會影響 {len(affected)} 個地方"
-        suggestion = "影響範圍較小，建議逐一檢查這些調用處。"
+        warning = f"Modification affects {len(affected)} locations"
+        suggestion = "Impact scope is small, recommend checking each call site."
     else:
-        warning = f"⚠️ 修改會影響 {len(affected)} 個地方！"
-        suggestion = "影響範圍較大，建議謹慎修改。"
+        warning = f"Warning: modification affects {len(affected)} locations!"
+        suggestion = "Impact scope is large, recommend modifying with caution."
 
     return {
         "symbol": symbol_id,
@@ -315,7 +315,7 @@ def impact_analysis(symbol_id: str) -> dict:
 
 
 def list_categories() -> dict:
-    """列出分類"""
+    """List categories"""
     project_map = load_project_map()
     categories = project_map.get("categories", {})
     return {
@@ -328,7 +328,7 @@ def list_categories() -> dict:
 
 
 def list_apis() -> dict:
-    """列出 API"""
+    """List APIs"""
     project_map = load_project_map()
     api_map = project_map.get("api_map", {})
     return {
@@ -341,7 +341,7 @@ def list_apis() -> dict:
 
 
 def get_stats() -> dict:
-    """索引統計"""
+    """Index statistics"""
     project_map = load_project_map()
     index = load_index()
     return {
@@ -357,7 +357,7 @@ def get_stats() -> dict:
 
 
 class APIHandler(BaseHTTPRequestHandler):
-    """HTTP 請求處理器"""
+    """HTTP request handler"""
 
     def _send_json(self, data: dict, status: int = 200):
         self.send_response(status)

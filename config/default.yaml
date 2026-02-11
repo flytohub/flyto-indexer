@@ -1,19 +1,19 @@
 # Flyto Indexer Configuration
 
-# 專案設定
+# Project settings
 project:
-  name: auto  # 自動使用目錄名稱，或指定名稱
+  name: auto  # Auto-detect from directory name, or specify a name
 
-# 掃描設定
+# Scan settings
 scan:
-  # 要掃描的語言/副檔名
+  # Languages/extensions to scan
   languages:
     - python
     - vue
     - typescript
     - javascript
 
-  # 忽略的路徑模式
+  # Ignored path patterns
   ignore_patterns:
     - node_modules
     - __pycache__
@@ -28,35 +28,35 @@ scan:
     - "*.min.js"
     - "*.min.css"
 
-  # 最大檔案大小 (bytes)
+  # Maximum file size (bytes)
   max_file_size: 1048576  # 1MB
 
-# 索引設定
+# Index settings
 index:
-  # 索引存放位置
+  # Index output directory
   output_dir: .flyto-index
 
-  # 是否生成 L0 大綱檔案
+  # Whether to generate L0 outline file
   generate_outline: true
 
-  # Symbol 摘要最大長度
+  # Maximum length of symbol summaries
   summary_max_length: 200
 
-# 影響分析設定
+# Impact analysis settings
 impact:
-  # 最大追溯深度
+  # Maximum traversal depth
   max_depth: 5
 
-  # 是否包含測試檔案
+  # Whether to include test files
   include_tests: false
 
-# 上下文設定
+# Context settings
 context:
-  # L0 最大檔案數
+  # L0 maximum number of files
   l0_max_files: 100
 
-  # L1 最大 symbols 數
+  # L1 maximum number of symbols
   l1_max_symbols: 50
 
-  # L2 最大 token 估算
+  # L2 maximum estimated tokens
   l2_max_tokens: 4000

@@ -16,12 +16,12 @@ except ImportError:
 
 class VueScanner(BaseScanner):
     """
-    Vue 單檔案組件掃描器
+    Vue single-file component scanner
 
-    提取：
-    - component（整個組件）
-    - template（模板區塊）
-    - script setup 中的：
+    Extracts:
+    - component (entire component)
+    - template (template block)
+    - From script setup:
       - imports
       - composables (use*)
       - refs/reactive
@@ -32,19 +32,19 @@ class VueScanner(BaseScanner):
     supported_extensions = [".vue"]
 
     def scan_file(self, file_path: Path, content: str) -> tuple[list[Symbol], list[Dependency]]:
-        """掃描 Vue SFC 檔案"""
+        """Scan a Vue SFC file"""
         symbols = []
         dependencies = []
 
         rel_path = str(file_path)
         component_name = file_path.stem
 
-        # 解析 SFC 區塊
+        # Parse SFC blocks
         template = self._extract_block(content, "template")
         script = self._extract_block(content, "script")
         style = self._extract_block(content, "style")
 
-        # 建立 component symbol
+        # Create component symbol
         comp_symbol = Symbol(
             project=self.project,
             path=rel_path,
@@ -63,7 +63,7 @@ class VueScanner(BaseScanner):
             script_content = script["content"]
             script_start = script["start_line"]
 
-            # 提取 imports
+            # Extract imports
             imports = self._extract_imports(script_content)
             for imp in imports:
                 dep = Dependency(
@@ -75,7 +75,7 @@ class VueScanner(BaseScanner):
                 )
                 dependencies.append(dep)
 
-                # 特別標記 composable 使用
+                # Specifically mark composable usage
                 for name in imp["names"]:
                     if name.startswith("use"):
                         dep2 = Dependency(
@@ -86,7 +86,7 @@ class VueScanner(BaseScanner):
                         )
                         dependencies.append(dep2)
 
-            # 提取 script 中的 functions
+            # Extract functions from script
             funcs = self._extract_functions(script_content, script_start)
             for func in funcs:
                 func_symbol = Symbol(
@@ -102,7 +102,7 @@ class VueScanner(BaseScanner):
                 func_symbol.compute_hash()
                 symbols.append(func_symbol)
 
-            # 提取 calls（函數呼叫）
+            # Extract calls (function invocations)
             calls = self._extract_calls(script_content, script_start)
             for call in calls:
                 dep = Dependency(
@@ -114,14 +114,14 @@ class VueScanner(BaseScanner):
                 )
                 dependencies.append(dep)
 
-            # 提取 defineProps/defineEmits
+            # Extract defineProps/defineEmits
             props_emits = self._extract_props_emits(script_content)
             comp_symbol.metadata = {
                 "props": props_emits.get("props", []),
                 "emits": props_emits.get("emits", []),
             }
 
-        # 生成摘要
+        # Generate summary
         comp_symbol.summary = self._generate_summary(
             component_name, template, script, dependencies
         )
@@ -129,12 +129,12 @@ class VueScanner(BaseScanner):
         return symbols, dependencies
 
     def _extract_block(self, content: str, block_name: str) -> Optional[dict]:
-        """提取 SFC 區塊"""
+        """Extract SFC block"""
         pattern = rf'<{block_name}[^>]*>(.*?)</{block_name}>'
         match = re.search(pattern, content, re.DOTALL)
         if match:
             block_content = match.group(1)
-            # 計算起始行號
+            # Compute starting line number
             start_pos = match.start()
             start_line = content[:start_pos].count("\n") + 1
             return {
@@ -145,7 +145,7 @@ class VueScanner(BaseScanner):
         return None
 
     def _extract_imports(self, script: str) -> list[dict]:
-        """提取 import 語句"""
+        """Extract import statements"""
         imports = []
         lines = script.splitlines()
 
@@ -179,18 +179,18 @@ class VueScanner(BaseScanner):
         return imports
 
     def _extract_functions(self, script: str, offset: int) -> list[dict]:
-        """提取 function 定義"""
+        """Extract function definitions"""
         functions = []
         lines = script.splitlines()
 
-        # 匹配 function xxx() 或 const xxx = () =>
-        # 簡化版本，只匹配單行定義開頭
+        # Match function xxx() or const xxx = () =>
+        # Simplified version, only matches single-line definition starts
         for i, line in enumerate(lines):
             # function xxx()
             match = re.match(r"\s*(async\s+)?function\s+(\w+)\s*\(", line)
             if match:
                 func_name = match.group(2)
-                # 找到函數結束（簡化：找下一個同級 }）
+                # Find function end (simplified: find next same-level })
                 end_line = self._find_block_end(lines, i)
                 content = "\n".join(lines[i:end_line + 1])
                 functions.append({
@@ -201,7 +201,7 @@ class VueScanner(BaseScanner):
                 })
                 continue
 
-            # const xxx = () => 或 const xxx = async () =>
+            # const xxx = () => or const xxx = async () =>
             match = re.match(
                 r"\s*const\s+(\w+)\s*=\s*(async\s+)?\([^)]*\)\s*=>",
                 line
@@ -220,7 +220,7 @@ class VueScanner(BaseScanner):
         return functions
 
     def _find_block_end(self, lines: list[str], start: int) -> int:
-        """找到程式碼區塊的結束行（基於括號配對）"""
+        """Find the end line of a code block (based on brace matching)"""
         depth = 0
         started = False
 
@@ -239,13 +239,13 @@ class VueScanner(BaseScanner):
         return len(lines) - 1
 
     def _extract_props_emits(self, script: str) -> dict:
-        """提取 defineProps 和 defineEmits"""
+        """Extract defineProps and defineEmits"""
         result = {"props": [], "emits": []}
 
         # defineProps
         match = re.search(r"defineProps<\{([^}]+)\}>", script, re.DOTALL)
         if match:
-            # 簡化解析：提取屬性名
+            # Simplified parsing: extract property names
             props_str = match.group(1)
             props = re.findall(r"(\w+)\s*[?:]", props_str)
             result["props"] = props
@@ -261,7 +261,7 @@ class VueScanner(BaseScanner):
 
     def _extract_calls(self, script: str, offset: int) -> list[dict]:
         """
-        提取函數呼叫
+        Extract function calls
 
         Args:
             script: Script content
@@ -321,10 +321,10 @@ class VueScanner(BaseScanner):
         script: Optional[dict],
         dependencies: list[Dependency]
     ) -> str:
-        """生成組件摘要（L1 用）"""
+        """Generate component summary (for L1)"""
         parts = [f"Vue component: {name}"]
 
-        # 用到的 composables
+        # Composables in use
         composables = [
             d.target_id.split(":")[-1]
             for d in dependencies
@@ -333,16 +333,16 @@ class VueScanner(BaseScanner):
         if composables:
             parts.append(f"Uses: {', '.join(composables)}")
 
-        # 模板特徵
+        # Template characteristics
         if template:
             tmpl = template["content"]
-            # 檢測路由連結
+            # Detect router links
             if "router-link" in tmpl or "RouterLink" in tmpl:
                 parts.append("Has router links")
-            # 檢測表單
+            # Detect forms
             if "<form" in tmpl or "v-model" in tmpl:
                 parts.append("Has form inputs")
-            # 檢測 API 呼叫相關
+            # Detect API call related patterns
             if "loading" in tmpl.lower():
                 parts.append("Has loading state")
 

@@ -23,9 +23,9 @@ except ImportError:
 
 class TypeScriptScanner(BaseScanner):
     """
-    TypeScript/JavaScript 掃描器
+    TypeScript/JavaScript scanner
 
-    提取：
+    Extracts:
     - functions
     - classes
     - interfaces/types
@@ -36,14 +36,14 @@ class TypeScriptScanner(BaseScanner):
     supported_extensions = [".ts", ".tsx", ".js", ".jsx"]
 
     def scan_file(self, file_path: Path, content: str) -> tuple[list[Symbol], list[Dependency]]:
-        """掃描 TypeScript/JavaScript 檔案"""
+        """Scan a TypeScript/JavaScript file"""
         symbols = []
         dependencies = []
         lines = content.splitlines()
         rel_path = str(file_path)
         file_source_id = f"{self.project}:{rel_path}:file:{file_path.stem}"
 
-        # 提取 imports
+        # Extract imports
         imports = self._extract_imports(content)
         for imp in imports:
             dep = Dependency(
@@ -55,7 +55,7 @@ class TypeScriptScanner(BaseScanner):
             )
             dependencies.append(dep)
 
-        # 提取 calls（函數呼叫）
+        # Extract calls (function calls)
         calls = self._extract_calls(content)
         for call in calls:
             dep = Dependency(
@@ -67,7 +67,7 @@ class TypeScriptScanner(BaseScanner):
             )
             dependencies.append(dep)
 
-        # 提取 functions
+        # Extract functions
         for match in re.finditer(
             r'^(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*(?:<[^>]*>)?\s*\(([^)]*)\)',
             content, re.MULTILINE
@@ -78,7 +78,7 @@ class TypeScriptScanner(BaseScanner):
             end_line = self._find_block_end(content, match.end(), start_line)
             func_content = '\n'.join(lines[start_line-1:end_line])
 
-            # 判斷是否是 composable
+            # Determine if it's a composable
             symbol_type = SymbolType.COMPOSABLE if name.startswith('use') else SymbolType.FUNCTION
 
             symbols.append(Symbol(
@@ -95,7 +95,7 @@ class TypeScriptScanner(BaseScanner):
                 params=[p.strip().split(':')[0].strip() for p in params.split(',') if p.strip()],
             ))
 
-        # 提取 arrow function exports: export const xxx = () => {}
+        # Extract arrow function exports: export const xxx = () => {}
         for match in re.finditer(
             r'^export\s+const\s+(\w+)\s*(?::\s*[^=]+)?\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::\s*[^=]+)?\s*=>',
             content, re.MULTILINE
@@ -120,7 +120,7 @@ class TypeScriptScanner(BaseScanner):
                 exports=[name],
             ))
 
-        # 提取 classes
+        # Extract classes
         for match in re.finditer(
             r'^(?:export\s+)?(?:abstract\s+)?class\s+(\w+)(?:\s+extends\s+(\w+))?(?:\s+implements\s+([^{]+))?',
             content, re.MULTILINE
@@ -146,7 +146,7 @@ class TypeScriptScanner(BaseScanner):
                 imports=[extends] if extends else [],
             ))
 
-        # 提取 interfaces
+        # Extract interfaces
         for match in re.finditer(
             r'^(?:export\s+)?interface\s+(\w+)(?:\s+extends\s+([^{]+))?',
             content, re.MULTILINE
@@ -168,7 +168,7 @@ class TypeScriptScanner(BaseScanner):
                 exports=[name] if 'export' in content[max(0, match.start()-20):match.start()] else [],
             ))
 
-        # 提取 type aliases
+        # Extract type aliases
         for match in re.finditer(
             r'^(?:export\s+)?type\s+(\w+)(?:<[^>]*>)?\s*=',
             content, re.MULTILINE
@@ -196,14 +196,14 @@ class TypeScriptScanner(BaseScanner):
                 exports=[name] if 'export' in content[max(0, match.start()-20):match.start()] else [],
             ))
 
-        # 計算 hash
+        # Compute hash
         for symbol in symbols:
             symbol.compute_hash()
 
         return symbols, dependencies
 
     def _extract_imports(self, content: str) -> list[dict]:
-        """提取 import 語句"""
+        """Extract import statements"""
         imports = []
 
         # import { x, y } from 'module'
@@ -235,8 +235,8 @@ class TypeScriptScanner(BaseScanner):
         return imports
 
     def _find_block_end(self, content: str, start_pos: int, start_line: int) -> int:
-        """找到程式碼區塊的結束位置"""
-        # 簡單的括號匹配
+        """Find end position of code block"""
+        # Simple bracket matching
         depth = 0
         in_string = False
         string_char = None
@@ -245,7 +245,7 @@ class TypeScriptScanner(BaseScanner):
         while pos < len(content):
             char = content[pos]
 
-            # 處理字串
+            # Handle strings
             if char in '"\'`' and (pos == 0 or content[pos-1] != '\\'):
                 if not in_string:
                     in_string = True
@@ -259,7 +259,7 @@ class TypeScriptScanner(BaseScanner):
                 pos += 1
                 continue
 
-            # 處理括號
+            # Handle brackets
             if char == '{':
                 depth += 1
             elif char == '}':
@@ -269,28 +269,28 @@ class TypeScriptScanner(BaseScanner):
 
             pos += 1
 
-        # 如果沒找到，返回一個合理的結束行
+        # If not found, return a reasonable end line
         return min(start_line + 50, content.count('\n') + 1)
 
     def _extract_jsdoc(self, content: str, pos: int) -> str:
-        """提取 JSDoc 註解"""
-        # 往前找 JSDoc
+        """Extract JSDoc comments"""
+        # Look backward for JSDoc
         search_start = max(0, pos - 500)
         search_content = content[search_start:pos]
 
         match = re.search(r'/\*\*\s*(.*?)\s*\*/', search_content, re.DOTALL)
         if match:
-            # 清理註解
+            # Clean up comment
             doc = match.group(1)
             doc = re.sub(r'\n\s*\*\s*', ' ', doc)
-            doc = re.sub(r'@\w+.*', '', doc)  # 移除 @param 等
+            doc = re.sub(r'@\w+.*', '', doc)  # Remove @param etc.
             return doc.strip()[:200]
 
         return ""
 
     def _extract_calls(self, content: str) -> list[dict]:
         """
-        提取函數呼叫
+        Extract function calls
 
         Matches patterns like:
         - functionName(

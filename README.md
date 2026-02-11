@@ -1,245 +1,76 @@
-# Flyto Indexer
-
-**程式碼品質分析工具**
-
-找出真正需要關注的問題：複雜函數、缺少測試的模組。
-
-## 程式碼品質分析（最實用）
-
-### 複雜度分析 - 找出過度複雜的函數
-
-```bash
-python examples/test_quality.py
-```
-
-分析結果範例：
-```
-Files scanned: 625
-Functions analyzed: 2922
-Complex functions: 369
-
-COMPLEX FUNCTIONS (top issues):
-  src/core/modules/registry/decorators.py:140
-  Function: register_module()
-  Lines: 489, Depth: 6, Params: 66, Branches: 16
-  Issues: 太長 (489 行), 參數太多 (66 個)
-```
-
-### 測試覆蓋分析 - 找出沒有測試的模組
-
-```
-Test Coverage Analysis:
-  Modules: 527
-  Covered: 112 (21.3%)
-  Uncovered: 415
-
-UNCOVERED MODULES (need tests):
-[HIGH] 409 modules
-  ! src/core/constants.py
-  ! src/core/enterprise/idp/impl.py
-  ! src/core/enterprise/rpa/impl.py
-```
-
-### Python API
-
-```python
-from analyzer import ComplexityAnalyzer, CoverageAnalyzer
-
-# 複雜度分析
-complexity = ComplexityAnalyzer(project_path)
-report = complexity.analyze()
-for func in report.complex_functions[:10]:
-    print(f"{func.file_path}:{func.line_start} - {func.name}()")
-    print(f"  Issues: {', '.join(func.issues)}")
-
-# 測試覆蓋分析
-coverage = CoverageAnalyzer(project_path)
-report = coverage.analyze()
-print(f"Coverage: {report.coverage_rate:.1f}%")
-for m in report.uncovered_modules:
-    if m.importance == "high":
-        print(f"  ! {m.path} - {len(m.functions)} functions")
-```
+<div align="center">
+  <h1>Flyto Indexer</h1>
+  <p>
+    <strong>Code intelligence MCP server for AI-assisted development</strong>
+  </p>
+  <p>
+    <a href="https://github.com/flytohub/flyto-indexer/actions"><img src="https://github.com/flytohub/flyto-indexer/workflows/CI/badge.svg" alt="CI"></a>
+    <a href="https://pypi.org/project/flyto-indexer/"><img src="https://img.shields.io/pypi/v/flyto-indexer.svg" alt="PyPI"></a>
+    <a href="https://github.com/flytohub/flyto-indexer/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+    <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
+  </p>
+  <p>
+    Impact analysis &bull; Smart code search &bull; Dependency graphs &bull; Dead code detection
+    <br/>
+    Works with Claude Code, Cursor, Windsurf, and any MCP client
+  </p>
+</div>
 
 ---
 
-## AI 工具整合
+**"What breaks if I change this?"** — Every developer asks this. Flyto Indexer answers it.
 
-| 工具 | 整合方式 | 文件 |
-|------|----------|------|
-| **Claude Code** | MCP Server | 自動載入 |
-| **Cursor** | HTTP API / Rules | [integrations/cursor.md](integrations/cursor.md) |
-| **OpenAI GPTs** | HTTP API + OpenAPI | [integrations/openai_gpts.md](integrations/openai_gpts.md) |
-| **ChatGPT** | HTTP API | 同上 |
-| **VSCode/Copilot** | Tasks / Extension | [integrations/vscode.md](integrations/vscode.md) |
-| **任何 AI** | REST API | 見下方 |
+It indexes your codebase, understands symbol relationships, and exposes **23 MCP tools** that give any AI assistant deep code intelligence — impact analysis, reference finding, dependency tracking, and more.
 
-### 快速啟動 API Server
+**Zero dependencies.** Pure Python standard library. Runs locally. No code leaves your machine.
+
+## Quick Start
+
+### Option A: Install from PyPI
 
 ```bash
-# 啟動 HTTP API（所有工具都能用）
-python -m src.api_server --port 8765
+pip install flyto-indexer
 
-# 測試
-curl http://localhost:8765/health
-curl -X POST http://localhost:8765/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "購物車"}'
+# Index your project (creates .flyto-index/)
+flyto-index scan /path/to/your/project
+
+# Start MCP server
+python -m flyto_indexer.mcp_server
 ```
 
-### API 端點
-
-| 端點 | 方法 | 說明 |
-|------|------|------|
-| `/search` | POST | 關鍵字搜尋程式碼 |
-| `/file/info` | POST | 取得檔案語意資訊 |
-| `/file/symbols` | POST | 取得檔案 symbols |
-| `/impact` | POST | 影響分析 |
-| `/categories` | GET | 列出分類 |
-| `/apis` | GET | 列出 API |
-| `/stats` | GET | 索引統計 |
-| `/openapi.json` | GET | OpenAPI 規格（GPTs 用） |
-
-## 核心概念
-
-### 1. Symbol ID 系統（學校_年級_班級_座號）
-
-每個 function/component/class 都有唯一且穩定的 ID：
-
-```
-project:path:type:name
-flyto-cloud:src/pages/TopUp.vue:component:TopUp
-flyto-cloud:src/pages/TopUp.vue:function:handleSubmit
-flyto-pro:src/pro/agent/router.py:class:AgentRouter
-flyto-pro:src/pro/agent/router.py:method:AgentRouter.route
-```
-
-### 2. 因果關係圖（改了 A 會影響 B、C、D）
-
-```
-改了 useWallet.ts 的 topUp()
-  → 影響 TopUp.vue（調用者）
-  → 影響 WalletPage.vue（引用 useWallet）
-  → 影響 /api/wallet/topup（API endpoint）
-```
-
-### 3. 由淺入深（L0 → L1 → L2）
-
-- **L0**：專案大綱（目錄樹 + 每個檔案一句話）
-- **L1**：檔案摘要（exports/imports/主要功能）
-- **L2**：片段原文（只取需要的 chunk）
-
-### 4. 永遠只保留最新
-
-不存歷史版本，用 hash 判斷變更，只更新變化的部分。
-
-## 目錄結構
-
-```
-flyto-indexer/
-├── src/
-│   ├── scanner/           # 專案掃描器
-│   │   ├── base.py       # 掃描器基類
-│   │   ├── python.py     # Python AST 分析
-│   │   ├── vue.py        # Vue SFC 分析
-│   │   └── typescript.py # TypeScript 分析
-│   ├── indexer/           # 索引建立
-│   │   ├── symbol.py     # Symbol ID 生成
-│   │   ├── manifest.py   # 指紋表（hash）
-│   │   ├── dependency.py # 依賴關係圖
-│   │   └── incremental.py # 增量更新
-│   ├── context/           # 上下文載入
-│   │   ├── l0_outline.py # L0 大綱
-│   │   ├── l1_summary.py # L1 摘要
-│   │   └── l2_chunk.py   # L2 片段
-│   ├── analyzer/          # 程式碼品質分析
-│   │   ├── complexity.py # 複雜度分析
-│   │   ├── coverage.py   # 測試覆蓋分析
-│   │   ├── duplicates.py # 重複碼偵測
-│   │   ├── api_consistency.py # API 一致性
-│   │   └── security.py   # 安全掃描
-│   ├── mapper/            # 索引生成
-│   │   ├── project_map.py # PROJECT_MAP 生成
-│   │   └── symbol_index.py # Symbol 索引
-│   └── cli.py             # 命令行入口
-├── config/
-│   └── default.yaml       # 預設配置
-├── scripts/
-│   └── github_action.yml  # CI/CD 範本
-└── tests/
-```
-
-## 快速開始
+### Option B: Run from source
 
 ```bash
-# 掃描專案，建立索引
-flyto-index scan /path/to/project
+git clone https://github.com/flytohub/flyto-indexer.git
+cd flyto-indexer
+pip install -e .
 
-# 查看影響範圍（改了某個 symbol 會影響什麼）
-flyto-index impact flyto-cloud:src/composables/useWallet.ts:function:topUp
+# Index your project
+flyto-index scan /path/to/your/project
 
-# 生成 L0 大綱
-flyto-index outline /path/to/project
-
-# 查詢相關代碼（給 AI 用）
-flyto-index query "儲值頁面的 API 呼叫"
+# Start MCP server (from repo)
+python -m src.mcp_server
 ```
 
-## LLM 審計 + AI 工作流程
+> **Tip:** Add `.flyto-index/` to your `.gitignore`. The index is typically a few MB for medium projects.
 
-### 審計專案（生成 PROJECT_MAP）
+### Connect to Claude Code
 
-```bash
-# 設定 OpenAI API Key
-export OPENAI_API_KEY="sk-xxx"
+Add to `~/.claude/settings.json`:
 
-# 執行 LLM 審計
-python examples/audit_all.py
-```
-
-這會為每個檔案生成語意描述：
 ```json
 {
-  "path": "src/pages/Cart.vue",
-  "purpose": "購物車頁面 - 顯示商品、修改數量、結帳",
-  "category": "cart",
-  "keywords": ["購物車", "cart", "結帳", "checkout"],
-  "apis": ["/api/cart", "/api/checkout"],
-  "dependencies": ["useCart", "usePayment"]
+  "mcpServers": {
+    "flyto-indexer": {
+      "command": "python3",
+      "args": ["-m", "flyto_indexer.mcp_server"]
+    }
+  }
 }
 ```
 
-### AI 工作流程（大向 → 中向 → 細項 → 影響分析）
-
-```python
-from auditor.workflow import AIWorkflow
-
-workflow = AIWorkflow(project_map_path, index_path)
-
-# 1. 大向搜尋：用戶說「我要修改購物車功能」
-l0 = workflow.search_l0("購物車")
-# → 找到：Cart.vue, useCart.ts, Product.vue
-
-# 2. 中向查看：選擇要看的檔案
-l1 = workflow.search_l1("src/composables/useCart.ts")
-# → 列出該檔案的所有 symbols
-
-# 3. 細項查看：選擇具體函數
-l2 = workflow.search_l2("flyto-cloud:useCart.ts:function:addToCart")
-# → 顯示函數內容
-
-# 4. 影響分析：修改前確認
-impact = workflow.impact_analysis("flyto-cloud:useCart.ts:function:addToCart")
-# → 告訴你：Cart.vue, Product.vue 都在呼叫這個函數
-```
-
-## Claude Code MCP 整合
-
-讓 Claude 可以直接查詢索引、執行影響分析。
-
-### 設定 MCP Server
-
-編輯 `~/.claude/settings.json`，加入：
+<details>
+<summary>Running from source instead?</summary>
 
 ```json
 {
@@ -247,49 +78,264 @@ impact = workflow.impact_analysis("flyto-cloud:useCart.ts:function:addToCart")
     "flyto-indexer": {
       "command": "python3",
       "args": ["-m", "src.mcp_server"],
-      "cwd": "/Library/其他專案/flytohub/flyto-indexer"
+      "cwd": "/path/to/flyto-indexer"
     }
   }
 }
 ```
+</details>
 
-### 可用工具
+That's it. Claude Code now has access to all 23 tools.
 
-設定後，Claude 可以使用：
+## Why This Exists
 
-| 工具 | 說明 | 範例 |
-|------|------|------|
-| `search_code` | 關鍵字搜尋 | `search_code("購物車")` |
-| `get_file_info` | 取得檔案語意資訊 | `get_file_info("src/pages/Cart.vue")` |
-| `get_file_symbols` | 列出檔案的所有 symbols | `get_file_symbols("src/composables/useCart.ts")` |
-| `impact_analysis` | 影響分析 | `impact_analysis("project:path:function:name")` |
-| `list_categories` | 列出所有分類 | `list_categories()` |
-| `list_apis` | 列出所有 API | `list_apis()` |
+AI coding assistants are powerful, but they're **flying blind**:
 
-### 使用範例
+- They don't know what breaks when they change a function
+- They can't trace dependencies across files or projects
+- They have no idea which code is dead and safe to remove
+- They can't assess the risk of a proposed change
+
+Flyto Indexer gives AI the **structural understanding** it needs to make safe, informed changes.
+
+## See It In Action
 
 ```
-你：我要修改購物車的結帳功能
+You:    "Rename validateOrder to validate_order — what breaks?"
 
-Claude：讓我先查詢相關程式碼...
-[呼叫 search_code("購物車 結帳")]
+Claude: Let me check the impact first.
+        → impact_analysis("myproject:src/validators.py:function:validateOrder")
+        → find_references("validateOrder")
 
-找到 3 個相關檔案：
-1. src/pages/Cart.vue - 購物車頁面，處理結帳流程
-2. src/composables/useCart.ts - 購物車狀態管理
-3. src/api/checkout.ts - 結帳 API 呼叫
+        ⚠️ Modifying validateOrder affects 5 locations:
+          → Cart.vue:42 — calls validateOrder() directly
+          → CheckoutAPI.py:18 — imports validateOrder
+          → test_validators.py:55 — tests validateOrder
+          Risk: MEDIUM — 3 files, 2 projects
 
-讓我分析影響範圍...
-[呼叫 impact_analysis("flyto-cloud:useCart.ts:function:checkout")]
-
-⚠️ 修改 checkout() 會影響：
-- Cart.vue (直接呼叫)
-- QuickBuy.vue (快速購買流程)
-
-建議：先確認 QuickBuy 頁面的結帳邏輯是否需要同步修改。
+        I'll rename all call sites and update the tests.
+        → edit_impact_preview("validateOrder", change_type="rename")
 ```
 
-## CI/CD 整合
+## What It Does
+
+### Impact Analysis
+
+```
+> "What happens if I change the checkout() function?"
+
+⚠️ Modifying checkout() affects:
+  → Cart.vue (direct caller)
+  → QuickBuy.vue (calls via useCart)
+  → /api/checkout (API endpoint)
+  Risk: MEDIUM — 3 files affected, no breaking changes detected
+```
+
+### Smart Code Search
+
+Search uses symbol-aware ranking with metadata matching — no embeddings or external services required.
+
+```
+> search_code("authentication")
+
+  1. src/composables/useAuth.ts — Auth state management, login/logout, JWT tokens
+  2. src/api/auth.py — Authentication API endpoints, rate limiting
+  3. src/middleware/auth.ts — Route guards, token validation
+```
+
+### Dependency Graph
+
+```
+> dependency_graph("src/composables/useCart.ts")
+
+  useCart.ts
+  ├── imports: useAuth, usePayment, cartApi
+  └── depended on by: Cart.vue, QuickBuy.vue, CartSidebar.vue
+```
+
+### Cross-Project Tracking
+
+```
+> cross_project_impact("validateOrder")
+
+  Defined in: backend/src/validators.py
+  Used by:
+    → frontend (3 references)
+    → mobile-app (1 reference)
+    → admin-panel (2 references)
+  Risk: HIGH — changes affect 3 other projects
+```
+
+## MCP Tools
+
+23 tools organized by category. **Start with these 6:**
+
+| Tool | What it does |
+|------|-------------|
+| `impact_analysis` | "What breaks if I change this?" |
+| `find_references` | "Who calls this function?" |
+| `search_code` | "Where is the auth code?" |
+| `dependency_graph` | "What does this file depend on?" |
+| `get_symbol_content` | "Show me the full function" |
+| `find_dead_code` | "What can I safely delete?" |
+
+<details>
+<summary>All 23 tools</summary>
+
+### Code Search & Discovery
+| Tool | Description |
+|------|-------------|
+| `search_code` | Symbol-aware search across all indexed projects |
+| `get_symbol_content` | Get full source code of a function/class |
+| `get_file_symbols` | List all symbols defined in a file |
+| `get_file_info` | Get file purpose, category, keywords, dependencies |
+| `fulltext_search` | Search inside comments, strings, and TODO markers |
+
+### Impact & Dependencies
+| Tool | Description |
+|------|-------------|
+| `impact_analysis` | Analyze blast radius of modifying a symbol |
+| `find_references` | Find all callers and importers of a symbol |
+| `dependency_graph` | Show import chains and dependent relationships |
+| `cross_project_impact` | Track API usage across multiple projects |
+| `edit_impact_preview` | Preview impact before renaming, deleting, or changing signatures |
+
+### Project Overview
+| Tool | Description |
+|------|-------------|
+| `list_projects` | List all indexed projects with statistics |
+| `list_categories` | Show code categories (auth, payment, etc.) |
+| `list_apis` | List all API endpoints found in code |
+| `check_index_status` | Check if the index is up-to-date |
+
+### Code Quality
+| Tool | Description |
+|------|-------------|
+| `find_dead_code` | Detect unreferenced functions, classes, and components |
+| `find_todos` | Find TODO, FIXME, HACK markers across the codebase |
+
+### File Context
+| Tool | Description |
+|------|-------------|
+| `get_file_context` | Complete context package for a file (info + symbols + deps) |
+| `find_test_file` | Find the test file for a source file (or vice versa) |
+| `get_description` | Get the semantic one-liner for a file |
+| `update_description` | Write or update a file description |
+
+### Session & Indexing
+| Tool | Description |
+|------|-------------|
+| `session_track` | Track workspace events for search boosting |
+| `session_get` | Inspect current session state |
+| `check_and_reindex` | Detect file changes and trigger re-indexing |
+
+</details>
+
+## Supported Languages
+
+| Language | Parser | Symbols Extracted |
+|----------|--------|-------------------|
+| Python | AST | Functions, classes, methods, decorators |
+| TypeScript/JavaScript | Custom parser | Functions, classes, interfaces, types, exports |
+| Vue | SFC parser | Components, composables, emits, props |
+| Go | Custom parser | Functions, structs, methods, interfaces |
+| Rust | Custom parser | Functions, structs, impl blocks, traits |
+| Java | Custom parser | Classes, methods, interfaces, annotations |
+
+## Architecture
+
+```
+your-project/
+├── src/            ← Your code (any language)
+└── .flyto-index/   ← Generated index (add to .gitignore)
+    ├── index.json.gz          # Symbol index (compressed)
+    ├── content.jsonl           # Source code content (lazy-loaded)
+    ├── PROJECT_MAP.json.gz     # File metadata
+    └── workspace_manifest.json # Incremental tracking
+```
+
+### How It Works
+
+1. **Scan** — AST parsers extract symbols (functions, classes, components) from your code
+2. **Index** — Symbols are organized into a searchable index with dependency relationships
+3. **Serve** — The MCP server exposes 23 tools that any AI client can call
+4. **Incremental** — Only changed files are re-scanned (tracked via content hashes)
+
+### Key Concepts
+
+**Symbol ID** — Every symbol has a unique, stable identifier:
+```
+project:path:type:name
+─────── ──── ──── ────
+  │       │    │    └── Symbol name
+  │       │    └── function, class, method, component, composable
+  │       └── File path relative to project root
+  └── Project name
+```
+
+**Depth Levels** — Progressive detail:
+- **L0** — Project outline (directory tree + one-liner per file)
+- **L1** — File summary (exports, imports, main functionality)
+- **L2** — Code chunks (only the specific symbols you need)
+
+## HTTP API
+
+For editors and tools that don't support MCP, there's a local REST API. This runs on your machine — no data is sent externally.
+
+```bash
+# Start the local HTTP server
+python -m src.api_server --port 8765
+
+# Search
+curl -X POST http://localhost:8765/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "authentication"}'
+
+# Impact analysis
+curl -X POST http://localhost:8765/impact \
+  -H "Content-Type: application/json" \
+  -d '{"symbol_id": "myproject:src/auth.py:function:login"}'
+```
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/search` | POST | Keyword search |
+| `/file/info` | POST | File metadata |
+| `/file/symbols` | POST | List file symbols |
+| `/impact` | POST | Impact analysis |
+| `/categories` | GET | List categories |
+| `/apis` | GET | List API endpoints |
+| `/stats` | GET | Index statistics |
+| `/openapi.json` | GET | OpenAPI spec |
+| `/health` | GET | Health check |
+
+## Integrations
+
+- **[Claude Code](README.md#connect-to-claude-code)** — MCP server (native)
+- **[Cursor](integrations/cursor.md)** — HTTP API + .cursorrules
+- **[VSCode / Copilot](integrations/vscode.md)** — Tasks + Extension
+- **[OpenAI GPTs](integrations/openai_gpts.md)** — HTTP API + OpenAPI schema
+
+## CLI
+
+```bash
+# Scan and index a project
+flyto-index scan /path/to/project
+
+# Check what changed since last index
+flyto-index status /path/to/project
+
+# Analyze impact of changing a symbol
+flyto-index impact myproject:src/auth.py:function:login
+
+# Generate project outline (L0)
+flyto-index brief /path/to/project
+
+# Annotate file purposes
+flyto-index describe /path/to/project
+```
+
+## CI/CD Integration
 
 ```yaml
 # .github/workflows/index.yml
@@ -305,3 +351,24 @@ jobs:
       - run: pip install flyto-indexer
       - run: flyto-index scan . --incremental
 ```
+
+## Security & Privacy
+
+- **Runs 100% locally.** No code is sent to any external service.
+- Index stored under `.flyto-index/` in your project directory.
+- Clean up by deleting `.flyto-index/` — there's no hidden state elsewhere.
+
+## Limitations
+
+- **Static analysis only** — dynamic imports, metaprogramming, and runtime-generated code are not tracked.
+- **No type inference** — TypeScript type-level computations and complex generics are simplified.
+- **Vue `<script setup>`** — most patterns are supported, but some edge cases with dynamic `defineProps` may be missed.
+- **Cross-project tracking** requires all projects to be indexed in the same workspace.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+[MIT](LICENSE) — Use it however you want.

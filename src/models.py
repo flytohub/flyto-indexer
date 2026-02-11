@@ -1,8 +1,8 @@
 """
 Core data models for Flyto Indexer.
 
-Symbol ID 格式：project:path:type:name
-例如：flyto-cloud:src/pages/TopUp.vue:component:TopUp
+Symbol ID format: project:path:type:name
+Example: flyto-cloud:src/pages/TopUp.vue:component:TopUp
 """
 
 from dataclasses import dataclass, field
@@ -12,23 +12,23 @@ import hashlib
 
 
 class SymbolType(str, Enum):
-    """Symbol 類型（年級）"""
-    FILE = "file"           # 整個檔案
-    CLASS = "class"         # 類
-    FUNCTION = "function"   # 函數
-    METHOD = "method"       # 類方法
-    COMPONENT = "component" # Vue/React 組件
+    """Symbol type (grade)"""
+    FILE = "file"           # Entire file
+    CLASS = "class"         # Class
+    FUNCTION = "function"   # Function
+    METHOD = "method"       # Class method
+    COMPONENT = "component" # Vue/React component
     COMPOSABLE = "composable"  # Vue composable
     STORE = "store"         # Pinia/Vuex store
-    ROUTE = "route"         # 路由定義
+    ROUTE = "route"         # Route definition
     API = "api"             # API endpoint
-    VARIABLE = "variable"   # 常數/變數
-    TYPE = "type"           # TypeScript 類型定義
-    INTERFACE = "interface" # 介面定義
+    VARIABLE = "variable"   # Constant/variable
+    TYPE = "type"           # TypeScript type definition
+    INTERFACE = "interface" # Interface definition
 
 
 class DependencyType(str, Enum):
-    """依賴類型"""
+    """Dependency type"""
     IMPORTS = "imports"       # A imports B
     CALLS = "calls"           # A calls B
     EXTENDS = "extends"       # A extends B
@@ -41,53 +41,53 @@ class DependencyType(str, Enum):
 @dataclass
 class Symbol:
     """
-    Symbol（學號）- 代碼中的唯一單元
+    Symbol (student ID) - a unique unit in the codebase
 
-    ID 格式：project:path:type:name
-    像學號一樣：學校_年級_班級_座號
-    - project = 學校
-    - path = 班級（檔案路徑）
-    - type = 年級（symbol 類型）
-    - name = 座號（symbol 名稱）
+    ID format: project:path:type:name
+    Like a student ID: school_grade_class_seat
+    - project = school
+    - path = class (file path)
+    - type = grade (symbol type)
+    - name = seat (symbol name)
     """
-    project: str          # 專案名稱
-    path: str             # 相對路徑
-    symbol_type: SymbolType  # symbol 類型
-    name: str             # symbol 名稱
+    project: str          # Project name
+    path: str             # Relative path
+    symbol_type: SymbolType  # Symbol type
+    name: str             # Symbol name
 
-    # 位置信息
+    # Location info
     start_line: int = 0
     end_line: int = 0
 
-    # 內容（用於計算 hash 和生成 embedding）
+    # Content (used for hash computation and embedding generation)
     content: str = ""
     content_hash: str = ""
 
-    # 摘要（L1 用）
+    # Summary (used for L1)
     summary: str = ""
 
-    # 元數據
+    # Metadata
     language: str = ""
     exports: list[str] = field(default_factory=list)
     imports: list[str] = field(default_factory=list)
     params: list[str] = field(default_factory=list)
     returns: str = ""
 
-    # 引用統計（用於搜尋排序）
+    # Reference count (used for search ranking)
     reference_count: int = 0
 
     @property
     def id(self) -> str:
-        """生成唯一 Symbol ID"""
+        """Generate unique Symbol ID"""
         return f"{self.project}:{self.path}:{self.symbol_type.value}:{self.name}"
 
     @property
     def short_id(self) -> str:
-        """短 ID（不含 project）"""
+        """Short ID (without project prefix)"""
         return f"{self.path}:{self.symbol_type.value}:{self.name}"
 
     def compute_hash(self) -> str:
-        """計算內容 hash"""
+        """Compute content hash"""
         self.content_hash = hashlib.sha256(self.content.encode()).hexdigest()[:16]
         return self.content_hash
 
@@ -150,19 +150,19 @@ class Symbol:
 @dataclass
 class Dependency:
     """
-    依賴關係（因果關係圖的邊）
+    Dependency (edge in causality graph)
 
     source -> target (type)
-    例如：TopUp.vue -calls-> useWallet.topUp()
+    Example: TopUp.vue -calls-> useWallet.topUp()
     """
-    source_id: str        # 來源 Symbol ID
-    target_id: str        # 目標 Symbol ID
+    source_id: str        # Source Symbol ID
+    target_id: str        # Target Symbol ID
     dep_type: DependencyType
 
-    # 來源位置（哪一行引用的）
+    # Source location (which line contains the reference)
     source_line: int = 0
 
-    # 額外信息
+    # Additional info
     metadata: dict = field(default_factory=dict)
 
     @property
@@ -183,7 +183,7 @@ class Dependency:
 @dataclass
 class FileManifest:
     """
-    檔案指紋（用於判斷變更）
+    File fingerprint (used for change detection)
     """
     path: str
     content_hash: str
@@ -204,40 +204,40 @@ class FileManifest:
 @dataclass
 class ProjectIndex:
     """
-    專案索引（L0 大綱）
+    Project index (L0 outline)
     """
     project: str
     root_path: str
 
-    # 目錄結構
+    # Directory structure
     tree: dict = field(default_factory=dict)
 
-    # 檔案清單（path -> FileManifest）
+    # File manifest (path -> FileManifest)
     files: dict[str, FileManifest] = field(default_factory=dict)
 
-    # 所有 symbols（id -> Symbol）
+    # All symbols (id -> Symbol)
     symbols: dict[str, Symbol] = field(default_factory=dict)
 
-    # 依賴關係（id -> Dependency）
+    # Dependencies (id -> Dependency)
     dependencies: dict[str, Dependency] = field(default_factory=dict)
 
-    # 入口點
+    # Entry points
     entry_points: list[str] = field(default_factory=list)
 
-    # 路由表（path -> component）
+    # Route table (path -> component)
     routes: dict[str, str] = field(default_factory=dict)
 
     # API endpoints
     api_endpoints: list[dict] = field(default_factory=list)
 
-    # 反向索引（symbol_id -> 被誰引用）
+    # Reverse index (symbol_id -> referenced by whom)
     reverse_index: dict[str, list[str]] = field(default_factory=dict)
 
     def get_affected_by(self, symbol_id: str) -> list[str]:
         """
-        反向查詢：改了這個 symbol，會影響哪些其他 symbols
+        Reverse lookup: if this symbol is changed, which other symbols are affected?
 
-        這就是「改了座號，反查會影響哪個班級/年級」
+        Like changing a seat number and tracing back which classes/grades are impacted.
         """
         affected = []
         for dep in self.dependencies.values():
@@ -247,7 +247,7 @@ class ProjectIndex:
 
     def get_depends_on(self, symbol_id: str) -> list[str]:
         """
-        正向查詢：這個 symbol 依賴哪些其他 symbols
+        Forward lookup: which other symbols does this symbol depend on?
         """
         depends = []
         for dep in self.dependencies.values():
@@ -257,12 +257,12 @@ class ProjectIndex:
 
     def get_impact_chain(self, symbol_id: str, max_depth: int = 3) -> dict:
         """
-        取得完整影響鏈（遞迴）
+        Get the full impact chain (recursive)
 
-        改了 useWallet.topUp()
-          → L1: TopUp.vue, WalletPage.vue（直接調用者）
-          → L2: /wallet route（引用 TopUp.vue）
-          → L3: App.vue（包含 router-view）
+        Changed useWallet.topUp()
+          -> L1: TopUp.vue, WalletPage.vue (direct callers)
+          -> L2: /wallet route (references TopUp.vue)
+          -> L3: App.vue (contains router-view)
         """
         result = {"symbol": symbol_id, "levels": []}
         visited = {symbol_id}

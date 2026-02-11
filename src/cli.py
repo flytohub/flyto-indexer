@@ -153,7 +153,7 @@ def main():
             parser.print_help()
             return
 
-        # 輸出結果
+        # Output result
         if result is None:
             pass  # Command handled its own output
         elif isinstance(result, str):
@@ -366,16 +366,8 @@ def cmd_status(args):
 
 
 def cmd_scan(args):
-    """執行 scan 命令"""
-    # 設定路徑
-    import sys
-    import os
-    src_path = Path(__file__).parent
-    if str(src_path) not in sys.path:
-        sys.path.insert(0, str(src_path))
-    os.chdir(src_path)
-
-    from engine import IndexEngine
+    """Execute scan command"""
+    from .engine import IndexEngine
 
     project_path = Path(args.path).resolve()
     project_name = args.name or project_path.name
@@ -388,15 +380,8 @@ def cmd_scan(args):
 
 
 def cmd_impact(args):
-    """執行 impact 命令"""
-    import sys
-    import os
-    src_path = Path(__file__).parent
-    if str(src_path) not in sys.path:
-        sys.path.insert(0, str(src_path))
-    os.chdir(src_path)
-
-    from engine import IndexEngine
+    """Execute impact command"""
+    from .engine import IndexEngine
 
     project_path = Path(args.path).resolve()
     project_name = project_path.name
@@ -408,15 +393,8 @@ def cmd_impact(args):
 
 
 def cmd_context(args):
-    """執行 context 命令"""
-    import sys
-    import os
-    src_path = Path(__file__).parent
-    if str(src_path) not in sys.path:
-        sys.path.insert(0, str(src_path))
-    os.chdir(src_path)
-
-    from engine import IndexEngine
+    """Execute context command"""
+    from .engine import IndexEngine
 
     project_path = Path(args.path).resolve()
     project_name = project_path.name
@@ -433,15 +411,8 @@ def cmd_context(args):
 
 
 def cmd_outline(args):
-    """執行 outline 命令"""
-    import sys
-    import os
-    src_path = Path(__file__).parent
-    if str(src_path) not in sys.path:
-        sys.path.insert(0, str(src_path))
-    os.chdir(src_path)
-
-    from engine import IndexEngine
+    """Execute outline command"""
+    from .engine import IndexEngine
 
     project_path = Path(args.path).resolve()
     project_name = args.name or project_path.name

@@ -1,77 +1,77 @@
-# Cursor 整合指南
+# Cursor Integration
 
-## 方式 1：Custom API（推薦）
+## Option 1: HTTP API (Recommended)
 
-### 1. 啟動 API Server
+### 1. Start the API Server
 
 ```bash
-cd /Library/其他專案/flytohub/flyto-indexer
+cd /path/to/flyto-indexer
 python -m src.api_server --port 8765
 ```
 
-### 2. 在 Cursor 設定 Custom Instructions
+### 2. Add Custom Instructions in Cursor
 
-打開 Cursor Settings → Features → Rules for AI，加入：
+Open Cursor Settings → Features → Rules for AI, and add:
 
 ```
-當你需要搜尋程式碼時，可以呼叫 flyto-indexer API：
+When you need to search or understand the codebase, use the flyto-indexer API:
 
-搜尋程式碼：
+Search code:
 curl -X POST http://localhost:8765/search \
   -H "Content-Type: application/json" \
-  -d '{"query": "購物車", "max_results": 10}'
+  -d '{"query": "authentication", "max_results": 10}'
 
-取得檔案資訊：
+Get file info:
 curl -X POST http://localhost:8765/file/info \
   -H "Content-Type: application/json" \
-  -d '{"path": "flyto-cloud/src/pages/Cart.vue"}'
+  -d '{"path": "src/auth.py"}'
 
-影響分析：
+Impact analysis:
 curl -X POST http://localhost:8765/impact \
   -H "Content-Type: application/json" \
   -d '{"symbol_id": "project:path:type:name"}'
 
-這些 API 會返回：
-- 相關檔案及其用途說明
-- 檔案的分類、關鍵字、依賴
-- 修改某個函數會影響哪些地方
+These APIs return:
+- Relevant files with purpose descriptions
+- File categories, keywords, and dependencies
+- What other files are affected when you modify a function
 ```
 
-### 3. 使用範例
+### 3. Usage Example
 
-在 Cursor 中輸入：
+In Cursor, type:
 ```
-幫我找購物車相關的程式碼
+Find the code that handles user authentication
 ```
 
-Cursor 會呼叫 API 找到相關檔案，然後給你建議。
+Cursor will call the API, find relevant files, and give you suggestions.
 
 ---
 
-## 方式 2：直接讀取 JSON
+## Option 2: Read the Index Directly
 
-如果不想啟動 server，可以讓 Cursor 直接讀取索引檔案：
+If you don't want to run a server, let Cursor read the index file directly:
 
 ```
-程式碼索引位置：/Library/其他專案/flytohub/flyto-indexer/.flyto-index/PROJECT_MAP.json
+Code index location: /path/to/flyto-indexer/.flyto-index/PROJECT_MAP.json
 
-這個 JSON 包含：
-- files: 每個檔案的用途、分類、關鍵字
-- keyword_index: 關鍵字 → 檔案對照
-- categories: 分類 → 檔案對照
-- api_map: API → 檔案對照
+This JSON contains:
+- files: Purpose, category, and keywords for each file
+- keyword_index: Keyword → file mapping
+- categories: Category → file mapping
+- api_map: API endpoint → file mapping
 
-當我問「XX 功能在哪裡」時，請先讀取這個 JSON 找相關檔案。
+When I ask "where is feature X?", read this JSON to find relevant files.
 ```
 
 ---
 
-## 方式 3：.cursorrules
+## Option 3: .cursorrules
 
-建立 `.cursorrules` 檔案：
+Create a `.cursorrules` file in your project root:
 
 ```
-# Flyto Project Context
+# Project Context
 
 This project uses flyto-indexer for semantic code search.
 
@@ -86,13 +86,13 @@ To find files related to a feature:
 
 ## File Categories
 
-- payment: 付款、儲值相關
-- auth: 認證、登入相關
-- user: 用戶相關
-- product: 商品相關
-- order: 訂單相關
-- cart: 購物車相關
-- admin: 後台管理
+- payment: Payment and billing
+- auth: Authentication and login
+- user: User management
+- product: Product catalog
+- order: Order processing
+- cart: Shopping cart
+- admin: Admin panel
 
 ## Before Modifying Code
 

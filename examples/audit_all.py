@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-全專案 LLM 審計
+Full project LLM audit.
 
-對所有 flyto 專案進行 LLM 審計，生成 PROJECT_MAP。
+Perform LLM audit on all flyto projects and generate PROJECT_MAP.
 """
 
 import sys
@@ -11,11 +11,11 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-# 載入環境變數
+# Load environment variables
 def load_dotenv():
     env_files = [
         Path(__file__).parent.parent / ".env",
-        Path("/Library/其他專案/flytohub/flyto-pro/.env"),
+        Path("/path/to/your/projects/flyto-pro/.env"),
     ]
     for env_file in env_files:
         if env_file.exists():
@@ -27,7 +27,7 @@ def load_dotenv():
 
 load_dotenv()
 
-# 設定路徑
+# Set up paths
 project_root = Path(__file__).parent.parent
 src_path = project_root / "src"
 sys.path.insert(0, str(src_path))
@@ -35,10 +35,10 @@ os.chdir(src_path)
 
 from auditor.llm_auditor import LLMAuditor
 
-# Flyto 專案根目錄
-FLYTOHUB_ROOT = Path("/Library/其他專案/flytohub")
+# Flyto projects root directory
+FLYTOHUB_ROOT = Path("/path/to/your/projects")
 
-# 要審計的專案
+# Projects to audit
 PROJECTS = [
     "flyto-core",
     "flyto-pro",
@@ -47,7 +47,7 @@ PROJECTS = [
     "flyto-modules-pro",
 ]
 
-# 忽略的路徑
+# Paths to ignore
 IGNORE_PATTERNS = [
     "node_modules", "__pycache__", ".git", "dist", "build",
     ".venv", "venv", ".pytest_cache", ".flyto-index",
@@ -55,12 +55,12 @@ IGNORE_PATTERNS = [
     "__init__.py", "conftest.py"
 ]
 
-# 支援的副檔名
+# Supported file extensions
 EXTENSIONS = [".py", ".vue", ".ts", ".tsx"]
 
 
 def should_skip(path: str) -> bool:
-    """檢查是否應該跳過"""
+    """Check whether the file should be skipped"""
     for pattern in IGNORE_PATTERNS:
         if pattern in path:
             return True
@@ -68,7 +68,7 @@ def should_skip(path: str) -> bool:
 
 
 def collect_files(project_path: Path) -> list[tuple[str, str, str]]:
-    """收集專案中的檔案"""
+    """Collect files from the project"""
     files = []
 
     for ext in EXTENSIONS:
@@ -80,11 +80,11 @@ def collect_files(project_path: Path) -> list[tuple[str, str, str]]:
 
             try:
                 content = file_path.read_text(encoding="utf-8")
-                # 跳過太短的檔案
+                # Skip files that are too short
                 if len(content) < 50:
                     continue
 
-                # 推斷語言
+                # Infer language
                 lang_map = {".py": "python", ".vue": "vue", ".ts": "typescript", ".tsx": "typescript"}
                 language = lang_map.get(ext, "unknown")
 
@@ -96,7 +96,7 @@ def collect_files(project_path: Path) -> list[tuple[str, str, str]]:
 
 
 def audit_project(project_name: str, auditor: LLMAuditor) -> dict:
-    """審計單個專案"""
+    """Audit a single project"""
     project_path = FLYTOHUB_ROOT / project_name
 
     if not project_path.exists():
@@ -106,7 +106,7 @@ def audit_project(project_name: str, auditor: LLMAuditor) -> dict:
     print(f"Auditing: {project_name}")
     print(f"{'='*60}")
 
-    # 收集檔案
+    # Collect files
     files = collect_files(project_path)
     print(f"Found {len(files)} files to audit")
 
@@ -122,7 +122,7 @@ def audit_project(project_name: str, auditor: LLMAuditor) -> dict:
         "keyword_index": {}
     }
 
-    # 審計每個檔案
+    # Audit each file
     try:
         from tqdm import tqdm
         iterator = tqdm(files, desc=f"Auditing {project_name}")
@@ -139,7 +139,7 @@ def audit_project(project_name: str, auditor: LLMAuditor) -> dict:
 
             result["files"][rel_path] = audit
 
-            # 建立索引
+            # Build index
             category = audit.get("category", "unknown")
             if category not in result["categories"]:
                 result["categories"][category] = []
@@ -171,20 +171,20 @@ def audit_project(project_name: str, auditor: LLMAuditor) -> dict:
 
 def main():
     print("\n" + "="*60)
-    print("Flyto Indexer - 全專案 LLM 審計")
+    print("Flyto Indexer - Full Project LLM Audit")
     print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("="*60)
 
-    # 檢查 API key
+    # Check API key
     if not os.getenv("OPENAI_API_KEY"):
         print("\n❌ OPENAI_API_KEY not set")
         return
 
-    # 建立審計器
+    # Create auditor
     auditor = LLMAuditor(provider="openai", model="gpt-4o-mini")
     print(f"\nUsing: OpenAI gpt-4o-mini")
 
-    # 審計所有專案
+    # Audit all projects
     all_results = {}
     total_files = 0
 
@@ -193,7 +193,7 @@ def main():
         all_results[project_name] = result
         total_files += len(result.get("files", {}))
 
-    # 合併結果
+    # Merge results
     merged = {
         "audited_at": datetime.now().isoformat(),
         "total_files": total_files,
@@ -205,45 +205,45 @@ def main():
     }
 
     for project_name, result in all_results.items():
-        # 合併 files（加上專案前綴）
+        # Merge files (with project prefix)
         for path, audit in result.get("files", {}).items():
             full_path = f"{project_name}/{path}"
             audit["project"] = project_name
             merged["files"][full_path] = audit
 
-        # 合併 categories
+        # Merge categories
         for cat, paths in result.get("categories", {}).items():
             if cat not in merged["categories"]:
                 merged["categories"][cat] = []
             merged["categories"][cat].extend([f"{project_name}/{p}" for p in paths])
 
-        # 合併 api_map
+        # Merge api_map
         for api, paths in result.get("api_map", {}).items():
             if api not in merged["api_map"]:
                 merged["api_map"][api] = []
             merged["api_map"][api].extend([f"{project_name}/{p}" for p in paths])
 
-        # 合併 keyword_index
+        # Merge keyword_index
         for kw, paths in result.get("keyword_index", {}).items():
             if kw not in merged["keyword_index"]:
                 merged["keyword_index"][kw] = []
             merged["keyword_index"][kw].extend([f"{project_name}/{p}" for p in paths])
 
-    # 保存結果
+    # Save results
     output_dir = FLYTOHUB_ROOT / "flyto-indexer" / ".flyto-index"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 保存合併結果
+    # Save merged results
     merged_path = output_dir / "PROJECT_MAP.json"
     merged_path.write_text(json.dumps(merged, indent=2, ensure_ascii=False))
     print(f"\n✅ Saved: {merged_path}")
 
-    # 保存每個專案的結果
+    # Save per-project results
     for project_name, result in all_results.items():
         project_map_path = output_dir / f"PROJECT_MAP_{project_name}.json"
         project_map_path.write_text(json.dumps(result, indent=2, ensure_ascii=False))
 
-    # 統計
+    # Statistics
     print("\n" + "="*60)
     print("SUMMARY")
     print("="*60)

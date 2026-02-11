@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "flyto-indexer"
-version = "0.1.0"
-description = "Code audit and smart indexing system for AI-assisted development"
+version = "1.0.0"
+description = "Code intelligence MCP server for AI-assisted development — impact analysis, semantic search, and dependency graphs"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["code-indexing", "ast", "ai", "development-tools"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -49,12 +49,9 @@ include = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/flyto_indexer"]
+packages = ["src"]
 
-[tool.hatch.build]
-sources = ["src"]
-
-# 重新映射 src -> flyto_indexer
+# Remap src/ -> flyto_indexer/ in the wheel
 [tool.hatch.build.targets.wheel.sources]
 "src" = "flyto_indexer"
 

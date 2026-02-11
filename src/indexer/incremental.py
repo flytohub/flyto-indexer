@@ -1,11 +1,11 @@
 """
 Incremental indexing - only update what changed.
 
-核心邏輯：
-1. 讀取舊的 manifest（hash 表）
-2. 掃描當前檔案，計算新 hash
-3. 比對：hash 一樣 → 跳過，hash 不同 → 重建
-4. 更新 manifest
+Core logic:
+1. Load the old manifest (hash table)
+2. Scan current files and compute new hashes
+3. Compare: same hash -> skip, different hash -> rebuild
+4. Update the manifest
 """
 
 import json
@@ -22,10 +22,10 @@ except ImportError:
 
 @dataclass
 class ChangeSet:
-    """變更集合"""
-    added: list[str]      # 新增的檔案
-    modified: list[str]   # 修改的檔案
-    deleted: list[str]    # 刪除的檔案
+    """Change set"""
+    added: list[str]      # Newly added files
+    modified: list[str]   # Modified files
+    deleted: list[str]    # Deleted files
 
     def is_empty(self) -> bool:
         return not (self.added or self.modified or self.deleted)
@@ -39,9 +39,9 @@ class ChangeSet:
 
 class ManifestStore:
     """
-    Manifest 存儲（指紋表）
+    Manifest store (fingerprint table)
 
-    存儲格式：
+    Storage format:
     {
         "project": "flyto-cloud",
         "version": 1,
@@ -61,7 +61,7 @@ class ManifestStore:
         self.data = {"project": "", "version": 1, "files": {}}
 
     def load(self) -> bool:
-        """載入 manifest"""
+        """Load manifest"""
         if self.store_path.exists():
             try:
                 self.data = json.loads(self.store_path.read_text())
@@ -71,27 +71,27 @@ class ManifestStore:
         return False
 
     def save(self):
-        """保存 manifest"""
+        """Save manifest"""
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
         self.store_path.write_text(json.dumps(self.data, indent=2))
 
     def get_file_hash(self, path: str) -> Optional[str]:
-        """取得檔案的舊 hash"""
+        """Get the old hash for a file"""
         if path in self.data["files"]:
             return self.data["files"][path].get("hash")
         return None
 
     def update_file(self, manifest: FileManifest):
-        """更新檔案 manifest"""
+        """Update file manifest"""
         self.data["files"][manifest.path] = manifest.to_dict()
 
     def remove_file(self, path: str):
-        """移除檔案"""
+        """Remove file"""
         if path in self.data["files"]:
             del self.data["files"][path]
 
     def get_all_paths(self) -> set[str]:
-        """取得所有已索引的檔案路徑"""
+        """Get all indexed file paths"""
         return set(self.data["files"].keys())
 
     def set_project(self, project: str):
@@ -100,9 +100,9 @@ class ManifestStore:
 
 class IncrementalIndexer:
     """
-    增量索引器
+    Incremental indexer
 
-    只更新變化的檔案，大幅減少重建時間。
+    Only updates changed files, significantly reducing rebuild time.
     """
 
     def __init__(self, project_root: Path, index_dir: Path):
@@ -112,13 +112,13 @@ class IncrementalIndexer:
 
     def detect_changes(self, current_files: dict[str, str]) -> ChangeSet:
         """
-        偵測變更
+        Detect changes
 
         Args:
-            current_files: {path: content_hash} 當前檔案的 hash 表
+            current_files: {path: content_hash} hash table of current files
 
         Returns:
-            ChangeSet 變更集合
+            ChangeSet of changes
         """
         self.manifest_store.load()
 
@@ -129,15 +129,15 @@ class IncrementalIndexer:
         modified = []
         deleted = []
 
-        # 新增的檔案
+        # Added files
         for path in new_paths - old_paths:
             added.append(path)
 
-        # 刪除的檔案
+        # Deleted files
         for path in old_paths - new_paths:
             deleted.append(path)
 
-        # 修改的檔案（hash 不同）
+        # Modified files (hash differs)
         for path in new_paths & old_paths:
             old_hash = self.manifest_store.get_file_hash(path)
             new_hash = current_files[path]
@@ -154,19 +154,19 @@ class IncrementalIndexer:
         new_dependencies: list[Dependency]
     ):
         """
-        應用變更到 manifest
+        Apply changes to the manifest
 
-        這只更新 manifest，向量庫更新在別處處理。
+        This only updates the manifest; vector store updates are handled elsewhere.
         """
-        # 更新/新增
+        # Update/add
         for manifest in new_manifests:
             self.manifest_store.update_file(manifest)
 
-        # 刪除
+        # Delete
         for path in change_set.deleted:
             self.manifest_store.remove_file(path)
 
-        # 保存
+        # Save
         self.manifest_store.save()
 
     def get_symbols_to_update(
@@ -175,7 +175,7 @@ class IncrementalIndexer:
         all_symbols: dict[str, Symbol]
     ) -> tuple[list[str], list[str]]:
         """
-        取得需要更新的 symbols
+        Get symbols that need updating
 
         Returns:
             (to_upsert, to_delete) symbol IDs
@@ -183,14 +183,14 @@ class IncrementalIndexer:
         to_upsert = []
         to_delete = []
 
-        # 變更/新增的檔案 → 其 symbols 需要 upsert
+        # Changed/added files -> their symbols need upsert
         for path in change_set.all_changed():
             for symbol in all_symbols.values():
                 if symbol.path == path:
                     to_upsert.append(symbol.id)
 
-        # 刪除的檔案 → 其 symbols 需要刪除
-        # 從舊 manifest 取得
+        # Deleted files -> their symbols need deletion
+        # Retrieved from old manifest
         self.manifest_store.load()
         for path in change_set.deleted:
             file_data = self.manifest_store.data["files"].get(path, {})
@@ -201,7 +201,7 @@ class IncrementalIndexer:
 
 
 def compute_file_hash(content: str) -> str:
-    """計算檔案 hash"""
+    """Compute file hash"""
     return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
@@ -211,12 +211,12 @@ def scan_directory_hashes(
     ignore_patterns: list[str] = None
 ) -> dict[str, str]:
     """
-    掃描目錄，取得所有檔案的 hash
+    Scan a directory and get hashes for all files
 
     Args:
-        root: 專案根目錄
-        extensions: 要掃描的副檔名
-        ignore_patterns: 要忽略的路徑模式
+        root: Project root directory
+        extensions: File extensions to scan
+        ignore_patterns: Path patterns to ignore
 
     Returns:
         {relative_path: content_hash}
@@ -230,7 +230,7 @@ def scan_directory_hashes(
 
     for ext in extensions:
         for file_path in root.rglob(f"*{ext}"):
-            # 檢查是否需要忽略
+            # Check if this path should be ignored
             rel_path = file_path.relative_to(root)
             should_ignore = any(
                 pattern in str(rel_path)
@@ -243,7 +243,7 @@ def scan_directory_hashes(
                 content = file_path.read_text(encoding="utf-8")
                 result[str(rel_path)] = compute_file_hash(content)
             except Exception:
-                # 無法讀取的檔案跳過
+                # Skip files that cannot be read
                 pass
 
     return result

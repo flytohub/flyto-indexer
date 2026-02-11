@@ -1,12 +1,12 @@
 """
-增量審計 - 只審計有變動的檔案
+Incremental audit -- only audit changed files
 
-流程：
-1. 載入現有 PROJECT_MAP
-2. 計算所有檔案的 hash
-3. 比對：找出新增、修改、刪除的檔案
-4. 只審計新增和修改的檔案
-5. 更新 PROJECT_MAP
+Flow:
+1. Load existing PROJECT_MAP
+2. Compute file hashes
+3. Compare: find added, modified, and deleted files
+4. Only audit new and modified files
+5. Update PROJECT_MAP
 """
 
 import json
@@ -20,13 +20,13 @@ logger = logging.getLogger(__name__)
 
 
 def file_hash(path: Path) -> str:
-    """計算檔案 hash"""
+    """Compute file hash"""
     content = path.read_bytes()
     return hashlib.sha256(content).hexdigest()[:16]
 
 
 class IncrementalAuditor:
-    """增量審計器"""
+    """Incremental auditor"""
 
     def __init__(
         self,
@@ -45,7 +45,7 @@ class IncrementalAuditor:
             "__init__.py", "conftest.py"
         ]
 
-        # 載入現有索引
+        # Load existing index
         self.project_map_path = index_dir / "PROJECT_MAP.json"
         self.manifest_path = index_dir / "manifest.json"
         self.project_map = self._load_json(self.project_map_path)
@@ -67,7 +67,7 @@ class IncrementalAuditor:
         return False
 
     def scan_files(self) -> dict[str, str]:
-        """掃描所有檔案，返回 {path: hash}"""
+        """Scan all files, return {path: hash}"""
         files = {}
         for ext in self.extensions:
             for file_path in self.project_root.rglob(f"*{ext}"):
@@ -75,7 +75,7 @@ class IncrementalAuditor:
                 if self._should_skip(rel_path):
                     continue
                 try:
-                    # 跳過太小的檔案
+                    # Skip files that are too small
                     if file_path.stat().st_size < 50:
                         continue
                     files[rel_path] = file_hash(file_path)
@@ -85,14 +85,14 @@ class IncrementalAuditor:
 
     def find_changes(self, current_files: dict[str, str]) -> dict:
         """
-        找出變動
+        Find changes
 
         Returns:
             {
-                "added": [path, ...],      # 新增的檔案
-                "modified": [path, ...],   # 修改的檔案
-                "deleted": [path, ...],    # 刪除的檔案
-                "unchanged": [path, ...],  # 沒變的檔案
+                "added": [path, ...],      # Newly added files
+                "modified": [path, ...],   # Modified files
+                "deleted": [path, ...],    # Deleted files
+                "unchanged": [path, ...],  # Unchanged files
             }
         """
         old_manifest = self.manifest.get("files", {})
@@ -102,7 +102,7 @@ class IncrementalAuditor:
         deleted = []
         unchanged = []
 
-        # 檢查當前檔案
+        # Check current files
         for path, hash_val in current_files.items():
             if path not in old_manifest:
                 added.append(path)
@@ -111,7 +111,7 @@ class IncrementalAuditor:
             else:
                 unchanged.append(path)
 
-        # 檢查刪除的檔案
+        # Check for deleted files
         for path in old_manifest:
             if path not in current_files:
                 deleted.append(path)
@@ -129,7 +129,7 @@ class IncrementalAuditor:
         auditor,  # LLMAuditor instance
         show_progress: bool = True
     ) -> dict[str, dict]:
-        """審計指定的檔案列表"""
+        """Audit the specified list of files"""
         results = {}
 
         if show_progress:
@@ -149,7 +149,7 @@ class IncrementalAuditor:
             try:
                 content = full_path.read_text(encoding="utf-8")
 
-                # 推斷語言
+                # Infer language
                 ext = Path(rel_path).suffix
                 lang_map = {
                     ".py": "python",
@@ -160,7 +160,7 @@ class IncrementalAuditor:
                 }
                 language = lang_map.get(ext, "unknown")
 
-                # 審計
+                # Audit
                 audit = auditor.audit_file(rel_path, content, language)
                 if not audit.get("error"):
                     results[rel_path] = audit
@@ -176,18 +176,18 @@ class IncrementalAuditor:
         new_audits: dict[str, dict],
         deleted_files: list[str]
     ):
-        """更新 PROJECT_MAP"""
-        # 更新 files
+        """Update PROJECT_MAP"""
+        # Update files
         files = self.project_map.get("files", {})
         for path, audit in new_audits.items():
             files[path] = audit
 
-        # 刪除已刪除的檔案
+        # Remove deleted files
         for path in deleted_files:
             if path in files:
                 del files[path]
 
-        # 重建索引
+        # Rebuild index
         categories = {}
         api_map = {}
         keyword_index = {}
@@ -224,7 +224,7 @@ class IncrementalAuditor:
         }
 
     def save(self, current_files: dict[str, str]):
-        """保存 PROJECT_MAP 和 manifest"""
+        """Save PROJECT_MAP and manifest"""
         self._save_json(self.project_map_path, self.project_map)
         self._save_json(self.manifest_path, {
             "updated_at": datetime.now().isoformat(),
@@ -238,12 +238,12 @@ class IncrementalAuditor:
         show_progress: bool = True
     ) -> dict:
         """
-        執行增量審計
+        Run incremental audit
 
         Args:
             auditor: LLMAuditor instance
-            force_full: 強制全量審計
-            show_progress: 顯示進度
+            force_full: Force full audit
+            show_progress: Show progress
 
         Returns:
             {
@@ -254,11 +254,11 @@ class IncrementalAuditor:
                 "audited": int,
             }
         """
-        # 掃描當前檔案
+        # Scan current files
         current_files = self.scan_files()
         logger.info(f"Found {len(current_files)} files")
 
-        # 找出變動
+        # Find changes
         if force_full:
             changes = {
                 "added": list(current_files.keys()),
@@ -276,24 +276,24 @@ class IncrementalAuditor:
             f"={len(changes['unchanged'])}"
         )
 
-        # 需要審計的檔案
+        # Files that need auditing
         files_to_audit = changes["added"] + changes["modified"]
 
         if files_to_audit:
-            # 審計變動的檔案
+            # Audit changed files
             new_audits = self.audit_files(files_to_audit, auditor, show_progress)
 
-            # 更新 PROJECT_MAP
+            # Update PROJECT_MAP
             self.update_project_map(new_audits, changes["deleted"])
 
-            # 保存
+            # Save
             self.save(current_files)
 
             logger.info(f"Audited {len(new_audits)} files")
         else:
             logger.info("No changes detected, skipping audit")
 
-            # 只更新刪除的檔案
+            # Only update deleted files
             if changes["deleted"]:
                 self.update_project_map({}, changes["deleted"])
                 self.save(current_files)
@@ -315,17 +315,17 @@ def incremental_audit(
     force_full: bool = False,
 ) -> dict:
     """
-    便捷函數：執行增量審計
+    Convenience function: run incremental audit
 
     Args:
-        project_path: 專案路徑
-        index_dir: 索引目錄（預設 project_path/.flyto-index）
+        project_path: Project path
+        index_dir: Index directory (default: project_path/.flyto-index)
         provider: LLM provider
         model: LLM model
-        force_full: 強制全量審計
+        force_full: Force full audit
 
     Returns:
-        審計結果統計
+        Audit result statistics
     """
     from .llm_auditor import LLMAuditor
 

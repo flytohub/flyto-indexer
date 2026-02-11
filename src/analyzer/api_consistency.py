@@ -1,11 +1,11 @@
 """
-API 格式一致性檢查
+API format consistency check
 
-檢查 API 回應是否符合標準格式：
-- 成功：{"ok": True, "data": ...}
-- 失敗：{"ok": False, "error": "..."}
+Check if API responses follow standard format:
+- Success: {"ok": True, "data": ...}
+- Failure: {"ok": False, "error": "..."}
 
-找出不符合規範的回應。
+Find non-conforming responses.
 """
 
 import re
@@ -17,7 +17,7 @@ from typing import Optional
 
 @dataclass
 class APIIssue:
-    """API 格式問題"""
+    """API format issue"""
     file_path: str
     line: int
     issue_type: str  # wrong_key, missing_ok, inconsistent_case, etc.
@@ -27,7 +27,7 @@ class APIIssue:
 
 @dataclass
 class APIConsistencyReport:
-    """API 一致性報告"""
+    """API consistency report"""
     total_files: int = 0
     total_returns: int = 0
     issues: list[APIIssue] = field(default_factory=list)
@@ -40,13 +40,13 @@ class APIConsistencyReport:
 
 
 class APIConsistencyChecker:
-    """API 格式一致性檢查器"""
+    """API format consistency checker"""
 
-    # 標準格式
+    # Standard format
     VALID_SUCCESS_KEYS = {"ok", "data", "message", "meta", "pagination"}
     VALID_ERROR_KEYS = {"ok", "error", "error_code", "details"}
 
-    # 常見錯誤格式
+    # Common error formats
     WRONG_PATTERNS = {
         "success": "ok",
         "status": "ok",
@@ -80,12 +80,12 @@ class APIConsistencyChecker:
         return False
 
     def _is_api_file(self, path: str) -> bool:
-        """判斷是否為 API 檔案"""
+        """Determine if file is an API file"""
         parts = Path(path).parts
         return any(d in parts for d in self.api_dirs)
 
     def scan_directory(self) -> list[str]:
-        """掃描目錄"""
+        """Scan directory"""
         files = []
         for ext in [".py", ".ts", ".js"]:
             for file_path in self.project_root.rglob(f"*{ext}"):
@@ -95,28 +95,28 @@ class APIConsistencyChecker:
         return files
 
     def analyze_python_file(self, rel_path: str, content: str) -> tuple[int, list[APIIssue]]:
-        """分析 Python API 檔案"""
+        """Analyze Python API file"""
         issues = []
         return_count = 0
 
         lines = content.split("\n")
 
-        # 找所有 return 語句
+        # Find all return statements
         for i, line in enumerate(lines):
             stripped = line.strip()
 
-            # 跳過註解
+            # Skip comments
             if stripped.startswith("#"):
                 continue
 
-            # 找 return {...}
+            # Find return {...}
             if "return" in stripped and "{" in stripped:
                 return_count += 1
                 issue = self._check_python_return(rel_path, i + 1, stripped)
                 if issue:
                     issues.append(issue)
 
-            # 找 JSONResponse({...})
+            # Find JSONResponse({...})
             if "JSONResponse" in stripped and "{" in stripped:
                 return_count += 1
                 issue = self._check_python_return(rel_path, i + 1, stripped)
@@ -126,15 +126,15 @@ class APIConsistencyChecker:
         return return_count, issues
 
     def _check_python_return(self, file_path: str, line: int, code: str) -> Optional[APIIssue]:
-        """檢查 Python return 語句"""
-        # 提取字典部分
+        """Check Python return statement"""
+        # Extract dict part
         dict_match = re.search(r'\{[^}]+\}', code)
         if not dict_match:
             return None
 
         dict_str = dict_match.group()
 
-        # 檢查錯誤的 key
+        # Check for wrong keys
         for wrong_key, correct_key in self.WRONG_PATTERNS.items():
             pattern = rf'["\']?{wrong_key}["\']?\s*:'
             if re.search(pattern, dict_str, re.IGNORECASE):
@@ -146,9 +146,9 @@ class APIConsistencyChecker:
                     suggestion=f'Use "{correct_key}" instead of "{wrong_key}"',
                 )
 
-        # 檢查是否缺少 ok
+        # Check if "ok" is missing
         if '"ok"' not in dict_str and "'ok'" not in dict_str:
-            # 但有 data 或 error
+            # But has data or error
             has_data = '"data"' in dict_str or "'data'" in dict_str
             has_error = '"error"' in dict_str or "'error'" in dict_str
 
@@ -164,7 +164,7 @@ class APIConsistencyChecker:
         return None
 
     def analyze_typescript_file(self, rel_path: str, content: str) -> tuple[int, list[APIIssue]]:
-        """分析 TypeScript API 檔案"""
+        """Analyze TypeScript API file"""
         issues = []
         return_count = 0
 
@@ -173,11 +173,11 @@ class APIConsistencyChecker:
         for i, line in enumerate(lines):
             stripped = line.strip()
 
-            # 跳過註解
+            # Skip comments
             if stripped.startswith("//"):
                 continue
 
-            # 找 return {...} 或 res.json({...})
+            # Find return {...} or res.json({...})
             if ("return" in stripped or "res.json" in stripped or "res.send" in stripped) and "{" in stripped:
                 return_count += 1
                 issue = self._check_ts_return(rel_path, i + 1, stripped)
@@ -187,15 +187,15 @@ class APIConsistencyChecker:
         return return_count, issues
 
     def _check_ts_return(self, file_path: str, line: int, code: str) -> Optional[APIIssue]:
-        """檢查 TypeScript return 語句"""
-        # 提取物件部分
+        """Check TypeScript return statement"""
+        # Extract object part
         obj_match = re.search(r'\{[^}]+\}', code)
         if not obj_match:
             return None
 
         obj_str = obj_match.group()
 
-        # 檢查錯誤的 key
+        # Check for wrong keys
         for wrong_key, correct_key in self.WRONG_PATTERNS.items():
             pattern = rf'\b{wrong_key}\s*:'
             if re.search(pattern, obj_str, re.IGNORECASE):
@@ -207,7 +207,7 @@ class APIConsistencyChecker:
                     suggestion=f'Use "{correct_key}" instead of "{wrong_key}"',
                 )
 
-        # 檢查是否缺少 ok
+        # Check if "ok" is missing
         if "ok:" not in obj_str and "ok :" not in obj_str:
             has_data = "data:" in obj_str or "data :" in obj_str
             has_error = "error:" in obj_str or "error :" in obj_str
@@ -224,7 +224,7 @@ class APIConsistencyChecker:
         return None
 
     def analyze(self) -> APIConsistencyReport:
-        """執行分析"""
+        """Run the analysis"""
         report = APIConsistencyReport()
 
         files = self.scan_directory()
@@ -247,13 +247,13 @@ class APIConsistencyChecker:
             report.total_returns += count
             report.issues.extend(issues)
 
-        # 按檔案排序
+        # Sort by file
         report.issues.sort(key=lambda x: (x.file_path, x.line))
 
         return report
 
     def print_report(self, report: APIConsistencyReport):
-        """印出報告"""
+        """Print the report"""
         print(f"\n{'='*70}")
         print("API Consistency Check")
         print(f"{'='*70}")
@@ -267,7 +267,7 @@ class APIConsistencyChecker:
             print("API FORMAT ISSUES")
             print(f"{'='*70}")
 
-            # 按類型分組
+            # Group by type
             by_type = {}
             for issue in report.issues:
                 if issue.issue_type not in by_type:
@@ -289,6 +289,6 @@ class APIConsistencyChecker:
 
 
 def check_api_consistency(project_path: Path) -> APIConsistencyReport:
-    """便捷函數"""
+    """Convenience function"""
     checker = APIConsistencyChecker(project_path)
     return checker.analyze()

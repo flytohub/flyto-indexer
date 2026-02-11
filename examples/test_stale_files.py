@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""測試陳舊檔案偵測"""
+"""Test stale file detection."""
 
 import sys
 from pathlib import Path
@@ -9,10 +9,10 @@ sys.path.insert(0, str(project_root / "src"))
 
 from analyzer.stale_files import StaleFileDetector
 
-FLYTOHUB_ROOT = Path("/Library/其他專案/flytohub")
+FLYTOHUB_ROOT = Path("/path/to/your/projects")
 
 def main():
-    # 只測試 flyto-cloud（有完整 git 歷史）
+    # Only test flyto-cloud (has complete git history)
     project_path = FLYTOHUB_ROOT / "flyto-cloud"
 
     print(f"\n{'#' * 70}")
@@ -21,7 +21,7 @@ def main():
 
     detector = StaleFileDetector(
         project_path,
-        stale_days=90,  # 3 個月沒動過
+        stale_days=90,  # Not modified for 3 months
     )
     report = detector.analyze()
     detector.print_report(report)

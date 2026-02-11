@@ -1,10 +1,10 @@
 """
-陳舊檔案偵測 - 用 git 歷史找出長期沒人動過的檔案
+Stale file detection - use git history to find files untouched for a long time
 
-這比靜態 import 分析更實用，因為：
-1. 如果一個檔案 6 個月沒人改過，很可能是死碼
-2. 如果整個目錄都沒人動過，可能整個功能都廢棄了
-3. 結合最後修改者，可以知道該問誰
+More practical than static import analysis because:
+1. If a file hasn't been changed in 6 months, it's likely dead code
+2. If an entire directory is untouched, the feature may be deprecated
+3. Combined with last author, helps identify who to ask
 """
 
 import subprocess
@@ -16,7 +16,7 @@ from collections import defaultdict
 
 @dataclass
 class StaleFile:
-    """陳舊檔案"""
+    """Stale file"""
     path: str
     last_modified: datetime
     last_author: str
@@ -26,7 +26,7 @@ class StaleFile:
 
 @dataclass
 class StaleReport:
-    """陳舊分析報告"""
+    """Stale analysis report"""
     total_files: int = 0
     stale_files: list[StaleFile] = field(default_factory=list)
     stale_dirs: list[tuple[str, int, int]] = field(default_factory=list)  # (dir, file_count, avg_days)
@@ -34,12 +34,12 @@ class StaleReport:
 
 
 class StaleFileDetector:
-    """陳舊檔案偵測器"""
+    """Stale file detector"""
 
     def __init__(
         self,
         project_root: Path,
-        stale_days: int = 180,  # 6 個月沒動過算陳舊
+        stale_days: int = 180,  # 6 months untouched counts as stale
         extensions: list[str] = None,
         ignore_patterns: list[str] = None,
     ):
@@ -58,7 +58,7 @@ class StaleFileDetector:
         return False
 
     def _run_git(self, args: list[str]) -> str:
-        """執行 git 命令"""
+        """Execute git command"""
         try:
             result = subprocess.run(
                 ["git", "-C", str(self.project_root)] + args,
@@ -72,12 +72,12 @@ class StaleFileDetector:
 
     def get_file_history(self, rel_path: str) -> tuple[datetime, str, int]:
         """
-        取得檔案的 git 歷史
+        Get git history of a file
 
         Returns:
             (last_modified, last_author, commit_count)
         """
-        # 最後修改時間和作者
+        # Last modification time and author
         log = self._run_git([
             "log", "-1",
             "--format=%ai|%an",
@@ -102,7 +102,7 @@ class StaleFileDetector:
         except Exception as e:
             return None, "", 0
 
-        # commit 次數
+        # Commit count
         count_output = self._run_git([
             "rev-list", "--count", "HEAD",
             "--", rel_path
@@ -112,7 +112,7 @@ class StaleFileDetector:
         return last_modified, author.strip(), commit_count
 
     def scan_directory(self) -> list[str]:
-        """掃描目錄"""
+        """Scan directory"""
         files = []
         for ext in self.extensions:
             for file_path in self.project_root.rglob(f"*{ext}"):
@@ -122,12 +122,12 @@ class StaleFileDetector:
         return files
 
     def analyze(self) -> StaleReport:
-        """執行分析"""
+        """Run analysis"""
         report = StaleReport()
         now = datetime.now()
         stale_threshold = now - timedelta(days=self.stale_days)
 
-        # 目錄統計
+        # Directory statistics
         dir_stats = defaultdict(lambda: {"files": [], "total_days": 0})
 
         files = self.scan_directory()
@@ -142,13 +142,13 @@ class StaleFileDetector:
             last_modified, author, commit_count = self.get_file_history(rel_path)
 
             if last_modified is None:
-                # 從未提交過的檔案
+                # Files never committed
                 report.never_committed.append(rel_path)
                 continue
 
             days_since = (now - last_modified).days
 
-            # 陳舊檔案
+            # Stale files
             if last_modified < stale_threshold:
                 stale_file = StaleFile(
                     path=rel_path,
@@ -159,26 +159,26 @@ class StaleFileDetector:
                 )
                 report.stale_files.append(stale_file)
 
-            # 目錄統計
+            # Directory statistics
             dir_path = str(Path(rel_path).parent)
             dir_stats[dir_path]["files"].append(rel_path)
             dir_stats[dir_path]["total_days"] += days_since
 
-        # 計算陳舊目錄
+        # Calculate stale directories
         for dir_path, stats in dir_stats.items():
             file_count = len(stats["files"])
             avg_days = stats["total_days"] // file_count if file_count > 0 else 0
             if avg_days > self.stale_days:
                 report.stale_dirs.append((dir_path, file_count, avg_days))
 
-        # 排序
+        # Sort
         report.stale_files.sort(key=lambda x: x.days_since_modified, reverse=True)
         report.stale_dirs.sort(key=lambda x: x[2], reverse=True)
 
         return report
 
     def print_report(self, report: StaleReport):
-        """印出報告"""
+        """Print report"""
         print(f"\n{'=' * 70}")
         print(f"Stale Files Analysis (>{self.stale_days} days without changes)")
         print(f"{'=' * 70}")
@@ -214,6 +214,6 @@ class StaleFileDetector:
 
 
 def detect_stale_files(project_path: Path, stale_days: int = 180) -> StaleReport:
-    """便捷函數"""
+    """Convenience function"""
     detector = StaleFileDetector(project_path, stale_days)
     return detector.analyze()
