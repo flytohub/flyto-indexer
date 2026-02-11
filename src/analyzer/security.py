@@ -10,9 +10,8 @@ Checks:
 """
 
 import re
-from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional
+from pathlib import Path
 
 
 @dataclass
@@ -141,10 +140,7 @@ class SecurityScanner:
         ]
 
     def _should_skip(self, path: str) -> bool:
-        for pattern in self.ignore_patterns:
-            if pattern in path:
-                return True
-        return False
+        return any(pattern in path for pattern in self.ignore_patterns)
 
     def scan_directory(self) -> list[str]:
         """Scan directory for files"""
@@ -200,8 +196,7 @@ class SecurityScanner:
                     break
 
             # 2. Password detection (with stricter filtering)
-            if re.search(self.PASSWORD_PATTERN, line, re.IGNORECASE):
-                if not self._is_placeholder(line) and not self._is_password_false_positive(line):
+            if re.search(self.PASSWORD_PATTERN, line, re.IGNORECASE) and not self._is_placeholder(line) and not self._is_password_false_positive(line):
                     issues.append(SecurityIssue(
                         file_path=rel_path,
                         line=line_num,
@@ -275,10 +270,7 @@ class SecurityScanner:
             "process.env", "os.environ", "os.getenv", "env.",
             "${", "{{", "}}", "params.", "config.",
         ]
-        if any(p in line_lower for p in placeholders):
-            return True
-
-        return False
+        return bool(any(p in line_lower for p in placeholders))
 
     def _is_password_false_positive(self, line: str) -> bool:
         """Check if password detection is a false positive"""
@@ -292,9 +284,9 @@ class SecurityScanner:
                 return True
 
         # 2. API endpoint paths (contain "password" but are URLs)
-        if any(p in line_lower for p in ['/password', '-password', '_password:', 'password/']):
-            if '://' not in line_lower:  # Not a DB URL with credentials
-                return True
+        if any(p in line_lower for p in ['/password', '-password', '_password:', 'password/']) and '://' not in line_lower:
+            # Not a DB URL with credentials
+            return True
 
         # 3. Type definitions (password: 'password' style mappings)
         if re.search(r'password["\']?\s*:\s*["\']password', line_lower):
@@ -309,10 +301,9 @@ class SecurityScanner:
             return True
 
         # 6. i18n keys or constant definitions
-        if any(p in line_lower for p in ['password_', 'password.', '_password', 'password:']):
-            if re.search(r'["\'][^"\']*password[^"\']*["\']', line_lower):
-                # The value itself contains "password", likely an i18n key
-                return True
+        if any(p in line_lower for p in ['password_', 'password.', '_password', 'password:']) and re.search(r'["\'][^"\']*password[^"\']*["\']', line_lower):
+            # The value itself contains "password", likely an i18n key
+            return True
 
         # 7. Vue v-model or props
         if 'v-model' in line_lower or ':password' in line_lower or '@password' in line_lower:
@@ -324,11 +315,7 @@ class SecurityScanner:
 
         # 9. Obvious test values
         test_values = ['password123', 'test123', '12345678', 'testpassword', 'admin123']
-        for tv in test_values:
-            if tv in line_lower:
-                return True
-
-        return False
+        return any(tv in line_lower for tv in test_values)
 
     def _is_unsafe_func_false_positive(self, line: str, func_name: str) -> bool:
         """Check if unsafe function detection is a false positive"""
@@ -357,10 +344,7 @@ class SecurityScanner:
             return True
 
         # 6. Docstrings
-        if '"""' in line or "'''" in line:
-            return True
-
-        return False
+        return bool('"""' in line or "'''" in line)
 
     def _mask_secret(self, line: str) -> str:
         """Mask sensitive values"""

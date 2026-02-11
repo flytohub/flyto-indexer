@@ -6,11 +6,8 @@ Two-layer strategy:
 2. Import analysis (fallback): test file imports source → establish link
 """
 
-import os
 import re
-from pathlib import PurePosixPath
 from typing import Optional
-
 
 # Test file patterns (basename matching)
 _TEST_FILE_PATTERNS = [
@@ -62,7 +59,7 @@ class TestMapper:
                     all_test_paths.add(p)
 
         # Layer 1: Naming convention
-        for proj, paths in project_files.items():
+        for _proj, paths in project_files.items():
             source_paths = [p for p in paths if not self._is_test_file(p)]
             test_paths = [p for p in paths if self._is_test_file(p)]
 
@@ -74,7 +71,7 @@ class TestMapper:
                     self._test_to_source[best] = source
 
         # Layer 2: Import analysis (for unmapped test files)
-        for dep_id, dep in dependencies.items():
+        for _dep_id, dep in dependencies.items():
             if dep.get("type") != "imports":
                 continue
             source_id = dep.get("source", "")
@@ -111,8 +108,7 @@ class TestMapper:
                     if target_path:
                         break
 
-            if target_path and not self._is_test_file(target_path):
-                if target_path not in self._source_to_test:
+            if target_path and not self._is_test_file(target_path) and target_path not in self._source_to_test:
                     self._source_to_test[target_path] = source_path
                     self._test_to_source[source_path] = target_path
 
@@ -136,10 +132,7 @@ class TestMapper:
                 return True
         # Check directory
         parts = path.replace("\\", "/").split("/")
-        for part in parts:
-            if part.lower() in _TEST_DIRS:
-                return True
-        return False
+        return any(part.lower() in _TEST_DIRS for part in parts)
 
     def _find_test_by_convention(self, source: str, test_paths: list[str]) -> list[str]:
         """Find test files matching a source file by naming convention."""

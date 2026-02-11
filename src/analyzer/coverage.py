@@ -10,9 +10,9 @@ Strategy:
 
 import ast
 import re
-from pathlib import Path
-from dataclasses import dataclass, field
 from collections import defaultdict
+from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass
@@ -64,10 +64,7 @@ class CoverageAnalyzer:
         self.test_coverage: dict[str, set[str]] = defaultdict(set)  # module -> tested functions
 
     def _should_skip(self, path: str) -> bool:
-        for pattern in self.ignore_patterns:
-            if pattern in path:
-                return True
-        return False
+        return any(pattern in path for pattern in self.ignore_patterns)
 
     def _is_test_file(self, path: str) -> bool:
         """Determine if a file is a test file"""
@@ -144,9 +141,8 @@ class CoverageAnalyzer:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if not node.name.startswith("_"):
                     functions.append(node.name)
-            elif isinstance(node, ast.ClassDef):
-                if not node.name.startswith("_"):
-                    classes.append(node.name)
+            elif isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
+                classes.append(node.name)
 
         return {"functions": functions, "classes": classes}
 
@@ -263,9 +259,8 @@ class CoverageAnalyzer:
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     imports.add(alias.name.split(".")[0])
-            elif isinstance(node, ast.ImportFrom):
-                if node.module:
-                    imports.add(node.module.split(".")[0])
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imports.add(node.module.split(".")[0])
 
         return imports
 
@@ -282,11 +277,7 @@ class CoverageAnalyzer:
             for match in re.finditer(pattern, content):
                 module = match.group(1)
                 # Get module name
-                if module.startswith("."):
-                    # Relative path
-                    name = Path(module).stem
-                else:
-                    name = module.split("/")[0]
+                name = Path(module).stem if module.startswith(".") else module.split("/")[0]
                 imports.add(name.lower())
 
         return imports

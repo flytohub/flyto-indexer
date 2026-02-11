@@ -8,11 +8,11 @@ Strategy:
 4. Merge adjacent duplicate blocks
 """
 
-import re
 import hashlib
-from pathlib import Path
-from dataclasses import dataclass, field
+import re
 from collections import defaultdict
+from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass
@@ -67,10 +67,7 @@ class DuplicateDetector:
         self.chunk_index: dict[str, list[tuple[str, int, list[str]]]] = defaultdict(list)
 
     def _should_skip(self, path: str) -> bool:
-        for pattern in self.ignore_patterns:
-            if pattern in path:
-                return True
-        return False
+        return any(pattern in path for pattern in self.ignore_patterns)
 
     def _normalize_line(self, line: str) -> str:
         """Normalize code line (remove whitespace and comments)"""
@@ -155,13 +152,13 @@ class DuplicateDetector:
         seen_pairs = set()
         duplicates_raw = []
 
-        for chunk_hash, locations in self.chunk_index.items():
+        for _chunk_hash, locations in self.chunk_index.items():
             if len(locations) < 2:
                 continue
 
             # Find all pairs
             for i, (file1, start1, lines1) in enumerate(locations):
-                for file2, start2, lines2 in locations[i + 1:]:
+                for file2, start2, _lines2 in locations[i + 1:]:
                     # Skip adjacent duplicates within the same file
                     if file1 == file2 and abs(start1 - start2) < self.min_lines:
                         continue
@@ -264,7 +261,7 @@ class DuplicateDetector:
                     for line in preview_lines:
                         print(f"    | {line[:60]}")
                     if len(block.code_preview.split("\n")) > 3:
-                        print(f"    | ...")
+                        print("    | ...")
         else:
             print("\n  No significant duplicates found")
 

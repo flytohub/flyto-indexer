@@ -707,18 +707,17 @@ class TestEdgeCases:
     """Test edge cases."""
 
     def test_empty_session_id(self):
-        """Empty string as session_id should work."""
+        """Empty string as session_id should be rejected by validation."""
         store = SessionStore()
-        s = store.get_or_create("")
-        assert s.session_id == ""
-        assert store.get("") is s
+        with pytest.raises(ValueError):
+            store.get_or_create("")
 
     def test_very_long_session_id(self):
+        """Session IDs over 64 chars should be rejected by validation."""
         long_id = "x" * 10000
         store = SessionStore()
-        s = store.get_or_create(long_id)
-        assert s.session_id == long_id
-        assert store.get(long_id) is s
+        with pytest.raises(ValueError):
+            store.get_or_create(long_id)
 
     def test_unicode_session_id(self):
         store = SessionStore()

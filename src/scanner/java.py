@@ -13,11 +13,11 @@ import re
 from pathlib import Path
 
 try:
+    from ..models import Dependency, DependencyType, Symbol, SymbolType
     from .base import BaseScanner
-    from ..models import Symbol, Dependency, SymbolType, DependencyType
 except ImportError:
+    from models import Dependency, DependencyType, Symbol, SymbolType
     from scanner.base import BaseScanner
-    from models import Symbol, Dependency, SymbolType, DependencyType
 
 
 class JavaScanner(BaseScanner):
@@ -105,10 +105,9 @@ class JavaScanner(BaseScanner):
         file_source_id = f"{self.project}:{rel_path}:file:{file_path.stem}"
 
         # Extract package
-        package = ""
         package_match = self.PACKAGE_PATTERN.search(content)
         if package_match:
-            package = package_match.group(1).strip()
+            package_match.group(1).strip()
 
         # Extract imports
         for match in self.IMPORT_PATTERN.finditer(content):

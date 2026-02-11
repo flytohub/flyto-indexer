@@ -9,19 +9,24 @@ Usage:
 
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
+
+from .context.loader import ContextLoader
+from .indexer import IncrementalIndexer, scan_directory_hashes
+from .models import Dependency, FileManifest, ProjectIndex, Symbol, SymbolType
+from .scanner import (
+    GoScanner,
+    JavaScanner,
+    PythonScanner,
+    RustScanner,
+    ScanResult,
+    TypeScriptScanner,
+    VueScanner,
+)
 
 logger = logging.getLogger(__name__)
-
-from .models import ProjectIndex, Symbol, Dependency, FileManifest, SymbolType
-from .scanner import (
-    PythonScanner, VueScanner, TypeScriptScanner,
-    GoScanner, RustScanner, JavaScanner, ScanResult
-)
-from .indexer import IncrementalIndexer, scan_directory_hashes, compute_file_hash
-from .context.loader import ContextLoader, L0Context, L1Context, L2Context
 
 
 class IndexEngine:
@@ -370,7 +375,7 @@ class IndexEngine:
         # Build file path -> imports mapping
         # imports format: {imported_name: module_path}
         file_imports = {}  # path -> {name: module}
-        for dep_id, dep in self.index.dependencies.items():
+        for _dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "imports":
                 continue
 
@@ -403,7 +408,7 @@ class IndexEngine:
                     module_to_symbols[mod_key].append(sid)
 
         # Resolve each call dependency
-        for dep_id, dep in self.index.dependencies.items():
+        for _dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "calls":
                 continue
 
@@ -505,7 +510,7 @@ class IndexEngine:
         """
         reverse_index = {}  # symbol_id -> [caller_ids]
 
-        for dep_id, dep in self.index.dependencies.items():
+        for _dep_id, dep in self.index.dependencies.items():
             # Track multiple dependency types
             if dep.dep_type.value not in self.TRACKED_DEP_TYPES:
                 continue

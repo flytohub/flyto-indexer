@@ -17,12 +17,12 @@ See FLYTO_SCHEMA_V1.md for the contract specification.
 """
 
 import json
-from pathlib import Path
-from datetime import datetime, timezone
 from collections import defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
 
-from .models import ProjectIndex, SymbolType, DependencyType
-from .flyto_tags import generate_tags, compute_tag_stats, write_tags
+from .flyto_tags import compute_tag_stats, generate_tags, write_tags
+from .models import DependencyType, ProjectIndex, SymbolType
 
 # Version
 GENERATOR_NAME = "flyto-indexer"
@@ -430,7 +430,7 @@ def _build_one_liner(path: str, info: dict, hotspot_paths: set) -> str:
     cat_label = CATEGORY_LABELS.get(category, category.title())
 
     # File basename for context
-    basename = path.rsplit("/", 1)[-1]
+    path.rsplit("/", 1)[-1]
 
     # Top symbol names (max 3)
     sym_names = [s["name"] for s in symbols[:3]]

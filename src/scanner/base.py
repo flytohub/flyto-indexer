@@ -2,15 +2,14 @@
 Base scanner class for code analysis.
 """
 
+import hashlib
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Generator
-import hashlib
 
 try:
-    from ..models import Symbol, Dependency, FileManifest
+    from ..models import Dependency, FileManifest, Symbol
 except ImportError:
-    from models import Symbol, Dependency, FileManifest
+    from models import Dependency, FileManifest, Symbol
 
 
 class BaseScanner(ABC):

@@ -8,16 +8,16 @@ Core logic:
 4. Update the manifest
 """
 
-import json
 import hashlib
+import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-from dataclasses import dataclass
 
 try:
-    from ..models import FileManifest, Symbol, Dependency
+    from ..models import Dependency, FileManifest, Symbol
 except ImportError:
-    from models import FileManifest, Symbol, Dependency
+    from models import Dependency, FileManifest, Symbol
 
 
 @dataclass

@@ -342,14 +342,14 @@ def cmd_status(args):
     print(f"  Languages:  {counts.get('languages', {})}")
     print()
     if tag_stats:
-        print(f"  Tags:")
+        print("  Tags:")
         print(f"    Dead code:      {tag_stats.get('dead_code', 0)} symbols ({tag_stats.get('dead_code_lines', 0)} lines)")
         print(f"    TDD covered:    {tag_stats.get('tdd_covered', 0)} / {tag_stats.get('tdd_testable', 0)} testable")
         print(f"    TDD uncovered:  {tag_stats.get('tdd_uncovered', 0)}")
     elif tag_counts:
         print(f"  Tags: {tag_counts}")
     else:
-        print(f"  Tags: (none)")
+        print("  Tags: (none)")
     print()
     if desc_stats:
         desc_total = desc_stats.get("total", 0)
@@ -432,8 +432,8 @@ def cmd_brief(args):
 
 def cmd_describe(args):
     """Read or write file descriptions in .flyto/descriptions.jsonl."""
-    from datetime import datetime, timezone
     import hashlib
+    from datetime import datetime, timezone
 
     project_path = Path(args.path).resolve()
     flyto_dir = project_path / ".flyto"
@@ -481,7 +481,7 @@ def cmd_describe(args):
     else:
         # Read mode: find latest description for this file
         if not desc_path.exists():
-            print(f"No descriptions found. Run 'flyto-index scan' first.", file=sys.stderr)
+            print("No descriptions found. Run 'flyto-index scan' first.", file=sys.stderr)
             sys.exit(1)
 
         latest = None
@@ -508,7 +508,7 @@ def cmd_describe(args):
             print(f"File: {file_path}")
             print(f"  {latest.get('one_liner', '(no description)')}")
             if stale:
-                print(f"  [STALE] File has changed since this description was written.")
+                print("  [STALE] File has changed since this description was written.")
             print(f"  Source: {latest.get('source', 'unknown')}")
             print(f"  Updated: {latest.get('updatedAt', 'unknown')}")
         else:

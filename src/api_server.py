@@ -25,12 +25,12 @@ API Endpoints:
     GET  /stats               - Index statistics
 """
 
-import json
 import argparse
-from pathlib import Path
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
+import json
 import logging
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from urllib.parse import urlparse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -283,7 +283,7 @@ def impact_analysis(symbol_id: str) -> dict:
     dependencies = index.get("dependencies", {})
     affected = []
 
-    for dep_id, dep in dependencies.items():
+    for _dep_id, dep in dependencies.items():
         if dep.get("target") == symbol_id or symbol_id in dep.get("target", ""):
             source_id = dep.get("source", "")
             source_symbol = index.get("symbols", {}).get(source_id, {})

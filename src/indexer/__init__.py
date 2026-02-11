@@ -1,9 +1,9 @@
 """Indexer module exports."""
 
 from .incremental import (
+    ChangeSet,
     IncrementalIndexer,
     ManifestStore,
-    ChangeSet,
     compute_file_hash,
     scan_directory_hashes,
 )

@@ -9,11 +9,11 @@ Flow:
 5. Update PROJECT_MAP
 """
 
-import json
 import hashlib
+import json
 import logging
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -61,10 +61,7 @@ class IncrementalAuditor:
         path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 
     def _should_skip(self, path: str) -> bool:
-        for pattern in self.ignore_patterns:
-            if pattern in path:
-                return True
-        return False
+        return any(pattern in path for pattern in self.ignore_patterns)
 
     def scan_files(self) -> dict[str, str]:
         """Scan all files, return {path: hash}"""

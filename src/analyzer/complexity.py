@@ -10,8 +10,8 @@ Metrics:
 
 import ast
 import re
-from pathlib import Path
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 
@@ -98,10 +98,7 @@ class ComplexityAnalyzer:
         self.max_branches = max_branches
 
     def _should_skip(self, path: str) -> bool:
-        for pattern in self.ignore_patterns:
-            if pattern in path:
-                return True
-        return False
+        return any(pattern in path for pattern in self.ignore_patterns)
 
     def scan_directory(self) -> list[str]:
         """Scan directory"""
@@ -260,7 +257,6 @@ class ComplexityAnalyzer:
         # Simplified calculation
         branches = 0
         max_depth = 0
-        current_depth = 0
 
         keywords = ["if", "else", "for", "while", "switch", "try", "catch"]
 
@@ -474,7 +470,7 @@ class ComplexityAnalyzer:
         print(f"Functions analyzed: {report.total_functions}")
         print(f"Complex functions: {len(report.complex_functions)}")
 
-        print(f"\nStatistics:")
+        print("\nStatistics:")
         print(f"  Average lines/function: {report.avg_lines:.1f}")
         print(f"  Average depth: {report.avg_depth:.1f}")
         print(f"  Max lines: {report.max_lines}")
@@ -482,7 +478,7 @@ class ComplexityAnalyzer:
 
         if report.complex_functions:
             print(f"\n{'='*70}")
-            print(f"COMPLEX FUNCTIONS (top 20)")
+            print("COMPLEX FUNCTIONS (top 20)")
             print(f"{'='*70}")
 
             for func in report.complex_functions[:20]:
@@ -492,7 +488,7 @@ class ComplexityAnalyzer:
                 if func.issues:
                     print(f"  Issues: {', '.join(func.issues)}")
         else:
-            print(f"\n  No overly complex functions found")
+            print("\n  No overly complex functions found")
 
 
 def analyze_complexity(project_path: Path) -> ComplexityReport:

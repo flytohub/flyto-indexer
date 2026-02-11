@@ -1,11 +1,11 @@
 """Code analyzers"""
-from .dead_code import DeadCodeDetector, DeadCodeReport, detect_dead_code
-from .stale_files import StaleFileDetector, StaleReport, detect_stale_files
+from .api_consistency import APIConsistencyChecker, APIConsistencyReport, check_api_consistency
 from .complexity import ComplexityAnalyzer, ComplexityReport, analyze_complexity
 from .coverage import CoverageAnalyzer, CoverageReport, analyze_coverage
+from .dead_code import DeadCodeDetector, DeadCodeReport, detect_dead_code
 from .duplicates import DuplicateDetector, DuplicateReport, detect_duplicates
-from .api_consistency import APIConsistencyChecker, APIConsistencyReport, check_api_consistency
-from .security import SecurityScanner, SecurityReport, scan_security
+from .security import SecurityReport, SecurityScanner, scan_security
+from .stale_files import StaleFileDetector, StaleReport, detect_stale_files
 
 __all__ = [
     # Dead code

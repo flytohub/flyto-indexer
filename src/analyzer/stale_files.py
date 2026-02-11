@@ -8,10 +8,10 @@ More practical than static import analysis because:
 """
 
 import subprocess
-from pathlib import Path
-from datetime import datetime, timedelta
-from dataclasses import dataclass, field
 from collections import defaultdict
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from pathlib import Path
 
 
 @dataclass
@@ -52,10 +52,7 @@ class StaleFileDetector:
         ]
 
     def _should_skip(self, path: str) -> bool:
-        for pattern in self.ignore_patterns:
-            if pattern in path:
-                return True
-        return False
+        return any(pattern in path for pattern in self.ignore_patterns)
 
     def _run_git(self, args: list[str]) -> str:
         """Execute git command"""
@@ -67,7 +64,7 @@ class StaleFileDetector:
                 timeout=30,
             )
             return result.stdout.strip()
-        except Exception as e:
+        except Exception:
             return ""
 
     def get_file_history(self, rel_path: str) -> tuple[datetime, str, int]:
@@ -99,7 +96,7 @@ class StaleFileDetector:
             if " +" in date_str or " -" in date_str:
                 date_str = date_str.rsplit(" ", 1)[0]
             last_modified = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-        except Exception as e:
+        except Exception:
             return None, "", 0
 
         # Commit count
@@ -197,7 +194,7 @@ class StaleFileDetector:
 
         if report.stale_files:
             print(f"\n{'=' * 70}")
-            print(f"STALE FILES (top 20 oldest)")
+            print("STALE FILES (top 20 oldest)")
             print(f"{'=' * 70}")
             for sf in report.stale_files[:20]:
                 print(f"  🕸️ {sf.path}")

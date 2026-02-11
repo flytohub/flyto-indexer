@@ -13,12 +13,11 @@ Philosophy:
 """
 
 import json
-from datetime import datetime, timezone
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 
-from .models import ProjectIndex, SymbolType, DependencyType
-
+from .models import DependencyType, ProjectIndex, SymbolType
 
 # Symbol types that should be referenced (dead code candidates).
 SHOULD_BE_REFERENCED = {
@@ -242,22 +241,19 @@ def _find_dead_code(index: ProjectIndex) -> dict[str, str]:
             continue
 
         # Composable: check if imported by any file
-        if sym.symbol_type == SymbolType.COMPOSABLE:
-            if _is_composable_imported(sym, file_basename, index):
-                continue
+        if sym.symbol_type == SymbolType.COMPOSABLE and _is_composable_imported(sym, file_basename, index):
+            continue
 
         # Class/Component with matching filename: check if file is imported
-        if sym.symbol_type in (SymbolType.CLASS, SymbolType.COMPONENT):
-            if file_basename == sym.name:
-                if _is_file_imported(sym, file_basename, index):
-                    continue
+        if sym.symbol_type in (SymbolType.CLASS, SymbolType.COMPONENT) and file_basename == sym.name and _is_file_imported(sym, file_basename, index):
+            continue
 
         # Final check: reverse_index
         callers = index.reverse_index.get(sym_id, [])
         if sym.reference_count > 0 or len(callers) > 0:
             continue
 
-        dead[sym_id] = f"ref_count=0, no callers, not in referenced_names"
+        dead[sym_id] = "ref_count=0, no callers, not in referenced_names"
 
     return dead
 
@@ -427,7 +423,4 @@ def _is_test_path(path: str) -> bool:
         if indicator in p:
             return True
     basename = p.rsplit("/", 1)[-1]
-    for pattern in TEST_NAME_PATTERNS:
-        if pattern in basename:
-            return True
-    return False
+    return any(pattern in basename for pattern in TEST_NAME_PATTERNS)

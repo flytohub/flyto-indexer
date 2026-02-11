@@ -9,7 +9,7 @@ Used by:
 All canonical tool names are defined here. VPS and extension MUST use these names.
 """
 
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Set
 
 # =============================================================================
 # Canonical tool names that VPS bridges to the Extension

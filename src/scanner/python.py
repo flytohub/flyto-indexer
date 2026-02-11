@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Optional
 
 try:
+    from ..models import Dependency, DependencyType, Symbol, SymbolType
     from .base import BaseScanner
-    from ..models import Symbol, Dependency, SymbolType, DependencyType
 except ImportError:
+    from models import Dependency, DependencyType, Symbol, SymbolType
     from scanner.base import BaseScanner
-    from models import Symbol, Dependency, SymbolType, DependencyType
 
 
 class PythonScanner(BaseScanner):
@@ -35,7 +35,7 @@ class PythonScanner(BaseScanner):
 
         try:
             tree = ast.parse(content)
-        except SyntaxError as e:
+        except SyntaxError:
             # Syntax error, return empty result
             return [], []
 
@@ -112,14 +112,13 @@ class PythonScanner(BaseScanner):
                         "line": node.lineno,
                     })
 
-            elif isinstance(node, ast.ImportFrom):
-                if node.module:
-                    names = [a.name for a in node.names]
-                    imports.append({
-                        "module": node.module,
-                        "names": names,
-                        "line": node.lineno,
-                    })
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                names = [a.name for a in node.names]
+                imports.append({
+                    "module": node.module,
+                    "names": names,
+                    "line": node.lineno,
+                })
 
         return imports
 
@@ -244,10 +243,7 @@ class PythonScanner(BaseScanner):
 
     def _is_top_level(self, node: ast.FunctionDef, tree: ast.Module) -> bool:
         """Check if a function is top-level"""
-        for item in tree.body:
-            if item is node:
-                return True
-        return False
+        return any(item is node for item in tree.body)
 
     def _extract_calls(self, tree: ast.AST) -> list[dict]:
         """

@@ -7,11 +7,10 @@ Enables AI to find:
 """
 
 import ast
-import re
-from pathlib import Path
-from dataclasses import dataclass, field
-from typing import Optional
 import json
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass
@@ -50,10 +49,7 @@ class SymbolIndexer:
         ]
 
     def _should_skip(self, path: str) -> bool:
-        for pattern in self.ignore_patterns:
-            if pattern in path:
-                return True
-        return False
+        return any(pattern in path for pattern in self.ignore_patterns)
 
     def extract_python_symbols(self, rel_path: str, content: str) -> list[Symbol]:
         """Extract Python symbols"""
@@ -80,8 +76,7 @@ class SymbolIndexer:
 
                 # Class methods
                 for item in node.body:
-                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        if not item.name.startswith("_") or item.name in ["__init__", "__call__"]:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and (not item.name.startswith("_") or item.name in ["__init__", "__call__"]):
                             params = [arg.arg for arg in item.args.args if arg.arg != "self"]
                             method_doc = ast.get_docstring(item) or ""
                             symbols.append(Symbol(
@@ -449,13 +444,12 @@ class SymbolIndexer:
                     "line": sym.line,
                     "methods": [],
                 }
-            elif sym.kind == "method" and sym.parent:
-                if sym.parent in index["classes"]:
-                    index["classes"][sym.parent]["methods"].append({
-                        "name": sym.name,
-                        "line": sym.line,
-                        "params": sym.params,
-                    })
+            elif sym.kind == "method" and sym.parent and sym.parent in index["classes"]:
+                index["classes"][sym.parent]["methods"].append({
+                    "name": sym.name,
+                    "line": sym.line,
+                    "params": sym.params,
+                })
 
             # Function index
             if sym.kind == "function":

@@ -10,12 +10,11 @@ Features:
 Supported languages: Python, TypeScript/JavaScript, Vue
 """
 
-import re
 import ast
-from pathlib import Path
+import re
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Optional
+from pathlib import Path
 
 
 @dataclass
@@ -64,10 +63,7 @@ class DeadCodeDetector:
         self.used_exports: dict[str, set[str]] = defaultdict(set)  # file -> set of used export names
 
     def _should_skip(self, path: str) -> bool:
-        for pattern in self.ignore_patterns:
-            if pattern in path:
-                return True
-        return False
+        return any(pattern in path for pattern in self.ignore_patterns)
 
     def _is_entry_point(self, path: str) -> bool:
         """Check if file is an entry point (should not be flagged as orphan)"""
@@ -101,10 +97,7 @@ class DeadCodeDetector:
             return True
 
         # Composables/hooks are not orphans (may be used dynamically)
-        if "composables" in parts or "hooks" in parts:
-            return True
-
-        return False
+        return bool("composables" in parts or "hooks" in parts)
 
     def scan_directory(self) -> list[str]:
         """Scan directory, return all files"""
@@ -159,8 +152,7 @@ class DeadCodeDetector:
                     self._add_import(rel_path, module, dir_path)
 
             # def xxx / class xxx (exports)
-            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                if not node.name.startswith("_"):
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_"):
                     self.exports[rel_path].add(node.name)
 
     def _analyze_typescript(self, rel_path: str, content: str):
@@ -267,8 +259,7 @@ class DeadCodeDetector:
         # Find circular dependencies
         for file_a in self.imports:
             for file_b in self.imports[file_a]:
-                if file_a in self.imports.get(file_b, set()):
-                    if (file_b, file_a) not in report.circular_deps:
+                if file_a in self.imports.get(file_b, set()) and (file_b, file_a) not in report.circular_deps:
                         report.circular_deps.append((file_a, file_b))
 
         # Sort

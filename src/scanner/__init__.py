@@ -2,20 +2,20 @@
 
 try:
     from .base import BaseScanner, ScanResult
-    from .python import PythonScanner
-    from .vue import VueScanner
-    from .typescript import TypeScriptScanner
     from .go import GoScanner
-    from .rust import RustScanner
     from .java import JavaScanner
+    from .python import PythonScanner
+    from .rust import RustScanner
+    from .typescript import TypeScriptScanner
+    from .vue import VueScanner
 except ImportError:
     from scanner.base import BaseScanner, ScanResult
-    from scanner.python import PythonScanner
-    from scanner.vue import VueScanner
-    from scanner.typescript import TypeScriptScanner
     from scanner.go import GoScanner
-    from scanner.rust import RustScanner
     from scanner.java import JavaScanner
+    from scanner.python import PythonScanner
+    from scanner.rust import RustScanner
+    from scanner.typescript import TypeScriptScanner
+    from scanner.vue import VueScanner
 
 __all__ = [
     "BaseScanner",

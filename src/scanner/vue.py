@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Optional
 
 try:
+    from ..models import Dependency, DependencyType, Symbol, SymbolType
     from .base import BaseScanner
-    from ..models import Symbol, Dependency, SymbolType, DependencyType
 except ImportError:
+    from models import Dependency, DependencyType, Symbol, SymbolType
     from scanner.base import BaseScanner
-    from models import Symbol, Dependency, SymbolType, DependencyType
 
 
 class VueScanner(BaseScanner):
@@ -42,7 +42,7 @@ class VueScanner(BaseScanner):
         # Parse SFC blocks
         template = self._extract_block(content, "template")
         script = self._extract_block(content, "script")
-        style = self._extract_block(content, "style")
+        self._extract_block(content, "style")
 
         # Create component symbol
         comp_symbol = Symbol(

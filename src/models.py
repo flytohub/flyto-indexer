@@ -5,10 +5,9 @@ Symbol ID format: project:path:type:name
 Example: flyto-cloud:src/pages/TopUp.vue:component:TopUp
 """
 
+import hashlib
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
-import hashlib
 
 
 class SymbolType(str, Enum):

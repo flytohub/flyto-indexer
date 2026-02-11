@@ -9,9 +9,8 @@ Find non-conforming responses.
 """
 
 import re
-import ast
-from pathlib import Path
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 
@@ -74,10 +73,7 @@ class APIConsistencyChecker:
         ]
 
     def _should_skip(self, path: str) -> bool:
-        for pattern in self.ignore_patterns:
-            if pattern in path:
-                return True
-        return False
+        return any(pattern in path for pattern in self.ignore_patterns)
 
     def _is_api_file(self, path: str) -> bool:
         """Determine if file is an API file"""

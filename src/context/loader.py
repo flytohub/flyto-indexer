@@ -11,10 +11,9 @@ Usage flow:
 3. Read L2 (only necessary snippets)
 """
 
-import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-from dataclasses import dataclass
 
 try:
     from ..models import ProjectIndex, Symbol, SymbolType
@@ -101,7 +100,7 @@ class L1Context:
             f"# File: {self.path}",
             f"Language: {self.language}",
             "",
-            f"## Summary",
+            "## Summary",
             self.summary,
             "",
         ]
@@ -181,7 +180,7 @@ class ContextLoader:
 
         # Generate file map (one line per file)
         file_map = {}
-        for path, manifest in self.index.files.items():
+        for path, _manifest in self.index.files.items():
             # Find the main symbol for this file
             main_symbol = self._find_main_symbol(path)
             if main_symbol:
@@ -330,9 +329,8 @@ class ContextLoader:
     def _find_main_symbol(self, path: str) -> Optional[Symbol]:
         """Find the main symbol of a file (component/class)"""
         for symbol in self.index.symbols.values():
-            if symbol.path == path:
-                if symbol.symbol_type in (SymbolType.COMPONENT, SymbolType.CLASS):
-                    return symbol
+            if symbol.path == path and symbol.symbol_type in (SymbolType.COMPONENT, SymbolType.CLASS):
+                return symbol
         return None
 
     def _infer_file_purpose(self, path: str) -> str:

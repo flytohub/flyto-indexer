@@ -13,11 +13,11 @@ import re
 from pathlib import Path
 
 try:
+    from ..models import Dependency, DependencyType, Symbol, SymbolType
     from .base import BaseScanner
-    from ..models import Symbol, Dependency, SymbolType, DependencyType
 except ImportError:
+    from models import Dependency, DependencyType, Symbol, SymbolType
     from scanner.base import BaseScanner
-    from models import Symbol, Dependency, SymbolType, DependencyType
 
 
 class GoScanner(BaseScanner):
@@ -134,7 +134,7 @@ class GoScanner(BaseScanner):
         # Extract methods (with receiver) - do this before functions
         method_positions = set()
         for match in self.METHOD_PATTERN.finditer(content):
-            receiver_name = match.group(1)
+            match.group(1)
             receiver_type = match.group(2)
             method_name = match.group(3)
             params = match.group(4) or ""

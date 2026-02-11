@@ -18,9 +18,8 @@ Flow when a user says "I want to build an e-commerce feature":
 """
 
 import json
-from pathlib import Path
-from typing import Optional
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -158,7 +157,7 @@ class AIWorkflow:
             suggestion += f"Purpose: {file_info.get('purpose', 'N/A')}\n"
             suggestion += f"Category: {file_info.get('category', 'N/A')}\n"
             suggestion += f"APIs: {', '.join(file_info.get('apis', []))}\n"
-            suggestion += f"\nMain symbols:"
+            suggestion += "\nMain symbols:"
             for m in matches[:5]:
                 suggestion += f"\n  - [{m['type']}] {m['name']} (L{m['line']})"
             suggestion += "\n\nUse search_l2(symbol_id) to view details"
@@ -213,7 +212,7 @@ class AIWorkflow:
 
         suggestion = f"[{symbol.get('type')}] {symbol.get('name')}\n"
         suggestion += f"Location: {symbol.get('path')}:{symbol.get('start_line')}-{symbol.get('end_line')}\n"
-        suggestion += f"\nUse impact_analysis(symbol_id) to view the blast radius"
+        suggestion += "\nUse impact_analysis(symbol_id) to view the blast radius"
 
         return SearchResult(
             level="l2",
@@ -244,7 +243,7 @@ class AIWorkflow:
         affected = []
 
         # Reverse lookup: who depends on this symbol
-        for dep_id, dep in dependencies.items():
+        for _dep_id, dep in dependencies.items():
             if dep.get("target") == symbol_id or symbol_id in dep.get("target", ""):
                 source_id = dep.get("source", "")
                 source_symbol = self.index.get("symbols", {}).get(source_id, {})
@@ -262,7 +261,7 @@ class AIWorkflow:
         if max_depth > 1:
             second_level = []
             for a in affected:
-                for dep_id, dep in dependencies.items():
+                for _dep_id, dep in dependencies.items():
                     if dep.get("target") == a["id"]:
                         source_id = dep.get("source", "")
                         if source_id not in [x["id"] for x in affected + second_level]:

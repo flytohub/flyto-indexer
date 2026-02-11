@@ -18,11 +18,11 @@ Output format (stored in vector database):
 }
 """
 
-import os
 import json
 import logging
-from typing import Optional
+import os
 from pathlib import Path
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -303,7 +303,7 @@ def audit_project(
         except ImportError:
             pass
 
-    for i, (path, content) in iterator:
+    for _i, (path, content) in iterator:
         # Infer language
         ext = Path(path).suffix
         lang_map = {".py": "python", ".vue": "vue", ".ts": "typescript", ".js": "javascript"}

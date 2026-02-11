@@ -13,11 +13,11 @@ import re
 from pathlib import Path
 
 try:
+    from ..models import Dependency, DependencyType, Symbol, SymbolType
     from .base import BaseScanner
-    from ..models import Symbol, Dependency, SymbolType, DependencyType
 except ImportError:
+    from models import Dependency, DependencyType, Symbol, SymbolType
     from scanner.base import BaseScanner
-    from models import Symbol, Dependency, SymbolType, DependencyType
 
 
 class RustScanner(BaseScanner):

@@ -23,6 +23,7 @@ import json
 import os
 import re
 import sys
+import time as _time
 from pathlib import Path
 from typing import Any
 
@@ -57,7 +58,6 @@ def send_error(id: Any, code: int, message: str):
 # =============================================================================
 # Rate Limiting (per-process, sliding window)
 # =============================================================================
-import time as _time
 
 _RATE_LIMIT_MAX = int(os.environ.get("FLYTO_INDEXER_RATE_LIMIT", "100"))  # requests per window (global)
 _RATE_LIMIT_SESSION_MAX = int(os.environ.get("FLYTO_INDEXER_SESSION_RATE_LIMIT", "30"))  # per-session per window
@@ -426,8 +426,7 @@ def impact_analysis(symbol_id: str) -> dict:
     resolved_id = symbol_id
     if symbol_id not in symbols:
         for sid, sym in symbols.items():
-            if sym.get("name") == symbol_id:
-                if sym.get("type") in ("composable", "function", "class"):
+            if sym.get("name") == symbol_id and sym.get("type") in ("composable", "function", "class"):
                     resolved_id = sid
                     break
         else:
@@ -464,7 +463,7 @@ def impact_analysis(symbol_id: str) -> dict:
             })
 
     # Method 2: Check resolved_target in dependencies
-    for dep_id, dep in dependencies.items():
+    for _dep_id, dep in dependencies.items():
         resolved_target = dep.get("metadata", {}).get("resolved_target", "")
         if resolved_target == resolved_id:
             source_id = dep.get("source", "")
@@ -757,15 +756,13 @@ def find_references(symbol_id: str) -> dict:
             })
 
     # Method 1: Search dependencies (calls, extends, implements, uses)
-    for dep_id, dep in dependencies.items():
+    for _dep_id, dep in dependencies.items():
         dep_type = dep.get("type", "")
         target = dep.get("target", "")
         resolved_target = dep.get("metadata", {}).get("resolved_target", "")
 
         # Check if this dependency targets our symbol
-        if dep_type in ("calls", "extends", "implements", "uses"):
-            # Match by resolved_target, symbol_id, or by name
-            if resolved_target == resolved_id or target == resolved_id or target == target_name:
+        if dep_type in ("calls", "extends", "implements", "uses") and (target in (resolved_id, target_name) or resolved_target == resolved_id):
                 source_id = dep.get("source", "")
                 source_symbol = symbols.get(source_id, {})
 
@@ -896,7 +893,7 @@ def dependency_graph(
     # Also use reverse_index for accurate dependents
     reverse_index = index.get("reverse_index", {})
 
-    for dep_id, dep in dependencies.items():
+    for _dep_id, dep in dependencies.items():
         source = dep.get("source", "")
         target = dep.get("target", "")
         dep_type = dep.get("type", "")
@@ -1172,11 +1169,10 @@ def check_index_status() -> dict:
     Compares file modification times and hashes with indexed data.
     """
     import os
-    import hashlib
     from datetime import datetime
 
     index = load_index()
-    project_map = load_project_map()
+    load_project_map()
 
     # Get index metadata
     index_file = INDEX_DIR / "index.json"
@@ -1295,7 +1291,7 @@ def find_dead_code(
     imported_files = set()  # Files that are imported
     referenced_classes = set()  # Referenced class names (their methods are not dead code)
 
-    for dep_id, dep in dependencies.items():
+    for _dep_id, dep in dependencies.items():
         dep_type = dep.get("type", "")
 
         if dep_type == "imports":
@@ -1584,7 +1580,7 @@ def cross_project_impact(
     index = load_index()
     symbols = index.get("symbols", {})
     reverse_index = index.get("reverse_index", {})
-    dependencies = index.get("dependencies", {})
+    index.get("dependencies", {})
 
     # Find source symbols
     source_symbols = []
@@ -1875,7 +1871,7 @@ def get_file_context(path: str, include_content: bool = False) -> dict:
     # 3. Imports (dependencies where source is in this file)
     imports = []
     seen_imports = set()
-    for dep_id, dep in dependencies.items():
+    for _dep_id, dep in dependencies.items():
         source_id = dep.get("source", "")
         if ":" in source_id:
             source_path = source_id.split(":")[1] if len(source_id.split(":")) >= 2 else ""
@@ -1901,7 +1897,7 @@ def get_file_context(path: str, include_content: bool = False) -> dict:
                 caller_path = caller_id.split(":")[1] if len(caller_id.split(":")) >= 2 else ""
                 if caller_path != path and caller_id not in seen_deps:
                     seen_deps.add(caller_id)
-                    caller_sym = symbols_map.get(caller_id, {})
+                    symbols_map.get(caller_id, {})
                     dependents.append({
                         "from_path": caller_path,
                         "symbol_used": sym_name,
@@ -1966,14 +1962,13 @@ def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
     index = load_index()
     symbols = index.get("symbols", {})
     reverse_index = index.get("reverse_index", {})
-    dependencies = index.get("dependencies", {})
+    index.get("dependencies", {})
 
     # Resolve symbol_id (same pattern as find_references)
     resolved_id = symbol_id
     if symbol_id not in symbols:
         for sid, sym in symbols.items():
-            if sym.get("name") == symbol_id:
-                if sym.get("type") in ("composable", "function", "class", "component"):
+            if sym.get("name") == symbol_id and sym.get("type") in ("composable", "function", "class", "component"):
                     resolved_id = sid
                     break
         else:
@@ -2697,7 +2692,9 @@ def handle_request(request: dict):
             try:
                 from .tool_registry import execute_tool as _registry_execute
             except ImportError:
-                from tool_registry import execute_tool as _registry_execute  # type: ignore[no-redef]
+                from tool_registry import (
+                    execute_tool as _registry_execute,  # type: ignore[no-redef]
+                )
             try:
                 result = _registry_execute(tool_name, arguments)
             except KeyError:
@@ -2719,7 +2716,6 @@ def handle_request(request: dict):
 
 def main():
     """MCP Server main program"""
-    import sys
     # Debug logging to stderr
     sys.stderr.write(f"[flyto-indexer] Starting MCP server (pid={os.getpid()})\n")
     sys.stderr.flush()

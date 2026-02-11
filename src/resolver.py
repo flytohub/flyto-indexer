@@ -8,8 +8,8 @@ This module provides functionality to:
 4. Multi-language support: Python, JS/TS, Go, Rust, Java
 """
 
-from typing import Optional
 import re
+from typing import Optional
 
 
 class SymbolResolver:
@@ -93,9 +93,7 @@ class SymbolResolver:
             # Check last segment match (filename)
             module_file = module.split("/")[-1].split(".")[-1]  # Handle both / and .
             path_file = sym_path.split("/")[-1].split(".")[0]
-            if module_file == path_file:
-                # Prefer same project
-                if source_project == sym_project:
+            if module_file == path_file and source_project == sym_project:
                     return sym_id
 
         # If no exact match, try export_map with project preference

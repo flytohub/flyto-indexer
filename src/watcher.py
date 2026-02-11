@@ -8,8 +8,7 @@ Design: Polling, not daemon.
 """
 
 import os
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -90,7 +89,6 @@ class FileWatcher:
 
     def _get_index_mtime(self) -> float:
         """Get the index file modification time."""
-        from pathlib import Path
         # Try to find index file from INDEX_DIR
         try:
             try:

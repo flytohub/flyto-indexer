@@ -19,7 +19,7 @@ Usage:
 """
 
 from .engine import IndexEngine
-from .models import Symbol, Dependency, ProjectIndex, SymbolType, DependencyType
+from .models import Dependency, DependencyType, ProjectIndex, Symbol, SymbolType
 
 __version__ = "0.1.0"
 __all__ = [

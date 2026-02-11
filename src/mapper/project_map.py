@@ -9,11 +9,11 @@ No LLM, pure static analysis to produce meaningful file descriptions:
 """
 
 import ast
-import re
-from pathlib import Path
-from dataclasses import dataclass, field
-from typing import Optional
 import json
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
 
 
 @dataclass
@@ -201,10 +201,7 @@ class ProjectMapGenerator:
         ]
 
     def _should_skip(self, path: str) -> bool:
-        for pattern in self.ignore_patterns:
-            if pattern in path:
-                return True
-        return False
+        return any(pattern in path for pattern in self.ignore_patterns)
 
     def _infer_category(self, rel_path: str) -> str:
         """Infer category from path"""
@@ -227,7 +224,6 @@ class ProjectMapGenerator:
     def _infer_purpose(self, rel_path: str, exports: list[str], classes: list[str]) -> str:
         """Infer purpose from path and exports"""
         stem = Path(rel_path).stem.lower()
-        parts = Path(rel_path).parts
 
         # 1. Infer from filename keywords
         purposes = []
@@ -323,8 +319,7 @@ class ProjectMapGenerator:
                     exports.append(node.name)
             elif isinstance(node, ast.Assign):
                 for target in node.targets:
-                    if isinstance(target, ast.Name) and not target.id.startswith("_"):
-                        if target.id.isupper():  # Constants
+                    if isinstance(target, ast.Name) and not target.id.startswith("_") and target.id.isupper():  # Constants
                             exports.append(target.id)
 
         return exports, list(set(imports)), classes

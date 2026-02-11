@@ -11,14 +11,13 @@ Extracts:
 
 import re
 from pathlib import Path
-from typing import Optional
 
 try:
+    from ..models import Dependency, DependencyType, Symbol, SymbolType
     from .base import BaseScanner
-    from ..models import Symbol, Dependency, SymbolType, DependencyType
 except ImportError:
+    from models import Dependency, DependencyType, Symbol, SymbolType
     from scanner.base import BaseScanner
-    from models import Symbol, Dependency, SymbolType, DependencyType
 
 
 class TypeScriptScanner(BaseScanner):
@@ -127,7 +126,7 @@ class TypeScriptScanner(BaseScanner):
         ):
             name = match.group(1)
             extends = match.group(2)
-            implements = match.group(3)
+            match.group(3)
             start_line = content[:match.start()].count('\n') + 1
             end_line = self._find_block_end(content, match.end(), start_line)
             class_content = '\n'.join(lines[start_line-1:end_line])
@@ -177,10 +176,7 @@ class TypeScriptScanner(BaseScanner):
             start_line = content[:match.start()].count('\n') + 1
             # Type aliases usually end at semicolon or newline
             end_match = re.search(r';|\n\n', content[match.end():])
-            if end_match:
-                end_pos = match.end() + end_match.end()
-            else:
-                end_pos = match.end() + 100
+            end_pos = match.end() + end_match.end() if end_match else match.end() + 100
             end_line = content[:end_pos].count('\n') + 1
             type_content = '\n'.join(lines[start_line-1:end_line])
 
