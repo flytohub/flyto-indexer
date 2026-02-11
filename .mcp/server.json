@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.flytohub/flyto-indexer",
+  "name": "io.github.ChesterHsu/flyto-indexer",
   "description": "Code intelligence MCP server: impact analysis, dependency graphs, dead code detection.",
   "repository": {
     "url": "https://github.com/flytohub/flyto-indexer",
     "source": "github"
   },
-  "version": "1.0.1",
+  "version": "1.0.2",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "flyto-indexer",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "transport": {
         "type": "stdio"
       }

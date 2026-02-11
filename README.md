@@ -373,4 +373,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 [MIT](LICENSE) — Use it however you want.
 
-<!-- mcp-name: io.github.flytohub/flyto-indexer -->
+<!-- mcp-name: io.github.ChesterHsu/flyto-indexer -->
