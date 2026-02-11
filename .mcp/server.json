@@ -1,43 +1,20 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.flytohub/flyto-indexer",
-  "title": "Flyto Indexer",
-  "description": "Code intelligence MCP server — impact analysis, dependency graphs, dead code detection, and semantic search. 23 tools that tell AI what breaks before it changes your code. Zero dependencies, runs locally.",
-  "version": "1.0.0",
-  "packages": [
-    {
-      "registry_type": "pypi",
-      "identifier": "flyto-indexer",
-      "version": "1.0.0"
-    }
-  ],
+  "description": "Code intelligence MCP server: impact analysis, dependency graphs, dead code detection.",
   "repository": {
     "url": "https://github.com/flytohub/flyto-indexer",
     "source": "github"
   },
-  "tools": [
-    {"name": "search_code", "description": "Symbol-aware search across all indexed projects"},
-    {"name": "get_symbol_content", "description": "Get full source code of a function/class"},
-    {"name": "get_file_symbols", "description": "List all symbols defined in a file"},
-    {"name": "get_file_info", "description": "Get file purpose, category, keywords, dependencies"},
-    {"name": "fulltext_search", "description": "Search inside comments, strings, and TODO markers"},
-    {"name": "find_references", "description": "Find all callers and importers of a symbol"},
-    {"name": "impact_analysis", "description": "Analyze blast radius of modifying a symbol"},
-    {"name": "dependency_graph", "description": "Show import chains and dependent relationships"},
-    {"name": "cross_project_impact", "description": "Track API usage across multiple projects"},
-    {"name": "edit_impact_preview", "description": "Preview impact before renaming, deleting, or changing signatures"},
-    {"name": "list_projects", "description": "List all indexed projects with statistics"},
-    {"name": "list_categories", "description": "Show code categories (auth, payment, etc.)"},
-    {"name": "list_apis", "description": "List all API endpoints found in code"},
-    {"name": "check_index_status", "description": "Check if the index is up-to-date"},
-    {"name": "find_dead_code", "description": "Detect unreferenced functions, classes, and components"},
-    {"name": "find_todos", "description": "Find TODO, FIXME, HACK markers across the codebase"},
-    {"name": "get_file_context", "description": "Complete context package for a file (info + symbols + deps)"},
-    {"name": "find_test_file", "description": "Find the test file for a source file (or vice versa)"},
-    {"name": "get_description", "description": "Get the semantic one-liner for a file"},
-    {"name": "update_description", "description": "Write or update a file description"},
-    {"name": "session_track", "description": "Track workspace events for search boosting"},
-    {"name": "session_get", "description": "Inspect current session state"},
-    {"name": "check_and_reindex", "description": "Detect file changes and trigger re-indexing"}
+  "version": "1.0.1",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "flyto-indexer",
+      "version": "1.0.1",
+      "transport": {
+        "type": "stdio"
+      }
+    }
   ]
 }
