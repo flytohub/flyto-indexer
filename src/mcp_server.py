@@ -18,7 +18,6 @@ Claude Code config (~/.claude/mcp_servers.json):
 }
 """
 
-import asyncio
 import gzip
 import json
 import os
@@ -26,26 +25,6 @@ import re
 import sys
 from pathlib import Path
 from typing import Any
-
-# Import Dual-AI module (optional - may not be available in embedded contexts)
-try:
-    from .dual_ai import (
-        dual_ai_task,
-        dual_ai_review,
-        dual_ai_consensus,
-        dual_ai_security,
-        dual_ai_test_gen,
-        dual_ai_agents,
-    )
-    _dual_ai_available = True
-except ImportError:
-    _dual_ai_available = False
-    dual_ai_task = None
-    dual_ai_review = None
-    dual_ai_consensus = None
-    dual_ai_security = None
-    dual_ai_test_gen = None
-    dual_ai_agents = None
 
 # Pre-compiled regex patterns for TODO/FIXME markers
 _TODO_PATTERNS = {
@@ -2679,181 +2658,6 @@ TOOLS = [
             "required": ["session_id"],
         },
     },
-    # =========================================================================
-    # Dual-AI Tools - Multi-model collaboration
-    # =========================================================================
-    {
-        "name": "dual_ai_task",
-        "description": (
-            "Run a collaborative Dual-AI task: GPT-4 plans the approach, Claude executes it, GPT-4 verifies the result. "
-            "Use this for complex tasks that benefit from multiple AI perspectives (refactoring, architecture decisions, etc). "
-            "Returns: execution result with plan, actions taken, and verification status."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "string",
-                    "description": "Task description. Example: 'Refactor the auth module to use JWT instead of sessions'",
-                },
-                "project_path": {
-                    "type": "string",
-                    "description": "Project directory path",
-                    "default": ".",
-                },
-                "mode": {
-                    "type": "string",
-                    "enum": ["sequential", "parallel", "consensus"],
-                    "default": "sequential",
-                    "description": "'sequential' = GPT plans -> Claude executes -> GPT verifies. 'parallel' = both work simultaneously. 'consensus' = both vote.",
-                },
-                "agents": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Agent IDs to use (default: planner, executor, reviewer)",
-                },
-                "max_iterations": {
-                    "type": "integer",
-                    "default": 10,
-                    "description": "Maximum iteration count",
-                },
-            },
-            "required": ["task"],
-        },
-    },
-    {
-        "name": "dual_ai_review",
-        "description": (
-            "Multi-model code review: Claude and GPT-4 independently review the same code, then results are merged. "
-            "Use this for thorough code review covering security, performance, and style issues. "
-            "Returns: merged review with findings from both models."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "file_path": {
-                    "type": "string",
-                    "description": "Path to the file to review",
-                },
-                "review_type": {
-                    "type": "string",
-                    "enum": ["security", "performance", "style", "all"],
-                    "default": "all",
-                    "description": "Focus area: 'security' for vulnerabilities, 'performance' for bottlenecks, 'style' for code quality, 'all' for everything",
-                },
-                "models": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Models to use (default: claude, gpt4)",
-                },
-            },
-            "required": ["file_path"],
-        },
-    },
-    {
-        "name": "dual_ai_consensus",
-        "description": (
-            "Multi-AI voting for important decisions. Multiple models independently vote on options and explain their reasoning. "
-            "Use this when choosing between approaches, architectures, or trade-offs. "
-            "Returns: vote tally, each model's reasoning, and final recommendation."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "question": {
-                    "type": "string",
-                    "description": "Decision question. Example: 'Should we use Redis or in-memory caching for session storage?'",
-                },
-                "options": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Options to vote on. Example: ['Redis', 'In-memory', 'File-based']",
-                },
-                "context": {
-                    "type": "string",
-                    "description": "Additional context for the decision (constraints, requirements, etc)",
-                    "default": "",
-                },
-                "mode": {
-                    "type": "string",
-                    "enum": ["majority", "unanimous", "weighted"],
-                    "default": "majority",
-                    "description": "'majority' = >50% wins, 'unanimous' = all must agree, 'weighted' = by confidence score",
-                },
-                "voters": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Voter IDs (default: claude, gpt4)",
-                },
-            },
-            "required": ["question", "options"],
-        },
-    },
-    {
-        "name": "dual_ai_security",
-        "description": (
-            "Security audit using multiple AI models. Checks for OWASP Top 10 vulnerabilities: "
-            "SQL injection, XSS, CSRF, auth bypasses, sensitive data exposure, and more. "
-            "Returns: vulnerability findings with severity, location, and fix suggestions."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "target": {
-                    "type": "string",
-                    "description": "File path to audit. Example: 'src/api/auth.py'",
-                },
-                "scan_type": {
-                    "type": "string",
-                    "enum": ["quick", "full", "deep"],
-                    "default": "full",
-                    "description": "'quick' = fast surface scan, 'full' = standard OWASP check, 'deep' = thorough with data flow analysis",
-                },
-            },
-            "required": ["target"],
-        },
-    },
-    {
-        "name": "dual_ai_test_gen",
-        "description": (
-            "Auto-generate test cases for a file or function. "
-            "Analyzes the code to create comprehensive tests including edge cases, error paths, and boundary conditions. "
-            "Returns: generated test code ready to save to a file."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "target": {
-                    "type": "string",
-                    "description": "File path to generate tests for. Example: 'src/utils/validator.py'",
-                },
-                "test_type": {
-                    "type": "string",
-                    "enum": ["unit", "integration", "e2e"],
-                    "default": "unit",
-                    "description": "'unit' = isolated function tests, 'integration' = module interaction tests, 'e2e' = full flow tests",
-                },
-                "framework": {
-                    "type": "string",
-                    "enum": ["auto", "pytest", "jest", "vitest"],
-                    "default": "auto",
-                    "description": "Test framework. 'auto' detects from project config.",
-                },
-            },
-            "required": ["target"],
-        },
-    },
-    {
-        "name": "dual_ai_agents",
-        "description": (
-            "List all available Dual-AI agents with their roles and capabilities. "
-            "Returns: agent IDs, model assignments, and what each agent specializes in."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
 ]
 
 
@@ -2889,99 +2693,16 @@ def handle_request(request: dict):
             return
 
         try:
-            # Dual-AI tools require asyncio.run (they are async)
-            if tool_name == "dual_ai_task":
-                _task = arguments.get("task", "")
-                if not isinstance(_task, str) or not _task.strip():
-                    send_error(id, -32602, "dual_ai_task: 'task' must be a non-empty string")
-                    return
-                _mode = arguments.get("mode", "sequential")
-                if _mode not in ("sequential", "parallel", "consensus"):
-                    send_error(id, -32602, f"dual_ai_task: invalid mode '{_mode}'")
-                    return
-                _max_iter = arguments.get("max_iterations", 10)
-                if not isinstance(_max_iter, int) or _max_iter < 1 or _max_iter > 100:
-                    _max_iter = 10
-                result = asyncio.run(dual_ai_task(
-                    task=_task,
-                    project_path=str(arguments.get("project_path", "."))[:500],
-                    mode=_mode,
-                    agents=arguments.get("agents"),
-                    max_iterations=_max_iter,
-                ))
-            elif tool_name == "dual_ai_review":
-                _fp = arguments.get("file_path", "")
-                if not isinstance(_fp, str) or not _fp.strip():
-                    send_error(id, -32602, "dual_ai_review: 'file_path' must be a non-empty string")
-                    return
-                _rt = arguments.get("review_type", "all")
-                if _rt not in ("security", "performance", "style", "all"):
-                    _rt = "all"
-                result = asyncio.run(dual_ai_review(
-                    file_path=_fp,
-                    review_type=_rt,
-                    models=arguments.get("models"),
-                ))
-            elif tool_name == "dual_ai_consensus":
-                _q = arguments.get("question", "")
-                _opts = arguments.get("options", [])
-                if not isinstance(_q, str) or not _q.strip():
-                    send_error(id, -32602, "dual_ai_consensus: 'question' must be a non-empty string")
-                    return
-                if not isinstance(_opts, list) or len(_opts) < 2:
-                    send_error(id, -32602, "dual_ai_consensus: 'options' must be a list with >= 2 items")
-                    return
-                _cm = arguments.get("mode", "majority")
-                if _cm not in ("majority", "unanimous", "weighted"):
-                    _cm = "majority"
-                result = asyncio.run(dual_ai_consensus(
-                    question=_q[:2000],
-                    options=[str(o)[:500] for o in _opts[:10]],
-                    context=str(arguments.get("context", ""))[:2000],
-                    mode=_cm,
-                    voters=arguments.get("voters"),
-                ))
-            elif tool_name == "dual_ai_security":
-                _target = arguments.get("target", "")
-                if not isinstance(_target, str) or not _target.strip():
-                    send_error(id, -32602, "dual_ai_security: 'target' must be a non-empty string")
-                    return
-                _st = arguments.get("scan_type", "full")
-                if _st not in ("quick", "full", "deep"):
-                    _st = "full"
-                result = asyncio.run(dual_ai_security(
-                    target=_target,
-                    scan_type=_st,
-                ))
-            elif tool_name == "dual_ai_test_gen":
-                _target = arguments.get("target", "")
-                if not isinstance(_target, str) or not _target.strip():
-                    send_error(id, -32602, "dual_ai_test_gen: 'target' must be a non-empty string")
-                    return
-                _tt = arguments.get("test_type", "unit")
-                if _tt not in ("unit", "integration", "e2e"):
-                    _tt = "unit"
-                _fw = arguments.get("framework", "auto")
-                if _fw not in ("auto", "pytest", "jest", "vitest"):
-                    _fw = "auto"
-                result = asyncio.run(dual_ai_test_gen(
-                    target=_target,
-                    test_type=_tt,
-                    framework=_fw,
-                ))
-            elif tool_name == "dual_ai_agents":
-                result = dual_ai_agents()
-            else:
-                # All non-Dual-AI tools dispatched via tool_registry
-                try:
-                    from .tool_registry import execute_tool as _registry_execute
-                except ImportError:
-                    from tool_registry import execute_tool as _registry_execute  # type: ignore[no-redef]
-                try:
-                    result = _registry_execute(tool_name, arguments)
-                except KeyError:
-                    send_error(id, -32601, f"Unknown tool: {tool_name}")
-                    return
+            # All tools dispatched via tool_registry
+            try:
+                from .tool_registry import execute_tool as _registry_execute
+            except ImportError:
+                from tool_registry import execute_tool as _registry_execute  # type: ignore[no-redef]
+            try:
+                result = _registry_execute(tool_name, arguments)
+            except KeyError:
+                send_error(id, -32601, f"Unknown tool: {tool_name}")
+                return
 
             send_response(id, {
                 "content": [{"type": "text", "text": json.dumps(result, ensure_ascii=False, indent=2)}],
