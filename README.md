@@ -18,6 +18,10 @@
 
 ---
 
+<div align="center">
+  <img src="demo.gif" alt="Flyto Indexer demo — impact analysis before renaming" width="800">
+</div>
+
 **"What breaks if I change this?"** — Every developer asks this. Flyto Indexer answers it.
 
 It indexes your codebase, understands symbol relationships, and exposes **23 MCP tools** that give any AI assistant deep code intelligence — impact analysis, reference finding, dependency tracking, and more.
