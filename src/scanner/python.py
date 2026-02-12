@@ -93,6 +93,32 @@ class PythonScanner(BaseScanner):
                     )
                     symbols.append(func_symbol)
 
+                    # Check for API endpoint decorators
+                    for decorator in node.decorator_list:
+                        api_info = self._extract_api_decorator(decorator, node)
+                        if api_info:
+                            # Include method in name to avoid ID collision
+                            # (e.g. GET /api/users vs POST /api/users)
+                            api_name = f"{api_info['method']} {api_info['path']}"
+                            api_symbol = Symbol(
+                                project=self.project,
+                                path=rel_path,
+                                symbol_type=SymbolType.API,
+                                name=api_name,
+                                start_line=node.lineno,
+                                end_line=node.end_lineno or node.lineno,
+                                content="",
+                                summary=f"{api_info['method']} {api_info['path']} -> {api_info['handler']}",
+                                language="python",
+                            )
+                            api_symbol.metadata = {
+                                "method": api_info["method"],
+                                "url": api_info["path"],
+                                "handler": api_info["handler"],
+                            }
+                            api_symbol.compute_hash()
+                            symbols.append(api_symbol)
+
         # Compute hash for each symbol
         for symbol in symbols:
             symbol.compute_hash()
@@ -240,6 +266,67 @@ class PythonScanner(BaseScanner):
             params=params,
             returns=returns,
         )
+
+    # HTTP method names recognized on route decorators
+    _HTTP_METHODS = {"get", "post", "put", "delete", "patch", "head", "options"}
+
+    def _extract_api_decorator(
+        self, decorator: ast.expr, func_node: ast.FunctionDef
+    ) -> Optional[dict]:
+        """
+        Extract API endpoint info from a decorator node.
+
+        Supports:
+        - @app.get("/users")          -> {method: "GET", path: "/users"}
+        - @router.post("/items")      -> {method: "POST", path: "/items"}
+        - @app.route("/x", methods=["GET", "POST"]) -> {method: "GET,POST", path: "/x"}
+        """
+        # Pattern 1: @app.get("/path"), @router.post("/path"), etc.
+        if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute):
+            attr_name = decorator.func.attr.lower()
+
+            if attr_name in self._HTTP_METHODS:
+                path = self._get_first_string_arg(decorator)
+                if path:
+                    return {
+                        "method": attr_name.upper(),
+                        "path": path,
+                        "handler": func_node.name,
+                    }
+
+            # Pattern 2: @app.route("/path", methods=["GET", "POST"])
+            if attr_name == "route":
+                path = self._get_first_string_arg(decorator)
+                if path:
+                    methods = self._get_methods_kwarg(decorator)
+                    return {
+                        "method": methods or "GET",
+                        "path": path,
+                        "handler": func_node.name,
+                    }
+
+        return None
+
+    def _get_first_string_arg(self, call_node: ast.Call) -> Optional[str]:
+        """Get the first string argument from a Call node."""
+        if call_node.args:
+            arg = call_node.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                return arg.value
+            # Handle f-strings and JoinedStr — skip them
+        return None
+
+    def _get_methods_kwarg(self, call_node: ast.Call) -> Optional[str]:
+        """Extract methods=["GET", "POST"] keyword argument."""
+        for kw in call_node.keywords:
+            if kw.arg == "methods" and isinstance(kw.value, ast.List):
+                methods = []
+                for elt in kw.value.elts:
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                        methods.append(elt.value.upper())
+                if methods:
+                    return ",".join(methods)
+        return None
 
     def _is_top_level(self, node: ast.FunctionDef, tree: ast.Module) -> bool:
         """Check if a function is top-level"""

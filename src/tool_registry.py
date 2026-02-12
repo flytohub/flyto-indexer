@@ -351,6 +351,7 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
         "check_and_reindex": lambda args: _idx.check_and_reindex(
             dry_run=args.get("dry_run", True),
             project=args.get("project"),
+            auto_reindex=args.get("auto_reindex", False),
         ),
         "session_track": lambda args: _idx.session_track(
             session_id=args.get("session_id", ""),

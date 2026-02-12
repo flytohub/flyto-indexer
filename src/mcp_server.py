@@ -108,6 +108,9 @@ INDEX_DIR = Path(os.environ.get(
 _content_cache: dict = {}
 _content_loaded: bool = False
 
+# BM25 index cache (lazy init)
+_bm25_cache = None
+
 # Test mapper cache (lazy init)
 _test_mapper = None
 
@@ -186,6 +189,22 @@ def get_symbol_content_text(symbol_id: str, symbol_data: dict) -> str:
     content_map = load_content_file()
     return content_map.get(symbol_id, "")
 
+def _load_bm25():
+    """Lazy-load BM25 index."""
+    global _bm25_cache
+    if _bm25_cache is not None:
+        return _bm25_cache
+
+    try:
+        from .bm25 import BM25Index
+    except ImportError:
+        from bm25 import BM25Index
+
+    bm25_path = INDEX_DIR / "bm25.json"
+    _bm25_cache = BM25Index.load(bm25_path)
+    return _bm25_cache
+
+
 # Symbol type importance weights
 TYPE_WEIGHTS = {
     "composable": 15,  # Vue composables are often what you want
@@ -244,6 +263,16 @@ def search_by_keyword(
             boost_paths = session.get_boost_paths()
             session.add_query(query)
 
+    # BM25 pre-scoring (if index available)
+    bm25_scores: dict = {}  # symbol_id -> normalized score (0-30)
+    bm25 = _load_bm25()
+    if bm25:
+        raw_results = bm25.search(query, top_k=200)
+        if raw_results:
+            max_score = raw_results[0][1] if raw_results else 1.0
+            for doc_id, score in raw_results:
+                bm25_scores[doc_id] = (score / max_score) * 30.0 if max_score > 0 else 0
+
     # Search symbols
     for symbol_id, symbol in index.get("symbols", {}).items():
         # Project filter
@@ -260,7 +289,13 @@ def search_by_keyword(
         match_reason = []
         path = symbol.get("path", "").lower()
 
-        # === Text matching ===
+        # === BM25 base score (if available) ===
+        bm25_score = bm25_scores.get(symbol_id, 0)
+        if bm25_score > 0:
+            score += bm25_score
+            match_reason.append("bm25")
+
+        # === Text matching (additive bonuses) ===
         # Name match (high weight)
         name = symbol.get("name", "").lower()
         if any(w in name for w in query_words):
@@ -277,11 +312,12 @@ def search_by_keyword(
             score += 5
             match_reason.append("summary")
 
-        # Content match (load from content.jsonl if needed)
-        content = get_symbol_content_text(symbol_id, symbol).lower()
-        if any(w in content for w in query_words):
-            score += 1
-            match_reason.append("content")
+        # Content match (only if no BM25 hit — avoid double-loading)
+        if bm25_score == 0:
+            content = get_symbol_content_text(symbol_id, symbol).lower()
+            if any(w in content for w in query_words):
+                score += 1
+                match_reason.append("content")
 
         # Skip if no match at all
         if score == 0:
@@ -522,17 +558,87 @@ def list_categories() -> dict:
 
 def list_apis() -> dict:
     """
-    List all API endpoints.
+    List all API endpoints with cross-language references.
+
+    Combines:
+    1. API endpoints from PROJECT_MAP (legacy)
+    2. API symbols from index (detected by Python scanner decorators)
+    3. API_CALLS from index (detected by TS/Vue scanner fetch/axios patterns)
     """
     project_map = load_project_map()
     api_map = project_map.get("api_map", {})
+    index = load_index()
+    symbols = index.get("symbols", {})
+    dependencies = index.get("dependencies", {})
+
+    # Collect API endpoints from index symbols (SymbolType.API)
+    api_endpoints = {}  # path -> {method, defined_in, handler, symbol_id}
+    for sid, sym in symbols.items():
+        if sym.get("type") == "api":
+            url = sym.get("name", "")
+            meta = sym.get("metadata", {})
+            if not meta:
+                # Compact format: metadata might be in summary
+                summary = sym.get("summary", "")
+                method = "GET"
+                if summary:
+                    parts = summary.split(" ", 1)
+                    if parts[0] in ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"):
+                        method = parts[0]
+            else:
+                method = meta.get("method", "GET")
+            api_endpoints[url] = {
+                "method": method,
+                "defined_in": sym.get("path", ""),
+                "handler": meta.get("handler", "") if meta else "",
+                "symbol_id": sid,
+            }
+
+    # Collect API calls from dependencies (DependencyType.API_CALLS)
+    api_callers = {}  # url -> [{from_path, method}]
+    for _dep_id, dep in dependencies.items():
+        if dep.get("type") != "api_calls":
+            continue
+        url = dep.get("target", "")
+        source_id = dep.get("source", "")
+        source_path = ""
+        if ":" in source_id:
+            parts = source_id.split(":")
+            if len(parts) >= 2:
+                source_path = parts[1]
+        meta = dep.get("metadata", {})
+        method = meta.get("method", "GET")
+
+        if url not in api_callers:
+            api_callers[url] = []
+        api_callers[url].append({"from_path": source_path, "method": method})
+
+    # Merge everything
+    all_urls = set(api_map.keys()) | set(api_endpoints.keys()) | set(api_callers.keys())
+
+    apis = []
+    for url in sorted(all_urls):
+        entry = {
+            "path": url,
+            "method": api_endpoints.get(url, {}).get("method", ""),
+            "defined_in": api_endpoints.get(url, {}).get("defined_in", ""),
+            "handler": api_endpoints.get(url, {}).get("handler", ""),
+            "called_by": sorted({
+                c["from_path"] for c in api_callers.get(url, []) if c["from_path"]
+            }),
+            "call_count": len(api_callers.get(url, [])),
+            "legacy_used_by": api_map.get(url, []),
+        }
+        apis.append(entry)
+
+    # Sort by call count descending
+    apis.sort(key=lambda x: -(x["call_count"] + len(x["legacy_used_by"])))
 
     return {
-        "total": len(api_map),
-        "apis": [
-            {"path": api, "used_by_count": len(files)}
-            for api, files in sorted(api_map.items(), key=lambda x: -len(x[1]))
-        ],
+        "total": len(apis),
+        "endpoints_with_definitions": len(api_endpoints),
+        "endpoints_with_callers": len(api_callers),
+        "apis": apis,
     }
 
 
@@ -2112,14 +2218,68 @@ def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
     }
 
 
-def check_and_reindex(dry_run: bool = True, project: str = None) -> dict:
+def _perform_live_reindex(project: str = None) -> dict:
     """
-    Detect file changes and optionally clear caches for re-indexing.
+    Perform live incremental reindex within the MCP server process.
+
+    Uses IndexEngine.scan(incremental=True) to update the index in-place,
+    then invalidates all caches so subsequent queries see fresh data.
+    """
+    global _index_cache, _content_cache, _content_loaded, _test_mapper, _bm25_cache
+
+    try:
+        from .engine import IndexEngine
+    except ImportError:
+        from engine import IndexEngine
+
+    index = load_index()
+    project_roots = index.get("project_roots", {})
+    projects = index.get("projects", [])
+
+    target_projects = [p for p in projects if project.lower() in p.lower()] if project else projects
+
+    reindex_results = []
+    for proj in target_projects:
+        root = project_roots.get(proj)
+        if not root or not Path(root).exists():
+            reindex_results.append({"project": proj, "error": f"Root not found: {root}"})
+            continue
+
+        try:
+            engine = IndexEngine(proj, Path(root), index_dir=INDEX_DIR)
+            scan_result = engine.scan(incremental=True)
+            reindex_results.append({
+                "project": proj,
+                "files_scanned": scan_result["files_scanned"],
+                "symbols_found": scan_result["symbols_found"],
+                "timing": scan_result.get("timing", {}),
+            })
+        except Exception as e:
+            reindex_results.append({"project": proj, "error": str(e)})
+
+    # Invalidate all caches so next query reads fresh index
+    _index_cache = None
+    _content_cache = {}
+    _content_loaded = False
+    _test_mapper = None
+    _bm25_cache = None
+
+    return {
+        "reindexed": len([r for r in reindex_results if "error" not in r]),
+        "errors": len([r for r in reindex_results if "error" in r]),
+        "results": reindex_results,
+    }
+
+
+def check_and_reindex(dry_run: bool = True, project: str = None, auto_reindex: bool = False) -> dict:
+    """
+    Detect file changes and optionally reindex live.
 
     dry_run=True: only report changes
     dry_run=False: clear caches + report changes (user should run index_all.py after)
+    auto_reindex=True: detect changes AND perform live incremental reindex
     """
-    global _index_cache, _content_cache, _content_loaded, _test_mapper
+    global _index_cache, _content_cache, _content_loaded, _test_mapper, _bm25_cache
 
     try:
         from .watcher import FileWatcher
@@ -2133,6 +2293,7 @@ def check_and_reindex(dry_run: bool = True, project: str = None) -> dict:
 
     result = {
         "dry_run": dry_run,
+        "auto_reindex": auto_reindex,
         "total_changes": summary["total"],
         "by_type": summary["by_type"],
         "by_project": summary["by_project"],
@@ -2143,15 +2304,21 @@ def check_and_reindex(dry_run: bool = True, project: str = None) -> dict:
         "has_more": len(changes) > 50,
     }
 
-    if not dry_run and changes:
+    if auto_reindex and changes:
+        reindex_result = _perform_live_reindex(project=project)
+        result["reindex"] = reindex_result
+        result["caches_cleared"] = True
+        result["recommendation"] = f"Live reindex complete. {reindex_result['reindexed']} projects updated."
+    elif not dry_run and changes:
         _index_cache = None
         _content_cache = {}
         _content_loaded = False
         _test_mapper = None
+        _bm25_cache = None
         result["caches_cleared"] = True
         result["recommendation"] = "Run 'python index_all.py' to rebuild the index."
     elif changes:
-        result["recommendation"] = "Run with dry_run=false to clear caches, then 'python index_all.py' to rebuild."
+        result["recommendation"] = "Run with auto_reindex=true for live update, or dry_run=false to clear caches."
     else:
         result["recommendation"] = "Index is up to date."
 
@@ -2605,6 +2772,7 @@ TOOLS = [
             "Detect file changes since last index and optionally clear caches. "
             "dry_run=true (default): only report which files changed. "
             "dry_run=false: clear all caches (must run 'python index_all.py' after). "
+            "auto_reindex=true: detect changes AND perform live incremental reindex in-process. "
             "Returns: changed files grouped by type (modified/added/deleted) and project."
         ),
         "inputSchema": {
@@ -2612,6 +2780,7 @@ TOOLS = [
             "properties": {
                 "dry_run": {"type": "boolean", "default": True, "description": "If true, only report changes. If false, also clear caches."},
                 "project": {"type": "string", "description": "Filter to a specific project"},
+                "auto_reindex": {"type": "boolean", "default": False, "description": "If true, perform live incremental reindex when changes are detected."},
             },
         },
     },

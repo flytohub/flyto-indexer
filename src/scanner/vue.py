@@ -114,6 +114,18 @@ class VueScanner(BaseScanner):
                 )
                 dependencies.append(dep)
 
+            # Extract API calls (fetch/axios/etc.)
+            api_calls = self._extract_api_calls(script_content, script_start)
+            for api_call in api_calls:
+                dep = Dependency(
+                    source_id=comp_symbol.id,
+                    target_id=api_call["url"],
+                    dep_type=DependencyType.API_CALLS,
+                    source_line=api_call["line"],
+                    metadata={"method": api_call["method"], "url": api_call["url"]},
+                )
+                dependencies.append(dep)
+
             # Extract defineProps/defineEmits
             props_emits = self._extract_props_emits(script_content)
             comp_symbol.metadata = {
@@ -313,6 +325,48 @@ class VueScanner(BaseScanner):
                 })
 
         return calls
+
+    # Patterns for detecting frontend API calls
+    _API_CALL_PATTERNS = [
+        # fetch('/api/users') or fetch(`/api/users`)
+        re.compile(r"""fetch\s*\(\s*[`'"](\/[^`'"]+)[`'"]\s*"""),
+        # axios.get('/api/users') etc.
+        re.compile(r"""axios\s*\.\s*(get|post|put|delete|patch)\s*\(\s*[`'"](\/[^`'"]+)[`'"]\s*""", re.I),
+        # api.get('/users'), $http.get('/users'), etc.
+        re.compile(r"""(?:api|\$http|http|request)\s*\.\s*(get|post|put|delete|patch)\s*\(\s*[`'"](\/[^`'"]+)[`'"]\s*""", re.I),
+    ]
+
+    def _extract_api_calls(self, script: str, offset: int) -> list[dict]:
+        """
+        Extract frontend API calls (fetch, axios, $http, etc.)
+
+        Args:
+            script: Script content
+            offset: Line offset (script start line)
+
+        Returns list of {method, url, line}.
+        """
+        results = []
+        seen = set()
+
+        for pattern in self._API_CALL_PATTERNS:
+            for match in pattern.finditer(script):
+                groups = match.groups()
+                if len(groups) == 1:
+                    method = "GET"
+                    url = groups[0]
+                else:
+                    method = groups[0].upper()
+                    url = groups[1]
+
+                rel_line = script[:match.start()].count('\n') + 1
+                line = offset + rel_line
+                key = (method, url, line)
+                if key not in seen:
+                    seen.add(key)
+                    results.append({"method": method, "url": url, "line": line})
+
+        return results
 
     def _generate_summary(
         self,

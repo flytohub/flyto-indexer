@@ -9,9 +9,15 @@ Usage:
 
 import json
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+try:
+    from .bm25 import BM25Index
+except ImportError:
+    from bm25 import BM25Index
 
 from .context.loader import ContextLoader
 from .indexer import IncrementalIndexer, scan_directory_hashes
@@ -71,8 +77,10 @@ class IndexEngine:
             incremental: Whether to perform incremental update (only update changed files)
 
         Returns:
-            Scan result summary
+            Scan result summary (includes timing breakdown)
         """
+        t_total_start = time.monotonic()
+
         # Collect all supported extensions
         extensions = []
         for scanner in self.scanners:
@@ -99,6 +107,7 @@ class IndexEngine:
             self.index = self._create_empty_index()
 
         # Scan files
+        t_scan_start = time.monotonic()
         result = ScanResult()
         for rel_path in files_to_scan:
             file_path = self.project_root / rel_path
@@ -123,16 +132,25 @@ class IndexEngine:
                 result.add_file_result(symbols, deps, manifest)
             except (SyntaxError, UnicodeDecodeError, OSError, ValueError) as e:
                 result.add_error(rel_path, str(e))
+        t_scan_end = time.monotonic()
 
         # Update index
         self._update_index(result, changes)
 
         # Resolve dependencies and build reverse index
+        t_resolve_start = time.monotonic()
         self._resolve_dependencies()
-        self._build_reverse_index()
+        t_resolve_end = time.monotonic()
 
-        # Save index
+        t_reverse_start = time.monotonic()
+        self._build_reverse_index()
+        t_reverse_end = time.monotonic()
+
+        # Save index + build BM25
+        t_save_start = time.monotonic()
         self._save_index()
+        self._build_bm25_index()
+        t_save_end = time.monotonic()
 
         # Apply incremental changes to manifest
         if incremental and changes:
@@ -143,6 +161,8 @@ class IndexEngine:
                 result.dependencies
             )
 
+        t_total_end = time.monotonic()
+
         return {
             "project": self.project_name,
             "files_scanned": len(files_to_scan),
@@ -150,6 +170,13 @@ class IndexEngine:
             "dependencies_found": len(result.dependencies),
             "errors": len(result.errors),
             "changes": changes.summary() if changes else "full rebuild",
+            "timing": {
+                "scan_files": round(t_scan_end - t_scan_start, 3),
+                "resolve_deps": round(t_resolve_end - t_resolve_start, 3),
+                "build_reverse": round(t_reverse_end - t_reverse_start, 3),
+                "save_index": round(t_save_end - t_save_start, 3),
+                "total": round(t_total_end - t_total_start, 3),
+            },
         }
 
     def impact(self, symbol_id: str, max_depth: int = 3) -> dict:
@@ -407,6 +434,41 @@ class IndexEngine:
                 if sid not in module_to_symbols[mod_key]:
                     module_to_symbols[mod_key].append(sid)
 
+        # Resolve API_CALLS → API symbols cross-reference
+        # API symbol names are "METHOD /path" (e.g., "GET /api/users")
+        api_path_map = {}  # url_path -> [symbol_ids]
+        for sid, symbol in self.index.symbols.items():
+            if symbol.symbol_type == SymbolType.API:
+                # Extract URL path from name (format: "METHOD /path")
+                parts = symbol.name.split(" ", 1)
+                url_path = parts[1] if len(parts) == 2 else symbol.name
+                if url_path not in api_path_map:
+                    api_path_map[url_path] = []
+                api_path_map[url_path].append(sid)
+
+        for _dep_id, dep in self.index.dependencies.items():
+            if dep.dep_type.value != "api_calls":
+                continue
+            target_url = dep.target_id
+            dep_method = dep.metadata.get("method", "GET")
+            # Try exact URL match first
+            candidates = api_path_map.get(target_url, [])
+            if not candidates:
+                # Try suffix match
+                for api_path, api_sids in api_path_map.items():
+                    if target_url.endswith(api_path) or api_path.endswith(target_url):
+                        candidates = api_sids
+                        break
+            if candidates:
+                # Prefer method match
+                resolved = candidates[0]
+                for cid in candidates:
+                    sym = self.index.symbols.get(cid)
+                    if sym and sym.name.startswith(dep_method + " "):
+                        resolved = cid
+                        break
+                dep.metadata["resolved_target"] = resolved
+
         # Resolve each call dependency
         for _dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "calls":
@@ -622,6 +684,25 @@ class IndexEngine:
         }
 
         index_file.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+
+    def _build_bm25_index(self):
+        """Build BM25 search index from symbols and save to disk."""
+        documents = {}
+        for sid, symbol in self.index.symbols.items():
+            # Build document text: name + summary + first 300 chars of content
+            parts = [symbol.name]
+            if symbol.summary:
+                parts.append(symbol.summary)
+            if symbol.content:
+                parts.append(symbol.content[:300])
+            documents[sid] = " ".join(parts)
+
+        if not documents:
+            return
+
+        bm25 = BM25Index()
+        bm25.build(documents)
+        bm25.save(self.index_dir / "bm25.json")
 
     def _deserialize_index(self, data: dict) -> ProjectIndex:
         """Deserialize index from JSON"""

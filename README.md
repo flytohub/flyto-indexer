@@ -10,7 +10,7 @@
     <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
   </p>
   <p>
-    Impact analysis &bull; Smart code search &bull; Dependency graphs &bull; Dead code detection
+    Impact analysis &bull; BM25 code search &bull; Cross-language API graph &bull; Dead code detection
     <br/>
     Works with Claude Code, Cursor, Windsurf, and any MCP client
   </p>
@@ -135,9 +135,9 @@ Claude: Let me check the impact first.
   Risk: MEDIUM — 3 files affected, no breaking changes detected
 ```
 
-### Smart Code Search
+### BM25 Code Search
 
-Search uses symbol-aware ranking with metadata matching — no embeddings or external services required.
+Search uses **Okapi BM25** ranking — the same algorithm behind Elasticsearch — with camelCase-aware tokenization, symbol-type weighting, and reference-count boosting. Pure Python, zero dependencies.
 
 ```
 > search_code("authentication")
@@ -156,6 +156,21 @@ Search uses symbol-aware ranking with metadata matching — no embeddings or ext
   ├── imports: useAuth, usePayment, cartApi
   └── depended on by: Cart.vue, QuickBuy.vue, CartSidebar.vue
 ```
+
+### Cross-Language API Graph
+
+Automatically links Python backend endpoints to TypeScript/Vue frontend callers — across languages, across projects.
+
+```
+> list_apis()
+
+  GET /api/users
+    Defined in: backend/routes/user.py (list_users)
+    Called by: frontend/views/UserList.vue, frontend/api/users.ts
+    Call count: 3
+```
+
+Detects: FastAPI/Flask/Starlette decorators, `fetch()`, `axios`, `$http`, and more.
 
 ### Cross-Project Tracking
 
@@ -209,7 +224,7 @@ Search uses symbol-aware ranking with metadata matching — no embeddings or ext
 |------|-------------|
 | `list_projects` | List all indexed projects with statistics |
 | `list_categories` | Show code categories (auth, payment, etc.) |
-| `list_apis` | List all API endpoints found in code |
+| `list_apis` | List API endpoints with cross-language caller tracking |
 | `check_index_status` | Check if the index is up-to-date |
 
 ### Code Quality
@@ -231,7 +246,7 @@ Search uses symbol-aware ranking with metadata matching — no embeddings or ext
 |------|-------------|
 | `session_track` | Track workspace events for search boosting |
 | `session_get` | Inspect current session state |
-| `check_and_reindex` | Detect file changes and trigger re-indexing |
+| `check_and_reindex` | Detect file changes and live-reindex in-process |
 
 </details>
 
@@ -239,9 +254,9 @@ Search uses symbol-aware ranking with metadata matching — no embeddings or ext
 
 | Language | Parser | Symbols Extracted |
 |----------|--------|-------------------|
-| Python | AST | Functions, classes, methods, decorators |
-| TypeScript/JavaScript | Custom parser | Functions, classes, interfaces, types, exports |
-| Vue | SFC parser | Components, composables, emits, props |
+| Python | AST | Functions, classes, methods, decorators, API endpoints |
+| TypeScript/JavaScript | Custom parser | Functions, classes, interfaces, types, exports, API calls |
+| Vue | SFC parser | Components, composables, emits, props, API calls |
 | Go | Custom parser | Functions, structs, methods, interfaces |
 | Rust | Custom parser | Functions, structs, impl blocks, traits |
 | Java | Custom parser | Classes, methods, interfaces, annotations |
@@ -254,6 +269,7 @@ your-project/
 └── .flyto-index/   ← Generated index (add to .gitignore)
     ├── index.json             # Symbol index (symbols, deps, reverse index)
     ├── content.jsonl          # Source code content (lazy-loaded)
+    ├── bm25.json              # BM25 search index (built automatically)
     ├── PROJECT_MAP.json       # File metadata and categories
     └── manifest.json          # Incremental tracking (content hashes)
 ```
@@ -374,6 +390,18 @@ jobs:
       - run: pip install flyto-indexer
       - run: flyto-index scan .
 ```
+
+## Benchmark
+
+Run against CPython stdlib (~1,800 Python files) to verify performance:
+
+```bash
+python benchmark.py                         # auto-clone CPython
+python benchmark.py --repo /path/to/cpython  # use local copy
+python benchmark.py --json                   # JSON output
+```
+
+Outputs: files scanned, symbols found, per-phase timing, peak memory, and known-symbol validation.
 
 ## Security & Privacy
 

@@ -192,6 +192,18 @@ class TypeScriptScanner(BaseScanner):
                 exports=[name] if 'export' in content[max(0, match.start()-20):match.start()] else [],
             ))
 
+        # Extract API calls (fetch/axios/etc.)
+        api_calls = self._extract_api_calls(content)
+        for api_call in api_calls:
+            dep = Dependency(
+                source_id=file_source_id,
+                target_id=api_call["url"],
+                dep_type=DependencyType.API_CALLS,
+                source_line=api_call["line"],
+                metadata={"method": api_call["method"], "url": api_call["url"]},
+            )
+            dependencies.append(dep)
+
         # Compute hash
         for symbol in symbols:
             symbol.compute_hash()
@@ -283,6 +295,44 @@ class TypeScriptScanner(BaseScanner):
             return doc.strip()[:200]
 
         return ""
+
+    # Patterns for detecting frontend API calls
+    _API_CALL_PATTERNS = [
+        # fetch('/api/users') or fetch(`/api/users`)
+        re.compile(r"""fetch\s*\(\s*[`'"](\/[^`'"]+)[`'"]\s*"""),
+        # axios.get('/api/users') etc.
+        re.compile(r"""axios\s*\.\s*(get|post|put|delete|patch)\s*\(\s*[`'"](\/[^`'"]+)[`'"]\s*""", re.I),
+        # api.get('/users'), $http.get('/users'), http.post('/items'), request.delete('/x')
+        re.compile(r"""(?:api|\$http|http|request)\s*\.\s*(get|post|put|delete|patch)\s*\(\s*[`'"](\/[^`'"]+)[`'"]\s*""", re.I),
+    ]
+
+    def _extract_api_calls(self, content: str) -> list[dict]:
+        """
+        Extract frontend API calls (fetch, axios, $http, etc.)
+
+        Returns list of {method, url, line}.
+        """
+        results = []
+        seen = set()
+
+        for pattern in self._API_CALL_PATTERNS:
+            for match in pattern.finditer(content):
+                groups = match.groups()
+                if len(groups) == 1:
+                    # fetch pattern: only URL captured
+                    method = "GET"
+                    url = groups[0]
+                else:
+                    method = groups[0].upper()
+                    url = groups[1]
+
+                line = content[:match.start()].count('\n') + 1
+                key = (method, url, line)
+                if key not in seen:
+                    seen.add(key)
+                    results.append({"method": method, "url": url, "line": line})
+
+        return results
 
     def _extract_calls(self, content: str) -> list[dict]:
         """
