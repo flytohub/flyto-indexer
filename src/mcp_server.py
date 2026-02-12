@@ -2374,6 +2374,7 @@ TOOLS = [
     {
         "name": "search_code",
         "title": "Search Code",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Search for functions, classes, components, and composables across all indexed projects. "
             "Use this as the FIRST step when you need to find code by name or keyword. "
@@ -2405,6 +2406,7 @@ TOOLS = [
     {
         "name": "get_symbol_content",
         "title": "Get Symbol Content",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Get the full source code of a specific symbol (function, class, component). "
             "Use this AFTER search_code to read the actual implementation. "
@@ -2425,6 +2427,7 @@ TOOLS = [
     {
         "name": "get_file_symbols",
         "title": "List File Symbols",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "List all symbols (functions, classes, methods, components) defined in a specific file. "
             "Use this to get an overview of what a file contains before diving deeper. "
@@ -2441,6 +2444,7 @@ TOOLS = [
     {
         "name": "get_file_info",
         "title": "Get File Info",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Get semantic metadata for a file: purpose, category, keywords, APIs used, and dependencies. "
             "Use this to quickly understand what a file does without reading its source code. "
@@ -2457,6 +2461,7 @@ TOOLS = [
     {
         "name": "fulltext_search",
         "title": "Full-Text Search",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Full-text search across all indexed source code. Searches inside comments, strings, and TODO/FIXME markers. "
             "Use this when search_code doesn't find what you need (search_code matches symbol names; this searches content). "
@@ -2485,6 +2490,7 @@ TOOLS = [
     {
         "name": "find_references",
         "title": "Find References",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Find all places that call or import a specific symbol. "
             "Use this BEFORE modifying a function/component to understand who depends on it. "
@@ -2506,6 +2512,7 @@ TOOLS = [
     {
         "name": "impact_analysis",
         "title": "Impact Analysis",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Analyze the blast radius of modifying a symbol. "
             "Use this to assess risk BEFORE making changes to shared code. "
@@ -2526,6 +2533,7 @@ TOOLS = [
     {
         "name": "dependency_graph",
         "title": "Dependency Graph",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Get the dependency graph for a file, symbol, or entire project. "
             "Shows what a module imports (dependencies) and what imports it (dependents). "
@@ -2551,6 +2559,7 @@ TOOLS = [
     {
         "name": "cross_project_impact",
         "title": "Cross-Project Impact",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Track cross-project API usage. When a function/class in one project changes, "
             "find all other projects that need to be updated. "
@@ -2578,6 +2587,7 @@ TOOLS = [
     {
         "name": "list_projects",
         "title": "List Projects",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "List all indexed projects with statistics. "
             "Use this FIRST to discover available projects and their sizes. "
@@ -2592,6 +2602,7 @@ TOOLS = [
     {
         "name": "list_categories",
         "title": "List Categories",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "List all code categories (e.g. auth, payment, product, order) and how many files belong to each. "
             "Use this to understand the high-level structure of indexed projects. "
@@ -2606,6 +2617,7 @@ TOOLS = [
     {
         "name": "list_apis",
         "title": "List APIs",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "List all API endpoints found in indexed code, along with which files use them. "
             "Use this to discover available backend endpoints or see API usage patterns. "
@@ -2620,6 +2632,7 @@ TOOLS = [
     {
         "name": "check_index_status",
         "title": "Check Index Status",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Check if the code index is up-to-date or stale. "
             "Compares file modification times against the last index time. "
@@ -2637,6 +2650,7 @@ TOOLS = [
     {
         "name": "find_dead_code",
         "title": "Find Dead Code",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Find unreferenced functions, classes, and components (dead code). "
             "These symbols are never imported or called by any other code and can likely be removed. "
@@ -2666,6 +2680,7 @@ TOOLS = [
     {
         "name": "find_todos",
         "title": "Find TODOs",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Find all TODO, FIXME, HACK, and XXX markers across indexed code. "
             "Use this to track technical debt and pending work items. "
@@ -2698,6 +2713,7 @@ TOOLS = [
     {
         "name": "get_description",
         "title": "Get Description",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Get the semantic one-liner description for a file. "
             "Returns the latest human or AI-written summary, staleness status (whether the file changed since description was written), and metadata. "
@@ -2715,6 +2731,7 @@ TOOLS = [
     {
         "name": "update_description",
         "title": "Update Description",
+        "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
         "description": (
             "Write or update a semantic description for a file. "
             "Call this after reading or modifying a file to record what it does. "
@@ -2737,6 +2754,7 @@ TOOLS = [
     {
         "name": "get_file_context",
         "title": "Get File Context",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Get a complete context package for a file in one call. "
             "Returns file info (purpose, category), symbols, imports, dependents, "
@@ -2756,6 +2774,7 @@ TOOLS = [
     {
         "name": "find_test_file",
         "title": "Find Test File",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Find the corresponding test file for a source file, or the source file for a test file. "
             "Uses naming conventions (test_foo.py, Foo.spec.ts) and import analysis as fallback. "
@@ -2772,6 +2791,7 @@ TOOLS = [
     {
         "name": "edit_impact_preview",
         "title": "Edit Impact Preview",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Preview the impact of editing a symbol before making changes. "
             "Shows all call sites with actual code lines, risk assessment, and suggestions. "
@@ -2798,6 +2818,7 @@ TOOLS = [
     {
         "name": "check_and_reindex",
         "title": "Check & Reindex",
+        "annotations": {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False},
         "description": (
             "Detect file changes since last index and optionally clear caches. "
             "dry_run=true (default): only report which files changed. "
@@ -2817,6 +2838,7 @@ TOOLS = [
     {
         "name": "session_track",
         "title": "Track Session Event",
+        "annotations": {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False},
         "description": (
             "Track a workspace event for search boosting. "
             "Events: file_open (opened a file), query (searched), edit (edited a file/symbol). "
@@ -2841,6 +2863,7 @@ TOOLS = [
     {
         "name": "session_get",
         "title": "Get Session State",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Get the current state of a workspace session. "
             "Returns: open files, recent queries, recent edits, and boost path count. "
