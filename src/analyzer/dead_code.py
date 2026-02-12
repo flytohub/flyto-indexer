@@ -190,11 +190,12 @@ class DeadCodeDetector:
 
     def _analyze_vue(self, rel_path: str, content: str):
         """Analyze Vue file"""
-        # Extract <script> block
-        script_match = re.search(r'<script[^>]*>(.*?)</script>', content, re.DOTALL)
-        if script_match:
-            script_content = script_match.group(1)
-            self._analyze_typescript(rel_path, script_content)
+        # Extract <script> block (string-based to avoid regex HTML parsing pitfalls)
+        script_open = content.find("<script")
+        script_body_start = content.find(">", script_open) + 1 if script_open != -1 else -1
+        script_end = content.find("</script>", script_body_start) if script_body_start > 0 else -1
+        if script_body_start > 0 and script_end != -1:
+            self._analyze_typescript(rel_path, content[script_body_start:script_end])
 
         # Vue component itself is an export
         self.exports[rel_path].add(Path(rel_path).stem)

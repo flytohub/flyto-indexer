@@ -117,9 +117,10 @@ class SymbolResolver:
             # Go: github.com/user/pkg -> pkg (last segment)
             # Or internal/pkg -> internal/pkg
             if "/" in module:
-                # For external packages, use last segment
-                if module.startswith("github.com/") or module.startswith("golang.org/"):
-                    return module.split("/")[-1]
+                parts = module.split("/")
+                # External packages have a domain as first segment (contains ".")
+                if "." in parts[0]:
+                    return parts[-1]
                 return module
             return module
 

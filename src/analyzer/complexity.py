@@ -424,10 +424,12 @@ class ComplexityAnalyzer:
             elif ext in [".ts", ".tsx", ".js", ".jsx"]:
                 functions = self.analyze_typescript_file(rel_path, content)
             elif ext == ".vue":
-                # Extract script block
-                script_match = re.search(r'<script[^>]*>(.*?)</script>', content, re.DOTALL)
-                if script_match:
-                    functions = self.analyze_typescript_file(rel_path, script_match.group(1))
+                # Extract script block (string-based to avoid regex HTML parsing pitfalls)
+                script_open = content.find("<script")
+                script_body_start = content.find(">", script_open) + 1 if script_open != -1 else -1
+                script_end = content.find("</script>", script_body_start) if script_body_start > 0 else -1
+                if script_body_start > 0 and script_end != -1:
+                    functions = self.analyze_typescript_file(rel_path, content[script_body_start:script_end])
                 else:
                     functions = []
             elif ext == ".java":

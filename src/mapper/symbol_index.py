@@ -229,11 +229,13 @@ class SymbolIndexer:
             exported=True,
         ))
 
-        # Extract script block
-        script_match = re.search(r'<script[^>]*>(.*?)</script>', content, re.DOTALL)
-        if script_match:
-            script_content = script_match.group(1)
-            script_start = content[:content.find("<script")].count("\n") + 1
+        # Extract script block (string-based to avoid regex HTML parsing pitfalls)
+        script_open = content.find("<script")
+        script_body_start = content.find(">", script_open) + 1 if script_open != -1 else -1
+        script_end = content.find("</script>", script_body_start) if script_body_start > 0 else -1
+        if script_body_start > 0 and script_end != -1:
+            script_content = content[script_body_start:script_end]
+            script_start = content[:script_open].count("\n") + 1
 
             # Adjust line numbers
             ts_symbols = self.extract_typescript_symbols(rel_path, script_content)
