@@ -10,11 +10,17 @@ Usage:
     flyto-index outline <path>
     flyto-index brief [path]
     flyto-index describe <file_path> [--summary "..."] [--path <project_path>]
+    flyto-index install-hook [path] [--remove]
+    flyto-index demo [path]
+    flyto-index check [path] [--threshold high|medium|low] [--json] [--base <ref>]
 """
 
 import argparse
 import json
+import os
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -124,6 +130,34 @@ def main():
     tools_parser.add_argument("--json", action="store_true", dest="as_json", default=True, help="Output as JSON (default)")
     tools_parser.add_argument("--compact", action="store_true", help="Compact output: names and one-liner summaries only")
 
+    # install-hook
+    hook_parser = subparsers.add_parser(
+        "install-hook",
+        help="Install git post-commit hook for auto-reindexing",
+        description="Install a git post-commit hook that automatically runs incremental scan after each commit.",
+    )
+    hook_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    hook_parser.add_argument("--remove", action="store_true", help="Remove the flyto hook instead of installing it")
+
+    # demo
+    demo_parser = subparsers.add_parser(
+        "demo",
+        help="Quick 30-second value demo (scan + impact analysis)",
+        description="Scan the project and demonstrate impact analysis on the most-referenced symbol. No MCP required.",
+    )
+    demo_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+
+    # check
+    check_parser = subparsers.add_parser(
+        "check",
+        help="CI-friendly impact check — exits non-zero when changes are risky",
+        description="Detect changed files, analyze impact, and exit non-zero if risk exceeds threshold. Designed for CI pipelines.",
+    )
+    check_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    check_parser.add_argument("--threshold", choices=["high", "medium", "low"], default="high", help="Fail when risk >= this level (default: high)")
+    check_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as structured JSON")
+    check_parser.add_argument("--base", help="Git ref to compare against (default: detect from index staleness)")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -149,6 +183,12 @@ def main():
             result = cmd_outline(args)
         elif args.command == "tools":
             result = cmd_tools(args)
+        elif args.command == "install-hook":
+            result = cmd_install_hook(args)
+        elif args.command == "demo":
+            result = cmd_demo(args)
+        elif args.command == "check":
+            result = cmd_check(args)
         else:
             parser.print_help()
             return
@@ -658,6 +698,282 @@ def cmd_tools(args):
         "usage": "flyto-index <command> [args]",
         "commands": commands,
     }
+
+
+HOOK_MARKER_BEGIN = "# --- flyto-indexer begin ---"
+HOOK_MARKER_END = "# --- flyto-indexer end ---"
+HOOK_CONTENT = """\
+# --- flyto-indexer begin ---
+flyto-index scan . 2>/dev/null &
+# --- flyto-indexer end ---
+"""
+
+
+def cmd_install_hook(args):
+    """Install or remove git post-commit hook for auto-reindexing."""
+    project_path = Path(args.path).resolve()
+    git_dir = project_path / ".git"
+
+    if not git_dir.is_dir():
+        print(f"Not a git repository: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    hooks_dir = git_dir / "hooks"
+    hooks_dir.mkdir(exist_ok=True)
+    hook_file = hooks_dir / "post-commit"
+
+    if args.remove:
+        # Remove flyto lines between markers
+        if not hook_file.exists():
+            print("No post-commit hook found. Nothing to remove.")
+            return None
+
+        content = hook_file.read_text(encoding="utf-8")
+        if HOOK_MARKER_BEGIN not in content:
+            print("No flyto hook found in post-commit. Nothing to remove.")
+            return None
+
+        # Strip lines between markers (inclusive)
+        lines = content.splitlines(keepends=True)
+        new_lines = []
+        inside_marker = False
+        for line in lines:
+            if HOOK_MARKER_BEGIN in line:
+                inside_marker = True
+                continue
+            if HOOK_MARKER_END in line:
+                inside_marker = False
+                continue
+            if not inside_marker:
+                new_lines.append(line)
+
+        new_content = "".join(new_lines).strip()
+        # If only a shebang line remains, treat as empty
+        if new_content and new_content.strip().replace("#!/bin/sh", "").strip():
+            hook_file.write_text(new_content + "\n", encoding="utf-8")
+        else:
+            hook_file.unlink()
+
+        print(f"Removed flyto hook from {hook_file}")
+        return None
+
+    # Install mode
+    if hook_file.exists():
+        content = hook_file.read_text(encoding="utf-8")
+        if HOOK_MARKER_BEGIN in content:
+            print("Flyto hook already installed. Skipping.")
+            return None
+        # Append to existing hook
+        if not content.endswith("\n"):
+            content += "\n"
+        content += "\n" + HOOK_CONTENT
+        hook_file.write_text(content, encoding="utf-8")
+    else:
+        hook_file.write_text("#!/bin/sh\n\n" + HOOK_CONTENT, encoding="utf-8")
+
+    os.chmod(hook_file, 0o755)
+    print(f"Installed flyto post-commit hook at {hook_file}")
+    return None
+
+
+def cmd_demo(args):
+    """Quick 30-second value demo: scan + impact analysis."""
+    from .engine import IndexEngine
+
+    project_path = Path(args.path).resolve()
+    project_name = project_path.name
+
+    print(f"Scanning {project_path.name}...", end=" ", flush=True)
+    t0 = time.monotonic()
+
+    engine = IndexEngine(project_name, project_path)
+    engine.scan(incremental=True)
+
+    elapsed = time.monotonic() - t0
+    symbol_count = len(engine.index.symbols)
+
+    if symbol_count == 0:
+        print("done")
+        print()
+        print("No symbols found. Make sure the project has supported source files")
+        print("(.py, .ts, .tsx, .js, .jsx, .vue, .go, .rs, .java).")
+        return None
+
+    print(f"done ({symbol_count} symbols in {elapsed:.1f}s)")
+    print()
+
+    # Find symbol with highest reference_count
+    best_symbol = max(
+        engine.index.symbols.values(),
+        key=lambda s: s.reference_count,
+    )
+
+    # Run impact analysis
+    impact = engine.impact(best_symbol.id)
+    chain = impact.get("impact_chain", [])
+
+    # Collect affected files and total call sites
+    total_affected = 0
+    affected_files = set()
+    for level in chain:
+        for entry in level.get("affected", []):
+            total_affected += 1
+            affected_files.add(entry["path"])
+
+    print(f"Example: What if you change `{best_symbol.name}`?")
+    if total_affected > 0:
+        file_word = "file" if len(affected_files) == 1 else "files"
+        site_word = "call site" if total_affected == 1 else "call sites"
+        print(f"  → {total_affected} {site_word} in {len(affected_files)} {file_word}")
+
+        # Determine risk
+        if total_affected >= 20:
+            risk = "HIGH"
+        elif total_affected >= 3:
+            risk = "MEDIUM"
+        else:
+            risk = "LOW"
+        print(f"  → Risk: {risk}")
+
+        # Show affected files (max 5)
+        shown = sorted(affected_files)[:5]
+        print(f"  → Affected: {', '.join(shown)}")
+        if len(affected_files) > 5:
+            print(f"    ... and {len(affected_files) - 5} more")
+    else:
+        print("  → No other code depends on this symbol")
+
+    print()
+    print(f"Try: flyto-index impact {best_symbol.name} --path .")
+    return None
+
+
+def cmd_check(args):
+    """CI-friendly impact check — exits non-zero when changes are risky."""
+    from .engine import IndexEngine
+
+    project_path = Path(args.path).resolve()
+    project_name = project_path.name
+
+    engine = IndexEngine(project_name, project_path)
+
+    # Detect changed files
+    changed_files = []
+    if args.base:
+        # Use git diff against base ref
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(project_path), "diff", "--name-only", f"{args.base}...HEAD"],
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode == 0:
+                changed_files = [f for f in result.stdout.strip().split("\n") if f]
+            else:
+                print(f"git diff failed: {result.stderr.strip()}", file=sys.stderr)
+                sys.exit(1)
+        except FileNotFoundError:
+            print("git not found", file=sys.stderr)
+            sys.exit(1)
+        except subprocess.TimeoutExpired:
+            print("git diff timed out", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # Use index staleness — re-scan and detect via incremental
+        from .indexer.incremental import scan_directory_hashes
+
+        extensions = []
+        for scanner in engine.scanners:
+            extensions.extend(scanner.supported_extensions)
+
+        current_hashes = scan_directory_hashes(
+            project_path, extensions,
+            ignore_patterns=[
+                "node_modules", "__pycache__", ".git", "dist", "build",
+                ".venv", "venv", ".pytest_cache", ".flyto-index", ".flyto",
+            ],
+        )
+        changes = engine.incremental.detect_changes(current_hashes)
+        changed_files = changes.all_changed()
+
+    # For each changed file, find symbols and compute impact
+    total_affected = 0
+    all_affected_files = set()
+    symbol_details = []
+
+    for rel_path in changed_files:
+        # Find symbols defined in this file
+        for sym_id, sym in engine.index.symbols.items():
+            if sym.path == rel_path:
+                chain = engine.index.get_impact_chain(sym_id, max_depth=3)
+                affected_ids = []
+                affected_paths = set()
+                for level in chain.get("levels", []):
+                    for sid in level.get("symbols", []):
+                        affected_ids.append(sid)
+                        if sid in engine.index.symbols:
+                            affected_paths.add(engine.index.symbols[sid].path)
+
+                if affected_ids:
+                    symbol_details.append({
+                        "symbol": sym_id,
+                        "name": sym.name,
+                        "path": sym.path,
+                        "affected_count": len(affected_ids),
+                        "affected_files": sorted(affected_paths),
+                    })
+                    total_affected += len(affected_ids)
+                    all_affected_files.update(affected_paths)
+
+    # Compute aggregate risk
+    if total_affected >= 20:
+        risk = "HIGH"
+    elif total_affected >= 3:
+        risk = "MEDIUM"
+    else:
+        risk = "LOW"
+
+    risk_levels = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
+    threshold_level = risk_levels[args.threshold.upper()]
+    actual_level = risk_levels[risk]
+    should_fail = actual_level >= threshold_level
+
+    output = {
+        "risk": risk,
+        "changed_files": len(changed_files),
+        "total_affected": total_affected,
+        "affected_files": len(all_affected_files),
+        "threshold": args.threshold.upper(),
+        "pass": not should_fail,
+        "symbols": symbol_details,
+    }
+
+    if hasattr(args, "as_json") and args.as_json:
+        print(json.dumps(output, indent=2, ensure_ascii=False))
+    else:
+        print(f"Risk: {risk}")
+        print(f"Changed files: {len(changed_files)}")
+        print(f"Total affected symbols: {total_affected}")
+        print(f"Affected files: {len(all_affected_files)}")
+        print(f"Threshold: {args.threshold.upper()}")
+        print()
+
+        if symbol_details:
+            for detail in symbol_details[:10]:
+                print(f"  {detail['name']} ({detail['path']})")
+                print(f"    → {detail['affected_count']} affected symbols in {len(detail['affected_files'])} files")
+            if len(symbol_details) > 10:
+                print(f"  ... and {len(symbol_details) - 10} more symbols")
+            print()
+
+        if should_fail:
+            print(f"FAIL: risk {risk} >= threshold {args.threshold.upper()}")
+        else:
+            print(f"PASS: risk {risk} < threshold {args.threshold.upper()}")
+
+    if should_fail:
+        sys.exit(1)
+
+    return None
 
 
 if __name__ == "__main__":

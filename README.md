@@ -252,10 +252,10 @@ Search uses symbol-aware ranking with metadata matching — no embeddings or ext
 your-project/
 ├── src/            ← Your code (any language)
 └── .flyto-index/   ← Generated index (add to .gitignore)
-    ├── index.json.gz          # Symbol index (compressed)
-    ├── content.jsonl           # Source code content (lazy-loaded)
-    ├── PROJECT_MAP.json.gz     # File metadata
-    └── workspace_manifest.json # Incremental tracking
+    ├── index.json             # Symbol index (symbols, deps, reverse index)
+    ├── content.jsonl          # Source code content (lazy-loaded)
+    ├── PROJECT_MAP.json       # File metadata and categories
+    └── manifest.json          # Incremental tracking (content hashes)
 ```
 
 ### How It Works
@@ -315,28 +315,47 @@ curl -X POST http://localhost:8765/impact \
 
 ## Integrations
 
-- **[Claude Code](README.md#connect-to-claude-code)** — MCP server (native)
-- **[Cursor](integrations/cursor.md)** — HTTP API + .cursorrules
-- **[VSCode / Copilot](integrations/vscode.md)** — Tasks + Extension
-- **[OpenAI GPTs](integrations/openai_gpts.md)** — HTTP API + OpenAPI schema
+- **[Claude Code](#connect-to-claude-code)** — MCP server (native)
+- **Cursor** — HTTP API + `.cursorrules`
+- **VSCode / Copilot** — Tasks + Extension
+- **OpenAI GPTs** — HTTP API + OpenAPI schema
 
 ## CLI
 
 ```bash
-# Scan and index a project
-flyto-index scan /path/to/project
+# Initialize a project
+flyto-index init .
 
-# Check what changed since last index
-flyto-index status /path/to/project
+# Scan and index a project
+flyto-index scan .
+
+# Check index status
+flyto-index status .
 
 # Analyze impact of changing a symbol
-flyto-index impact myproject:src/auth.py:function:login
+flyto-index impact useAuth --path .
 
-# Generate project outline (L0)
-flyto-index brief /path/to/project
+# Generate project brief / outline
+flyto-index brief .
+flyto-index outline .
 
-# Annotate file purposes
-flyto-index describe /path/to/project
+# Read or write file descriptions
+flyto-index describe src/auth.py --path .
+flyto-index describe src/auth.py --summary "User auth: login, register, JWT" --path .
+
+# Quick 30-second value demo (scan + impact)
+flyto-index demo .
+
+# Install git hook for auto-reindex on commit
+flyto-index install-hook .
+flyto-index install-hook . --remove
+
+# CI-friendly impact check (exits non-zero if risky)
+flyto-index check . --threshold medium
+flyto-index check . --json --base main
+
+# List all commands as JSON (for AI integration)
+flyto-index tools
 ```
 
 ## CI/CD Integration
@@ -353,7 +372,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: pip install flyto-indexer
-      - run: flyto-index scan . --incremental
+      - run: flyto-index scan .
 ```
 
 ## Security & Privacy
