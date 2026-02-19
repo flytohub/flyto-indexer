@@ -147,13 +147,14 @@ Detects FastAPI, Flask, Starlette decorators + `fetch()`, `axios`, `$http` calls
 
 ## Tools
 
-29 MCP tools. Organized by what they do:
+30 MCP tools. Organized by what they do:
 
 **Impact & Dependencies** — the reason to install this
 
 | Tool | What it answers |
 |------|----------------|
 | `impact_analysis` | "What breaks if I change this?" |
+| `impact_from_diff` | "What's the blast radius of my uncommitted changes?" |
 | `find_references` | "Who calls this function?" (with file + line) |
 | `cross_project_impact` | "Which other repos use this?" |
 | `edit_impact_preview` | "Show me the exact lines affected by this rename" |
@@ -173,7 +174,7 @@ Detects FastAPI, Flask, Starlette decorators + `fetch()`, `axios`, `$http` calls
 | `find_todos` | "What's the tech debt backlog?" |
 
 <details>
-<summary>All 29 tools (including search, metadata, session)</summary>
+<summary>All 30 tools (including search, metadata, session)</summary>
 
 **Search & Discovery**
 
@@ -210,6 +211,7 @@ Detects FastAPI, Flask, Starlette decorators + `fetch()`, `axios`, `$http` calls
 | `session_track` | Track events for search boosting |
 | `session_get` | Inspect session state |
 | `check_and_reindex` | Detect changes + live reindex |
+| `impact_from_diff` | Git diff → symbol impact analysis |
 
 </details>
 

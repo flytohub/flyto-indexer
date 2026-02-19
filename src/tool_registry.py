@@ -28,6 +28,7 @@ INDEXER_TOOL_NAMES: Set[str] = {
     "find_dead_code",
     "find_todos",
     "check_index_status",
+    "impact_from_diff",
 }
 
 
@@ -246,6 +247,30 @@ def get_vscode_tool_schemas() -> list:
                 },
             },
         },
+        {
+            "type": "function",
+            "function": {
+                "name": "impact_from_diff",
+                "description": (
+                    "Parse git diff, match changed hunks to indexed symbols, classify each change "
+                    "(signature_change, body_change, rename), and run impact analysis. "
+                    "Use this to assess blast radius of uncommitted or recent changes. "
+                    "Chain with: edit_impact_preview (detailed call sites for high-risk symbols)."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "mode": {
+                            "type": "string",
+                            "enum": ["unstaged", "staged", "committed", "branch"],
+                            "description": "What to diff: unstaged (default), staged, committed (base=SHA), branch (base=branch)",
+                        },
+                        "base": {"type": "string", "description": "Base ref for committed/branch mode. Examples: 'HEAD~1', 'main'"},
+                        "project": {"type": "string", "description": "Filter to a specific project"},
+                    },
+                },
+            },
+        },
     ]
 
 
@@ -352,6 +377,11 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             dry_run=args.get("dry_run", True),
             project=args.get("project"),
             auto_reindex=args.get("auto_reindex", False),
+        ),
+        "impact_from_diff": lambda args: _idx.impact_from_diff(
+            mode=args.get("mode", "unstaged"),
+            base=args.get("base", ""),
+            project=args.get("project"),
         ),
         "session_track": lambda args: _idx.session_track(
             session_id=args.get("session_id", ""),

@@ -396,6 +396,20 @@ def code_health_score(_idx, project: str = None) -> dict:
     else:
         grade = "F"
 
+    # next_action: point to worst dimension
+    dimensions = {
+        "complexity": (complexity_score, "find_complex_functions", "Use find_complex_functions to identify refactoring targets."),
+        "dead_code": (dead_score, "find_dead_code", "Use find_dead_code to find removable symbols."),
+        "documentation": (doc_score, "update_description", "Use update_description to document undocumented files."),
+        "modularity": (modularity_score, "dependency_graph", "Use dependency_graph to find isolated modules."),
+    }
+    worst_dim = min(dimensions, key=lambda k: dimensions[k][0])
+    worst_score, worst_tool, worst_hint = dimensions[worst_dim]
+    if total_score >= 90:
+        next_action = "Excellent health. No immediate action needed."
+    else:
+        next_action = f"Weakest area: {worst_dim} ({worst_score}/25). {worst_hint}"
+
     return {
         "score": total_score,
         "grade": grade,
@@ -418,6 +432,7 @@ def code_health_score(_idx, project: str = None) -> dict:
             },
         },
         "total_symbols": total_symbols,
+        "next_action": next_action,
     }
 
 

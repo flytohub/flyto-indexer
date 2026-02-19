@@ -122,6 +122,49 @@ _test_mapper = None
 # Session store (in-memory, survives across MCP calls within same process)
 _session_store = None
 
+# Auto-reindex state
+_last_reindex_check: float = 0.0
+_AUTO_REINDEX_INTERVAL = 300.0  # 5 min
+_AUTO_REINDEX_ENABLED = os.environ.get("FLYTO_AUTO_REINDEX", "1") != "0"
+
+
+def _maybe_auto_reindex():
+    """Auto-check index freshness on first tool call or every 5 min.
+
+    Fast path: skip if checked within interval.
+    Uses FileWatcher.detect_changes() (mtime-based, fast) and
+    _perform_live_reindex() (incremental, typically <2s) if stale.
+    """
+    global _last_reindex_check
+    if not _AUTO_REINDEX_ENABLED:
+        return
+
+    now = _time.monotonic()
+    if now - _last_reindex_check < _AUTO_REINDEX_INTERVAL:
+        return
+    _last_reindex_check = now
+
+    try:
+        try:
+            from .watcher import FileWatcher
+        except ImportError:
+            from watcher import FileWatcher
+
+        index = load_index()
+        if not index:
+            return
+        watcher = FileWatcher(index)
+        changes = watcher.detect_changes()
+        if changes:
+            sys.stderr.write(f"[flyto-indexer] Auto-reindex: {len(changes)} changed files detected, reindexing...\n")
+            sys.stderr.flush()
+            result = _perform_live_reindex()
+            sys.stderr.write(f"[flyto-indexer] Auto-reindex: done ({result.get('reindexed', 0)} projects updated)\n")
+            sys.stderr.flush()
+    except Exception as e:
+        sys.stderr.write(f"[flyto-indexer] Auto-reindex error: {e}\n")
+        sys.stderr.flush()
+
 
 def load_project_map() -> dict:
     # Try gzip first, fallback to plain JSON
@@ -535,6 +578,15 @@ def impact_analysis(symbol_id: str) -> dict:
         warning = f"⚠️ Modification affects {len(affected)} locations!"
         suggestion = "High impact. Recommend cautious modification and thorough testing."
 
+    # next_action hint for AI
+    if len(affected) == 0:
+        next_action = "Safe to modify — no callers found."
+    elif len(affected) <= 3:
+        first = affected[0]
+        next_action = f"Low impact ({len(affected)} callers). Check first caller: {first.get('path', '')}:{first.get('name', '')}"
+    else:
+        next_action = f"High impact ({len(affected)} callers). Use edit_impact_preview for detailed call sites with code lines."
+
     return {
         "symbol": resolved_id,
         "affected_count": len(affected),
@@ -542,6 +594,7 @@ def impact_analysis(symbol_id: str) -> dict:
         "has_more": len(affected) > 20,
         "warning": warning,
         "suggestion": suggestion,
+        "next_action": next_action,
     }
 
 
@@ -971,6 +1024,15 @@ def find_references(symbol_id: str) -> dict:
         conf = ref.get("confidence", "low")
         confidence_counts[conf] = confidence_counts.get(conf, 0) + 1
 
+    # next_action hint for AI
+    if len(references) == 0:
+        next_action = "No references found — may be dead code. Use find_dead_code to verify."
+    elif len(references) <= 5:
+        top = next((r for r in references if r.get("confidence") == "high"), references[0])
+        next_action = f"{len(references)} reference(s). Highest-confidence: {top.get('from_path', '')}:{top.get('from_name', '')}"
+    else:
+        next_action = f"{len(references)} references across {len(by_project)} project(s). Use impact_analysis for risk assessment."
+
     return {
         "symbol": resolved_id,
         "name": target_name,
@@ -978,6 +1040,7 @@ def find_references(symbol_id: str) -> dict:
         "confidence_breakdown": confidence_counts,
         "by_project": by_project,
         "references": references,
+        "next_action": next_action,
     }
 
 
@@ -1589,12 +1652,20 @@ def find_dead_code(
 
     total_dead_lines = sum(item["lines"] for item in dead_code)
 
+    # next_action hint for AI
+    if dead_code:
+        largest = dead_code[0]
+        next_action = f"Largest dead symbol: {largest['name']} ({largest['lines']} lines) at {largest['path']}:{largest.get('start_line', 0)}. Use get_symbol_content to review before removing."
+    else:
+        next_action = "Codebase is clean — no dead code detected."
+
     return {
         "total": len(dead_code),
         "total_dead_lines": total_dead_lines,
         "by_project": {k: len(v) for k, v in by_project.items()},
         "top_20": dead_code[:20],
-        "suggestion": f"Found {len(dead_code)} unreferenced symbols, {total_dead_lines} total lines of code that can be considered for removal."
+        "suggestion": f"Found {len(dead_code)} unreferenced symbols, {total_dead_lines} total lines of code that can be considered for removal.",
+        "next_action": next_action,
     }
 
 
@@ -2209,6 +2280,15 @@ def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
     if change_type in ("delete", "rename") and total > 0:
         risk = "high" if total > 3 else "moderate"
 
+    # next_action hint for AI
+    if total == 0:
+        next_action = "Safe to proceed — no call sites found."
+    elif change_type in ("rename", "delete"):
+        files_to_update = sorted({cs["file"] for cs in call_sites})
+        next_action = f"Update {len(files_to_update)} file(s): {', '.join(files_to_update[:5])}"
+    else:
+        next_action = f"Run tests after change. Use find_test_file to locate test files for {target_path}."
+
     return {
         "symbol": resolved_id,
         "symbol_name": target_name,
@@ -2220,6 +2300,7 @@ def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
         "risk_reason": risk_reason,
         "change_description": risk_info[0],
         "suggestions": risk_info[1],
+        "next_action": next_action,
     }
 
 
@@ -2398,6 +2479,22 @@ def code_health_score(project=None):
 
 def suggest_refactoring(project=None, max_results=20):
     return _quality().suggest_refactoring(_sys.modules[__name__], project=project, max_results=max_results)
+
+
+# =========================================================================
+# Diff Impact — delegated to src/diff_impact.py
+# =========================================================================
+
+def _diff_impact():
+    """Lazy-import diff_impact module."""
+    try:
+        from . import diff_impact as _di
+    except ImportError:
+        import diff_impact as _di  # type: ignore[no-redef]
+    return _di
+
+def impact_from_diff(mode="unstaged", base="", project=None):
+    return _diff_impact().impact_from_diff(_sys.modules[__name__], mode=mode, base=base, project=project)
 
 
 # MCP tool definitions
@@ -2870,6 +2967,38 @@ TOOLS = [
         },
     },
     {
+        "name": "impact_from_diff",
+        "title": "Impact from Diff",
+        "annotations": {"readOnlyHint": True, "openWorldHint": True},
+        "description": (
+            "Parse git diff output, match changed hunks to indexed symbols, classify each change "
+            "(signature_change, body_change, rename, etc.), and run impact analysis. "
+            "Use this to assess the blast radius of uncommitted or recent changes. "
+            "Requires git. Modes: unstaged (default), staged, committed (base=SHA), branch (base=branch). "
+            "Returns: changed symbols with risk level, caller count, and affected projects."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": ["unstaged", "staged", "committed", "branch"],
+                    "default": "unstaged",
+                    "description": "What to diff: 'unstaged' (working tree), 'staged' (git add), 'committed' (base..HEAD), 'branch' (base...HEAD)",
+                },
+                "base": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Base ref for committed/branch mode. Examples: 'HEAD~1', 'main', 'abc1234'. Defaults to HEAD~1 / main.",
+                },
+                "project": {
+                    "type": "string",
+                    "description": "Filter to a specific project",
+                },
+            },
+        },
+    },
+    {
         "name": "session_track",
         "title": "Track Session Event",
         "annotations": {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False},
@@ -3034,6 +3163,78 @@ TOOLS = [
 ]
 
 
+# =========================================================================
+# MCP Resources (read-only, AI client can proactively read project state)
+# =========================================================================
+
+RESOURCES = [
+    {
+        "uri": "indexer://projects",
+        "name": "Indexed Projects",
+        "description": "List of all indexed projects with symbol counts.",
+        "mimeType": "application/json",
+    },
+    {
+        "uri": "indexer://recent-changes",
+        "name": "Recent Changes",
+        "description": "Files changed since last index (dry-run check).",
+        "mimeType": "application/json",
+    },
+]
+
+RESOURCE_TEMPLATES = [
+    {
+        "uriTemplate": "indexer://project/{name}/health",
+        "name": "Project Health Score",
+        "description": "Code health score (0-100) with letter grade for a specific project.",
+        "mimeType": "application/json",
+    },
+    {
+        "uriTemplate": "indexer://project/{name}/stale",
+        "name": "Project Stale Files",
+        "description": "Changed files since last index for a specific project.",
+        "mimeType": "application/json",
+    },
+]
+
+
+def _read_resource(uri: str) -> dict:
+    """Read an MCP resource by URI. Returns MCP resource response."""
+    if uri == "indexer://projects":
+        data = list_projects()
+    elif uri == "indexer://recent-changes":
+        data = check_and_reindex(dry_run=True)
+    elif uri.startswith("indexer://project/") and uri.endswith("/health"):
+        # indexer://project/{name}/health
+        name = uri[len("indexer://project/"):-len("/health")]
+        if not name:
+            return {"error": "Missing project name in URI"}
+        # Validate project exists
+        index = load_index()
+        if name not in index.get("projects", []):
+            return {"error": f"Project not found: {name}"}
+        data = code_health_score(project=name)
+    elif uri.startswith("indexer://project/") and uri.endswith("/stale"):
+        # indexer://project/{name}/stale
+        name = uri[len("indexer://project/"):-len("/stale")]
+        if not name:
+            return {"error": "Missing project name in URI"}
+        index = load_index()
+        if name not in index.get("projects", []):
+            return {"error": f"Project not found: {name}"}
+        data = check_and_reindex(dry_run=True, project=name)
+    else:
+        return {"error": f"Unknown resource URI: {uri}"}
+
+    return {
+        "contents": [{
+            "uri": uri,
+            "mimeType": "application/json",
+            "text": json.dumps(data, ensure_ascii=False, indent=2),
+        }]
+    }
+
+
 def handle_request(request: dict):
     """Handle MCP request"""
     method = request.get("method", "")
@@ -3049,20 +3250,22 @@ def handle_request(request: dict):
             "protocolVersion": server_version,
             "capabilities": {
                 "tools": {"listChanged": False},
+                "resources": {"listChanged": False},
                 "logging": {},
             },
             "serverInfo": {
                 "name": "flyto-indexer",
                 "title": "Flyto Code Indexer",
-                "version": "1.1.0",
+                "version": "1.2.0",
                 "description": "Code index and analysis MCP server — search symbols, track dependencies, detect dead code, security scanning, and code health scoring across any project.",
                 "websiteUrl": "https://github.com/flytohub/flyto-indexer",
             },
             "instructions": (
-                "flyto-indexer provides 29 tools for code intelligence. "
+                "flyto-indexer provides 30 tools for code intelligence. "
                 "Start with list_projects to discover indexed projects, "
                 "then use search_code to find symbols by name. "
                 "Use get_file_context for a one-call summary of any file. "
+                "Use impact_from_diff to assess blast radius of uncommitted changes. "
                 "Use code_health_score for a quick project quality overview."
             ),
         })
@@ -3071,6 +3274,8 @@ def handle_request(request: dict):
         send_response(id, {"tools": TOOLS})
 
     elif method == "tools/call":
+        _maybe_auto_reindex()
+
         tool_name = params.get("name", "")
         arguments = params.get("arguments", {})
 
@@ -3101,6 +3306,23 @@ def handle_request(request: dict):
             })
         except Exception as e:
             send_error(id, -32000, str(e))
+
+    elif method == "resources/list":
+        send_response(id, {
+            "resources": RESOURCES,
+            "resourceTemplates": RESOURCE_TEMPLATES,
+        })
+
+    elif method == "resources/read":
+        uri = params.get("uri", "")
+        if not uri:
+            send_error(id, -32602, "Missing 'uri' parameter")
+            return
+        result = _read_resource(uri)
+        if "error" in result:
+            send_error(id, -32002, result["error"])
+        else:
+            send_response(id, result)
 
     elif method == "logging/setLevel":
         # Accept but we don't filter — always log everything to stderr

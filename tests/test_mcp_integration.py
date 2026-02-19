@@ -19,15 +19,19 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-EXPECTED_TOOL_COUNT = 23
+EXPECTED_TOOL_COUNT = 30
 EXPECTED_TOOL_NAMES = sorted([
     "check_and_reindex",
     "check_index_status",
+    "code_health_score",
     "cross_project_impact",
     "dependency_graph",
     "edit_impact_preview",
+    "find_complex_functions",
     "find_dead_code",
+    "find_duplicates",
     "find_references",
+    "find_stale_files",
     "find_test_file",
     "find_todos",
     "fulltext_search",
@@ -37,12 +41,15 @@ EXPECTED_TOOL_NAMES = sorted([
     "get_file_symbols",
     "get_symbol_content",
     "impact_analysis",
+    "impact_from_diff",
     "list_apis",
     "list_categories",
     "list_projects",
     "search_code",
+    "security_scan",
     "session_get",
     "session_track",
+    "suggest_refactoring",
     "update_description",
 ])
 
