@@ -2366,6 +2366,40 @@ def session_get(session_id: str) -> dict:
     return session.to_dict()
 
 
+# =========================================================================
+# Code Quality Tools — delegated to src/quality.py
+# =========================================================================
+
+def _quality():
+    """Lazy-import quality module to avoid circular imports."""
+    try:
+        from . import quality as _q
+    except ImportError:
+        import quality as _q  # type: ignore[no-redef]
+    return _q
+
+# Thin wrappers so tool_registry dispatch stays `_idx.<name>(...)`.
+import sys as _sys
+
+def find_complex_functions(project=None, max_results=20, min_score=1):
+    return _quality().find_complex_functions(_sys.modules[__name__], project=project, max_results=max_results, min_score=min_score)
+
+def find_duplicates(project=None, min_lines=6, max_results=20):
+    return _quality().find_duplicates(_sys.modules[__name__], project=project, min_lines=min_lines, max_results=max_results)
+
+def security_scan(project=None, severity=None, max_results=50):
+    return _quality().security_scan(_sys.modules[__name__], project=project, severity=severity, max_results=max_results)
+
+def find_stale_files(project=None, stale_days=180, max_results=30):
+    return _quality().find_stale_files(_sys.modules[__name__], project=project, stale_days=stale_days, max_results=max_results)
+
+def code_health_score(project=None):
+    return _quality().code_health_score(_sys.modules[__name__], project=project)
+
+def suggest_refactoring(project=None, max_results=20):
+    return _quality().suggest_refactoring(_sys.modules[__name__], project=project, max_results=max_results)
+
+
 # MCP tool definitions
 TOOLS = [
     # =========================================================================
@@ -2877,6 +2911,126 @@ TOOLS = [
             "required": ["session_id"],
         },
     },
+    # =========================================================================
+    # Code Quality
+    # =========================================================================
+    {
+        "name": "find_complex_functions",
+        "title": "Find Complex Functions",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "description": (
+            "Find overly complex functions and methods across indexed projects. "
+            "Scores each function based on: line count (>50), nesting depth (>3), "
+            "parameter count (>5), and branch count (>10). "
+            "Returns: ranked list with complexity score, issues, and symbol_id for follow-up. "
+            "Use this to identify refactoring candidates."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Filter to a specific project"},
+                "max_results": {"type": "integer", "default": 20, "description": "Max results to return (default 20)"},
+                "min_score": {"type": "integer", "default": 1, "description": "Minimum complexity score to include (default 1)"},
+            },
+        },
+    },
+    {
+        "name": "find_duplicates",
+        "title": "Find Duplicate Code",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "description": (
+            "Find copy-pasted code blocks across project files. "
+            "Uses sliding-window hash comparison to detect duplicate code blocks (default min 6 lines). "
+            "Scans project filesystem. May take a few seconds for large projects. "
+            "Returns: duplicate blocks with file locations, line ranges, and code preview."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Filter to a specific project"},
+                "min_lines": {"type": "integer", "default": 6, "description": "Minimum duplicate block size in lines (default 6)"},
+                "max_results": {"type": "integer", "default": 20, "description": "Max duplicate blocks to return (default 20)"},
+            },
+        },
+    },
+    {
+        "name": "security_scan",
+        "title": "Security Scan",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "description": (
+            "Scan project files for potential security issues: hardcoded secrets, SQL injection risks, "
+            "unsafe function usage (eval, exec, pickle.loads), and sensitive data leaks. "
+            "Multi-language: Python, JS/TS, Java, Go. "
+            "Scans project filesystem. May take a few seconds for large projects. "
+            "Returns: issues sorted by severity (critical/high/medium/low) with code snippets and fix recommendations."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Filter to a specific project"},
+                "severity": {
+                    "type": "string",
+                    "enum": ["critical", "high", "medium", "low"],
+                    "description": "Filter by severity level. Omit to show all.",
+                },
+                "max_results": {"type": "integer", "default": 50, "description": "Max issues to return (default 50)"},
+            },
+        },
+    },
+    {
+        "name": "find_stale_files",
+        "title": "Find Stale Files",
+        "annotations": {"readOnlyHint": True, "openWorldHint": True},
+        "description": (
+            "Find source files untouched for a long time using git history. "
+            "Cross-references git log with indexed files to identify potentially dead or deprecated code. "
+            "Requires git. Uses a single git log command per project for efficiency. "
+            "Returns: stale files sorted by age with last author and modification date."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Filter to a specific project"},
+                "stale_days": {"type": "integer", "default": 180, "description": "Days without changes to consider stale (default 180)"},
+                "max_results": {"type": "integer", "default": 30, "description": "Max results to return (default 30)"},
+            },
+        },
+    },
+    {
+        "name": "code_health_score",
+        "title": "Code Health Score",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "description": (
+            "Compute an aggregate code health score (0-100) with letter grade (A-F). "
+            "Breakdown: complexity (25 pts), dead code (25 pts), documentation (25 pts), modularity (25 pts). "
+            "Works entirely from the index — fast, no filesystem access. "
+            "Use this for a quick project quality overview."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Filter to a specific project. Omit for all projects."},
+            },
+        },
+    },
+    {
+        "name": "suggest_refactoring",
+        "title": "Suggest Refactoring",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "description": (
+            "Get prioritized refactoring suggestions combining complexity analysis, dead code detection, "
+            "and large file identification. Each suggestion includes type, priority (high/medium/low), "
+            "reason, and actionable fix recommendation. "
+            "Works from the index — fast. Use this to plan code improvement sprints."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Filter to a specific project"},
+                "max_results": {"type": "integer", "default": 20, "description": "Max suggestions to return (default 20)"},
+            },
+        },
+    },
 ]
 
 
@@ -2900,15 +3054,16 @@ def handle_request(request: dict):
             "serverInfo": {
                 "name": "flyto-indexer",
                 "title": "Flyto Code Indexer",
-                "version": "1.0.2",
-                "description": "Code index and analysis MCP server — search symbols, track dependencies, detect dead code across any project.",
-                "websiteUrl": "https://github.com/anthropics/flyto-indexer",
+                "version": "1.1.0",
+                "description": "Code index and analysis MCP server — search symbols, track dependencies, detect dead code, security scanning, and code health scoring across any project.",
+                "websiteUrl": "https://github.com/flytohub/flyto-indexer",
             },
             "instructions": (
-                "flyto-indexer provides 24 tools for code intelligence. "
+                "flyto-indexer provides 29 tools for code intelligence. "
                 "Start with list_projects to discover indexed projects, "
                 "then use search_code to find symbols by name. "
-                "Use get_file_context for a one-call summary of any file."
+                "Use get_file_context for a one-call summary of any file. "
+                "Use code_health_score for a quick project quality overview."
             ),
         })
 

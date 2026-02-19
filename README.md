@@ -24,7 +24,7 @@
 
 **"What breaks if I change this?"** — Every developer asks this. Flyto Indexer answers it.
 
-It indexes your codebase, understands symbol relationships, and exposes **23 MCP tools** that give any AI assistant deep code intelligence — impact analysis, reference finding, dependency tracking, and more.
+It indexes your codebase, understands symbol relationships, and exposes **29 MCP tools** that give any AI assistant deep code intelligence — impact analysis, reference finding, dependency tracking, and more.
 
 **Zero dependencies.** Pure Python standard library. Runs locally. No code leaves your machine.
 
@@ -89,7 +89,7 @@ Add to `~/.claude/settings.json`:
 ```
 </details>
 
-That's it. Claude Code now has access to all 23 tools.
+That's it. Claude Code now has access to all 29 tools.
 
 ## Why This Exists
 
@@ -187,7 +187,7 @@ Detects: FastAPI/Flask/Starlette decorators, `fetch()`, `axios`, `$http`, and mo
 
 ## MCP Tools
 
-23 tools organized by category. **Start with these 6:**
+29 tools organized by category. **Start with these 8:**
 
 | Tool | What it does |
 |------|-------------|
@@ -197,9 +197,11 @@ Detects: FastAPI/Flask/Starlette decorators, `fetch()`, `axios`, `$http`, and mo
 | `dependency_graph` | "What does this file depend on?" |
 | `get_symbol_content` | "Show me the full function" |
 | `find_dead_code` | "What can I safely delete?" |
+| `code_health_score` | "How healthy is this project?" |
+| `security_scan` | "Are there any security issues?" |
 
 <details>
-<summary>All 23 tools</summary>
+<summary>All 29 tools</summary>
 
 ### Code Search & Discovery
 | Tool | Description |
@@ -232,6 +234,12 @@ Detects: FastAPI/Flask/Starlette decorators, `fetch()`, `axios`, `$http`, and mo
 |------|-------------|
 | `find_dead_code` | Detect unreferenced functions, classes, and components |
 | `find_todos` | Find TODO, FIXME, HACK markers across the codebase |
+| `find_complex_functions` | Find overly complex functions (high nesting, too many params/branches) |
+| `find_duplicates` | Detect copy-pasted code blocks across files |
+| `security_scan` | Scan for hardcoded secrets, SQL injection, unsafe functions |
+| `find_stale_files` | Find files untouched for months using git history |
+| `code_health_score` | Aggregate health score (0-100) with A-F grade |
+| `suggest_refactoring` | Prioritized refactoring suggestions combining all analyses |
 
 ### File Context
 | Tool | Description |
@@ -278,7 +286,7 @@ your-project/
 
 1. **Scan** — AST parsers extract symbols (functions, classes, components) from your code
 2. **Index** — Symbols are organized into a searchable index with dependency relationships
-3. **Serve** — The MCP server exposes 23 tools that any AI client can call
+3. **Serve** — The MCP server exposes 29 tools that any AI client can call
 4. **Incremental** — Only changed files are re-scanned (tracked via content hashes)
 
 ### Key Concepts

@@ -362,6 +362,34 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
         "session_get": lambda args: _idx.session_get(
             session_id=args.get("session_id", ""),
         ),
+        # Code Quality tools
+        "find_complex_functions": lambda args: _idx.find_complex_functions(
+            project=args.get("project"),
+            max_results=args.get("max_results", 20),
+            min_score=args.get("min_score", 1),
+        ),
+        "find_duplicates": lambda args: _idx.find_duplicates(
+            project=args.get("project"),
+            min_lines=args.get("min_lines", 6),
+            max_results=args.get("max_results", 20),
+        ),
+        "security_scan": lambda args: _idx.security_scan(
+            project=args.get("project"),
+            severity=args.get("severity"),
+            max_results=args.get("max_results", 50),
+        ),
+        "find_stale_files": lambda args: _idx.find_stale_files(
+            project=args.get("project"),
+            stale_days=args.get("stale_days", 180),
+            max_results=args.get("max_results", 30),
+        ),
+        "code_health_score": lambda args: _idx.code_health_score(
+            project=args.get("project"),
+        ),
+        "suggest_refactoring": lambda args: _idx.suggest_refactoring(
+            project=args.get("project"),
+            max_results=args.get("max_results", 20),
+        ),
     }
 
     handler = _DISPATCH.get(name)
