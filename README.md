@@ -1,7 +1,7 @@
 <div align="center">
   <h1>Flyto Indexer</h1>
   <p>
-    <strong>"What breaks if I change this?" — for AI coding assistants</strong>
+    <strong>Know what breaks before you change it.</strong>
   </p>
   <p>
     <a href="https://github.com/flytohub/flyto-indexer/actions"><img src="https://github.com/flytohub/flyto-indexer/workflows/CI/badge.svg" alt="CI"></a>
@@ -10,34 +10,58 @@
     <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
   </p>
   <p>
-    Impact analysis &bull; Cross-project reference tracking &bull; Code health scoring
-    <br/>
-    Works with Claude Code, Cursor, Windsurf, and any MCP client
+    MCP server that gives AI assistants impact analysis, cross-project reference tracking, and code health scoring.<br/>
+    Zero dependencies. Pure Python. 100% local.
   </p>
 </div>
 
 ---
 
+## Without Flyto Indexer
+
+```
+You:    "Rename validateOrder to validate_order"
+
+AI:     *renames the function*
+        *greps for "validateOrder"*
+        *finds 3 matches in the same project*
+        *misses 4 callers in the frontend repo*
+        *misses the API endpoint that routes to it*
+        *pushes broken code*
+```
+
+## With Flyto Indexer
+
+```
+You:    "Rename validateOrder to validate_order"
+
+AI:     → impact_analysis("validateOrder")
+
+        ⚠️ 7 call sites across 3 projects:
+          backend/checkout.py:42     — calls validateOrder()
+          backend/api/orders.py:18   — imports validateOrder
+          frontend/Cart.vue:55       — calls via useCheckout()
+          frontend/QuickBuy.vue:23   — calls via useCheckout()
+          mobile/OrderScreen.tsx:67  — API call to /api/validate
+          tests/test_orders.py:12    — unit test
+          tests/test_api.py:88       — integration test
+          Risk: HIGH — 3 projects affected
+
+        → edit_impact_preview("validateOrder", change_type="rename")
+        *renames all 7 call sites, updates tests, pushes clean code*
+```
+
+**That's the difference.** grep finds text. This finds dependencies.
+
 <div align="center">
-  <img src="demo.gif" alt="Flyto Indexer demo — impact analysis before renaming" width="800">
+  <img src="demo.gif" alt="Flyto Indexer — impact analysis before renaming" width="800">
 </div>
 
-AI coding assistants can grep, read files, and write code. But they can't answer **"if I change this function, what else breaks?"** — not without reading every file in every project.
-
-Flyto Indexer builds a **dependency graph** of your codebase and exposes it as MCP tools. One call to `impact_analysis` tells the AI exactly which files, functions, and projects are affected — before a single line is changed.
-
-**Zero dependencies.** Pure Python. Runs locally. No code leaves your machine.
-
-## Quick Start
+## Install
 
 ```bash
 pip install flyto-indexer
-
-# Index your project
-flyto-index scan /path/to/your/project
-
-# Start MCP server
-python -m flyto_indexer.mcp_server
+flyto-index scan .
 ```
 
 Add to Claude Code (`~/.claude/settings.json`):
@@ -53,182 +77,149 @@ Add to Claude Code (`~/.claude/settings.json`):
 }
 ```
 
+Done. Works with any MCP client — Claude Code, Cursor, Windsurf, etc.
+
 <details>
-<summary>Running from source</summary>
+<summary>Run from source</summary>
 
 ```bash
 git clone https://github.com/flytohub/flyto-indexer.git
 cd flyto-indexer && pip install -e .
 flyto-index scan /path/to/your/project
-```
-
-```json
-{
-  "mcpServers": {
-    "flyto-indexer": {
-      "command": "python3",
-      "args": ["-m", "src.mcp_server"],
-      "cwd": "/path/to/flyto-indexer"
-    }
-  }
-}
+python -m src.mcp_server
 ```
 </details>
 
-> Add `.flyto-index/` to your `.gitignore`.
+## What It Does
 
-## The Problem
+### Impact Analysis — the core feature
 
-AI assistants are powerful editors, but they're **structurally blind**:
+Every tool an AI already has (grep, file read, glob) finds **text**. None of them answer **"what depends on this?"**
 
-- `grep` finds text matches — it doesn't know that `useCart()` in `Cart.vue` calls `checkout()` in `cartApi.py`
-- Reading every file is slow and wastes context window
-- Without a dependency graph, renaming a function is a game of "hope nothing breaks"
-
-## What This Solves
-
-### Impact Analysis
-
-> "I want to rename `validateOrder`. What breaks?"
+`impact_analysis` builds a reverse dependency graph and tells you exactly what breaks:
 
 ```
-→ impact_analysis("validateOrder")
+→ impact_analysis("useAuth")
 
-⚠️ Modifying validateOrder affects 5 call sites:
-  → Cart.vue:42 — calls validateOrder() directly
-  → CheckoutAPI.py:18 — imports validateOrder
-  → test_validators.py:55 — tests validateOrder
-  Risk: MEDIUM — 3 files, 2 projects
+  12 references across 4 projects:
+    flyto-cloud:  LoginPage.vue, RegisterPage.vue, AuthGuard.ts, api.ts
+    flyto-pro:    vscode_agent/tools.py, middleware/auth.py
+    flyto-vscode: ChatHandler.ts, AuthProvider.ts
+    flyto-core:   modules/auth/login.py
+  Risk: HIGH — shared across 4 projects
 
-→ edit_impact_preview("validateOrder", change_type="rename")
-  Shows exact code lines that need updating.
+→ edit_impact_preview("useAuth", change_type="signature_change")
+  Shows exact code lines at each call site that need updating.
 ```
 
-### Cross-Project Reference Tracking
+### Cross-Language API Tracking
 
-> "Who uses this shared function across all our repos?"
-
-```
-→ cross_project_impact("validateOrder")
-
-  Defined in: backend/src/validators.py
-  Used by:
-    → frontend (3 references)
-    → mobile-app (1 reference)
-    → admin-panel (2 references)
-  Risk: HIGH — changes affect 3 other projects
-
-→ find_references("validateOrder")
-  Returns every caller with file, line number, and confidence level.
-```
-
-### Cross-Language API Graph
-
-> "Which frontend components call this Python endpoint?"
+Python backend endpoints automatically linked to TypeScript/Vue frontend callers:
 
 ```
 → list_apis()
 
-  GET /api/users
-    Defined in: backend/routes/user.py (list_users)
-    Called by: frontend/views/UserList.vue, frontend/api/users.ts
+  POST /api/checkout
+    Defined in: backend/routes/order.py (create_order)
+    Called by:   frontend/Cart.vue, frontend/api/orders.ts
+    Call count: 4
 ```
 
-Automatically links Python (FastAPI/Flask) endpoints to TypeScript/Vue callers.
+Detects FastAPI, Flask, Starlette decorators + `fetch()`, `axios`, `$http` calls.
 
 ### Code Health & Security
 
-> "Give me a quick quality check before release."
-
 ```
-→ code_health_score(project="backend")
+→ code_health_score()            → security_scan()
 
-  Score: 74/100 (Grade: C)
-  Complexity:    22/25 — 3/120 functions over 50 lines
-  Dead code:     18/25 — 12 unreferenced symbols
-  Documentation: 16/25 — 65% of symbols documented
-  Modularity:    18/25 — avg 3.6 references per symbol
+  Score: 74/100 (C)               2 critical: hardcoded API keys
+  Complexity:    22/25             1 high: SQL string concatenation
+  Dead code:     18/25             0 medium
+  Documentation: 16/25
+  Modularity:    18/25
 
-→ security_scan(project="backend")
-  2 critical: hardcoded API keys in config.py
-  1 high: SQL string concatenation in queries.py
+→ suggest_refactoring()
 
-→ suggest_refactoring(project="backend")
-  [high] process_data() — 87 lines, depth=6 → extract sub-functions
+  [high]   process_data() — 87 lines, depth=6 → extract sub-functions
   [medium] dead_fn() — unreferenced, 45 lines → safe to remove
+  [low]    utils.py — 800 lines → split into focused modules
 ```
 
-## MCP Tools
+## Tools
 
-29 tools. The ones that matter most:
+29 MCP tools. Organized by what they do:
 
-### Core — what grep can't do
+**Impact & Dependencies** — the reason to install this
 
-| Tool | Purpose |
-|------|---------|
-| `impact_analysis` | Blast radius of changing a symbol |
-| `find_references` | All callers/importers with file + line |
-| `cross_project_impact` | Track usage across multiple projects |
-| `edit_impact_preview` | Preview exact code lines affected by rename/delete/signature change |
-| `dependency_graph` | Import chains and reverse dependencies |
+| Tool | What it answers |
+|------|----------------|
+| `impact_analysis` | "What breaks if I change this?" |
+| `find_references` | "Who calls this function?" (with file + line) |
+| `cross_project_impact` | "Which other repos use this?" |
+| `edit_impact_preview` | "Show me the exact lines affected by this rename" |
+| `dependency_graph` | "What does this file import / what imports it?" |
 
-### Code Quality
+**Code Quality** — catch problems before review
 
-| Tool | Purpose |
-|------|---------|
-| `code_health_score` | Aggregate 0-100 score with A-F grade |
-| `security_scan` | Hardcoded secrets, SQL injection, unsafe functions |
-| `find_dead_code` | Unreferenced functions/classes safe to remove |
-| `find_complex_functions` | Functions with high nesting, too many params/branches |
-| `suggest_refactoring` | Prioritized refactoring suggestions |
-| `find_duplicates` | Copy-pasted code blocks |
-| `find_stale_files` | Files untouched for months (via git) |
-| `find_todos` | TODO/FIXME/HACK markers |
+| Tool | What it answers |
+|------|----------------|
+| `code_health_score` | "How healthy is this project?" (0-100, A-F) |
+| `security_scan` | "Any hardcoded secrets or injection risks?" |
+| `find_dead_code` | "What's safe to delete?" |
+| `find_complex_functions` | "Which functions need refactoring?" |
+| `suggest_refactoring` | "What should I fix first?" |
+| `find_duplicates` | "Where's the copy-pasted code?" |
+| `find_stale_files` | "What hasn't been touched in months?" |
+| `find_todos` | "What's the tech debt backlog?" |
 
 <details>
-<summary>All 29 tools</summary>
+<summary>All 29 tools (including search, metadata, session)</summary>
 
-### Search & Discovery
+**Search & Discovery**
+
 | Tool | Description |
 |------|-------------|
-| `search_code` | BM25-ranked symbol search across all projects |
-| `get_symbol_content` | Full source code of a function/class |
-| `get_file_symbols` | All symbols defined in a file |
-| `get_file_info` | File purpose, category, keywords, dependencies |
-| `get_file_context` | One-call summary: symbols + deps + test file |
-| `fulltext_search` | Search inside comments, strings, TODO markers |
+| `search_code` | BM25-ranked symbol search |
+| `get_symbol_content` | Full source of a function/class |
+| `get_file_symbols` | All symbols in a file |
+| `get_file_info` | File purpose, category, keywords |
+| `get_file_context` | One-call: symbols + deps + test file |
+| `fulltext_search` | Search comments, strings, TODOs |
 
-### Project Overview
+**Project Overview**
+
 | Tool | Description |
 |------|-------------|
-| `list_projects` | All indexed projects with statistics |
-| `list_categories` | Code categories (auth, payment, etc.) |
-| `list_apis` | API endpoints with cross-language callers |
-| `check_index_status` | Index freshness check |
+| `list_projects` | Indexed projects with stats |
+| `list_categories` | Code categories (auth, payment...) |
+| `list_apis` | API endpoints + cross-language callers |
+| `check_index_status` | Is the index fresh or stale? |
 
-### File Metadata
+**File Metadata**
+
 | Tool | Description |
 |------|-------------|
-| `find_test_file` | Find test file for source file (or vice versa) |
+| `find_test_file` | Source → test file mapping |
 | `get_description` | Semantic one-liner for a file |
-| `update_description` | Write/update a file description |
+| `update_description` | Write/update file description |
 
-### Session & Indexing
+**Session & Indexing**
+
 | Tool | Description |
 |------|-------------|
-| `session_track` | Track workspace events for search boosting |
+| `session_track` | Track events for search boosting |
 | `session_get` | Inspect session state |
-| `check_and_reindex` | Detect changes and live-reindex |
+| `check_and_reindex` | Detect changes + live reindex |
 
 </details>
 
-## Supported Languages
+## Languages
 
-| Language | Parser | What's Extracted |
-|----------|--------|-----------------|
-| Python | AST | Functions, classes, methods, decorators, API endpoints |
-| TypeScript/JavaScript | Custom | Functions, classes, interfaces, types, exports, API calls |
-| Vue | SFC | Components, composables, emits, props, API calls |
+| Language | Parser | Extracts |
+|----------|--------|----------|
+| Python | AST | Functions, classes, methods, decorators, API routes |
+| TypeScript/JS | Custom | Functions, classes, interfaces, types, API calls |
+| Vue | SFC | Components, composables, emits, props |
 | Go | Custom | Functions, structs, methods, interfaces |
 | Rust | Custom | Functions, structs, impl blocks, traits |
 | Java | Custom | Classes, methods, interfaces, annotations |
@@ -236,88 +227,50 @@ Automatically links Python (FastAPI/Flask) endpoints to TypeScript/Vue callers.
 ## How It Works
 
 ```
-your-project/
-├── src/            ← Your code (any language)
-└── .flyto-index/   ← Generated index (add to .gitignore)
-    ├── index.json       # Symbols + dependency graph + reverse index
-    ├── content.jsonl    # Source code (lazy-loaded)
-    ├── bm25.json        # Search index
-    └── manifest.json    # Incremental tracking (content hashes)
+flyto-index scan .
 ```
 
-1. **Scan** — AST/regex parsers extract symbols and their relationships
-2. **Index** — Build dependency graph + reverse index (who calls whom)
-3. **Serve** — MCP server exposes tools that query the graph
-4. **Incremental** — Only changed files are re-scanned
+1. **Parse** — AST (Python) or regex (others) extracts every function, class, and import
+2. **Graph** — Builds dependency graph + reverse index (caller → callee)
+3. **Serve** — MCP server answers queries from the graph in memory
+4. **Incremental** — Re-scans only changed files (content hash tracking)
+
+```
+.flyto-index/
+├── index.json       # Symbols + dependency graph + reverse index
+├── content.jsonl    # Source code (lazy-loaded)
+├── bm25.json        # Search index
+└── manifest.json    # Change tracking
+```
+
+## CI: Block Risky Changes
+
+```yaml
+# Fail the PR if changes affect too many call sites
+- run: pip install flyto-indexer
+- run: flyto-index scan .
+- run: flyto-index check . --threshold medium --base main
+```
 
 ## CLI
 
 ```bash
-flyto-index scan .                          # Index a project
-flyto-index impact useAuth --path .         # Check impact from terminal
-flyto-index check . --threshold medium      # CI gate: fail if risky changes
-flyto-index demo .                          # 30-second value demo
-flyto-index install-hook .                  # Auto-reindex on git commit
+flyto-index scan .                        # Index
+flyto-index impact useAuth --path .       # Impact analysis
+flyto-index check . --threshold medium    # CI gate
+flyto-index demo .                        # 30-second demo
+flyto-index install-hook .                # Auto-reindex on commit
 ```
 
-<details>
-<summary>All CLI commands</summary>
+## Privacy
 
-```bash
-flyto-index init .                          # Initialize project
-flyto-index scan .                          # Scan and index
-flyto-index status .                        # Check index status
-flyto-index impact useAuth --path .         # Impact analysis
-flyto-index brief .                         # Project brief
-flyto-index outline .                       # Directory outline
-flyto-index describe src/auth.py --path .   # Read file description
-flyto-index describe src/auth.py --summary "Auth module" --path .
-flyto-index demo .                          # Quick demo (scan + impact)
-flyto-index install-hook .                  # Git hook for auto-reindex
-flyto-index check . --threshold medium      # CI impact check
-flyto-index check . --json --base main      # JSON output for CI
-flyto-index tools                           # List tools as JSON
-```
-</details>
-
-## CI/CD Integration
-
-Block risky changes in pull requests:
-
-```yaml
-# .github/workflows/impact-check.yml
-on: [pull_request]
-
-jobs:
-  impact:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: pip install flyto-indexer
-      - run: flyto-index scan .
-      - run: flyto-index check . --threshold medium --base main
-```
-
-## HTTP API
-
-For tools that don't support MCP:
-
-```bash
-python -m src.api_server --port 8765
-curl -X POST http://localhost:8765/impact \
-  -d '{"symbol_id": "myproject:src/auth.py:function:login"}'
-```
-
-## Security & Privacy
-
-- **100% local.** No code is sent anywhere.
-- Index stored in `.flyto-index/`. Delete it to clean up completely.
+100% local. No code is sent anywhere. Delete `.flyto-index/` to clean up completely.
 
 ## Limitations
 
-- **Static analysis only** — dynamic imports and metaprogramming are not tracked
-- **No type inference** — complex TypeScript generics are simplified
-- **Cross-project tracking** requires all projects indexed in the same workspace
+- Static analysis only — dynamic imports and metaprogramming not tracked
+- No type inference — complex TypeScript generics simplified
+- Cross-project tracking requires all projects indexed together
 
 ## License
 
