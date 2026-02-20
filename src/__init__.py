@@ -21,7 +21,7 @@ Usage:
 from .engine import IndexEngine
 from .models import Dependency, DependencyType, ProjectIndex, Symbol, SymbolType
 
-__version__ = "0.1.0"
+__version__ = "1.2.1"
 __all__ = [
     "IndexEngine",
     "Symbol",

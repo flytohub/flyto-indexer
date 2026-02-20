@@ -2500,122 +2500,6 @@ def impact_from_diff(mode="unstaged", base="", project=None):
 # MCP tool definitions
 TOOLS = [
     # =========================================================================
-    # Code Search & Discovery
-    # =========================================================================
-    {
-        "name": "search_code",
-        "title": "Search Code",
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-        "description": (
-            "Search for functions, classes, components, and composables across all indexed projects. "
-            "Use this as the FIRST step when you need to find code by name or keyword. "
-            "Results are ranked by relevance (name match > summary match > content match) "
-            "and grouped by project. "
-            "Returns: symbol_id, path, line number, type, summary, score. "
-            "Use the symbol_id in follow-up calls to get_symbol_content, find_references, or impact_analysis."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "Keyword to search (function name, class name, etc.). Example: 'useAuth', 'LoginForm', 'validate'"},
-                "max_results": {"type": "integer", "default": 20, "description": "Max results to return (default 20)"},
-                "symbol_type": {
-                    "type": "string",
-                    "enum": ["function", "class", "method", "composable", "component", "interface", "type"],
-                    "description": "Filter by symbol type. Omit to search all types.",
-                },
-                "project": {
-                    "type": "string",
-                    "description": "Filter by project name. Use list_projects to see available projects.",
-                },
-                "include_content": {"type": "boolean", "default": False, "description": "Include first 500 chars of source code in results"},
-                "session_id": {"type": "string", "description": "Optional session ID for search boost. Files recently opened/edited in the session get +8 score boost."},
-            },
-            "required": ["query"],
-        },
-    },
-    {
-        "name": "get_symbol_content",
-        "title": "Get Symbol Content",
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-        "description": (
-            "Get the full source code of a specific symbol (function, class, component). "
-            "Use this AFTER search_code to read the actual implementation. "
-            "Supports fuzzy matching: you can pass a partial symbol_id and it will find the best match. "
-            "Returns: full source code, file path, line range, summary."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "symbol_id": {
-                    "type": "string",
-                    "description": "Symbol ID from search_code results. Format: project:path:type:name. Example: 'flyto-core:src/modules/string/uppercase.py:class:StringUppercase'",
-                },
-            },
-            "required": ["symbol_id"],
-        },
-    },
-    {
-        "name": "get_file_symbols",
-        "title": "List File Symbols",
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-        "description": (
-            "List all symbols (functions, classes, methods, components) defined in a specific file. "
-            "Use this to get an overview of what a file contains before diving deeper. "
-            "Returns: symbol id, name, type, line number, and summary for each symbol."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "File path relative to project root. Example: 'src/composables/useAuth.js'"},
-            },
-            "required": ["path"],
-        },
-    },
-    {
-        "name": "get_file_info",
-        "title": "Get File Info",
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-        "description": (
-            "Get semantic metadata for a file: purpose, category, keywords, APIs used, and dependencies. "
-            "Use this to quickly understand what a file does without reading its source code. "
-            "Returns: purpose description, category (e.g. 'auth', 'payment'), keywords, API endpoints, dependencies."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "File path. Example: 'src/api/auth.py' or 'frontend/src/views/Login.vue'"},
-            },
-            "required": ["path"],
-        },
-    },
-    {
-        "name": "fulltext_search",
-        "title": "Full-Text Search",
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-        "description": (
-            "Full-text search across all indexed source code. Searches inside comments, strings, and TODO/FIXME markers. "
-            "Use this when search_code doesn't find what you need (search_code matches symbol names; this searches content). "
-            "Use search_type='todo' to find all TODO/FIXME items, 'comment' for comments only, 'string' for string literals. "
-            "Returns: matching symbols with context snippets, grouped by project."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "Text to search for. Example: 'deprecated', 'workaround', 'api/v2'"},
-                "search_type": {
-                    "type": "string",
-                    "enum": ["all", "todo", "comment", "string"],
-                    "default": "all",
-                    "description": "What to search: 'all' = everything, 'todo' = TODO/FIXME/HACK/XXX markers, 'comment' = code comments, 'string' = string literals",
-                },
-                "project": {"type": "string", "description": "Filter to a specific project"},
-                "max_results": {"type": "integer", "default": 50, "description": "Max results to return"},
-            },
-            "required": ["query"],
-        },
-    },
-    # =========================================================================
     # Reference & Dependency Analysis
     # =========================================================================
     {
@@ -2730,51 +2614,6 @@ TOOLS = [
             "additionalProperties": False,
         },
     },
-    {
-        "name": "list_categories",
-        "title": "List Categories",
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-        "description": (
-            "List all code categories (e.g. auth, payment, product, order) and how many files belong to each. "
-            "Use this to understand the high-level structure of indexed projects. "
-            "Returns: category names sorted by file count."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": False,
-        },
-    },
-    {
-        "name": "list_apis",
-        "title": "List APIs",
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-        "description": (
-            "List all API endpoints found in indexed code, along with which files use them. "
-            "Use this to discover available backend endpoints or see API usage patterns. "
-            "Returns: API paths sorted by usage count."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": False,
-        },
-    },
-    {
-        "name": "check_index_status",
-        "title": "Check Index Status",
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-        "description": (
-            "Check if the code index is up-to-date or stale. "
-            "Compares file modification times against the last index time. "
-            "Returns: status (fresh/slightly_stale/stale), list of changed files, and recommendation to re-index if needed."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": False,
-        },
-    },
     # =========================================================================
     # Code Quality
     # =========================================================================
@@ -2806,117 +2645,6 @@ TOOLS = [
                     "default": 5,
                 },
             },
-        },
-    },
-    {
-        "name": "find_todos",
-        "title": "Find TODOs",
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-        "description": (
-            "Find all TODO, FIXME, HACK, and XXX markers across indexed code. "
-            "Use this to track technical debt and pending work items. "
-            "Priority: FIXME/HACK = high, TODO/XXX = medium, NOTE = low. "
-            "Returns: list of markers with text, file path, line number, grouped by priority and project."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "project": {
-                    "type": "string",
-                    "description": "Filter to a specific project",
-                },
-                "priority": {
-                    "type": "string",
-                    "description": "Filter by priority level",
-                    "enum": ["high", "medium", "low"],
-                },
-                "max_results": {
-                    "type": "integer",
-                    "description": "Max results to return. Default: 100",
-                    "default": 100,
-                },
-            },
-        },
-    },
-    # =========================================================================
-    # File Descriptions
-    # =========================================================================
-    {
-        "name": "get_description",
-        "title": "Get Description",
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-        "description": (
-            "Get the semantic one-liner description for a file. "
-            "Returns the latest human or AI-written summary, staleness status (whether the file changed since description was written), and metadata. "
-            "Use this to quickly understand what a file does."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "File path relative to project root. Example: 'src/api/auth.py'"},
-                "project": {"type": "string", "description": "Project name (optional, auto-detected if omitted)"},
-            },
-            "required": ["path"],
-        },
-    },
-    {
-        "name": "update_description",
-        "title": "Update Description",
-        "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
-        "description": (
-            "Write or update a semantic description for a file. "
-            "Call this after reading or modifying a file to record what it does. "
-            "The description is stored in .flyto/descriptions.jsonl with a content hash for staleness tracking. "
-            "Side effects: appends one line to .flyto/descriptions.jsonl."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "File path relative to project root. Example: 'src/api/auth.py'"},
-                "summary": {"type": "string", "description": "One-liner description. Example: 'User auth core: login, register, rate limiting, JWT token management'"},
-                "project": {"type": "string", "description": "Project name (optional, auto-detected if omitted)"},
-            },
-            "required": ["path", "summary"],
-        },
-    },
-    # =========================================================================
-    # VSCode Agent Helpers
-    # =========================================================================
-    {
-        "name": "get_file_context",
-        "title": "Get File Context",
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-        "description": (
-            "Get a complete context package for a file in one call. "
-            "Returns file info (purpose, category), symbols, imports, dependents, "
-            "test file mapping, and related files. "
-            "Use this instead of calling get_file_info + get_file_symbols + find_references separately. "
-            "All data comes from cached index, zero I/O."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "File path relative to project root. Example: 'src/composables/useAuth.js'"},
-                "include_content": {"type": "boolean", "default": False, "description": "Include first 500 chars of each symbol's source code"},
-            },
-            "required": ["path"],
-        },
-    },
-    {
-        "name": "find_test_file",
-        "title": "Find Test File",
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-        "description": (
-            "Find the corresponding test file for a source file, or the source file for a test file. "
-            "Uses naming conventions (test_foo.py, Foo.spec.ts) and import analysis as fallback. "
-            "Returns the matched file path or null if no match found."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "Source or test file path. Example: 'src/engine.py' or 'tests/test_engine.py'"},
-            },
-            "required": ["path"],
         },
     },
     {
@@ -2998,51 +2726,6 @@ TOOLS = [
             },
         },
     },
-    {
-        "name": "session_track",
-        "title": "Track Session Event",
-        "annotations": {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False},
-        "description": (
-            "Track a workspace event for search boosting. "
-            "Events: file_open (opened a file), query (searched), edit (edited a file/symbol). "
-            "Tracked files get +8 score boost in search_code results. "
-            "Sessions are in-memory and expire after 24h."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "session_id": {"type": "string", "description": "Unique session identifier (e.g. workspace folder name or UUID)"},
-                "event_type": {
-                    "type": "string",
-                    "enum": ["file_open", "query", "edit"],
-                    "description": "Type of event: file_open, query, edit",
-                },
-                "target": {"type": "string", "description": "Target of the event (file path for file_open/edit, query string for query)"},
-                "workspace_root": {"type": "string", "description": "Workspace root path (optional, used when creating new session)"},
-            },
-            "required": ["session_id", "event_type", "target"],
-        },
-    },
-    {
-        "name": "session_get",
-        "title": "Get Session State",
-        "annotations": {"readOnlyHint": True, "openWorldHint": False},
-        "description": (
-            "Get the current state of a workspace session. "
-            "Returns: open files, recent queries, recent edits, and boost path count. "
-            "Use this to inspect what the session is tracking."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "session_id": {"type": "string", "description": "Session identifier"},
-            },
-            "required": ["session_id"],
-        },
-    },
-    # =========================================================================
-    # Code Quality
-    # =========================================================================
     {
         "name": "find_complex_functions",
         "title": "Find Complex Functions",
@@ -3256,17 +2939,18 @@ def handle_request(request: dict):
             "serverInfo": {
                 "name": "flyto-indexer",
                 "title": "Flyto Code Indexer",
-                "version": "1.2.0",
-                "description": "Code index and analysis MCP server — search symbols, track dependencies, detect dead code, security scanning, and code health scoring across any project.",
+                "version": "2.0.0",
+                "description": "Code analysis MCP server — impact analysis, dependency tracking, dead code detection, security scanning, and code health scoring across any project.",
                 "websiteUrl": "https://github.com/flytohub/flyto-indexer",
             },
             "instructions": (
-                "flyto-indexer provides 30 tools for code intelligence. "
-                "Start with list_projects to discover indexed projects, "
-                "then use search_code to find symbols by name. "
-                "Use get_file_context for a one-call summary of any file. "
+                "flyto-indexer provides 15 code analysis tools focused on impact analysis, "
+                "dependency tracking, and code quality. "
+                "Start with list_projects to discover indexed projects. "
+                "Use find_references / impact_analysis / edit_impact_preview before modifying shared code. "
                 "Use impact_from_diff to assess blast radius of uncommitted changes. "
-                "Use code_health_score for a quick project quality overview."
+                "Use code_health_score for a quick project quality overview. "
+                "For searching and reading code, use Claude Code's built-in Grep/Glob/Read tools."
             ),
         })
 
