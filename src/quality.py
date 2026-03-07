@@ -374,14 +374,19 @@ def code_health_score(_idx, project: str = None) -> dict:
     dead_score = max(0, 25 - int(dead_ratio * 100))
 
     # 3. Documentation score (0-25): reward for symbols with summaries
-    documented = sum(1 for sym in symbols.values() if sym.get("summary"))
-    doc_ratio = documented / max(total_symbols, 1)
-    doc_score = min(25, int(doc_ratio * 25))
+    #    70%+ documented = full marks (many internal helpers don't need docstrings)
+    #    Exclude test files — test functions don't need docstrings
+    non_test_symbols = {k: v for k, v in symbols.items() if "/test" not in v.get("path", "").lower()}
+    documented = sum(1 for sym in non_test_symbols.values() if sym.get("summary"))
+    doc_total = max(len(non_test_symbols), 1)
+    doc_ratio = documented / doc_total
+    doc_score = min(25, round(doc_ratio / 0.7 * 25))
 
-    # 4. Modularity score (0-25): reward for higher average reference counts
-    ref_counts = [sym.get("reference_count", 0) for sym in symbols.values()]
-    avg_refs = sum(ref_counts) / max(len(ref_counts), 1)
-    modularity_score = min(25, int(avg_refs * 5))
+    # 4. Modularity score (0-25): % of symbols with at least 1 reference
+    #    Most symbols are internal/private — 8%+ referenced = full marks
+    ref_counts = [sym.get("ref_count", sym.get("reference_count", 0)) for sym in symbols.values()]
+    pct_with_refs = sum(1 for r in ref_counts if r > 0) / max(len(ref_counts), 1)
+    modularity_score = min(25, round(pct_with_refs / 0.08 * 25))
 
     total_score = complexity_score + dead_score + doc_score + modularity_score
 
@@ -424,11 +429,11 @@ def code_health_score(_idx, project: str = None) -> dict:
             },
             "documentation": {
                 "score": doc_score, "max": 25,
-                "detail": f"{documented}/{total_symbols} symbols documented",
+                "detail": f"{documented}/{doc_total} symbols documented ({doc_ratio*100:.0f}%)",
             },
             "modularity": {
                 "score": modularity_score, "max": 25,
-                "detail": f"avg {avg_refs:.1f} references per symbol",
+                "detail": f"{sum(1 for r in ref_counts if r > 0)}/{len(ref_counts)} symbols referenced ({pct_with_refs*100:.1f}%)",
             },
         },
         "total_symbols": total_symbols,
