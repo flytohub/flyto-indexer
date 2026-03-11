@@ -29,6 +29,8 @@ INDEXER_TOOL_NAMES: Set[str] = {
     "find_todos",
     "check_index_status",
     "impact_from_diff",
+    "batch_impact_analysis",
+    "validate_changes",
 }
 
 
@@ -334,6 +336,14 @@ def _task():
     return task_analysis
 
 
+def _validation():
+    try:
+        from .tools import validation
+    except ImportError:
+        from tools import validation
+    return validation
+
+
 # =============================================================================
 # Unified tool dispatch
 # =============================================================================
@@ -371,6 +381,9 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
         ),
         "impact_analysis": lambda args: _refs().impact_analysis(
             args.get("symbol_id", ""),
+        ),
+        "batch_impact_analysis": lambda args: _refs().batch_impact_analysis(
+            symbol_ids=args.get("symbol_ids", []),
         ),
         "edit_impact_preview": lambda args: _refs().edit_impact_preview(
             symbol_id=args.get("symbol_id", ""),
@@ -493,6 +506,13 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             task_contract=args.get("task_contract", {}),
             next_phase=args.get("next_phase"),
             current_state=args.get("current_state", {}),
+        ),
+
+        # Validation tools
+        "validate_changes": lambda args: _validation().validate_changes(
+            project=args.get("project"),
+            run_tests=args.get("run_tests", True),
+            test_path=args.get("test_path"),
         ),
     }
 

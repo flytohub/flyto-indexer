@@ -120,7 +120,7 @@ class TestAnalyzeTask:
         assert profile["task_id"].startswith("task_refactor_")
         assert profile["title"] == "Refactor login function"
         assert profile["intent"] == "refactor"
-        assert profile["version"] == "task-contract.v1"
+        assert profile["version"] == "task-contract.v2"
         assert "generated_at" in profile
         assert profile["overall_risk"] in ("safe", "low", "moderate", "high")
 
@@ -1045,8 +1045,8 @@ class TestExecutionPlan:
         purposes = [s["purpose"] for s in plan]
         assert "scope_callers" not in purposes
 
-    def test_multi_target_adds_additional_steps(self):
-        """Multiple targets generate additional scoping steps after gate."""
+    def test_multi_target_generates_per_target_steps(self):
+        """V2: Multiple targets generate inspect/assess steps for ALL targets."""
         from tools.task_analysis import _build_execution_plan
         resolved = [
             {"symbol_id": "proj-a:src/auth.py:function:login",
@@ -1058,5 +1058,6 @@ class TestExecutionPlan:
                 ["blast_radius", "breaking_risk", "test_risk",
                  "cross_coupling", "complexity", "rollback_difficulty"]}
         plan = _build_execution_plan(resolved, dims, "refactor", {})
-        additional = [s for s in plan if s["purpose"] == "scope_callers_additional"]
-        assert len(additional) >= 1
+        # Both targets should have find_references steps
+        ref_steps = [s for s in plan if s["tool"] == "find_references"]
+        assert len(ref_steps) >= 2

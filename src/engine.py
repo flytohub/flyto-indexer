@@ -9,6 +9,7 @@ Usage:
 
 import json
 import logging
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -21,7 +22,7 @@ except ImportError:
 
 from .context.loader import ContextLoader
 from .indexer import IncrementalIndexer, scan_directory_hashes
-from .models import Dependency, FileManifest, ProjectIndex, Symbol, SymbolType
+from .models import Dependency, DependencyType, FileManifest, ProjectIndex, Symbol, SymbolType
 from .scanner import (
     GoScanner,
     JavaScanner,
@@ -655,6 +656,89 @@ class IndexEngine:
             if resolved:
                 dep.metadata["resolved_target"] = resolved
 
+        # --- Re-export chain resolution pass ---
+        # Build re_export_map: {(exporter_path, exported_name) -> original_module}
+        re_export_map = {}  # (exporter_path, name) -> original_module_key
+        for _dep_id, dep in self.index.dependencies.items():
+            if dep.dep_type.value != "re_exports":
+                continue
+            exporter_path = self._extract_path(dep.source_id)
+            if not exporter_path:
+                continue
+            original_module = dep.metadata.get("original_module", "")
+            names = dep.metadata.get("names", [])
+            is_star = dep.metadata.get("star", False)
+            for name in names:
+                re_export_map[(exporter_path, name)] = original_module
+            if is_star:
+                # For star re-exports, store with empty name as wildcard
+                re_export_map[(exporter_path, "*")] = original_module
+
+        if re_export_map:
+            # Build exporter_path set for quick lookup
+            exporter_paths = {path for (path, _name) in re_export_map}
+
+            # For each unresolved import dependency, check if target module
+            # matches a re-exporter and resolve through the chain
+            for _dep_id, dep in self.index.dependencies.items():
+                if dep.dep_type.value not in ('calls', 'uses'):
+                    continue
+                if dep.metadata.get("resolved_target"):
+                    continue  # Already resolved
+
+                source_path = self._extract_path(dep.source_id)
+                if not source_path:
+                    continue
+
+                target = dep.target_id
+                call_name = target.split('.')[0]
+                imports = file_imports.get(source_path, {})
+                if call_name not in imports:
+                    continue
+
+                import_module = imports[call_name]
+
+                # Check if any exporter path matches the import module
+                for exp_path in exporter_paths:
+                    # Match: import module name matches exporter's file path
+                    exp_base = exp_path.rsplit('/', 1)[-1].rsplit('.', 1)[0]
+                    exp_parent = exp_path.rsplit('.', 1)[0]
+                    exp_dir = exp_path.rsplit('/', 1)[0] if '/' in exp_path else ''
+                    # __init__.py / index.ts are accessed by their directory name
+                    is_init = exp_base in ('__init__', 'index')
+
+                    match = False
+                    if import_module in (exp_base, exp_parent, exp_path):
+                        match = True
+                    elif is_init and (import_module == exp_dir or
+                                     import_module.endswith('/' + exp_dir.rsplit('/', 1)[-1]) if exp_dir else False):
+                        match = True
+                    elif import_module.replace('@/', 'src/').replace('./', '') in exp_path:
+                        match = True
+
+                    if not match:
+                        continue
+
+                    # Look up the original module through the re-export chain
+                    original_module = re_export_map.get((exp_path, call_name))
+                    if not original_module:
+                        # Try wildcard (star re-export)
+                        original_module = re_export_map.get((exp_path, "*"))
+                    if not original_module:
+                        continue
+
+                    # Find the original symbol in the original module
+                    for sid, sym in self.index.symbols.items():
+                        if sym.name == call_name:
+                            sym_base = sym.path.rsplit('/', 1)[-1].rsplit('.', 1)[0]
+                            sym_parent = sym.path.rsplit('.', 1)[0]
+                            if original_module in (sym_base, sym_parent, sym.path):
+                                dep.metadata["resolved_target"] = sid
+                                dep.metadata["resolved_via_reexport"] = exp_path
+                                break
+                    if dep.metadata.get("resolved_target"):
+                        break
+
     def _extract_path(self, source_id: str) -> str:
         """Extract file path from source_id"""
         if ":" in source_id:
@@ -682,7 +766,7 @@ class IndexEngine:
     }
 
     # Tracked dependency types (not just calls)
-    TRACKED_DEP_TYPES = {'calls', 'extends', 'implements', 'uses'}
+    TRACKED_DEP_TYPES = {'calls', 'extends', 'implements', 'uses', 're_exports'}
 
     def _build_reverse_index(self):
         """
@@ -752,6 +836,49 @@ class IndexEngine:
 
             if source not in reverse_index[resolved]:
                 reverse_index[resolved].append(source)
+
+        # --- Dict dispatch detection pass ---
+        # For unreferenced symbols, check if their name appears as a bare
+        # reference (dict value, list element, callback) in a sibling symbol
+        # in the same file.
+        _file_content_cache = {}  # file_key -> [(symbol_id, content)]
+        MAX_CONTENT_SCAN = 100_000  # Skip files larger than 100KB total
+
+        for sid, symbol in self.index.symbols.items():
+            if sid in reverse_index:
+                continue  # Already has callers
+            if symbol.symbol_type.value not in ('function', 'method'):
+                continue  # Only check functions/methods
+
+            bare_name = symbol.name.split('.')[-1] if '.' in symbol.name else symbol.name
+            if not bare_name or len(bare_name) <= 2:
+                continue  # Too short, would cause false positives
+
+            file_key = f"{symbol.project}:{symbol.path}"
+            if file_key not in _file_content_cache:
+                parts = []
+                total_size = 0
+                for other_id, other_sym in self.index.symbols.items():
+                    if other_sym.path == symbol.path and other_sym.project == symbol.project:
+                        content = other_sym.content
+                        if content:
+                            total_size += len(content)
+                            if total_size > MAX_CONTENT_SCAN:
+                                break
+                            parts.append((other_id, content))
+                _file_content_cache[file_key] = parts if total_size <= MAX_CONTENT_SCAN else []
+
+            name_pat = re.compile(r'\b' + re.escape(bare_name) + r'\b')
+            for other_id, content in _file_content_cache[file_key]:
+                if other_id == sid:
+                    continue
+                if name_pat.search(content):
+                    # Found a reference in a sibling symbol
+                    if sid not in reverse_index:
+                        reverse_index[sid] = []
+                    if other_id not in reverse_index[sid]:
+                        reverse_index[sid].append(other_id)
+                    break  # One caller is enough to mark as referenced
 
         # Save reverse index
         self.index.reverse_index = reverse_index

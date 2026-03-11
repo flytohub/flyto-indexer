@@ -54,6 +54,22 @@ class TypeScriptScanner(BaseScanner):
             )
             dependencies.append(dep)
 
+            # Create RE_EXPORTS dependency for barrel re-exports
+            if imp.get("re_export"):
+                re_dep = Dependency(
+                    source_id=file_source_id,
+                    target_id=imp["module"],
+                    dep_type=DependencyType.RE_EXPORTS,
+                    source_line=imp["line"],
+                    metadata={
+                        "re_export": True,
+                        "original_module": imp["module"],
+                        "names": imp["names"],
+                        "star": imp.get("star", False),
+                    },
+                )
+                dependencies.append(re_dep)
+
         # Extract calls (function calls)
         calls = self._extract_calls(content)
         for call in calls:
@@ -260,6 +276,44 @@ class TypeScriptScanner(BaseScanner):
                 "module": match.group(1),
                 "names": [],
                 "line": content[:match.start()].count('\n') + 1,
+            })
+
+        # Re-exports: export { x, y } from './module'
+        for match in re.finditer(
+            r"export\s+\{([^}]+)\}\s+from\s+['\"]([^'\"]+)['\"]",
+            content
+        ):
+            names_str = match.group(1)
+            module = match.group(2)
+            names = []
+            for n in names_str.split(','):
+                n = n.strip()
+                if ' as ' in n:
+                    # export { default as Name } or { x as y }
+                    names.append(n.split(' as ')[-1].strip())
+                elif n:
+                    names.append(n)
+            line = content[:match.start()].count('\n') + 1
+            imports.append({
+                "module": module,
+                "names": names,
+                "line": line,
+                "re_export": True,
+            })
+
+        # Re-exports: export * from './module'
+        for match in re.finditer(
+            r"export\s+\*\s+from\s+['\"]([^'\"]+)['\"]",
+            content
+        ):
+            module = match.group(1)
+            line = content[:match.start()].count('\n') + 1
+            imports.append({
+                "module": module,
+                "names": [],
+                "line": line,
+                "re_export": True,
+                "star": True,
             })
 
         return imports

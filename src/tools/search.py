@@ -11,6 +11,7 @@ try:
         TYPE_WEIGHTS,
         LOW_PRIORITY_PATHS,
     )
+    from ..synonyms import expand_query
 except ImportError:
     from index_store import (
         load_index,
@@ -20,6 +21,7 @@ except ImportError:
         TYPE_WEIGHTS,
         LOW_PRIORITY_PATHS,
     )
+    from synonyms import expand_query
 
 # Pre-compiled regex patterns for TODO/FIXME markers
 _TODO_PATTERNS = {
@@ -38,6 +40,40 @@ _STRING_PATTERNS = [
     re.compile(r"'([^'\\]*(?:\\.[^'\\]*)*)'"),
     re.compile(r'`([^`]*)`'),
 ]
+
+
+def _fuzzy_score(query: str, name: str) -> float:
+    """Levenshtein-based similarity between query and symbol name, 0.0 to 1.0.
+
+    Pure Python implementation with early termination.
+    Only intended for short strings (symbol names), not content.
+    """
+    q = query.lower()
+    n = name.lower()
+    if q == n:
+        return 1.0
+    len_q, len_n = len(q), len(n)
+    if len_q == 0 or len_n == 0:
+        return 0.0
+    max_len = max(len_q, len_n)
+    # Short-circuit: if length difference > 50%, can't be similar enough
+    if abs(len_q - len_n) > max_len * 0.5:
+        return 0.0
+    # Standard Levenshtein via two-row DP
+    prev = list(range(len_n + 1))
+    curr = [0] * (len_n + 1)
+    for i in range(1, len_q + 1):
+        curr[0] = i
+        for j in range(1, len_n + 1):
+            cost = 0 if q[i - 1] == n[j - 1] else 1
+            curr[j] = min(
+                prev[j] + 1,       # deletion
+                curr[j - 1] + 1,   # insertion
+                prev[j - 1] + cost  # substitution
+            )
+        prev, curr = curr, prev
+    distance = prev[len_n]
+    return 1.0 - (distance / max_len)
 
 
 def search_by_keyword(
@@ -59,18 +95,26 @@ def search_by_keyword(
         include_content: Whether to include code snippets
 
     Scoring:
+        - BM25 base: 0-30 (with synonym-expanded query)
         - Name match: +10 (exact: +20)
-        - Summary match: +5
+        - Fuzzy match: 0-15 (Levenshtein on symbol name, threshold >= 0.6)
+        - Synonym match: +5 (name matches expanded concept synonym)
+        - Summary match: +5 (original) / +3 (synonym)
         - Content match: +1
         - Type importance: +3~15 (composable > function > method)
         - Reference count: +0.5 per ref (max +10)
         - Path importance: -5 if in tests/
         - Has exports: +3
+        - Session boost: +8
     """
     index = load_index()
     results = []
     query_lower = query.lower()
     query_words = query_lower.split()
+
+    # Expand query with concept synonyms
+    original_tokens, synonym_tokens = expand_query(query)
+    all_search_words = list(original_tokens | synonym_tokens)
 
     # Session boost paths
     boost_paths: set = set()
@@ -85,7 +129,11 @@ def search_by_keyword(
     bm25_scores: dict = {}  # symbol_id -> normalized score (0-30)
     bm25 = _load_bm25()
     if bm25:
-        raw_results = bm25.search(query, top_k=200)
+        # Build expanded BM25 query: original + synonym terms
+        bm25_query = query
+        if synonym_tokens:
+            bm25_query = query + " " + " ".join(synonym_tokens)
+        raw_results = bm25.search(bm25_query, top_k=200)
         if raw_results:
             max_score = raw_results[0][1] if raw_results else 1.0
             for doc_id, score in raw_results:
@@ -114,7 +162,7 @@ def search_by_keyword(
             match_reason.append("bm25")
 
         # === Text matching (additive bonuses) ===
-        # Name match (high weight)
+        # Name match (high weight) — check original query words
         name = symbol.get("name", "").lower()
         if any(w in name for w in query_words):
             score += 10
@@ -124,16 +172,33 @@ def search_by_keyword(
         if query_lower == name:
             score += 20
 
-        # Summary match
+        # Synonym name match — name contains an expanded synonym term
+        if synonym_tokens and any(w in name for w in synonym_tokens):
+            score += 5
+            if "synonym" not in match_reason:
+                match_reason.append("synonym")
+
+        # Fuzzy name match (Levenshtein on symbol name vs query)
+        fuzzy = _fuzzy_score(query_lower, name)
+        if fuzzy >= 0.6:
+            fuzzy_pts = fuzzy * 15.0  # scale 0.6-1.0 → 9-15 points
+            score += fuzzy_pts
+            if "fuzzy" not in match_reason:
+                match_reason.append("fuzzy")
+
+        # Summary match — check both original and expanded words
         summary = symbol.get("summary", "").lower()
         if any(w in summary for w in query_words):
             score += 5
             match_reason.append("summary")
+        elif synonym_tokens and any(w in summary for w in synonym_tokens):
+            score += 3
+            match_reason.append("summary_synonym")
 
         # Content match (only if no BM25 hit — avoid double-loading)
         if bm25_score == 0:
             content = get_symbol_content_text(symbol_id, symbol).lower()
-            if any(w in content for w in query_words):
+            if any(w in content for w in all_search_words):
                 score += 1
                 match_reason.append("content")
 

@@ -45,6 +45,7 @@ class PythonScanner(BaseScanner):
 
         # Extract imports (create dependencies)
         imports = self._extract_imports(tree)
+        is_init = file_path.name == "__init__.py"
         for imp in imports:
             dep = Dependency(
                 source_id=file_source_id,
@@ -54,6 +55,21 @@ class PythonScanner(BaseScanner):
                 metadata={"names": imp["names"]},
             )
             dependencies.append(dep)
+
+            # Detect re-exports in __init__.py: from .submodule import name
+            if is_init and imp.get("is_relative") and imp["names"]:
+                re_dep = Dependency(
+                    source_id=file_source_id,
+                    target_id=imp["module"],
+                    dep_type=DependencyType.RE_EXPORTS,
+                    source_line=imp["line"],
+                    metadata={
+                        "re_export": True,
+                        "original_module": imp["module"],
+                        "names": imp["names"],
+                    },
+                )
+                dependencies.append(re_dep)
 
         # Extract calls (function invocations)
         calls = self._extract_calls(tree)
@@ -144,6 +160,7 @@ class PythonScanner(BaseScanner):
                     "module": node.module,
                     "names": names,
                     "line": node.lineno,
+                    "is_relative": (node.level or 0) > 0,
                 })
 
         return imports

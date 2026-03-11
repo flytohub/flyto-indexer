@@ -106,19 +106,39 @@ LOW_PRIORITY_PATHS = ["test", "tests", "__test__", "spec", "mock", "fixture", "e
 # ---------------------------------------------------------------------------
 
 _last_reindex_check: float = 0.0
-_AUTO_REINDEX_INTERVAL = 300.0  # 5 min
+_REINDEX_INTERVAL_FAST = 10.0   # fast mtime check (cheap stat calls)
+_REINDEX_INTERVAL_FULL = 300.0  # full watcher scan (more expensive)
+_last_full_check: float = 0.0
 _AUTO_REINDEX_ENABLED = os.environ.get("FLYTO_AUTO_REINDEX", "1") != "0"
 
 
 def _maybe_auto_reindex():
-    """Check for file changes and trigger a live reindex if needed."""
-    global _last_reindex_check
+    """Check for file changes and trigger incremental reindex if needed.
+
+    Two-tier strategy:
+    - Every 10s: fast check via .generation file mtime (near-zero cost)
+    - Every 300s: full watcher scan (stat() on indexed files)
+
+    Only reindexes projects with actual changes, not all projects.
+    """
+    global _last_reindex_check, _last_full_check
     if not _AUTO_REINDEX_ENABLED:
         return
     now = _time.monotonic()
-    if now - _last_reindex_check < _AUTO_REINDEX_INTERVAL:
+
+    # Tier 1: fast generation check (every 10s)
+    if now - _last_reindex_check < _REINDEX_INTERVAL_FAST:
         return
     _last_reindex_check = now
+
+    # If generation file changed, cache will auto-invalidate on next load_index()
+    # No action needed here for tier 1 — _check_generation() handles it in load_index()
+
+    # Tier 2: full file watcher scan (every 300s)
+    if now - _last_full_check < _REINDEX_INTERVAL_FULL:
+        return
+    _last_full_check = now
+
     try:
         try:
             from .watcher import FileWatcher
@@ -129,21 +149,33 @@ def _maybe_auto_reindex():
             return
         watcher = FileWatcher(index)
         changes = watcher.detect_changes()
-        if changes:
-            sys.stderr.write(
-                f"[flyto-indexer] Auto-reindex: {len(changes)} changed files detected, reindexing...\n"
-            )
-            sys.stderr.flush()
-            # Lazy import to avoid circular dependency
-            try:
-                from .tools.maintenance import _perform_live_reindex
-            except ImportError:
-                from tools.maintenance import _perform_live_reindex
-            result = _perform_live_reindex()
-            sys.stderr.write(
-                f"[flyto-indexer] Auto-reindex: done ({result.get('reindexed', 0)} projects updated)\n"
-            )
-            sys.stderr.flush()
+        if not changes:
+            return
+
+        # Group changes by project — only reindex affected projects
+        changed_projects = set()
+        for c in changes:
+            changed_projects.add(c.project)
+
+        sys.stderr.write(
+            f"[flyto-indexer] Auto-reindex: {len(changes)} changes in {len(changed_projects)} project(s)\n"
+        )
+        sys.stderr.flush()
+
+        try:
+            from .tools.maintenance import _perform_live_reindex
+        except ImportError:
+            from tools.maintenance import _perform_live_reindex
+
+        total_reindexed = 0
+        for proj in changed_projects:
+            result = _perform_live_reindex(project=proj)
+            total_reindexed += result.get("reindexed", 0)
+
+        sys.stderr.write(
+            f"[flyto-indexer] Auto-reindex: done ({total_reindexed} projects updated)\n"
+        )
+        sys.stderr.flush()
     except Exception as e:
         sys.stderr.write(f"[flyto-indexer] Auto-reindex error: {e}\n")
         sys.stderr.flush()

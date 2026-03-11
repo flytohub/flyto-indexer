@@ -792,3 +792,115 @@ def dependency_graph(
         result["summary"]["dependent_types"][t] = result["summary"]["dependent_types"].get(t, 0) + 1
 
     return result
+
+
+def batch_impact_analysis(symbol_ids: list) -> dict:
+    """
+    Run impact analysis on multiple symbols at once.
+
+    More efficient than calling impact_analysis() repeatedly because
+    the index is loaded only once. Returns per-symbol breakdown and
+    a deduplicated union of all affected symbols.
+    """
+    index = load_index()
+    symbols = index.get("symbols", {})
+    reverse_index = index.get("reverse_index", {})
+    dependencies = index.get("dependencies", {})
+
+    def get_basename_key(source_id: str) -> str:
+        parts = source_id.split(":")
+        if len(parts) >= 4:
+            basename = parts[1].rsplit("/", 1)[-1]
+            return f"{basename}:{parts[2]}:{parts[3]}"
+        return source_id
+
+    def _resolve(symbol_id: str) -> str:
+        if symbol_id in symbols:
+            return symbol_id
+        for sid, sym in symbols.items():
+            if sym.get("name") == symbol_id and sym.get("type") in ("composable", "function", "class"):
+                return sid
+        for sid in symbols:
+            if symbol_id in sid:
+                return sid
+        return symbol_id
+
+    per_symbol = []
+    all_affected = {}  # keyed by dedup_key -> affected dict
+
+    for sid in symbol_ids:
+        resolved_id = _resolve(sid)
+        affected = []
+        seen_paths = set()
+
+        # Method 1: reverse_index
+        if resolved_id in reverse_index:
+            for caller_id in reverse_index[resolved_id]:
+                dedup_key = get_basename_key(caller_id)
+                if dedup_key in seen_paths:
+                    continue
+                seen_paths.add(dedup_key)
+
+                caller_symbol = symbols.get(caller_id, {})
+                entry = {
+                    "id": caller_id,
+                    "path": caller_symbol.get("path", ""),
+                    "name": caller_symbol.get("name", ""),
+                    "type": caller_symbol.get("type", ""),
+                    "reason": "Direct call",
+                }
+                affected.append(entry)
+                all_affected[dedup_key] = entry
+
+        # Method 2: resolved_target in dependencies
+        for _dep_id, dep in dependencies.items():
+            resolved_target = dep.get("metadata", {}).get("resolved_target", "")
+            if resolved_target == resolved_id:
+                source_id = dep.get("source", "")
+                dedup_key = get_basename_key(source_id)
+                if dedup_key in seen_paths:
+                    continue
+                seen_paths.add(dedup_key)
+
+                source_symbol = symbols.get(source_id, {})
+                entry = {
+                    "id": source_id,
+                    "path": source_symbol.get("path", ""),
+                    "name": source_symbol.get("name", ""),
+                    "type": dep.get("type", ""),
+                    "reason": f"Via {dep.get('type', 'unknown')} dependency",
+                }
+                affected.append(entry)
+                all_affected[dedup_key] = entry
+
+        count = len(affected)
+        if count == 0:
+            risk = "safe"
+        elif count <= 10:
+            risk = "moderate"
+        else:
+            risk = "high"
+
+        per_symbol.append({
+            "symbol_id": resolved_id,
+            "affected_count": count,
+            "risk": risk,
+        })
+
+    deduplicated = list(all_affected.values())
+    total = len(deduplicated)
+
+    if total == 0:
+        overall_risk = "safe"
+    elif total <= 10:
+        overall_risk = "moderate"
+    else:
+        overall_risk = "high"
+
+    return {
+        "symbols_analyzed": len(symbol_ids),
+        "total_affected": total,
+        "per_symbol": per_symbol,
+        "deduplicated_affected": deduplicated,
+        "overall_risk": overall_risk,
+    }

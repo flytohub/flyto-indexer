@@ -136,6 +136,26 @@ TOOLS = [
         },
     },
     {
+        "name": "batch_impact_analysis",
+        "title": "Batch Impact Analysis",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "description": (
+            "Run impact analysis on multiple symbols at once. More efficient than calling "
+            "impact_analysis repeatedly. Returns per-symbol breakdown and deduplicated affected list."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "symbol_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of symbol IDs to analyze. Get IDs from search_code or find_dead_code results.",
+                },
+            },
+            "required": ["symbol_ids"],
+        },
+    },
+    {
         "name": "dependency_graph",
         "title": "Dependency Graph",
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
@@ -738,6 +758,24 @@ TOOLS = [
             "required": ["task_contract"],
         },
     },
+    {
+        "name": "validate_changes",
+        "title": "Validate Changes",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "description": (
+            "Run code quality checks (ruff) and tests (pytest) on a project. "
+            "Use after making code changes to verify nothing is broken. "
+            "Returns pass/fail status with detailed output."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project name. If omitted, auto-detect."},
+                "run_tests": {"type": "boolean", "description": "Whether to run pytest. Default: true"},
+                "test_path": {"type": "string", "description": "Specific test file or directory to run. If omitted, runs all tests."},
+            },
+        },
+    },
 ]
 
 
@@ -865,7 +903,8 @@ def handle_request(request: dict):
                 "     Do NOT skip steps. Do NOT edit code until all inspect/assess steps complete.\n"
                 "  3. task_gate_check → call at EVERY gate step before proceeding.\n"
                 "     If gate returns pass=false, STOP and report to user.\n"
-                "  4. Only after all gates pass, proceed to make changes.\n\n"
+                "  4. Only after all gates pass, proceed to make changes.\n"
+                "  5. After making changes, call validate_changes to run ruff + pytest.\n\n"
                 "When asked to UNDERSTAND or EXPLORE code:\n"
                 "  1. search_code → find symbols by name\n"
                 "  2. list_projects → discover indexed projects\n"
@@ -903,6 +942,21 @@ def handle_request(request: dict):
             send_error(id, -32000, f"Rate limit exceeded ({_RATE_LIMIT_MAX} req/{int(_RATE_LIMIT_WINDOW)}s). Please slow down.")
             return
 
+        # Execution guard: block tool calls that skip required gates
+        try:
+            try:
+                from .execution_guard import check_enforcement, record_tool_call, register_task
+            except ImportError:
+                from execution_guard import check_enforcement, record_tool_call, register_task
+            _guard_warning = check_enforcement(tool_name, arguments)
+            if _guard_warning:
+                send_response(id, {
+                    "content": [{"type": "text", "text": json.dumps(_guard_warning, ensure_ascii=False, indent=2)}],
+                })
+                return
+        except Exception:
+            pass
+
         try:
             try:
                 from .tool_registry import execute_tool
@@ -914,29 +968,63 @@ def handle_request(request: dict):
                 send_error(id, -32601, f"Unknown tool: {tool_name}")
                 return
 
+            # Execution guard: record step completion + register new task
+            try:
+                record_tool_call(tool_name, arguments)
+                if tool_name == "analyze_task" and isinstance(result, dict):
+                    register_task(result)
+            except Exception:
+                pass
+
             result_text = json.dumps(result, ensure_ascii=False, indent=2)
 
             # Structural enforcement: inject directive after analyze_task
-            if tool_name == "analyze_task" and isinstance(result, dict) and "execution_plan" in result:
-                plan = result["execution_plan"]
-                if plan:
-                    steps = []
-                    for step in plan:
-                        args_str = json.dumps(step.get("args", {}), ensure_ascii=False)
-                        is_gate = step.get("tool") == "task_gate_check"
-                        marker = " ⛔ GATE — MUST CALL" if is_gate else ""
-                        steps.append(f"  {step['id']}: {step['tool']}({args_str}){marker}")
-                    directive = (
-                        "\n\n⚠️ MANDATORY: Execute these steps IN ORDER before editing any code:\n"
-                        + "\n".join(steps)
-                        + "\n\n"
-                        "RULES:\n"
-                        "1. Call each tool above sequentially with the pre-filled args.\n"
-                        "2. At ⛔ GATE steps, call task_gate_check. If pass=false → STOP.\n"
-                        "3. Do NOT read/edit source files until all gates pass.\n"
-                        "4. After completing all steps, proceed with changes."
-                    )
-                    result_text += directive
+            if tool_name == "analyze_task" and isinstance(result, dict):
+                if result.get("task_profile", {}).get("compound"):
+                    # Compound contract: show per-sub-task plans
+                    parts = []
+                    for i, st in enumerate(result.get("sub_tasks", [])):
+                        plan = st.get("execution_plan", [])
+                        if plan:
+                            steps = []
+                            for step in plan:
+                                args_str = json.dumps(step.get("args", {}), ensure_ascii=False)
+                                is_gate = step.get("tool") == "task_gate_check"
+                                marker = " ⛔ GATE — MUST CALL" if is_gate else ""
+                                steps.append(f"    {step['id']}: {step['tool']}({args_str}){marker}")
+                            parts.append(f"\n  Sub-task {i+1} [{st['intent']}] ({len(st['targets'])} targets):\n" + "\n".join(steps))
+                    if parts:
+                        directive = (
+                            "\n\n⚠️ COMPOUND TASK: Execute sub-tasks IN ORDER (cleanup first, then refactor):\n"
+                            + "\n".join(parts)
+                            + "\n\n"
+                            "RULES:\n"
+                            "1. Complete each sub-task before starting the next.\n"
+                            "2. At ⛔ GATE steps, call task_gate_check. If pass=false → STOP.\n"
+                            "3. Do NOT edit code until all gates in the current sub-task pass."
+                        )
+                        result_text += directive
+                elif "execution_plan" in result:
+                    # Standard (non-compound) contract
+                    plan = result["execution_plan"]
+                    if plan:
+                        steps = []
+                        for step in plan:
+                            args_str = json.dumps(step.get("args", {}), ensure_ascii=False)
+                            is_gate = step.get("tool") == "task_gate_check"
+                            marker = " ⛔ GATE — MUST CALL" if is_gate else ""
+                            steps.append(f"  {step['id']}: {step['tool']}({args_str}){marker}")
+                        directive = (
+                            "\n\n⚠️ MANDATORY: Execute these steps IN ORDER before editing any code:\n"
+                            + "\n".join(steps)
+                            + "\n\n"
+                            "RULES:\n"
+                            "1. Call each tool above sequentially with the pre-filled args.\n"
+                            "2. At ⛔ GATE steps, call task_gate_check. If pass=false → STOP.\n"
+                            "3. Do NOT read/edit source files until all gates pass.\n"
+                            "4. After completing all steps, proceed with changes."
+                        )
+                        result_text += directive
 
             send_response(id, {
                 "content": [{"type": "text", "text": result_text}],
@@ -984,8 +1072,8 @@ try:
     )
     from .tools.search import search_by_keyword, fulltext_search
     from .tools.references import (
-        find_references, impact_analysis, edit_impact_preview,
-        cross_project_impact, dependency_graph,
+        find_references, impact_analysis, batch_impact_analysis,
+        edit_impact_preview, cross_project_impact, dependency_graph,
     )
     from .tools.code_info import (
         get_file_info, get_file_symbols, get_symbol_content,
@@ -1012,8 +1100,8 @@ except ImportError:
     )
     from tools.search import search_by_keyword, fulltext_search
     from tools.references import (
-        find_references, impact_analysis, edit_impact_preview,
-        cross_project_impact, dependency_graph,
+        find_references, impact_analysis, batch_impact_analysis,
+        edit_impact_preview, cross_project_impact, dependency_graph,
     )
     from tools.code_info import (
         get_file_info, get_file_symbols, get_symbol_content,

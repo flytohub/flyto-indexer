@@ -62,7 +62,9 @@ except ImportError:
 
 VALID_INTENTS = {"refactor", "bugfix", "feature", "cleanup", "migration"}
 
-CONTRACT_VERSION = "task-contract.v1"
+CONTRACT_VERSION = "task-contract.v2"
+
+MAX_INDIVIDUAL_INSPECT = 10  # Above this, batch the rest into one step
 
 # =========================================================================
 # Intent → default strategy
@@ -1171,18 +1173,48 @@ def _build_execution_plan(
     # Phase 1: INSPECT — understand the landscape
     # =================================================================
 
-    # Step: scope callers (always first for anything that touches existing code)
-    ref_step = None
-    if first_sid and intent != "feature":
-        ref_step = _add("find_references", {"symbol_id": first_sid}, "scope_callers")
+    # Collect all inspect step IDs for gate dependencies
+    inspect_step_ids = []
 
-    # Step: verify test coverage
-    test_step = None
-    if first_path:
-        test_step = _add(
-            "find_test_file", {"file_path": first_path}, "verify_test_coverage",
-            required=test_level in ("medium", "high"),
-        )
+    # Step(s): scope callers — one per symbol, up to MAX_INDIVIDUAL_INSPECT
+    ref_steps = []
+    if symbol_ids and intent != "feature":
+        individual_sids = symbol_ids[:MAX_INDIVIDUAL_INSPECT]
+        for idx, sid in enumerate(individual_sids):
+            # Single target: use plain purpose for V1 compatibility
+            purpose = "scope_callers" if len(symbol_ids) == 1 else f"scope_callers_{idx}"
+            sid_step = _add("find_references", {"symbol_id": sid}, purpose)
+            ref_steps.append(sid_step)
+        # Batch remainder if more than MAX_INDIVIDUAL_INSPECT
+        if len(symbol_ids) > MAX_INDIVIDUAL_INSPECT:
+            batch_sids = symbol_ids[MAX_INDIVIDUAL_INSPECT:]
+            batch_step = _add(
+                "impact_analysis",
+                {"symbol_id": batch_sids[0]},
+                "batch_scope_callers",
+            )
+            ref_steps.append(batch_step)
+        inspect_step_ids.extend(ref_steps)
+
+    # Back-compat alias for downstream deps (single-target case)
+    ref_step = ref_steps[0] if ref_steps else None
+
+    # Step(s): verify test coverage — one per unique file path
+    test_steps = []
+    if file_paths:
+        unique_test_paths = list(dict.fromkeys(file_paths))  # dedupe, preserve order
+        individual_paths = unique_test_paths[:MAX_INDIVIDUAL_INSPECT]
+        for idx, fpath in enumerate(individual_paths):
+            purpose = "verify_test_coverage" if len(unique_test_paths) == 1 else f"verify_test_coverage_{idx}"
+            t_step = _add(
+                "find_test_file", {"file_path": fpath}, purpose,
+                required=test_level in ("medium", "high"),
+            )
+            test_steps.append(t_step)
+        inspect_step_ids.extend(test_steps)
+
+    # Back-compat alias
+    test_step = test_steps[0] if test_steps else None
 
     # Step: check cross-project usage (if coupling is a concern)
     cross_step = None
@@ -1191,8 +1223,9 @@ def _build_execution_plan(
             "find_references", {"symbol_id": first_sid}, "check_cross_project",
             depends_on=[ref_step] if ref_step else [],
         )
+        inspect_step_ids.append(cross_step)
 
-    # Step: map dependency graph (if complexity is a concern)
+    # Step: map dependency graph (if complexity is a concern) — first path only
     dep_step = None
     if complexity_level in ("medium", "high") and first_path:
         dep_step = _add(
@@ -1201,24 +1234,47 @@ def _build_execution_plan(
             "map_dependencies",
             required=complexity_level == "high",
         )
+        inspect_step_ids.append(dep_step)
 
     # =================================================================
     # Phase 2: ASSESS — quantify risk before making changes
     # =================================================================
 
-    # Step: impact analysis (required when blast is medium+)
-    impact_step = None
-    if first_sid:
-        impact_deps = []
-        if ref_step:
-            impact_deps.append(ref_step)
-        impact_step = _add(
-            "impact_analysis", {"symbol_id": first_sid}, "assess_blast_radius",
-            required=blast_level in ("medium", "high"),
-            depends_on=impact_deps,
-        )
+    assess_step_ids = []
 
-    # Step: edit impact preview (required when breaking is medium+)
+    # Step(s): impact analysis — one per symbol or batched
+    impact_steps = []
+    if symbol_ids:
+        if len(symbol_ids) <= MAX_INDIVIDUAL_INSPECT:
+            for idx, sid in enumerate(symbol_ids):
+                purpose = "assess_blast_radius" if len(symbol_ids) == 1 else f"assess_blast_radius_{idx}"
+                # Each impact step depends on its corresponding ref step if available
+                impact_deps = []
+                if idx < len(ref_steps):
+                    impact_deps.append(ref_steps[idx])
+                elif ref_step:
+                    impact_deps.append(ref_step)
+                i_step = _add(
+                    "impact_analysis", {"symbol_id": sid}, purpose,
+                    required=blast_level in ("medium", "high"),
+                    depends_on=impact_deps,
+                )
+                impact_steps.append(i_step)
+        else:
+            # Batch: single impact_analysis step using first sid as representative
+            impact_deps = [ref_steps[0]] if ref_steps else []
+            batch_impact = _add(
+                "impact_analysis", {"symbol_id": first_sid}, "batch_assess_blast_radius",
+                required=blast_level in ("medium", "high"),
+                depends_on=impact_deps,
+            )
+            impact_steps.append(batch_impact)
+        assess_step_ids.extend(impact_steps)
+
+    # Back-compat alias
+    impact_step = impact_steps[0] if impact_steps else None
+
+    # Step: edit impact preview (required when breaking is medium+) — first sid only
     preview_step = None
     if first_sid and breaking_level in ("medium", "high"):
         change_type_map = {
@@ -1231,32 +1287,19 @@ def _build_execution_plan(
             "preview_change_risk",
             depends_on=[impact_step] if impact_step else [],
         )
+        assess_step_ids.append(preview_step)
 
     # =================================================================
     # Phase 3: GATE — verify ready to proceed
     # =================================================================
 
-    gate_deps = [s for s in [ref_step, test_step, impact_step] if s]
+    gate_deps = inspect_step_ids + assess_step_ids
     gate_step = _add(
         "task_gate_check",
         {"next_phase": "plan_changes"},
         "gate_before_plan",
         depends_on=gate_deps,
     )
-
-    # =================================================================
-    # Phase 4: Additional steps for multi-target tasks
-    # =================================================================
-
-    # For each additional target beyond the first, add scoping steps
-    if len(symbol_ids) > 1:
-        for extra_sid in symbol_ids[1:]:
-            extra_ref = _add(
-                "find_references", {"symbol_id": extra_sid},
-                "scope_callers_additional",
-                required=False,
-                depends_on=[gate_step],
-            )
 
     # Step: final gate before applying changes
     _add(
@@ -1330,6 +1373,154 @@ def _generate_human_summary(dimensions: Dict[str, dict], constraints: dict) -> d
 # Main entry points
 # =========================================================================
 
+def _classify_target_intent(resolved: List[dict], caller_intent: str) -> Dict[str, str]:
+    """Classify each target's natural intent based on index data.
+
+    Returns dict mapping symbol_id -> classified intent.
+    Dead code (no references) -> 'cleanup'
+    Complex functions (>50 lines with callers) -> 'refactor'
+    Otherwise -> caller_intent
+    """
+    index = load_index()
+    reverse_index = index.get("reverse_index", {})
+    symbols = index.get("symbols", {})
+    dependencies = index.get("dependencies", {})
+
+    # Build set of referenced names (same logic as find_dead_code)
+    referenced_names = set()
+    for dep in dependencies.values():
+        dep_type = dep.get("type", "")
+        if dep_type == "imports":
+            for name in dep.get("metadata", {}).get("names", []):
+                referenced_names.add(name)
+        elif dep_type == "calls":
+            target = dep.get("target", "")
+            if target:
+                referenced_names.add(target)
+                for part in target.split("."):
+                    if len(part) > 2:
+                        referenced_names.add(part)
+
+    result = {}
+    for t in resolved:
+        sid = t.get("symbol_id")
+        if not sid:
+            result[t.get("input", "")] = caller_intent
+            continue
+
+        name = t.get("name", "")
+        has_callers = bool(reverse_index.get(sid, [])) or name in referenced_names
+
+        if not has_callers:
+            result[sid] = "cleanup"
+        else:
+            sym = symbols.get(sid, {})
+            lines = sym.get("end_line", 0) - sym.get("start_line", 0)
+            if lines > 50:
+                result[sid] = "refactor"
+            else:
+                result[sid] = caller_intent
+
+    return result
+
+
+def _generate_compound_summary(sub_tasks: list) -> dict:
+    """Generate human summary for compound contract."""
+    parts = []
+    for st in sub_tasks:
+        intent = st["intent"]
+        count = len(st["targets"])
+        risk = st["overall_risk"]
+        parts.append(f"{intent}: {count} targets ({risk} risk)")
+
+    return {
+        "summary": f"Compound task with {len(sub_tasks)} sub-tasks: " + ", ".join(parts),
+        "sub_task_summaries": parts,
+        "recommended_execution_order": [
+            st["intent"] for st in sorted(
+                sub_tasks,
+                key=lambda s: {"cleanup": 0, "bugfix": 1, "refactor": 2, "feature": 3, "migration": 4}.get(s["intent"], 5),
+            )
+        ],
+    }
+
+
+def _build_compound_contract(
+    description: str,
+    resolved: List[dict],
+    classified: Dict[str, str],
+    original_intent: str,
+    project: str,
+    task_id: str,
+    opts: dict,
+) -> dict:
+    """Build a compound contract for mixed-intent tasks."""
+    # Group by classified intent
+    groups = {}  # intent -> [resolved_targets]
+    for t in resolved:
+        key = t.get("symbol_id") or t.get("input", "")
+        target_intent = classified.get(key, original_intent)
+        groups.setdefault(target_intent, []).append(t)
+
+    sub_tasks = []
+    max_risk_score = 0
+
+    for sub_intent, sub_resolved in sorted(groups.items()):
+        # Score dimensions for this sub-group
+        blast = _score_blast_radius(sub_resolved)
+        breaking = _score_breaking_risk(sub_resolved, sub_intent)
+        test = _score_test_risk(sub_resolved)
+        coupling = _score_cross_coupling(sub_resolved)
+        complexity = _score_complexity(sub_resolved)
+        rollback = _score_rollback_difficulty(blast, breaking, coupling, complexity)
+
+        dims = {
+            "blast_radius": blast,
+            "breaking_risk": breaking,
+            "test_risk": test,
+            "cross_coupling": coupling,
+            "complexity": complexity,
+            "rollback_difficulty": rollback,
+        }
+
+        constraints = _derive_constraints(dims, sub_intent)
+        strategy = _derive_strategy(dims, sub_intent, constraints)
+        plan = _build_execution_plan(sub_resolved, dims, sub_intent, constraints)
+
+        sub_max = max(d.get("score", 0) for d in dims.values())
+        max_risk_score = max(max_risk_score, sub_max)
+
+        sub_tasks.append({
+            "intent": sub_intent,
+            "targets": [t.get("input", t.get("symbol_id", "")) for t in sub_resolved],
+            "resolved_targets": sub_resolved,
+            "overall_risk": _overall_risk(sub_max),
+            "dimensions": dims,
+            "constraints": constraints,
+            "strategy": strategy,
+            "execution_plan": plan,
+        })
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    return {
+        "task_profile": {
+            "task_id": task_id,
+            "title": description[:120],
+            "description": description,
+            "original_intent": original_intent,
+            "compound": True,
+            "sub_task_count": len(sub_tasks),
+            "project": project,
+            "overall_risk": _overall_risk(max_risk_score),
+            "version": CONTRACT_VERSION,
+            "generated_at": now,
+        },
+        "sub_tasks": sub_tasks,
+        "human_summary": _generate_compound_summary(sub_tasks),
+    }
+
+
 def analyze_task(
     description: str,
     targets: List[str],
@@ -1366,6 +1557,16 @@ def analyze_task(
 
     # Resolve targets
     resolved = _resolve_targets(targets)
+
+    # Classify each target's natural intent
+    classified = _classify_target_intent(resolved, intent)
+    unique_intents = set(classified.values())
+
+    # If mixed intents detected, split into sub-tasks
+    if len(unique_intents) > 1:
+        return _build_compound_contract(
+            description, resolved, classified, intent, project, task_id, opts
+        )
 
     # Score all 6 dimensions (all HIGH = HIGH RISK)
     blast_radius = _score_blast_radius(resolved)
@@ -1459,6 +1660,28 @@ def task_gate_check(
     """
     if not task_contract:
         return {"error": "task_contract is required"}
+
+    # Handle compound contracts
+    if task_contract.get("task_profile", {}).get("compound") or task_contract.get("compound"):
+        sub_tasks = task_contract.get("sub_tasks", [])
+        if not sub_tasks:
+            return {"error": "Compound contract has no sub_tasks"}
+        # Check gate for each sub-task, return merged result
+        all_pass = True
+        all_blockers = []
+        for i, st in enumerate(sub_tasks):
+            sub_result = task_gate_check(st, next_phase, current_state)
+            if sub_result.get("decision") == "blocked":
+                all_pass = False
+                for msg in sub_result.get("reason_codes", []):
+                    prefixed = f"[{st['intent']}] {msg}"
+                    if prefixed not in all_blockers:
+                        all_blockers.append(prefixed)
+
+        if all_pass:
+            return {"pass": True, "decision": "pass", "phase": next_phase, "reason_codes": [], "message": f"Clear to proceed to {next_phase} (all {len(sub_tasks)} sub-tasks pass).", "required_actions": []}
+        else:
+            return {"pass": False, "decision": "blocked", "phase": next_phase, "reason_codes": all_blockers, "message": f"Blocked: {'; '.join(all_blockers)}", "required_actions": all_blockers}
 
     state = current_state or {}
     constraints = task_contract.get("constraints", {})

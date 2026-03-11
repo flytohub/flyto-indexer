@@ -35,6 +35,7 @@ class DependencyType(str, Enum):
     USES = "uses"             # A uses B (composable/store)
     ROUTES_TO = "routes_to"   # route points to component
     API_CALLS = "api_calls"   # frontend calls backend API
+    RE_EXPORTS = "re_exports" # re-exports from another module
 
 
 @dataclass
