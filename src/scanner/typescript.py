@@ -240,6 +240,28 @@ class TypeScriptScanner(BaseScanner):
                 "line": content[:match.start()].count('\n') + 1,
             })
 
+        # Dynamic imports: import('./module') or import("./module")
+        for match in re.finditer(
+            r"import\s*\(\s*['\"]([^'\"]+)['\"]\s*\)",
+            content
+        ):
+            imports.append({
+                "module": match.group(1),
+                "names": [],
+                "line": content[:match.start()].count('\n') + 1,
+            })
+
+        # CommonJS require: require('./module') or require("./module")
+        for match in re.finditer(
+            r"require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)",
+            content
+        ):
+            imports.append({
+                "module": match.group(1),
+                "names": [],
+                "line": content[:match.start()].count('\n') + 1,
+            })
+
         return imports
 
     def _find_block_end(self, content: str, start_pos: int, start_line: int) -> int:

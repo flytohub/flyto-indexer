@@ -109,6 +109,8 @@ class SecurityScanner:
         # JavaScript
         (r'\.innerHTML\s*=\s*[^"\'<\s]', "innerHTML with variable", "XSS vulnerability"),
         (r'dangerouslySetInnerHTML\s*=\s*\{', "dangerouslySetInnerHTML", "XSS vulnerability"),
+        # Vue v-html directive (renders raw HTML, XSS risk)
+        (r'v-html\s*=\s*["\']', "Vue v-html directive", "XSS vulnerability — use text interpolation {{ }} instead"),
         # Java
         (r'Runtime\.getRuntime\(\)\.exec\s*\([^)]*\+', "Runtime.exec() with concatenation", "Command injection risk"),
         (r'ObjectInputStream.*readObject', "Java deserialization", "Deserialization vulnerability"),
@@ -132,7 +134,7 @@ class SecurityScanner:
         ignore_patterns: list[str] = None,
     ):
         self.project_root = project_root
-        self.extensions = extensions or [".py", ".ts", ".tsx", ".js", ".jsx", ".vue", ".java", ".go", ".env"]
+        self.extensions = extensions or [".py", ".ts", ".tsx", ".js", ".jsx", ".vue", ".java", ".go"]
         self.ignore_patterns = ignore_patterns or [
             "node_modules", "__pycache__", ".git", "dist", "build",
             ".venv", "venv", ".nuxt", ".output",

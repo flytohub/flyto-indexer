@@ -78,14 +78,14 @@ class PythonScanner(BaseScanner):
 
                 # Methods
                 for item in node.body:
-                    if isinstance(item, ast.FunctionDef):
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         method_symbol = self._create_method_symbol(
                             item, node.name, rel_path, lines
                         )
                         symbols.append(method_symbol)
 
-            # Top-level functions
-            elif isinstance(node, ast.FunctionDef):
+            # Top-level functions (sync and async)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 # Ensure it is top-level (not a method)
                 if self._is_top_level(node, tree):
                     func_symbol = self._create_function_symbol(
@@ -189,7 +189,7 @@ class PythonScanner(BaseScanner):
 
     def _create_function_symbol(
         self,
-        node: ast.FunctionDef,
+        node: "ast.FunctionDef | ast.AsyncFunctionDef",
         rel_path: str,
         lines: list[str]
     ) -> Symbol:
@@ -229,7 +229,7 @@ class PythonScanner(BaseScanner):
 
     def _create_method_symbol(
         self,
-        node: ast.FunctionDef,
+        node: "ast.FunctionDef | ast.AsyncFunctionDef",
         class_name: str,
         rel_path: str,
         lines: list[str]
@@ -271,7 +271,7 @@ class PythonScanner(BaseScanner):
     _HTTP_METHODS = {"get", "post", "put", "delete", "patch", "head", "options"}
 
     def _extract_api_decorator(
-        self, decorator: ast.expr, func_node: ast.FunctionDef
+        self, decorator: ast.expr, func_node: "ast.FunctionDef | ast.AsyncFunctionDef"
     ) -> Optional[dict]:
         """
         Extract API endpoint info from a decorator node.
@@ -328,7 +328,7 @@ class PythonScanner(BaseScanner):
                     return ",".join(methods)
         return None
 
-    def _is_top_level(self, node: ast.FunctionDef, tree: ast.Module) -> bool:
+    def _is_top_level(self, node: "ast.FunctionDef | ast.AsyncFunctionDef", tree: ast.Module) -> bool:
         """Check if a function is top-level"""
         return any(item is node for item in tree.body)
 

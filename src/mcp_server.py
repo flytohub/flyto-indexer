@@ -837,17 +837,18 @@ def find_references(symbol_id: str) -> dict:
         """
         Get dedup key for cross-project deduplication.
 
-        Uses basename + type + name to handle forks with different paths:
-        - flyto-cloud: src/ui/web/frontend/src/views/Cart.vue:component:Cart
-        - flyto-cloud-dev: frontend/src/views/Cart.vue:component:Cart
-        Both become: Cart.vue:component:Cart
+        Uses project + basename + type + name to distinguish same-named
+        symbols across different projects:
+        - flyto-cloud:src/.../Cart.vue:component:Cart -> flyto-cloud:Cart.vue:component:Cart
+        - flyto-landing:src/.../Cart.vue:component:Cart -> flyto-landing:Cart.vue:component:Cart
         """
         parts = source_id.split(":")
         if len(parts) >= 4:
-            # project:path:type:name -> basename(path):type:name
+            # project:path:type:name -> project:basename(path):type:name
+            project = parts[0]
             path = parts[1]
             basename = path.rsplit("/", 1)[-1]  # Get filename only
-            return f"{basename}:{parts[2]}:{parts[3]}"
+            return f"{project}:{basename}:{parts[2]}:{parts[3]}"
         elif len(parts) >= 2:
             return parts[1]
         return source_id
@@ -959,7 +960,7 @@ def find_references(symbol_id: str) -> dict:
                 })
 
     # Method 2: Search content for symbol name usage
-    if target_name and len(target_name) >= 3:  # Avoid short names
+    if target_name and len(target_name) >= 2:  # Avoid single-char names
         pattern = rf'\b{re.escape(target_name)}\s*\('
 
         for sym_id, sym in symbols.items():
@@ -1559,10 +1560,6 @@ def find_dead_code(
         if sym_type == "function" and sym_path.endswith(".vue"):
             continue
 
-        # Skip exported symbols
-        if sym.get("exports"):
-            continue
-
         # Skip private methods (starts with _ but not __)
         if sym_name.startswith("_") and not sym_name.startswith("__"):
             continue
@@ -1598,11 +1595,14 @@ def find_dead_code(
                 if dep.get("type") == "imports":
                     target = dep.get("target", "")
                     names = dep.get("metadata", {}).get("names", [])
-                    # Check if import path contains the composable name
-                    if sym_name in target or file_basename in target:
+                    # Check if import path ends with the composable file
+                    # Use endswith to avoid substring false positives
+                    # e.g. "useAuth" should not match "useAuthModal"
+                    target_basename = target.rsplit("/", 1)[-1].rsplit(".", 1)[0] if target else ""
+                    if target_basename == file_basename or target_basename == sym_name:
                         is_imported = True
                         break
-                    # Check named imports
+                    # Check named imports (exact match)
                     if sym_name in names:
                         is_imported = True
                         break

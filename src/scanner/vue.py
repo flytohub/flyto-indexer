@@ -133,12 +133,57 @@ class VueScanner(BaseScanner):
                 "emits": props_emits.get("emits", []),
             }
 
+        # Extract component references from template
+        if template:
+            template_refs = self._extract_template_component_refs(template["content"])
+            for ref_name, ref_line in template_refs:
+                dep = Dependency(
+                    source_id=comp_symbol.id,
+                    target_id=ref_name,
+                    dep_type=DependencyType.USES,
+                    source_line=template["start_line"] + ref_line,
+                    metadata={"template_ref": True},
+                )
+                dependencies.append(dep)
+
         # Generate summary
         comp_symbol.summary = self._generate_summary(
             component_name, template, script, dependencies
         )
 
         return symbols, dependencies
+
+    def _extract_template_component_refs(self, template_content: str) -> list[tuple[str, int]]:
+        """
+        Extract component references from Vue template.
+
+        Detects PascalCase tags like <MyComponent />, <RouterLink>, etc.
+        Returns list of (component_name, relative_line_number).
+        """
+        refs = []
+        seen = set()
+
+        # Match PascalCase component tags: <MyComponent or <MyComponent/>
+        # Must start with uppercase to distinguish from HTML elements
+        for match in re.finditer(r'<([A-Z][a-zA-Z0-9]+)', template_content):
+            name = match.group(1)
+            if name not in seen:
+                seen.add(name)
+                line = template_content[:match.start()].count('\n')
+                refs.append((name, line))
+
+        # Also match kebab-case component tags: <my-component>
+        # (Vue auto-resolves PascalCase imports to kebab-case usage)
+        for match in re.finditer(r'<([a-z][\w]*(?:-[\w]+)+)', template_content):
+            # Convert kebab-case to PascalCase
+            kebab_name = match.group(1)
+            pascal_name = ''.join(word.capitalize() for word in kebab_name.split('-'))
+            if pascal_name not in seen:
+                seen.add(pascal_name)
+                line = template_content[:match.start()].count('\n')
+                refs.append((pascal_name, line))
+
+        return refs
 
     def _extract_block(self, content: str, block_name: str) -> Optional[dict]:
         """Extract SFC block"""

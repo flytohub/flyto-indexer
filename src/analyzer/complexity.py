@@ -253,23 +253,27 @@ class ComplexityAnalyzer:
         return min(start + 50, len(lines))
 
     def _count_ts_complexity(self, content: str) -> tuple[int, int]:
-        """Calculate TypeScript complexity"""
-        # Simplified calculation
+        """Calculate TypeScript complexity using control-flow depth tracking"""
         branches = 0
         max_depth = 0
+        depth = 0
 
-        keywords = ["if", "else", "for", "while", "switch", "try", "catch"]
+        nesting_keywords = {"if", "for", "while", "switch", "try", "catch"}
+        branch_keywords = {"if", "else", "for", "while", "switch", "try", "catch", "case"}
 
         for line in content.split("\n"):
             stripped = line.strip()
 
-            # Calculate depth
-            indent = len(line) - len(line.lstrip())
-            depth = indent // 2
-            max_depth = max(max_depth, depth)
+            # Track brace-based nesting depth
+            for char in stripped:
+                if char == '{':
+                    depth += 1
+                    max_depth = max(max_depth, depth)
+                elif char == '}':
+                    depth = max(0, depth - 1)
 
-            # Calculate branches
-            for kw in keywords:
+            # Count branches
+            for kw in branch_keywords:
                 if re.search(rf'\b{kw}\b', stripped):
                     branches += 1
 
@@ -320,22 +324,26 @@ class ComplexityAnalyzer:
         return functions
 
     def _count_java_complexity(self, content: str) -> tuple[int, int]:
-        """Calculate Java complexity"""
+        """Calculate Java complexity using control-flow depth tracking"""
         branches = 0
         max_depth = 0
+        depth = 0
 
-        keywords = ["if", "else", "for", "while", "switch", "try", "catch", "case"]
+        branch_keywords = {"if", "else", "for", "while", "switch", "try", "catch", "case"}
 
         for line in content.split("\n"):
             stripped = line.strip()
 
-            # Calculate depth (Java uses 4-space indent)
-            indent = len(line) - len(line.lstrip())
-            depth = indent // 4
-            max_depth = max(max_depth, depth)
+            # Track brace-based nesting depth
+            for char in stripped:
+                if char == '{':
+                    depth += 1
+                    max_depth = max(max_depth, depth)
+                elif char == '}':
+                    depth = max(0, depth - 1)
 
             # Calculate branches
-            for kw in keywords:
+            for kw in branch_keywords:
                 if re.search(rf'\b{kw}\b', stripped):
                     branches += 1
 
@@ -382,21 +390,26 @@ class ComplexityAnalyzer:
         return functions
 
     def _count_go_complexity(self, content: str) -> tuple[int, int]:
-        """Calculate Go complexity"""
+        """Calculate Go complexity using control-flow depth tracking"""
         branches = 0
         max_depth = 0
+        depth = 0
 
-        keywords = ["if", "else", "for", "switch", "select", "case", "defer"]
+        branch_keywords = {"if", "else", "for", "switch", "select", "case", "defer"}
 
         for line in content.split("\n"):
             stripped = line.strip()
 
-            # Calculate depth (Go uses tab indent)
-            tabs = len(line) - len(line.lstrip('\t'))
-            max_depth = max(max_depth, tabs)
+            # Track brace-based nesting depth
+            for char in stripped:
+                if char == '{':
+                    depth += 1
+                    max_depth = max(max_depth, depth)
+                elif char == '}':
+                    depth = max(0, depth - 1)
 
             # Calculate branches
-            for kw in keywords:
+            for kw in branch_keywords:
                 if re.search(rf'\b{kw}\b', stripped):
                     branches += 1
 

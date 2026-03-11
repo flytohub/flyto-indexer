@@ -88,16 +88,13 @@ class DeadCodeDetector:
         if "api" in parts or "routes" in parts or "routers" in parts:
             return True
 
-        # Pages/views are not orphans (frameworks auto-load)
+        # Pages/views are not orphans (frameworks auto-load by file path)
         if "pages" in parts or "views" in parts:
             return True
 
-        # Components are not orphans (may be lazy loaded)
-        if "components" in parts:
-            return True
-
-        # Composables/hooks are not orphans (may be used dynamically)
-        return bool("composables" in parts or "hooks" in parts)
+        # Note: components/, composables/, hooks/ are NOT blanket-excluded.
+        # They should be detected as orphans if never imported.
+        return False
 
     def scan_directory(self) -> list[str]:
         """Scan directory, return all files"""
