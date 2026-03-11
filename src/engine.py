@@ -739,6 +739,77 @@ class IndexEngine:
                     if dep.metadata.get("resolved_target"):
                         break
 
+        # --- Same-file call resolution pass ---
+        # For unresolved calls, check if the target exists as a symbol in the
+        # same file. This catches local function calls that don't require imports.
+        file_symbols = {}  # path -> {name: symbol_id}
+        for sid, symbol in self.index.symbols.items():
+            path = symbol.path
+            if path not in file_symbols:
+                file_symbols[path] = {}
+            file_symbols[path][symbol.name] = sid
+            # Also index short name for methods (Class.method -> method)
+            if '.' in symbol.name:
+                short = symbol.name.split('.')[-1]
+                # Don't overwrite a direct match with a method short name
+                if short not in file_symbols[path]:
+                    file_symbols[path][short] = sid
+
+        for _dep_id, dep in self.index.dependencies.items():
+            if dep.dep_type.value != "calls":
+                continue
+            if dep.metadata.get("resolved_target"):
+                continue
+
+            source_path = self._extract_path(dep.source_id)
+            if not source_path:
+                continue
+
+            target = dep.target_id
+            local_syms = file_symbols.get(source_path, {})
+            if not local_syms:
+                continue
+
+            # Exact match (e.g. "foo" or "Class.method")
+            if target in local_syms:
+                dep.metadata["resolved_target"] = local_syms[target]
+                continue
+
+            # Simple name match (first part of dotted name)
+            call_name = target.split('.')[0]
+            if call_name in local_syms:
+                dep.metadata["resolved_target"] = local_syms[call_name]
+                continue
+
+            # For chained method calls (e.g. self.service.do_thing),
+            # try matching the last segment as a method in same file
+            if '.' in target:
+                method_name = target.split('.')[-1]
+                for sym_name, sym_id in local_syms.items():
+                    if '.' in sym_name and sym_name.endswith('.' + method_name):
+                        dep.metadata["resolved_target"] = sym_id
+                        break
+
+        # --- Global fallback resolution pass ---
+        # For still-unresolved calls, try name_to_ids with single-candidate match.
+        # Only match if there's exactly one symbol with that name (unambiguous).
+        for _dep_id, dep in self.index.dependencies.items():
+            if dep.dep_type.value != "calls":
+                continue
+            if dep.metadata.get("resolved_target"):
+                continue
+
+            target = dep.target_id
+            call_name = target.split('.')[0]
+
+            # Skip built-in names
+            if call_name.lower() in self.BUILTIN_NAMES:
+                continue
+
+            candidates = name_to_ids.get(call_name, [])
+            if len(candidates) == 1:
+                dep.metadata["resolved_target"] = candidates[0]
+
     def _extract_path(self, source_id: str) -> str:
         """Extract file path from source_id"""
         if ":" in source_id:
@@ -836,6 +907,74 @@ class IndexEngine:
 
             if source not in reverse_index[resolved]:
                 reverse_index[resolved].append(source)
+
+        # --- Import-based reference tracking ---
+        # If file A imports symbol X, then X's reverse index should include A.
+        # This catches the vast majority of "who depends on this symbol" cases.
+        name_to_ids = {}
+        for sid, symbol in self.index.symbols.items():
+            name = symbol.name
+            if name not in name_to_ids:
+                name_to_ids[name] = []
+            name_to_ids[name].append(sid)
+
+        # Build module path -> file path mapping for import resolution
+        path_to_module_keys = {}  # file_path -> set of module keys
+        for sid, symbol in self.index.symbols.items():
+            path = symbol.path
+            if path not in path_to_module_keys:
+                keys = set()
+                base = path.rsplit('/', 1)[-1].rsplit('.', 1)[0]  # filename
+                parent = path.rsplit('.', 1)[0]  # path without ext
+                keys.update([base, parent, path])
+                # For __init__.py / index.ts, add directory name
+                if base in ('__init__', 'index') and '/' in path:
+                    dir_name = path.rsplit('/', 1)[0]
+                    keys.add(dir_name)
+                    if '/' in dir_name:
+                        keys.add(dir_name.rsplit('/', 1)[-1])
+                path_to_module_keys[path] = keys
+
+        for _dep_id, dep in self.index.dependencies.items():
+            if dep.dep_type.value != "imports":
+                continue
+
+            source = dep.source_id
+            target_module = dep.target_id
+            names = dep.metadata.get("names", [])
+            norm_module = target_module.replace('@/', 'src/').replace('./', '').replace('../', '')
+
+            for name in names:
+                if name.lower() in self.BUILTIN_NAMES or len(name) <= 1:
+                    continue
+
+                candidates = name_to_ids.get(name, [])
+                if not candidates:
+                    continue
+
+                # Find best match by checking if symbol's file matches import module
+                resolved = None
+                for cid in candidates:
+                    sym = self.index.symbols.get(cid)
+                    if not sym:
+                        continue
+                    mod_keys = path_to_module_keys.get(sym.path, set())
+                    if (target_module in mod_keys or
+                            norm_module in sym.path or
+                            any(target_module.endswith(k) or k.endswith(target_module)
+                                for k in mod_keys if len(k) > 3)):
+                        resolved = cid
+                        break
+
+                # Single candidate fallback
+                if not resolved and len(candidates) == 1:
+                    resolved = candidates[0]
+
+                if resolved:
+                    if resolved not in reverse_index:
+                        reverse_index[resolved] = []
+                    if source not in reverse_index[resolved]:
+                        reverse_index[resolved].append(source)
 
         # --- Dict dispatch detection pass ---
         # For unreferenced symbols, check if their name appears as a bare

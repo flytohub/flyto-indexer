@@ -92,6 +92,23 @@ class PythonScanner(BaseScanner):
                 )
                 symbols.append(class_symbol)
 
+                # Create extends dependencies for base classes
+                for base in node.bases:
+                    base_name = None
+                    if isinstance(base, ast.Name):
+                        base_name = base.id
+                    elif isinstance(base, ast.Attribute):
+                        base_name = base.attr
+                    if base_name:
+                        dep = Dependency(
+                            source_id=class_symbol.id,
+                            target_id=base_name,
+                            dep_type=DependencyType.EXTENDS,
+                            source_line=node.lineno,
+                            metadata={"base_class": base_name},
+                        )
+                        dependencies.append(dep)
+
                 # Methods
                 for item in node.body:
                     if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
