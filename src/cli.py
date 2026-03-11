@@ -147,7 +147,16 @@ def main():
     )
     demo_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
 
-    # setup-claude
+    # setup
+    setup_parser = subparsers.add_parser(
+        "setup",
+        help="One command to set up everything: scan + CLAUDE.md + MCP config",
+        description="Complete setup for AI-assisted development. Scans the project, writes CLAUDE.md instructions, and configures Claude Code MCP settings. Run this once per project.",
+    )
+    setup_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    setup_parser.add_argument("--remove", action="store_true", help="Remove flyto-indexer from CLAUDE.md and MCP settings")
+
+    # setup-claude (kept for backward compat)
     setup_claude_parser = subparsers.add_parser(
         "setup-claude",
         help="Add flyto-indexer usage instructions to CLAUDE.md",
@@ -196,6 +205,8 @@ def main():
             result = cmd_install_hook(args)
         elif args.command == "demo":
             result = cmd_demo(args)
+        elif args.command == "setup":
+            result = cmd_setup(args)
         elif args.command == "setup-claude":
             result = cmd_setup_claude(args)
         elif args.command == "check":
@@ -867,35 +878,113 @@ CLAUDE_SECTION = """\
 
 This project is indexed by [flyto-indexer](https://pypi.org/project/flyto-indexer/). Use its MCP tools for code changes.
 
-### First-time setup (auto-index)
-If `.flyto-index/` does not exist in the project root, run this before using any flyto-indexer tools:
-```bash
-flyto-index scan .
-```
+### ALWAYS use flyto-indexer tools when:
+- **Auditing or reviewing** a project → `code_health_score`, `security_scan`, `find_dead_code`, `find_complex_functions`
+- **Understanding code** → `search_code`, `list_projects`, `list_apis`, `dependency_graph`
+- **Before modifying code** → `analyze_task` (call FIRST), then follow the `execution_plan`
+- **Checking impact** → `impact_analysis`, `find_references`, `edit_impact_preview`, `cross_project_impact`
+- **During modifications** → `task_gate_check` at each phase gate before proceeding
 
-### Before modifying shared code
-1. Call `analyze_task` with a description and intent — get risk dimensions, constraints, and execution plan
-2. Follow the `execution_plan` steps in order — each step has the tool name and pre-filled args
-3. Call `task_gate_check` at gate steps before proceeding to the next phase
-4. Respect `constraints.max_files_per_step` — don't batch too many changes at once
-
-### Key tools
-- `analyze_task` — risk assessment + execution plan (call FIRST)
-- `task_gate_check` — phase gate validation (call at checkpoints)
-- `impact_analysis` — what breaks if you change this symbol
-- `find_references` — who calls this function (with file + line)
-- `edit_impact_preview` — exact lines affected by a rename/change
-- `cross_project_impact` — which other repos use this symbol
-- `code_health_score` — project quality score (0-100)
-- `search_code` — find symbols by name
-
-### When to use
-- Renaming or changing function/class signatures
-- Modifying code that might be imported by other files
-- Deleting code (check for references first)
-- Refactoring shared utilities or components
+### Workflow for code changes
+1. `analyze_task` — get risk dimensions, constraints, and execution plan
+2. Follow `execution_plan` steps in order — each step has tool name and pre-filled args
+3. `task_gate_check` at gate steps before proceeding to next phase
+4. Respect `constraints.max_files_per_step`
 <!-- flyto-indexer end -->
 """
+
+
+CLAUDE_SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
+MCP_SERVER_KEY = "flyto-indexer"
+
+
+def _configure_mcp_settings(remove=False):
+    """Add or remove flyto-indexer from ~/.claude/settings.json."""
+    settings_path = CLAUDE_SETTINGS_PATH
+
+    if remove:
+        if not settings_path.exists():
+            return
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        servers = settings.get("mcpServers", {})
+        if MCP_SERVER_KEY not in servers:
+            return
+        del servers[MCP_SERVER_KEY]
+        settings_path.write_text(
+            json.dumps(settings, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        print(f"  Removed {MCP_SERVER_KEY} from {settings_path}")
+        return
+
+    # Find python3 path
+    python_path = sys.executable
+
+    mcp_entry = {
+        "command": python_path,
+        "args": ["-m", "flyto_indexer.mcp_server"],
+    }
+
+    if settings_path.exists():
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    else:
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings = {}
+
+    servers = settings.setdefault("mcpServers", {})
+    if MCP_SERVER_KEY in servers:
+        existing = servers[MCP_SERVER_KEY]
+        if existing.get("args") == mcp_entry["args"]:
+            print(f"  MCP server already configured in {settings_path}")
+            return
+    servers[MCP_SERVER_KEY] = mcp_entry
+    settings_path.write_text(
+        json.dumps(settings, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    print(f"  MCP server configured in {settings_path}")
+
+
+def cmd_setup(args):
+    """One command setup: scan + CLAUDE.md + MCP config."""
+    project_path = Path(args.path).resolve()
+
+    if args.remove:
+        print("Removing flyto-indexer setup...")
+        # Remove CLAUDE.md section
+        remove_args = argparse.Namespace(path=args.path, remove=True)
+        cmd_setup_claude(remove_args)
+        # Remove MCP settings
+        _configure_mcp_settings(remove=True)
+        print("\nDone. flyto-indexer removed.")
+        return None
+
+    print(f"Setting up flyto-indexer for {project_path.name}...\n")
+
+    # Step 1: Scan
+    index_dir = project_path / ".flyto-index"
+    if index_dir.exists():
+        print(f"  Index exists at {index_dir}, skipping scan.")
+    else:
+        print("  [1/3] Scanning project...")
+        scan_args = argparse.Namespace(
+            path=str(project_path), full=False,
+            name=project_path.name, output=None,
+        )
+        cmd_scan(scan_args)
+
+    # Step 2: CLAUDE.md
+    print("  [2/3] Writing CLAUDE.md...")
+    claude_args = argparse.Namespace(path=args.path, remove=False)
+    cmd_setup_claude(claude_args)
+
+    # Step 3: MCP settings
+    print("  [3/3] Configuring MCP server...")
+    _configure_mcp_settings()
+
+    print(f"\nDone! Restart Claude Code to activate.")
+    print("Try: ask Claude to audit this project.")
+    return None
 
 
 def cmd_setup_claude(args):

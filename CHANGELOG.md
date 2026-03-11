@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.0] — 2026-03-11
+
+### Added
+- `flyto-index setup .` — single command that does everything: scan + CLAUDE.md + MCP config
+- `flyto-index setup . --remove` — clean uninstall (removes CLAUDE.md section + MCP settings)
+- Auto-detects Python path for MCP server configuration
+
+### Changed
+- README simplified to two-line install: `pip install flyto-indexer` + `flyto-index setup .`
+- `setup-claude` kept for backward compatibility but `setup` is now the recommended command
+
 ## [1.3.2] — 2026-03-11
 
 ### Changed

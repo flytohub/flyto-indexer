@@ -61,10 +61,20 @@ AI:     → impact_analysis("validateOrder")
 
 ```bash
 pip install flyto-indexer
-flyto-index scan .
+flyto-index setup .
 ```
 
-Add to Claude Code (`~/.claude/settings.json`):
+That's it. One command does everything:
+1. **Scans** your project and builds the code index
+2. **Writes** `CLAUDE.md` with tool usage instructions
+3. **Configures** Claude Code MCP settings (`~/.claude/settings.json`)
+
+Restart Claude Code and start using it. Works with any MCP client — Claude Code, Cursor, Windsurf, etc.
+
+<details>
+<summary>Manual setup (other MCP clients)</summary>
+
+If your MCP client doesn't use `~/.claude/settings.json`, add this to your MCP config:
 
 ```json
 {
@@ -77,15 +87,12 @@ Add to Claude Code (`~/.claude/settings.json`):
 }
 ```
 
-Then set up AI instructions:
-
+Then scan and set up CLAUDE.md separately:
 ```bash
+flyto-index scan .
 flyto-index setup-claude .
 ```
-
-This appends task contract and tool usage instructions to your project's `CLAUDE.md` so AI assistants automatically use `analyze_task` before modifying shared code.
-
-Done. Works with any MCP client — Claude Code, Cursor, Windsurf, etc.
+</details>
 
 <details>
 <summary>Run from source</summary>
@@ -93,8 +100,16 @@ Done. Works with any MCP client — Claude Code, Cursor, Windsurf, etc.
 ```bash
 git clone https://github.com/flytohub/flyto-indexer.git
 cd flyto-indexer && pip install -e .
-flyto-index scan /path/to/your/project
-python -m src.mcp_server
+flyto-index setup .
+```
+</details>
+
+<details>
+<summary>Uninstall</summary>
+
+```bash
+flyto-index setup . --remove
+pip uninstall flyto-indexer
 ```
 </details>
 
@@ -307,12 +322,13 @@ flyto-index scan .
 ## CLI
 
 ```bash
-flyto-index scan .                        # Index
+flyto-index setup .                       # One command: scan + CLAUDE.md + MCP config
+flyto-index scan .                        # Index (or re-index)
 flyto-index impact useAuth --path .       # Impact analysis
 flyto-index check . --threshold medium    # CI gate
-flyto-index setup-claude .                # Add AI instructions to CLAUDE.md
 flyto-index demo .                        # 30-second demo
 flyto-index install-hook .                # Auto-reindex on commit
+flyto-index setup . --remove              # Uninstall
 ```
 
 ## Privacy

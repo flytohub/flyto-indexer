@@ -3,31 +3,22 @@
 
 This project is indexed by [flyto-indexer](https://pypi.org/project/flyto-indexer/). Use its MCP tools for code changes.
 
-### First-time setup (auto-index)
+### First-time setup
 If `.flyto-index/` does not exist in the project root, run this before using any flyto-indexer tools:
 ```bash
 flyto-index scan .
 ```
 
-### Before modifying shared code
-1. Call `analyze_task` with a description and intent — get risk dimensions, constraints, and execution plan
-2. Follow the `execution_plan` steps in order — each step has the tool name and pre-filled args
-3. Call `task_gate_check` at gate steps before proceeding to the next phase
-4. Respect `constraints.max_files_per_step` — don't batch too many changes at once
+### ALWAYS use flyto-indexer tools when:
+- **Auditing or reviewing** a project → `code_health_score`, `security_scan`, `find_dead_code`, `find_complex_functions`
+- **Understanding code** → `search_code`, `list_projects`, `list_apis`, `dependency_graph`
+- **Before modifying code** → `analyze_task` (call FIRST), then follow the `execution_plan`
+- **Checking impact** → `impact_analysis`, `find_references`, `edit_impact_preview`, `cross_project_impact`
+- **During modifications** → `task_gate_check` at each phase gate before proceeding
 
-### Key tools
-- `analyze_task` — risk assessment + execution plan (call FIRST)
-- `task_gate_check` — phase gate validation (call at checkpoints)
-- `impact_analysis` — what breaks if you change this symbol
-- `find_references` — who calls this function (with file + line)
-- `edit_impact_preview` — exact lines affected by a rename/change
-- `cross_project_impact` — which other repos use this symbol
-- `code_health_score` — project quality score (0-100)
-- `search_code` — find symbols by name
-
-### When to use
-- Renaming or changing function/class signatures
-- Modifying code that might be imported by other files
-- Deleting code (check for references first)
-- Refactoring shared utilities or components
+### Workflow for code changes
+1. `analyze_task` — get risk dimensions, constraints, and execution plan
+2. Follow `execution_plan` steps in order — each step has tool name and pre-filled args
+3. `task_gate_check` at gate steps before proceeding to next phase
+4. Respect `constraints.max_files_per_step`
 <!-- flyto-indexer end -->
