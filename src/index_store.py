@@ -80,6 +80,7 @@ _content_loaded: bool = False
 _bm25_cache = None
 _test_mapper = None
 _session_store = None
+_cache_generation: float = 0.0
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -164,11 +165,38 @@ def _load_single_index(index_dir: Path) -> dict:
     return {}
 
 
+def _check_generation() -> bool:
+    """Return True if any discovered index dir has a newer .generation file."""
+    global _cache_generation
+    for d in _discover_index_dirs():
+        gen_file = d / ".generation"
+        if gen_file.exists():
+            try:
+                mtime = gen_file.stat().st_mtime
+                if mtime > _cache_generation:
+                    return True
+            except OSError:
+                pass
+    return False
+
+
+def _write_generation(index_dir: Path):
+    """Write current timestamp to index_dir/.generation to signal cache staleness."""
+    gen_file = index_dir / ".generation"
+    try:
+        gen_file.write_text(str(_time.time()))
+    except OSError:
+        pass
+
+
 def load_index() -> dict:
     """Load and merge all discovered indexes, with caching."""
     global _index_cache
     if _index_cache is not None:
-        return _index_cache
+        if _check_generation():
+            invalidate_caches()
+        else:
+            return _index_cache
 
     dirs = _discover_index_dirs()
     if not dirs:
@@ -223,6 +251,8 @@ def load_index() -> dict:
 
     merged["projects"] = projects
     _index_cache = merged
+    # Record the latest generation mtime so subsequent checks are relative
+    _update_cache_generation()
     return _index_cache
 
 
@@ -326,12 +356,29 @@ def _get_session_store():
 # Cache management
 # ---------------------------------------------------------------------------
 
+def _update_cache_generation():
+    """Record the max .generation mtime across all discovered index dirs."""
+    global _cache_generation
+    max_mtime = 0.0
+    for d in _discover_index_dirs():
+        gen_file = d / ".generation"
+        if gen_file.exists():
+            try:
+                mtime = gen_file.stat().st_mtime
+                if mtime > max_mtime:
+                    max_mtime = mtime
+            except OSError:
+                pass
+    _cache_generation = max_mtime
+
+
 def invalidate_caches():
     """Reset all caches to their initial states, forcing a fresh reload."""
     global _index_cache, _content_cache, _content_loaded
-    global _bm25_cache, _test_mapper
+    global _bm25_cache, _test_mapper, _cache_generation
     _index_cache = None
     _content_cache = {}
     _content_loaded = False
     _bm25_cache = None
     _test_mapper = None
+    _cache_generation = 0.0

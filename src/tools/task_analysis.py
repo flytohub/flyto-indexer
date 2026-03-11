@@ -1152,6 +1152,21 @@ def _build_execution_plan(
     test_level = dimensions.get("test_risk", {}).get("level", "low")
     complexity_level = dimensions.get("complexity", {}).get("level", "low")
 
+    # Fast path: minimal plan for all-low-risk cleanup/bugfix tasks
+    all_low = all(level == "low" for level in [
+        blast_level, breaking_level, coupling_level, test_level, complexity_level,
+    ])
+    if all_low and intent in ("cleanup", "bugfix"):
+        # Only verify no live callers if the constraint exists
+        if constraints.get("must_verify_no_live_callers") and first_sid:
+            _add("find_references", {"symbol_id": first_sid}, "scope_callers")
+        _add(
+            "task_gate_check",
+            {"next_phase": "apply_changes"},
+            "gate_before_apply",
+        )
+        return steps
+
     # =================================================================
     # Phase 1: INSPECT — understand the landscape
     # =================================================================

@@ -393,9 +393,25 @@ def code_health_score(project: str = None) -> dict:
     doc_score = min(25, round(doc_ratio / 0.7 * 25))
 
     # 4. Modularity score (0-25): % of symbols with at least 1 reference
+    #    Detect project archetype: "toolbox" projects (high ratio of public
+    #    entry-point functions) naturally have lower cross-referencing.
     ref_counts = [sym.get("ref_count", sym.get("reference_count", 0)) for sym in symbols.values()]
     pct_with_refs = sum(1 for r in ref_counts if r > 0) / max(len(ref_counts), 1)
-    modularity_score = min(25, round(pct_with_refs / 0.08 * 25))
+
+    # Count entry-point functions: public, top-level, non-test
+    entry_points = sum(
+        1 for sym in symbols.values()
+        if sym.get("type") == "function"
+        and not sym.get("name", "_").startswith("_")
+        and "/test" not in sym.get("path", "").lower()
+    )
+    total_functions = sum(1 for sym in symbols.values() if sym.get("type") == "function")
+    entry_point_ratio = entry_points / max(total_functions, 1)
+    is_toolbox = entry_point_ratio > 0.4
+    modularity_baseline = 0.03 if is_toolbox else 0.08
+    archetype = "toolbox" if is_toolbox else "application"
+
+    modularity_score = min(25, round(pct_with_refs / modularity_baseline * 25))
 
     total_score = complexity_score + dead_score + doc_score + modularity_score
 
@@ -442,7 +458,7 @@ def code_health_score(project: str = None) -> dict:
             },
             "modularity": {
                 "score": modularity_score, "max": 25,
-                "detail": f"{sum(1 for r in ref_counts if r > 0)}/{len(ref_counts)} symbols referenced ({pct_with_refs*100:.1f}%)",
+                "detail": f"{sum(1 for r in ref_counts if r > 0)}/{len(ref_counts)} symbols referenced ({pct_with_refs*100:.1f}%, {archetype} baseline {modularity_baseline*100:.0f}%)",
             },
         },
         "total_symbols": total_symbols,

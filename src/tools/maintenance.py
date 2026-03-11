@@ -79,6 +79,8 @@ def find_dead_code(project=None, symbol_type=None, min_lines=5):
         "setup", "data", "computed", "methods", "watch",
     }
 
+    _same_file_content_cache = {}
+
     for sym_id, sym in symbols.items():
         sym_type = sym.get("type", "")
         sym_name = sym.get("name", "")
@@ -151,6 +153,33 @@ def find_dead_code(project=None, symbol_type=None, min_lines=5):
         ref_count = sym.get("ref_count", 0)
         callers = reverse_index.get(sym_id, [])
         if ref_count == 0 and len(callers) == 0:
+            # Check for dict/list dispatch patterns: the symbol name may
+            # appear as a bare reference (dict value, list element, callback
+            # assignment) inside another symbol in the same file.
+            bare_name = sym_name.split(".")[-1] if "." in sym_name else sym_name
+            if bare_name and len(bare_name) > 2:
+                file_key = f"{sym_project}:{sym_path}"
+                if file_key not in _same_file_content_cache:
+                    parts = []
+                    for other_id, other_sym in symbols.items():
+                        other_proj = other_id.split(":")[0] if ":" in other_id else ""
+                        if other_sym.get("path", "") == sym_path and other_proj == sym_project:
+                            text = get_symbol_content_text(other_id, other_sym)
+                            if text:
+                                parts.append((other_id, text))
+                    _same_file_content_cache[file_key] = parts
+
+                name_pat = re.compile(r'\b' + re.escape(bare_name) + r'\b')
+                found_in_sibling = False
+                for other_id, text in _same_file_content_cache[file_key]:
+                    if other_id == sym_id:
+                        continue
+                    if name_pat.search(text):
+                        found_in_sibling = True
+                        break
+                if found_in_sibling:
+                    continue
+
             dead_code.append({
                 "symbol_id": sym_id,
                 "name": sym_name,

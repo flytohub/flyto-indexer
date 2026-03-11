@@ -810,6 +810,13 @@ class IndexEngine:
 
         index_file.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 
+        # Bump generation counter so in-memory caches know to reload
+        try:
+            from .index_store import _write_generation
+        except ImportError:
+            from index_store import _write_generation
+        _write_generation(self.index_dir)
+
     def _build_bm25_index(self):
         """Build BM25 search index from symbols and save to disk."""
         documents = {}
