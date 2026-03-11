@@ -850,13 +850,29 @@ def handle_request(request: dict):
                 "websiteUrl": "https://github.com/flytohub/flyto-indexer",
             },
             "instructions": (
-                "flyto-indexer provides 15 code analysis tools focused on impact analysis, "
-                "dependency tracking, and code quality. "
-                "Start with list_projects to discover indexed projects. "
-                "Use find_references / impact_analysis / edit_impact_preview before modifying shared code. "
-                "Use impact_from_diff to assess blast radius of uncommitted changes. "
-                "Use code_health_score for a quick project quality overview. "
-                "For searching and reading code, use Claude Code's built-in Grep/Glob/Read tools."
+                "flyto-indexer provides 32 code analysis tools. "
+                "ALWAYS use these tools — do NOT fall back to Grep/Read for tasks they cover.\n\n"
+                "When asked to AUDIT or REVIEW a project:\n"
+                "  1. code_health_score → overall quality score\n"
+                "  2. security_scan → hardcoded secrets, injection risks\n"
+                "  3. find_dead_code → unreferenced code safe to delete\n"
+                "  4. find_complex_functions → functions needing refactoring\n"
+                "  5. suggest_refactoring → prioritized improvement list\n\n"
+                "When asked to MODIFY or REFACTOR code:\n"
+                "  1. analyze_task → risk assessment + execution plan (call FIRST)\n"
+                "  2. Follow execution_plan steps — each has tool name + pre-filled args\n"
+                "  3. task_gate_check → validate before proceeding to next phase\n\n"
+                "When asked to UNDERSTAND or EXPLORE code:\n"
+                "  1. search_code → find symbols by name\n"
+                "  2. list_projects → discover indexed projects\n"
+                "  3. list_apis → API endpoints + cross-language callers\n"
+                "  4. dependency_graph → imports and dependents\n\n"
+                "When checking IMPACT of changes:\n"
+                "  1. impact_analysis → what breaks if you change this\n"
+                "  2. find_references → who calls this function\n"
+                "  3. edit_impact_preview → exact lines affected\n"
+                "  4. cross_project_impact → which other repos use this\n"
+                "  5. impact_from_diff → blast radius of uncommitted changes"
             ),
         })
 
