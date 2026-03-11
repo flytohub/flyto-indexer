@@ -17,20 +17,23 @@ from pathlib import Path
 # Index directory (configurable via env var)
 # ---------------------------------------------------------------------------
 
-INDEX_DIR = Path(os.environ.get(
-    "FLYTO_INDEX_DIR",
-    str(Path.cwd() / ".flyto-index")
-))
+_EXPLICIT_INDEX_DIR = os.environ.get("FLYTO_INDEX_DIR")
+INDEX_DIR = Path(_EXPLICIT_INDEX_DIR) if _EXPLICIT_INDEX_DIR else Path.cwd() / ".flyto-index"
 
 
 def _discover_index_dirs() -> list:
     """Discover all .flyto-index/ directories.
 
-    Searches:
-    1. INDEX_DIR itself (env var or CWD/.flyto-index)
+    If FLYTO_INDEX_DIR is explicitly set, only use that directory (no discovery).
+    Otherwise searches:
+    1. CWD/.flyto-index
     2. Direct child directories (monorepo: each sub-project may have its own index)
-    3. If INDEX_DIR doesn't exist, try parent directory (running from a sub-project)
+    3. Parent directory (running from a sub-project)
     """
+    # Explicit env var = no auto-discovery
+    if _EXPLICIT_INDEX_DIR:
+        return [INDEX_DIR] if INDEX_DIR.exists() else []
+
     seen = set()
     dirs = []
 
@@ -40,12 +43,12 @@ def _discover_index_dirs() -> list:
             seen.add(rp)
             dirs.append(rp)
 
-    # 1. INDEX_DIR itself
+    # 1. CWD/.flyto-index
     if INDEX_DIR.exists():
         _add(INDEX_DIR)
 
     # 2. Scan child directories for .flyto-index/
-    base = INDEX_DIR.parent  # CWD or env-specified parent
+    base = INDEX_DIR.parent  # CWD
     if base.exists():
         for child in base.iterdir():
             if child.is_dir() and not child.name.startswith("."):
@@ -207,9 +210,16 @@ def load_index() -> dict:
         # Merge files
         for k, v in idx.get("files", {}).items():
             merged.setdefault("files", {})[k] = v
-        # Merge routes/api_endpoints
-        merged.setdefault("routes", []).extend(idx.get("routes", []))
-        merged.setdefault("api_endpoints", []).extend(idx.get("api_endpoints", []))
+        # Merge routes/api_endpoints (may be list or dict depending on index version)
+        for key in ("routes", "api_endpoints"):
+            incoming = idx.get(key, [])
+            existing = merged.get(key)
+            if isinstance(incoming, list) and isinstance(existing, list):
+                existing.extend(incoming)
+            elif isinstance(incoming, dict):
+                merged.setdefault(key, {}).update(incoming)
+            elif isinstance(incoming, list) and existing is None:
+                merged[key] = list(incoming)
 
     merged["projects"] = projects
     _index_cache = merged
