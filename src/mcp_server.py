@@ -776,6 +776,194 @@ TOOLS = [
             },
         },
     },
+    # Git Intelligence
+    {
+        "name": "git_hotspots",
+        "title": "Git Hotspots",
+        "annotations": {"readOnlyHint": True, "openWorldHint": True},
+        "description": (
+            "Find files that change most frequently and cross-reference with code complexity. "
+            "Hotspot score = commit_count * (1 + complexity / 10). "
+            "Uses 1 year of git history. "
+            "Returns: ranked hotspots with commit count, complexity score, hotspot score, and recent authors."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Filter to a specific project"},
+                "max_results": {"type": "integer", "default": 20, "description": "Max hotspots to return (default 20)"},
+            },
+        },
+    },
+    {
+        "name": "git_cochange",
+        "title": "Git Co-change",
+        "annotations": {"readOnlyHint": True, "openWorldHint": True},
+        "description": (
+            "Find files that frequently change together with a given file. "
+            "Helps discover hidden coupling not visible in import graphs. "
+            "Filters out obvious pairs (e.g. test file of same name) and requires min 2 co-changes. "
+            "Returns: co-changed files with frequency, ratio, and sample commit hashes."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path relative to project root. Example: 'src/api/auth.py'"},
+                "project": {"type": "string", "description": "Filter to a specific project"},
+                "max_results": {"type": "integer", "default": 10, "description": "Max co-changed files to return (default 10)"},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "git_churn",
+        "title": "Git Churn",
+        "annotations": {"readOnlyHint": True, "openWorldHint": True},
+        "description": (
+            "Measure code churn (insertions + deletions) for a file or entire project over a time period. "
+            "When a path is given, maps churn to indexed symbols (approximate). "
+            "Returns: total commits, unique authors, insertions, deletions, recent commits, and per-symbol churn."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path relative to project root. If omitted, shows project-level stats."},
+                "project": {"type": "string", "description": "Filter to a specific project"},
+                "days": {"type": "integer", "default": 90, "description": "Look back N days (default 90)"},
+            },
+        },
+    },
+    {
+        "name": "git_risk_commits",
+        "title": "Git Risk Commits",
+        "annotations": {"readOnlyHint": True, "openWorldHint": True},
+        "description": (
+            "Score recent commits by risk heuristics: large changesets, risky keywords "
+            "(fix, hotfix, workaround, hack, revert), high line count, and touching complex files. "
+            "Returns: ranked commits with risk score, risk factors, and change stats."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Filter to a specific project"},
+                "days": {"type": "integer", "default": 30, "description": "Look back N days (default 30)"},
+                "max_results": {"type": "integer", "default": 15, "description": "Max commits to return (default 15)"},
+            },
+        },
+    },
+    # Coverage Intelligence
+    {
+        "name": "coverage_report",
+        "title": "Coverage Report",
+        "annotations": {"readOnlyHint": True, "openWorldHint": True},
+        "description": (
+            "Generate a test coverage report mapped to indexed symbols. "
+            "Parses .coverage (SQLite) or coverage.xml (Cobertura) files produced by pytest-cov / coverage.py. "
+            "Shows overall coverage % and per-function breakdown sorted by worst coverage first. "
+            "Use min_coverage (0.0-1.0) to filter to functions below a threshold."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project name. If omitted, auto-detect."},
+                "min_coverage": {"type": "number", "description": "Filter to functions below this coverage threshold (0.0-1.0). Example: 0.8 = show functions below 80%."},
+            },
+        },
+    },
+    {
+        "name": "coverage_gaps",
+        "title": "Coverage Gaps",
+        "annotations": {"readOnlyHint": True, "openWorldHint": True},
+        "description": (
+            "Find high-impact coverage gaps: functions with low test coverage AND many references. "
+            "Gap score = (1 - coverage%) * (1 + reference_count). Higher score = more critical to test. "
+            "Use this to prioritize which functions to add tests for."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project name. If omitted, auto-detect."},
+                "max_results": {"type": "integer", "default": 20, "description": "Max results (default 20)"},
+            },
+        },
+    },
+    {
+        "name": "untested_changes",
+        "title": "Untested Changes",
+        "annotations": {"readOnlyHint": True, "openWorldHint": True},
+        "description": (
+            "Cross-reference git diff with coverage data to find changed lines that lack test coverage. "
+            "Shows per-file breakdown of uncovered changed lines with affected symbols. "
+            "Use before committing to ensure new/modified code is tested."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project name. If omitted, auto-detect."},
+                "mode": {
+                    "type": "string",
+                    "enum": ["unstaged", "staged", "committed"],
+                    "description": "What to diff: unstaged (default), staged, committed (HEAD~1)",
+                },
+            },
+        },
+    },
+    # Type Contract Checking
+    {
+        "name": "extract_type_schema",
+        "title": "Extract Type Schema",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "description": (
+            "Extract the field-level type schema from a Python class (Pydantic BaseModel, dataclass, TypedDict) "
+            "or TypeScript interface/type alias. Returns field names, types, optionality, and defaults. "
+            "Use this to inspect a type's contract before comparing with contract_drift or check_api_contracts."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "symbol_id": {
+                    "type": "string",
+                    "description": "Symbol ID or name of the class/interface. Examples: 'LoginResponse', 'flyto-cloud:src/models.py:class:UserProfile'",
+                },
+            },
+            "required": ["symbol_id"],
+        },
+    },
+    {
+        "name": "check_api_contracts",
+        "title": "Check API Contracts",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "description": (
+            "Check type contracts between API producers and consumers across projects. "
+            "For each API endpoint, extracts the return type schema and compares it with consumer-side types. "
+            "Detects missing fields, type mismatches, and optionality drift. "
+            "Returns: contracts checked, mismatches found, and detailed per-endpoint breakdown."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "source_project": {"type": "string", "description": "API producer project. Example: 'flyto-cloud'"},
+                "consumer_project": {"type": "string", "description": "API consumer project. Example: 'flyto-vscode'"},
+            },
+        },
+    },
+    {
+        "name": "contract_drift",
+        "title": "Contract Drift",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "description": (
+            "Detect type schema drift between projects. Finds classes/interfaces with the same name "
+            "in different projects and compares their field schemas. "
+            "Reports missing fields, type mismatches, and optionality differences. "
+            "Use this to catch when a shared type definition diverges across projects."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Filter to types defined in this project (optional)"},
+            },
+        },
+    },
 ]
 
 

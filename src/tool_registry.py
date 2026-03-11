@@ -31,6 +31,16 @@ INDEXER_TOOL_NAMES: Set[str] = {
     "impact_from_diff",
     "batch_impact_analysis",
     "validate_changes",
+    "git_hotspots",
+    "git_cochange",
+    "git_churn",
+    "git_risk_commits",
+    "coverage_report",
+    "coverage_gaps",
+    "untested_changes",
+    "extract_type_schema",
+    "check_api_contracts",
+    "contract_drift",
 }
 
 
@@ -344,6 +354,30 @@ def _validation():
     return validation
 
 
+def _git_intel():
+    try:
+        from .tools import git_intel
+    except ImportError:
+        from tools import git_intel
+    return git_intel
+
+
+def _coverage_intel():
+    try:
+        from .tools import coverage_intel
+    except ImportError:
+        from tools import coverage_intel
+    return coverage_intel
+
+
+def _type_contracts():
+    try:
+        from .tools import type_contracts
+    except ImportError:
+        from tools import type_contracts
+    return type_contracts
+
+
 # =============================================================================
 # Unified tool dispatch
 # =============================================================================
@@ -513,6 +547,53 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             project=args.get("project"),
             run_tests=args.get("run_tests", True),
             test_path=args.get("test_path"),
+        ),
+
+        # Git intelligence tools
+        "git_hotspots": lambda args: _git_intel().git_hotspots(
+            project=args.get("project"),
+            max_results=args.get("max_results", 20),
+        ),
+        "git_cochange": lambda args: _git_intel().git_cochange(
+            path=args.get("path", ""),
+            project=args.get("project"),
+            max_results=args.get("max_results", 10),
+        ),
+        "git_churn": lambda args: _git_intel().git_churn(
+            path=args.get("path"),
+            project=args.get("project"),
+            days=args.get("days", 90),
+        ),
+        "git_risk_commits": lambda args: _git_intel().git_risk_commits(
+            project=args.get("project"),
+            days=args.get("days", 30),
+            max_results=args.get("max_results", 15),
+        ),
+
+        # Coverage intelligence tools
+        "coverage_report": lambda args: _coverage_intel().coverage_report(
+            project=args.get("project"),
+            min_coverage=args.get("min_coverage"),
+        ),
+        "coverage_gaps": lambda args: _coverage_intel().coverage_gaps(
+            project=args.get("project"),
+            max_results=args.get("max_results", 20),
+        ),
+        "untested_changes": lambda args: _coverage_intel().untested_changes(
+            project=args.get("project"),
+            mode=args.get("mode", "unstaged"),
+        ),
+
+        # Type contract tools
+        "extract_type_schema": lambda args: _type_contracts().extract_type_schema(
+            symbol_id=args.get("symbol_id", ""),
+        ),
+        "check_api_contracts": lambda args: _type_contracts().check_api_contracts(
+            source_project=args.get("source_project"),
+            consumer_project=args.get("consumer_project"),
+        ),
+        "contract_drift": lambda args: _type_contracts().contract_drift(
+            project=args.get("project"),
         ),
     }
 
