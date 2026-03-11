@@ -147,6 +147,15 @@ def main():
     )
     demo_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
 
+    # setup-claude
+    setup_claude_parser = subparsers.add_parser(
+        "setup-claude",
+        help="Add flyto-indexer usage instructions to CLAUDE.md",
+        description="Append task contract and tool usage instructions to CLAUDE.md so AI assistants know to use flyto-indexer.",
+    )
+    setup_claude_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    setup_claude_parser.add_argument("--remove", action="store_true", help="Remove flyto-indexer section from CLAUDE.md")
+
     # check
     check_parser = subparsers.add_parser(
         "check",
@@ -187,6 +196,8 @@ def main():
             result = cmd_install_hook(args)
         elif args.command == "demo":
             result = cmd_demo(args)
+        elif args.command == "setup-claude":
+            result = cmd_setup_claude(args)
         elif args.command == "check":
             result = cmd_check(args)
         else:
@@ -845,6 +856,92 @@ def cmd_demo(args):
 
     print()
     print(f"Try: flyto-index impact {best_symbol.name} --path .")
+    return None
+
+
+CLAUDE_MARKER_BEGIN = "<!-- flyto-indexer begin -->"
+CLAUDE_MARKER_END = "<!-- flyto-indexer end -->"
+CLAUDE_SECTION = """\
+<!-- flyto-indexer begin -->
+## Code Intelligence (flyto-indexer)
+
+This project is indexed by [flyto-indexer](https://pypi.org/project/flyto-indexer/). Use its MCP tools for code changes.
+
+### Before modifying shared code
+1. Call `analyze_task` with a description and intent — get risk dimensions, constraints, and execution plan
+2. Follow the `execution_plan` steps in order — each step has the tool name and pre-filled args
+3. Call `task_gate_check` at gate steps before proceeding to the next phase
+4. Respect `constraints.max_files_per_step` — don't batch too many changes at once
+
+### Key tools
+- `analyze_task` — risk assessment + execution plan (call FIRST)
+- `task_gate_check` — phase gate validation (call at checkpoints)
+- `impact_analysis` — what breaks if you change this symbol
+- `find_references` — who calls this function (with file + line)
+- `edit_impact_preview` — exact lines affected by a rename/change
+- `cross_project_impact` — which other repos use this symbol
+- `code_health_score` — project quality score (0-100)
+- `search_code` — find symbols by name
+
+### When to use
+- Renaming or changing function/class signatures
+- Modifying code that might be imported by other files
+- Deleting code (check for references first)
+- Refactoring shared utilities or components
+<!-- flyto-indexer end -->
+"""
+
+
+def cmd_setup_claude(args):
+    """Add flyto-indexer instructions to CLAUDE.md."""
+    project_path = Path(args.path).resolve()
+    claude_md = project_path / "CLAUDE.md"
+
+    if args.remove:
+        if not claude_md.exists():
+            print("No CLAUDE.md found. Nothing to remove.")
+            return None
+        content = claude_md.read_text(encoding="utf-8")
+        if CLAUDE_MARKER_BEGIN not in content:
+            print("No flyto-indexer section found in CLAUDE.md. Nothing to remove.")
+            return None
+        lines = content.splitlines(keepends=True)
+        new_lines = []
+        inside = False
+        for line in lines:
+            if CLAUDE_MARKER_BEGIN in line:
+                inside = True
+                continue
+            if CLAUDE_MARKER_END in line:
+                inside = False
+                continue
+            if not inside:
+                new_lines.append(line)
+        new_content = "".join(new_lines).strip()
+        if new_content:
+            claude_md.write_text(new_content + "\n", encoding="utf-8")
+            print(f"Removed flyto-indexer section from {claude_md}")
+        else:
+            claude_md.unlink()
+            print(f"CLAUDE.md was empty after removal — deleted {claude_md}")
+        return None
+
+    # Install mode
+    if claude_md.exists():
+        content = claude_md.read_text(encoding="utf-8")
+        if CLAUDE_MARKER_BEGIN in content:
+            print("flyto-indexer section already exists in CLAUDE.md. Skipping.")
+            print("Use --remove to remove it first, then re-run.")
+            return None
+        if not content.endswith("\n"):
+            content += "\n"
+        content += "\n" + CLAUDE_SECTION
+        claude_md.write_text(content, encoding="utf-8")
+    else:
+        claude_md.write_text(CLAUDE_SECTION, encoding="utf-8")
+
+    print(f"Added flyto-indexer instructions to {claude_md}")
+    print("AI assistants will now use analyze_task before modifying shared code.")
     return None
 
 

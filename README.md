@@ -77,6 +77,14 @@ Add to Claude Code (`~/.claude/settings.json`):
 }
 ```
 
+Then set up AI instructions:
+
+```bash
+flyto-index setup-claude .
+```
+
+This appends task contract and tool usage instructions to your project's `CLAUDE.md` so AI assistants automatically use `analyze_task` before modifying shared code.
+
 Done. Works with any MCP client — Claude Code, Cursor, Windsurf, etc.
 
 <details>
@@ -302,6 +310,7 @@ flyto-index scan .
 flyto-index scan .                        # Index
 flyto-index impact useAuth --path .       # Impact analysis
 flyto-index check . --threshold medium    # CI gate
+flyto-index setup-claude .                # Add AI instructions to CLAUDE.md
 flyto-index demo .                        # 30-second demo
 flyto-index install-hook .                # Auto-reindex on commit
 ```
