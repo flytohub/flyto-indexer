@@ -182,8 +182,8 @@ def generate_project_map(project_path: Path) -> dict:
         return None
 
 
-def main():
-    # Parse arguments
+def parse_args() -> tuple:
+    """Parse CLI arguments. Returns (config_path, discover_path, force_full)."""
     config_path = None
     discover_path = None
     force_full = False
@@ -199,7 +199,11 @@ def main():
     elif args:
         config_path = Path(args[0])
 
-    # Load or discover projects
+    return config_path, discover_path, force_full
+
+
+def resolve_projects(config_path, discover_path) -> tuple:
+    """Resolve project list and output dir. Returns (projects, output_dir, workspace_name) or None."""
     if discover_path:
         print(f"Discovering projects in: {discover_path}")
         projects = discover_projects(discover_path)
@@ -208,7 +212,7 @@ def main():
     else:
         config = load_projects_config(config_path)
         if not config:
-            return
+            return None
 
         workspace = config.get("workspace", {})
         workspace_name = workspace.get("name", "workspace")
@@ -222,144 +226,66 @@ def main():
 
     if not projects:
         print("No projects to index.")
-        return
+        return None
 
-    print("=" * 60)
-    print(f"Indexing: {workspace_name}")
-    print(f"Projects: {len(projects)}")
-    print(f"Output: {output_dir}")
-    print(f"Mode: {'full rebuild' if force_full else 'incremental'}")
-    print("=" * 60)
+    return projects, output_dir, workspace_name
 
-    output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load workspace manifest for incremental indexing
-    ws_manifest = load_workspace_manifest(output_dir)
-    new_manifest = {"projects": {}}
+def copy_existing_project_data(name: str, path: Path, existing_index: dict, combined_index: dict) -> int:
+    """Copy data from previous index for an unchanged project. Returns symbol count."""
+    combined_index["projects"].append(name)
+    combined_index["project_roots"][name] = str(path)
 
-    # Load existing combined index for incremental merge
-    existing_index = {}
-    existing_index_path = output_dir / "index.json"
-    if not force_full and existing_index_path.exists():
-        try:
-            existing_index = json.loads(existing_index_path.read_text())
-        except Exception:
-            pass
+    symbol_count = 0
 
-    # Combined index
-    combined_index = {
-        "workspace": workspace_name,
-        "projects": [],
-        "project_roots": {},  # Store project paths for MCP server
-        "files": {},
-        "symbols": {},
-        "dependencies": {},
-        "reverse_index": {},  # symbol_id -> [caller_ids]
-        "indexed_at": datetime.now().isoformat(),
-    }
+    for fpath, fdata in existing_index.get("files", {}).items():
+        if fpath.startswith(f"{name}/"):
+            combined_index["files"][fpath] = fdata
 
-    combined_map = {
-        "projects": [],
-        "total_files": 0,
-        "files": {},
-        "categories": {},
-    }
+    for sid, sdata in existing_index.get("symbols", {}).items():
+        if sid.startswith(f"{name}:"):
+            combined_index["symbols"][sid] = sdata
+            symbol_count += 1
 
-    total_files = 0
-    total_symbols = 0
-    skipped_projects = 0
+    for did, ddata in existing_index.get("dependencies", {}).items():
+        if did.startswith(f"{name}:"):
+            combined_index["dependencies"][did] = ddata
 
-    for i, proj in enumerate(projects):
-        name = proj["name"]
-        path = Path(proj["path"])
+    for target_id, callers in existing_index.get("reverse_index", {}).items():
+        if target_id.startswith(f"{name}:"):
+            if target_id not in combined_index["reverse_index"]:
+                combined_index["reverse_index"][target_id] = []
+            for caller in callers:
+                if caller not in combined_index["reverse_index"][target_id]:
+                    combined_index["reverse_index"][target_id].append(caller)
 
-        print(f"\n[{i + 1}/{len(projects)}] {name}")
+    return symbol_count
 
-        # Compute project hash for incremental check
-        proj_hash = compute_project_hash(path)
-        new_manifest["projects"][name] = proj_hash
 
-        # Check if project has changed
-        if not force_full and ws_manifest["projects"].get(name) == proj_hash:
-            print(f"  [skip] No changes detected")
-            skipped_projects += 1
+def merge_project_data(name: str, index_data: dict, combined_index: dict):
+    """Merge newly scanned project data into combined index."""
+    combined_index["projects"].append(name)
+    combined_index["project_roots"][name] = index_data["root_path"]
 
-            # Use existing data from previous index
-            if existing_index:
-                combined_index["projects"].append(name)
-                combined_index["project_roots"][name] = str(path)
+    for fpath, fdata in index_data["files"].items():
+        combined_index["files"][f"{name}/{fpath}"] = fdata
 
-                # Copy existing files, symbols, dependencies for this project
-                for fpath, fdata in existing_index.get("files", {}).items():
-                    if fpath.startswith(f"{name}/"):
-                        combined_index["files"][fpath] = fdata
+    for sid, sdata in index_data["symbols"].items():
+        combined_index["symbols"][sid] = sdata
 
-                for sid, sdata in existing_index.get("symbols", {}).items():
-                    if sid.startswith(f"{name}:"):
-                        combined_index["symbols"][sid] = sdata
-                        total_symbols += 1
+    for did, ddata in index_data["dependencies"].items():
+        combined_index["dependencies"][did] = ddata
 
-                for did, ddata in existing_index.get("dependencies", {}).items():
-                    if did.startswith(f"{name}:"):
-                        combined_index["dependencies"][did] = ddata
+    for target_id, callers in index_data.get("reverse_index", {}).items():
+        if target_id not in combined_index["reverse_index"]:
+            combined_index["reverse_index"][target_id] = []
+        for caller in callers:
+            if caller not in combined_index["reverse_index"][target_id]:
+                combined_index["reverse_index"][target_id].append(caller)
 
-                # Copy existing reverse_index for this project
-                for target_id, callers in existing_index.get("reverse_index", {}).items():
-                    if target_id.startswith(f"{name}:"):
-                        if target_id not in combined_index["reverse_index"]:
-                            combined_index["reverse_index"][target_id] = []
-                        for caller in callers:
-                            if caller not in combined_index["reverse_index"][target_id]:
-                                combined_index["reverse_index"][target_id].append(caller)
 
-            continue
-
-        # Index (incremental within project)
-        index_data = index_project(name, path, output_dir, incremental=not force_full)
-        if index_data:
-            combined_index["projects"].append(name)
-            combined_index["project_roots"][name] = str(path)
-
-            # Merge files
-            for fpath, fdata in index_data["files"].items():
-                full_path = f"{name}/{fpath}"
-                combined_index["files"][full_path] = fdata
-
-            # Merge symbols
-            for sid, sdata in index_data["symbols"].items():
-                combined_index["symbols"][sid] = sdata
-
-            # Merge dependencies
-            for did, ddata in index_data["dependencies"].items():
-                combined_index["dependencies"][did] = ddata
-
-            # Merge reverse_index
-            for target_id, callers in index_data.get("reverse_index", {}).items():
-                if target_id not in combined_index["reverse_index"]:
-                    combined_index["reverse_index"][target_id] = []
-                for caller in callers:
-                    if caller not in combined_index["reverse_index"][target_id]:
-                        combined_index["reverse_index"][target_id].append(caller)
-
-            total_files += index_data["stats"]["files_scanned"]
-            total_symbols += index_data["stats"]["symbols_found"]
-
-        # PROJECT_MAP
-        map_data = generate_project_map(path)
-        if map_data:
-            combined_map["projects"].append(name)
-            combined_map["total_files"] += map_data.get("total_files", 0)
-
-            for mpath, finfo in map_data.get("files", {}).items():
-                full_path = f"{name}/{mpath}"
-                combined_map["files"][full_path] = finfo
-
-            for cat, paths in map_data.get("categories", {}).items():
-                if cat not in combined_map["categories"]:
-                    combined_map["categories"][cat] = []
-                combined_map["categories"][cat].extend([f"{name}/{p}" for p in paths])
-
-    # Save
+def save_combined_index(combined_index: dict, combined_map: dict, output_dir: Path, new_manifest: dict):
+    """Save combined index, map, and manifest to disk."""
     print("\n" + "=" * 60)
     print("Saving index...")
 
@@ -385,7 +311,6 @@ def main():
             "end_line": sdata.get("end_line", 0),
             "language": sdata.get("language", ""),
         }
-        # Only include non-empty optional fields
         if sdata.get("content_hash"):
             compact["content_hash"] = sdata["content_hash"]
         if sdata.get("summary"):
@@ -415,6 +340,96 @@ def main():
     # Save workspace manifest for next incremental run
     save_workspace_manifest(output_dir, new_manifest)
     print(f"  [ok] {MANIFEST_FILE}")
+
+
+def main():
+    config_path, discover_path, force_full = parse_args()
+
+    result = resolve_projects(config_path, discover_path)
+    if not result:
+        return
+    projects, output_dir, workspace_name = result
+
+    print("=" * 60)
+    print(f"Indexing: {workspace_name}")
+    print(f"Projects: {len(projects)}")
+    print(f"Output: {output_dir}")
+    print(f"Mode: {'full rebuild' if force_full else 'incremental'}")
+    print("=" * 60)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    ws_manifest = load_workspace_manifest(output_dir)
+    new_manifest = {"projects": {}}
+
+    # Load existing combined index for incremental merge
+    existing_index = {}
+    existing_index_path = output_dir / "index.json"
+    if not force_full and existing_index_path.exists():
+        try:
+            existing_index = json.loads(existing_index_path.read_text())
+        except Exception:
+            pass
+
+    combined_index = {
+        "workspace": workspace_name,
+        "projects": [],
+        "project_roots": {},
+        "files": {},
+        "symbols": {},
+        "dependencies": {},
+        "reverse_index": {},
+        "indexed_at": datetime.now().isoformat(),
+    }
+
+    combined_map = {
+        "projects": [],
+        "total_files": 0,
+        "files": {},
+        "categories": {},
+    }
+
+    total_files = 0
+    total_symbols = 0
+    skipped_projects = 0
+
+    for i, proj in enumerate(projects):
+        name = proj["name"]
+        path = Path(proj["path"])
+
+        print(f"\n[{i + 1}/{len(projects)}] {name}")
+
+        proj_hash = compute_project_hash(path)
+        new_manifest["projects"][name] = proj_hash
+
+        # Skip unchanged projects
+        if not force_full and ws_manifest["projects"].get(name) == proj_hash:
+            print(f"  [skip] No changes detected")
+            skipped_projects += 1
+            if existing_index:
+                total_symbols += copy_existing_project_data(name, path, existing_index, combined_index)
+            continue
+
+        # Index project
+        index_data = index_project(name, path, output_dir, incremental=not force_full)
+        if index_data:
+            merge_project_data(name, index_data, combined_index)
+            total_files += index_data["stats"]["files_scanned"]
+            total_symbols += index_data["stats"]["symbols_found"]
+
+        # PROJECT_MAP
+        map_data = generate_project_map(path)
+        if map_data:
+            combined_map["projects"].append(name)
+            combined_map["total_files"] += map_data.get("total_files", 0)
+            for mpath, finfo in map_data.get("files", {}).items():
+                combined_map["files"][f"{name}/{mpath}"] = finfo
+            for cat, paths in map_data.get("categories", {}).items():
+                if cat not in combined_map["categories"]:
+                    combined_map["categories"][cat] = []
+                combined_map["categories"][cat].extend([f"{name}/{p}" for p in paths])
+
+    save_combined_index(combined_index, combined_map, output_dir, new_manifest)
 
     # Summary
     print("\n" + "=" * 60)

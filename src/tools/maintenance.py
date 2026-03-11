@@ -436,10 +436,15 @@ def check_and_reindex(dry_run=True, project=None, auto_reindex=False):
         result["reindex"] = reindex_result
         result["caches_cleared"] = True
         result["recommendation"] = f"Live reindex complete. {reindex_result['reindexed']} projects updated."
-    elif not dry_run and changes:
+    elif not dry_run:
+        # Always invalidate caches when dry_run=false, even with 0 changes.
+        # The on-disk index may have been rebuilt externally (e.g. flyto-index scan).
         invalidate_caches()
         result["caches_cleared"] = True
-        result["recommendation"] = "Run 'python index_all.py' to rebuild the index."
+        if changes:
+            result["recommendation"] = "Run 'python index_all.py' to rebuild the index."
+        else:
+            result["recommendation"] = "Caches cleared. Index is up to date."
     elif changes:
         result["recommendation"] = "Run with auto_reindex=true for live update, or dry_run=false to clear caches."
     else:
