@@ -19,8 +19,53 @@ from pathlib import Path
 
 INDEX_DIR = Path(os.environ.get(
     "FLYTO_INDEX_DIR",
-    str(Path(__file__).parent.parent / ".flyto-index")
+    str(Path.cwd() / ".flyto-index")
 ))
+
+
+def _discover_index_dirs() -> list:
+    """Discover all .flyto-index/ directories.
+
+    Searches:
+    1. INDEX_DIR itself (env var or CWD/.flyto-index)
+    2. Direct child directories (monorepo: each sub-project may have its own index)
+    3. If INDEX_DIR doesn't exist, try parent directory (running from a sub-project)
+    """
+    seen = set()
+    dirs = []
+
+    def _add(p: Path):
+        rp = p.resolve()
+        if rp not in seen and rp.exists():
+            seen.add(rp)
+            dirs.append(rp)
+
+    # 1. INDEX_DIR itself
+    if INDEX_DIR.exists():
+        _add(INDEX_DIR)
+
+    # 2. Scan child directories for .flyto-index/
+    base = INDEX_DIR.parent  # CWD or env-specified parent
+    if base.exists():
+        for child in base.iterdir():
+            if child.is_dir() and not child.name.startswith("."):
+                sub_index = child / ".flyto-index"
+                if sub_index.exists():
+                    _add(sub_index)
+
+    # 3. Also scan parent dir (sub-project → monorepo root pattern)
+    parent = base.parent
+    parent_index = parent / ".flyto-index"
+    if parent_index.exists():
+        _add(parent_index)
+    if parent.exists():
+        for child in parent.iterdir():
+            if child.is_dir() and not child.name.startswith("."):
+                sub_index = child / ".flyto-index"
+                if sub_index.exists():
+                    _add(sub_index)
+
+    return dirs
 
 # ---------------------------------------------------------------------------
 # Caches
@@ -104,51 +149,114 @@ def _maybe_auto_reindex():
 # Index loading
 # ---------------------------------------------------------------------------
 
-def load_index() -> dict:
-    """Load the symbol index, with caching."""
-    global _index_cache
-    if _index_cache is not None:
-        return _index_cache
-    gz_path = INDEX_DIR / "index.json.gz"
-    if gz_path.exists():
-        with gzip.open(gz_path, 'rt', encoding='utf-8') as f:
-            _index_cache = json.load(f)
-            return _index_cache
-    path = INDEX_DIR / "index.json"
-    if path.exists():
-        _index_cache = json.loads(path.read_text())
-        return _index_cache
-    return {}
-
-
-def load_project_map() -> dict:
-    """Load the project map (PROJECT_MAP.json or .gz)."""
-    gz_path = INDEX_DIR / "PROJECT_MAP.json.gz"
+def _load_single_index(index_dir: Path) -> dict:
+    """Load index.json(.gz) from a single directory."""
+    gz_path = index_dir / "index.json.gz"
     if gz_path.exists():
         with gzip.open(gz_path, 'rt', encoding='utf-8') as f:
             return json.load(f)
-    path = INDEX_DIR / "PROJECT_MAP.json"
+    path = index_dir / "index.json"
     if path.exists():
         return json.loads(path.read_text())
     return {}
 
 
+def load_index() -> dict:
+    """Load and merge all discovered indexes, with caching."""
+    global _index_cache
+    if _index_cache is not None:
+        return _index_cache
+
+    dirs = _discover_index_dirs()
+    if not dirs:
+        return {}
+
+    # Load first index as base
+    merged = _load_single_index(dirs[0])
+    if not merged and len(dirs) <= 1:
+        return {}
+    if not merged:
+        merged = {}
+
+    # Merge additional indexes
+    projects = list(merged.get("projects", []))
+    if merged.get("project") and merged["project"] not in projects:
+        projects.append(merged["project"])
+
+    for d in dirs[1:]:
+        idx = _load_single_index(d)
+        if not idx:
+            continue
+        proj = idx.get("project", "")
+        if proj and proj not in projects:
+            projects.append(proj)
+        # Merge symbols
+        for k, v in idx.get("symbols", {}).items():
+            merged.setdefault("symbols", {})[k] = v
+        # Merge dependencies
+        for k, v in idx.get("dependencies", {}).items():
+            merged.setdefault("dependencies", {})[k] = v
+        # Merge reverse_index
+        for k, v in idx.get("reverse_index", {}).items():
+            existing = merged.setdefault("reverse_index", {}).get(k, [])
+            if isinstance(v, list):
+                for item in v:
+                    if item not in existing:
+                        existing.append(item)
+                merged["reverse_index"][k] = existing
+        # Merge files
+        for k, v in idx.get("files", {}).items():
+            merged.setdefault("files", {})[k] = v
+        # Merge routes/api_endpoints
+        merged.setdefault("routes", []).extend(idx.get("routes", []))
+        merged.setdefault("api_endpoints", []).extend(idx.get("api_endpoints", []))
+
+    merged["projects"] = projects
+    _index_cache = merged
+    return _index_cache
+
+
+def load_project_map() -> dict:
+    """Load and merge project maps from all discovered index dirs."""
+    merged = None
+    for d in _discover_index_dirs():
+        gz_path = d / "PROJECT_MAP.json.gz"
+        path = d / "PROJECT_MAP.json"
+        data = {}
+        if gz_path.exists():
+            with gzip.open(gz_path, 'rt', encoding='utf-8') as f:
+                data = json.load(f)
+        elif path.exists():
+            data = json.loads(path.read_text())
+        if not data:
+            continue
+        if merged is None:
+            merged = data
+            continue
+        # Merge dict-type fields
+        for k in ("files", "categories", "api_map"):
+            for fk, fv in data.get(k, {}).items():
+                merged.setdefault(k, {})[fk] = fv
+    return merged or {}
+
+
 def load_content_file() -> dict:
-    """Lazily load content.jsonl into the content cache."""
+    """Lazily load content.jsonl from all discovered index dirs."""
     global _content_cache, _content_loaded
     if _content_loaded:
         return _content_cache
-    content_file = INDEX_DIR / "content.jsonl"
-    if content_file.exists():
-        try:
-            with open(content_file, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        record = json.loads(line)
-                        _content_cache[record["id"]] = record["content"]
-        except Exception:
-            pass
+    for d in _discover_index_dirs():
+        content_file = d / "content.jsonl"
+        if content_file.exists():
+            try:
+                with open(content_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            record = json.loads(line)
+                            _content_cache[record["id"]] = record["content"]
+            except Exception:
+                pass
     _content_loaded = True
     return _content_cache
 
