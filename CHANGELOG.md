@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.2] — 2026-03-11
+
+### Changed
+- `setup-claude` template now includes auto-index instructions — tells AI to run `flyto-index scan .` if `.flyto-index/` doesn't exist
+
 ## [1.3.1] — 2026-03-11
 
 ### Added

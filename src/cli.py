@@ -867,6 +867,12 @@ CLAUDE_SECTION = """\
 
 This project is indexed by [flyto-indexer](https://pypi.org/project/flyto-indexer/). Use its MCP tools for code changes.
 
+### First-time setup (auto-index)
+If `.flyto-index/` does not exist in the project root, run this before using any flyto-indexer tools:
+```bash
+flyto-index scan .
+```
+
 ### Before modifying shared code
 1. Call `analyze_task` with a description and intent — get risk dimensions, constraints, and execution plan
 2. Follow the `execution_plan` steps in order — each step has the tool name and pre-filled args
