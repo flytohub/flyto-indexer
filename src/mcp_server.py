@@ -860,8 +860,12 @@ def handle_request(request: dict):
                 "  5. suggest_refactoring → prioritized improvement list\n\n"
                 "When asked to MODIFY or REFACTOR code:\n"
                 "  1. analyze_task → risk assessment + execution plan (call FIRST)\n"
-                "  2. Follow execution_plan steps — each has tool name + pre-filled args\n"
-                "  3. task_gate_check → validate before proceeding to next phase\n\n"
+                "  2. MANDATORY: Execute EVERY step in the execution_plan sequentially.\n"
+                "     Each step has: tool name, pre-filled args, and dependencies.\n"
+                "     Do NOT skip steps. Do NOT edit code until all inspect/assess steps complete.\n"
+                "  3. task_gate_check → call at EVERY gate step before proceeding.\n"
+                "     If gate returns pass=false, STOP and report to user.\n"
+                "  4. Only after all gates pass, proceed to make changes.\n\n"
                 "When asked to UNDERSTAND or EXPLORE code:\n"
                 "  1. search_code → find symbols by name\n"
                 "  2. list_projects → discover indexed projects\n"
@@ -910,8 +914,32 @@ def handle_request(request: dict):
                 send_error(id, -32601, f"Unknown tool: {tool_name}")
                 return
 
+            result_text = json.dumps(result, ensure_ascii=False, indent=2)
+
+            # Structural enforcement: inject directive after analyze_task
+            if tool_name == "analyze_task" and isinstance(result, dict) and "execution_plan" in result:
+                plan = result["execution_plan"]
+                if plan:
+                    steps = []
+                    for step in plan:
+                        args_str = json.dumps(step.get("args", {}), ensure_ascii=False)
+                        is_gate = step.get("tool") == "task_gate_check"
+                        marker = " ⛔ GATE — MUST CALL" if is_gate else ""
+                        steps.append(f"  {step['id']}: {step['tool']}({args_str}){marker}")
+                    directive = (
+                        "\n\n⚠️ MANDATORY: Execute these steps IN ORDER before editing any code:\n"
+                        + "\n".join(steps)
+                        + "\n\n"
+                        "RULES:\n"
+                        "1. Call each tool above sequentially with the pre-filled args.\n"
+                        "2. At ⛔ GATE steps, call task_gate_check. If pass=false → STOP.\n"
+                        "3. Do NOT read/edit source files until all gates pass.\n"
+                        "4. After completing all steps, proceed with changes."
+                    )
+                    result_text += directive
+
             send_response(id, {
-                "content": [{"type": "text", "text": json.dumps(result, ensure_ascii=False, indent=2)}],
+                "content": [{"type": "text", "text": result_text}],
             })
         except Exception as e:
             send_error(id, -32000, str(e))

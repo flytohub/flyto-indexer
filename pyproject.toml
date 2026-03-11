@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "flyto-indexer"
-version = "1.5.1"
+version = "1.5.2"
 description = "Code intelligence MCP server for AI-assisted development — impact analysis, semantic search, and dependency graphs"
 readme = "README.md"
 license = "MIT"
