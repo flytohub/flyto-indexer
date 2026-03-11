@@ -145,9 +145,37 @@ Detects FastAPI, Flask, Starlette decorators + `fetch()`, `axios`, `$http` calls
   [low]    utils.py — 800 lines → split into focused modules
 ```
 
+### Task Analysis — plan before you code
+
+`analyze_task` scores risk across 6 dimensions and generates an execution plan with concrete tool call sequences:
+
+```
+→ analyze_task("Rename validateOrder to validate_order", intent="refactor")
+
+  Dimensions:
+    blast_radius:      HIGH (8.0)  — 7 callers across 3 projects
+    breaking_risk:     HIGH (7.0)  — public API, used by external consumers
+    test_risk:         MEDIUM (5.0) — 2/7 callers have test coverage
+    cross_coupling:    HIGH (8.0)  — referenced in 3 projects
+    complexity:        LOW (2.0)   — straightforward rename
+    rollback_difficulty: MEDIUM (5.0) — multi-project change
+
+  Strategy: safe_refactor (upgraded from minimal_diff due to blast radius)
+
+  Execution Plan:
+    1. scope_callers       → find_references("validateOrder")
+    2. verify_test_coverage → find_test_file("checkout.py")
+    3. check_cross_project → cross_project_impact("validateOrder")
+    4. gate_before_plan    → task_gate_check(phase="plan")
+    5. preview_changes     → edit_impact_preview("validateOrder", "rename")
+    6. gate_before_apply   → task_gate_check(phase="apply")
+```
+
+Each step has pre-filled arguments and dependencies — AI follows the data structure, not prompts.
+
 ## Tools
 
-30 MCP tools. Organized by what they do:
+32 MCP tools. Organized by what they do:
 
 **Impact & Dependencies** — the reason to install this
 
@@ -159,6 +187,13 @@ Detects FastAPI, Flask, Starlette decorators + `fetch()`, `axios`, `$http` calls
 | `cross_project_impact` | "Which other repos use this?" |
 | `edit_impact_preview` | "Show me the exact lines affected by this rename" |
 | `dependency_graph` | "What does this file import / what imports it?" |
+
+**Task Analysis** — plan before you code
+
+| Tool | What it answers |
+|------|----------------|
+| `analyze_task` | "What's the risk profile and execution plan for this change?" |
+| `task_gate_check` | "Is it safe to proceed to the next phase?" |
 
 **Code Quality** — catch problems before review
 
@@ -174,7 +209,7 @@ Detects FastAPI, Flask, Starlette decorators + `fetch()`, `axios`, `$http` calls
 | `find_todos` | "What's the tech debt backlog?" |
 
 <details>
-<summary>All 30 tools (including search, metadata, session)</summary>
+<summary>All 32 tools (including search, metadata, session, task analysis)</summary>
 
 **Search & Discovery**
 
@@ -212,6 +247,13 @@ Detects FastAPI, Flask, Starlette decorators + `fetch()`, `axios`, `$http` calls
 | `session_get` | Inspect session state |
 | `check_and_reindex` | Detect changes + live reindex |
 | `impact_from_diff` | Git diff → symbol impact analysis |
+
+**Task Analysis**
+
+| Tool | Description |
+|------|-------------|
+| `analyze_task` | Multi-dimensional risk assessment with execution plan |
+| `task_gate_check` | Phase gate validation before proceeding |
 
 </details>
 

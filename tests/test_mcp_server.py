@@ -28,6 +28,8 @@ from mcp_server import (
     LOW_PRIORITY_PATHS,
 )
 import mcp_server
+import index_store
+import tools.code_info as _code_info_mod
 
 
 # ---------------------------------------------------------------------------
@@ -403,7 +405,7 @@ class TestGetFileInfo:
 
     def test_unknown_path_returns_error(self):
         """Unknown file path should return an error dict."""
-        with patch.object(mcp_server, "load_project_map", return_value={"files": {}}):
+        with patch.object(_code_info_mod, "load_project_map", return_value={"files": {}}):
             result = get_file_info("nonexistent/path.py")
             assert "error" in result
 
@@ -421,7 +423,7 @@ class TestGetFileInfo:
                 },
             },
         }
-        with patch.object(mcp_server, "load_project_map", return_value=mock_project_map):
+        with patch.object(_code_info_mod, "load_project_map", return_value=mock_project_map):
             result = get_file_info("src/auth.py")
             assert result["path"] == "src/auth.py"
             assert result["purpose"] == "Authentication logic"
@@ -439,7 +441,7 @@ class TestGetFileInfo:
                 },
             },
         }
-        with patch.object(mcp_server, "load_project_map", return_value=mock_project_map):
+        with patch.object(_code_info_mod, "load_project_map", return_value=mock_project_map):
             result = get_file_info("src/utils.py")
             assert result["path"] == "src/utils.py"
             assert result["purpose"] == "Utility functions"
@@ -460,7 +462,7 @@ class TestLoadIndex:
         """When no index file exists, load_index should return {}."""
         mcp_server._index_cache = None
         with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(mcp_server, "INDEX_DIR", Path(tmpdir)):
+            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
                 # No index.json or index.json.gz in tmpdir
                 result = load_index()
                 assert result == {}
@@ -480,7 +482,7 @@ class TestLoadIndex:
             index_data = {"symbols": {"test:a.py:function:foo": {"name": "foo"}}}
             Path(tmpdir, "index.json").write_text(json.dumps(index_data))
 
-            with patch.object(mcp_server, "INDEX_DIR", Path(tmpdir)):
+            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
                 result = load_index()
                 assert "symbols" in result
                 assert "test:a.py:function:foo" in result["symbols"]
@@ -498,7 +500,7 @@ class TestLoadIndex:
 
             Path(tmpdir, "index.json").write_text(json.dumps(plain_data))
 
-            with patch.object(mcp_server, "INDEX_DIR", Path(tmpdir)):
+            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
                 result = load_index()
                 assert result.get("source") == "gzip"
 
@@ -513,7 +515,7 @@ class TestLoadProjectMap:
     def test_missing_file_returns_empty_dict(self):
         """When no PROJECT_MAP file exists, should return {}."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(mcp_server, "INDEX_DIR", Path(tmpdir)):
+            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
                 result = load_project_map()
                 assert result == {}
 
@@ -523,7 +525,7 @@ class TestLoadProjectMap:
             map_data = {"files": {"src/a.py": {"purpose": "test"}}}
             Path(tmpdir, "PROJECT_MAP.json").write_text(json.dumps(map_data))
 
-            with patch.object(mcp_server, "INDEX_DIR", Path(tmpdir)):
+            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
                 result = load_project_map()
                 assert "files" in result
                 assert "src/a.py" in result["files"]
@@ -539,7 +541,7 @@ class TestLoadProjectMap:
             plain_data = {"files": {}, "source": "plain"}
             Path(tmpdir, "PROJECT_MAP.json").write_text(json.dumps(plain_data))
 
-            with patch.object(mcp_server, "INDEX_DIR", Path(tmpdir)):
+            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
                 result = load_project_map()
                 assert result.get("source") == "gzip"
 
@@ -556,7 +558,7 @@ class TestLoadContentFile:
         mcp_server._content_cache = {}
         mcp_server._content_loaded = False
         with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(mcp_server, "INDEX_DIR", Path(tmpdir)):
+            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
                 result = load_content_file()
                 assert result == {}
 
@@ -571,7 +573,7 @@ class TestLoadContentFile:
             ]
             Path(tmpdir, "content.jsonl").write_text("\n".join(lines) + "\n")
 
-            with patch.object(mcp_server, "INDEX_DIR", Path(tmpdir)):
+            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
                 result = load_content_file()
                 assert "proj:a.py:function:foo" in result
                 assert result["proj:a.py:function:foo"] == "def foo(): pass"
@@ -597,7 +599,7 @@ class TestLoadContentFile:
             )
             Path(tmpdir, "content.jsonl").write_text(content)
 
-            with patch.object(mcp_server, "INDEX_DIR", Path(tmpdir)):
+            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
                 # The function catches all exceptions, so malformed lines
                 # will cause the entire load to fail silently (due to the
                 # broad except). After the bad line, the loop may stop.
@@ -944,19 +946,19 @@ class TestGetFileInfoEdgeCases:
 
     def test_empty_project_map(self):
         """Empty project map should return error."""
-        with patch.object(mcp_server, "load_project_map", return_value={}):
+        with patch.object(_code_info_mod, "load_project_map", return_value={}):
             result = get_file_info("any/path.py")
             assert "error" in result
 
     def test_project_map_without_files_key(self):
         """Project map missing 'files' key should return error."""
-        with patch.object(mcp_server, "load_project_map", return_value={"categories": {}}):
+        with patch.object(_code_info_mod, "load_project_map", return_value={"categories": {}}):
             result = get_file_info("any/path.py")
             assert "error" in result
 
     def test_path_with_special_characters(self):
         """Path with special characters should not crash."""
-        with patch.object(mcp_server, "load_project_map", return_value={"files": {}}):
+        with patch.object(_code_info_mod, "load_project_map", return_value={"files": {}}):
             result = get_file_info("src/file (copy).py")
             assert "error" in result  # File not found, but no crash
 

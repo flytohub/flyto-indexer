@@ -1022,10 +1022,10 @@ class TestProtocolSafety:
         """handle_request catches exceptions and sends error responses."""
         responses, errors, mock_resp, mock_err = self._capture_output()
 
-        # Force load_index to raise
+        # Force load_index to raise (patch where tools.search imports it)
         with patch("mcp_server.send_response", mock_resp), \
              patch("mcp_server.send_error", mock_err), \
-             patch("mcp_server.load_index", side_effect=RuntimeError("boom")):
+             patch("tools.search.load_index", side_effect=RuntimeError("boom")):
             handle_request({
                 "jsonrpc": "2.0",
                 "id": 10,

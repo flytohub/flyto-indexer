@@ -92,9 +92,9 @@ class FileWatcher:
         # Try to find index file from INDEX_DIR
         try:
             try:
-                from .mcp_server import INDEX_DIR
+                from .index_store import INDEX_DIR
             except ImportError:
-                from mcp_server import INDEX_DIR
+                from index_store import INDEX_DIR
             for name in ("index.json.gz", "index.json"):
                 p = INDEX_DIR / name
                 if p.exists():

@@ -19,8 +19,9 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-EXPECTED_TOOL_COUNT = 30
+EXPECTED_TOOL_COUNT = 32
 EXPECTED_TOOL_NAMES = sorted([
+    "analyze_task",
     "check_and_reindex",
     "check_index_status",
     "code_health_score",
@@ -50,6 +51,7 @@ EXPECTED_TOOL_NAMES = sorted([
     "session_get",
     "session_track",
     "suggest_refactoring",
+    "task_gate_check",
     "update_description",
 ])
 

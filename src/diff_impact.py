@@ -2,7 +2,7 @@
 Diff-based Impact Analysis — parse git diff, match changed hunks to indexed symbols,
 classify change type (signature vs body), and run impact analysis.
 
-All functions receive `_idx` (mcp_server module) to access index data.
+Imports index data directly from index_store.
 """
 
 import os
@@ -10,6 +10,11 @@ import re
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+try:
+    from .index_store import load_index, get_symbol_content_text
+except ImportError:
+    from index_store import load_index, get_symbol_content_text
 
 try:
     from .signature import ChangeKind, classify_symbol_change
@@ -115,7 +120,6 @@ def _ranges_overlap(a_start: int, a_end: int, b_start: int, b_end: int) -> bool:
 
 
 def _match_symbols_to_changes(
-    _idx,
     project_filter: Optional[str],
     file_changes: Dict[str, List[Tuple[int, int]]],
 ) -> List[dict]:
@@ -124,7 +128,7 @@ def _match_symbols_to_changes(
     For each symbol that overlaps with a changed hunk, classify the change type
     using signature analysis.
     """
-    index = _idx.load_index()
+    index = load_index()
     symbols = index.get("symbols", {})
     project_roots = index.get("project_roots", {})
     matched = []
@@ -155,7 +159,7 @@ def _match_symbols_to_changes(
 
         # Classify change type using signature analysis
         change_kind = ChangeKind.BODY_CHANGE
-        old_content = _idx.get_symbol_content_text(sym_id, sym)
+        old_content = get_symbol_content_text(sym_id, sym)
 
         # Try to read new content from filesystem
         root = project_roots.get(sym_project, "")
@@ -209,7 +213,6 @@ def _classify_risk(caller_count: int, change_type: str) -> str:
 
 
 def impact_from_diff(
-    _idx,
     mode: str = "unstaged",
     base: str = "",
     project: str = None,
@@ -217,7 +220,6 @@ def impact_from_diff(
     """Parse git diff, find affected indexed symbols, and run impact analysis.
 
     Args:
-        _idx: mcp_server module reference
         mode: "unstaged" | "staged" | "committed" | "branch"
         base: SHA or branch name (for committed/branch modes)
         project: Filter to a specific project
@@ -233,7 +235,7 @@ def impact_from_diff(
         return {"error": f"Invalid base ref: {base}"}
 
     # Find git root
-    index = _idx.load_index()
+    index = load_index()
     project_roots = index.get("project_roots", {})
     git_root = _find_git_root(project_roots)
     if not git_root:
@@ -255,14 +257,26 @@ def impact_from_diff(
     file_changes = _parse_unified_diff(diff_text)
 
     # Match hunks to indexed symbols
-    changed_symbols = _match_symbols_to_changes(_idx, project, file_changes)
+    changed_symbols = _match_symbols_to_changes(project, file_changes)
 
     # For each changed symbol, get impact data
+    # Lazy import to avoid circular dependency
+    try:
+        from .tools.references import impact_analysis
+    except ImportError:
+        try:
+            from tools.references import impact_analysis
+        except ImportError:
+            impact_analysis = None
+
     symbols_with_impact = []
     risk_summary = {"high_risk": 0, "moderate_risk": 0, "low_risk": 0, "safe": 0}
 
     for sym in changed_symbols:
-        impact_result = _idx.impact_analysis(sym["symbol_id"])
+        if impact_analysis:
+            impact_result = impact_analysis(sym["symbol_id"])
+        else:
+            impact_result = {"affected_count": 0, "affected": []}
         caller_count = impact_result.get("affected_count", 0)
         risk = _classify_risk(caller_count, sym["change_type"])
 

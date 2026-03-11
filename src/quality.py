@@ -1,18 +1,20 @@
 """
 Code Quality Tools — complexity, duplicates, security, staleness, health score, refactoring.
 
-Extracted from mcp_server.py to keep that file focused on MCP protocol.
-All functions here receive index data via the `_idx` parameter (a module reference)
-to avoid circular imports.
+Extracted from mcp_server.py. Imports index data directly from index_store.
 """
 
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
+try:
+    from .index_store import load_index, get_symbol_content_text
+except ImportError:
+    from index_store import load_index, get_symbol_content_text
+
 
 def find_complex_functions(
-    _idx,
     project: str = None,
     max_results: int = 20,
     min_score: int = 1,
@@ -22,7 +24,7 @@ def find_complex_functions(
     Scores each function/method based on: line count, nesting depth,
     parameter count, and branch count. Same thresholds as ComplexityAnalyzer.
     """
-    index = _idx.load_index()
+    index = load_index()
     symbols = index.get("symbols", {})
 
     complex_fns = []
@@ -37,7 +39,7 @@ def find_complex_functions(
             continue
 
         total_analyzed += 1
-        content = _idx.get_symbol_content_text(sym_id, sym)
+        content = get_symbol_content_text(sym_id, sym)
         if not content:
             continue
 
@@ -116,7 +118,6 @@ def find_complex_functions(
 
 
 def find_duplicates(
-    _idx,
     project: str = None,
     min_lines: int = 6,
     max_results: int = 20,
@@ -127,7 +128,7 @@ def find_duplicates(
     except ImportError:
         from analyzer.duplicates import DuplicateDetector
 
-    index = _idx.load_index()
+    index = load_index()
     project_roots = index.get("project_roots", {})
     projects = index.get("projects", [])
 
@@ -173,7 +174,6 @@ def find_duplicates(
 
 
 def security_scan(
-    _idx,
     project: str = None,
     severity: str = None,
     max_results: int = 50,
@@ -184,7 +184,7 @@ def security_scan(
     except ImportError:
         from analyzer.security import SecurityScanner
 
-    index = _idx.load_index()
+    index = load_index()
     project_roots = index.get("project_roots", {})
     projects = index.get("projects", [])
 
@@ -234,7 +234,6 @@ def security_scan(
 
 
 def find_stale_files(
-    _idx,
     project: str = None,
     stale_days: int = 180,
     max_results: int = 30,
@@ -244,7 +243,7 @@ def find_stale_files(
     Uses a single git log command per project and cross-references with
     indexed files for efficiency.
     """
-    index = _idx.load_index()
+    index = load_index()
     project_roots = index.get("project_roots", {})
     projects = index.get("projects", [])
     symbols = index.get("symbols", {})
@@ -335,12 +334,12 @@ def find_stale_files(
     }
 
 
-def code_health_score(_idx, project: str = None) -> dict:
+def code_health_score(project: str = None) -> dict:
     """Compute an aggregate code health score (0-100) with A-F grade.
 
     Breakdown: complexity (25), dead code (25), documentation (25), modularity (25).
     """
-    index = _idx.load_index()
+    index = load_index()
     symbols = index.get("symbols", {})
 
     if project:
@@ -357,7 +356,7 @@ def code_health_score(_idx, project: str = None) -> dict:
         if sym.get("type") not in ("function", "method"):
             continue
         func_count += 1
-        content = _idx.get_symbol_content_text(sym_id, sym)
+        content = get_symbol_content_text(sym_id, sym)
         if content and len(content.split("\n")) > 50:
             complex_count += 1
 
@@ -368,14 +367,25 @@ def code_health_score(_idx, project: str = None) -> dict:
         complexity_score = 25
 
     # 2. Dead code score (0-25): penalty for unreferenced symbols
-    dead_result = _idx.find_dead_code(project=project, min_lines=5)
-    dead_count = dead_result.get("total_dead", 0)
+    # Lazy import to avoid circular dependency
+    try:
+        from .tools.maintenance import find_dead_code
+    except ImportError:
+        try:
+            from tools.maintenance import find_dead_code
+        except ImportError:
+            # Fallback: skip dead code scoring
+            find_dead_code = None
+
+    if find_dead_code:
+        dead_result = find_dead_code(project=project, min_lines=5)
+        dead_count = dead_result.get("total_dead", 0)
+    else:
+        dead_count = 0
     dead_ratio = dead_count / max(total_symbols, 1)
     dead_score = max(0, 25 - int(dead_ratio * 100))
 
     # 3. Documentation score (0-25): reward for symbols with summaries
-    #    70%+ documented = full marks (many internal helpers don't need docstrings)
-    #    Exclude test files — test functions don't need docstrings
     non_test_symbols = {k: v for k, v in symbols.items() if "/test" not in v.get("path", "").lower()}
     documented = sum(1 for sym in non_test_symbols.values() if sym.get("summary"))
     doc_total = max(len(non_test_symbols), 1)
@@ -383,7 +393,6 @@ def code_health_score(_idx, project: str = None) -> dict:
     doc_score = min(25, round(doc_ratio / 0.7 * 25))
 
     # 4. Modularity score (0-25): % of symbols with at least 1 reference
-    #    Most symbols are internal/private — 8%+ referenced = full marks
     ref_counts = [sym.get("ref_count", sym.get("reference_count", 0)) for sym in symbols.values()]
     pct_with_refs = sum(1 for r in ref_counts if r > 0) / max(len(ref_counts), 1)
     modularity_score = min(25, round(pct_with_refs / 0.08 * 25))
@@ -455,14 +464,14 @@ def _suggest_fix_for_complexity(fn: dict) -> str:
     return "; ".join(parts) if parts else "Review for simplification opportunities"
 
 
-def suggest_refactoring(_idx, project: str = None, max_results: int = 20) -> dict:
+def suggest_refactoring(project: str = None, max_results: int = 20) -> dict:
     """Combine complexity + dead code + file size analysis into prioritized refactoring suggestions."""
-    index = _idx.load_index()
+    index = load_index()
     symbols = index.get("symbols", {})
     suggestions = []
 
     # 1. Complex functions → extract/simplify
-    complex_result = find_complex_functions(_idx, project=project, max_results=50, min_score=1)
+    complex_result = find_complex_functions(project=project, max_results=50, min_score=1)
     for fn in complex_result.get("functions", []):
         priority = "high" if fn["score"] >= 10 else "medium" if fn["score"] >= 5 else "low"
         suggestions.append({
@@ -478,20 +487,29 @@ def suggest_refactoring(_idx, project: str = None, max_results: int = 20) -> dic
         })
 
     # 2. Dead code → remove
-    dead_result = _idx.find_dead_code(project=project, min_lines=10)
-    for sym in dead_result.get("dead_symbols", []):
-        lines = sym.get("lines", 0)
-        suggestions.append({
-            "type": "dead_code",
-            "priority": "medium" if lines >= 20 else "low",
-            "symbol_id": sym.get("symbol_id", ""),
-            "name": sym.get("name", ""),
-            "path": sym.get("path", ""),
-            "line": sym.get("line", 0),
-            "reason": f"Unreferenced ({lines} lines)",
-            "suggestion": "Safe to remove — no callers found in indexed code",
-            "score": lines // 5,
-        })
+    try:
+        from .tools.maintenance import find_dead_code
+    except ImportError:
+        try:
+            from tools.maintenance import find_dead_code
+        except ImportError:
+            find_dead_code = None
+
+    if find_dead_code:
+        dead_result = find_dead_code(project=project, min_lines=10)
+        for sym in dead_result.get("dead_symbols", []):
+            lines = sym.get("lines", 0)
+            suggestions.append({
+                "type": "dead_code",
+                "priority": "medium" if lines >= 20 else "low",
+                "symbol_id": sym.get("symbol_id", ""),
+                "name": sym.get("name", ""),
+                "path": sym.get("path", ""),
+                "line": sym.get("line", 0),
+                "reason": f"Unreferenced ({lines} lines)",
+                "suggestion": "Safe to remove — no callers found in indexed code",
+                "score": lines // 5,
+            })
 
     # 3. Large files → split
     file_symbol_lines: dict = {}
@@ -500,7 +518,7 @@ def suggest_refactoring(_idx, project: str = None, max_results: int = 20) -> dic
             continue
         path = sym.get("path", "")
         if path:
-            content = _idx.get_symbol_content_text(sym_id, sym)
+            content = get_symbol_content_text(sym_id, sym)
             if content:
                 file_symbol_lines[path] = file_symbol_lines.get(path, 0) + len(content.split("\n"))
 

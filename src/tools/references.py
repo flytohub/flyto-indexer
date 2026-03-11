@@ -1,0 +1,794 @@
+"""Reference and impact analysis tools for flyto-indexer MCP server."""
+
+import re
+
+try:
+    from ..index_store import load_index, get_symbol_content_text
+except ImportError:
+    from index_store import load_index, get_symbol_content_text
+
+
+def find_references(symbol_id: str) -> dict:
+    """
+    Find all places that reference this symbol.
+
+    Uses:
+    1. Reverse index (pre-computed during indexing)
+    2. Resolved dependencies
+    3. Content search as fallback
+    """
+    index = load_index()
+    symbols = index.get("symbols", {})
+    dependencies = index.get("dependencies", {})
+    reverse_index = index.get("reverse_index", {})
+
+    # Resolve symbol_id if partial
+    resolved_id = symbol_id
+    if symbol_id not in symbols:
+        # Try exact name match first
+        name_matches = []
+        partial_matches = []
+        for sid, sym in symbols.items():
+            sym_name = sym.get("name", "")
+            if sym_name == symbol_id:
+                name_matches.append(sid)
+            elif symbol_id in sid or sid.endswith(symbol_id):
+                partial_matches.append(sid)
+
+        if name_matches:
+            # Prefer composables/functions over methods
+            for sid in name_matches:
+                sym = symbols[sid]
+                if sym.get("type") in ("composable", "function"):
+                    resolved_id = sid
+                    break
+            else:
+                resolved_id = name_matches[0]
+        elif partial_matches:
+            resolved_id = partial_matches[0]
+
+    target_symbol = symbols.get(resolved_id)
+    if not target_symbol:
+        return {"error": f"Symbol not found: {symbol_id}"}
+
+    target_name = target_symbol.get("name", "")
+    target_path = target_symbol.get("path", "")
+    references = []
+    seen_keys = set()  # Use (path, line) as key to avoid duplicates
+    seen_paths = set()  # Track unique paths for dedup across projects
+
+    def extract_path_from_source_id(source_id: str) -> str:
+        """Extract file path from source_id like project:path:type:name"""
+        parts = source_id.split(":")
+        if len(parts) >= 2:
+            return parts[1]
+        return ""
+
+    def get_dedup_key(source_id: str) -> str:
+        """
+        Get dedup key for cross-project deduplication.
+
+        Uses project + basename + type + name to distinguish same-named
+        symbols across different projects:
+        - flyto-cloud:src/.../Cart.vue:component:Cart -> flyto-cloud:Cart.vue:component:Cart
+        - flyto-landing:src/.../Cart.vue:component:Cart -> flyto-landing:Cart.vue:component:Cart
+        """
+        parts = source_id.split(":")
+        if len(parts) >= 4:
+            # project:path:type:name -> project:basename(path):type:name
+            project = parts[0]
+            path = parts[1]
+            basename = path.rsplit("/", 1)[-1]  # Get filename only
+            return f"{project}:{basename}:{parts[2]}:{parts[3]}"
+        elif len(parts) >= 2:
+            return parts[1]
+        return source_id
+
+    # Method 0: Use pre-computed reverse index (fastest & most accurate)
+    if resolved_id in reverse_index:
+        for caller_id in reverse_index[resolved_id]:
+            caller_symbol = symbols.get(caller_id, {})
+            from_path = caller_symbol.get("path", "") or extract_path_from_source_id(caller_id)
+
+            # Skip self-references
+            if from_path == target_path:
+                continue
+
+            # Dedup across projects (flyto-cloud vs flyto-cloud-dev)
+            dedup_key = get_dedup_key(caller_id)
+            if dedup_key in seen_paths:
+                continue
+            seen_paths.add(dedup_key)
+
+            # Find the line from dependencies
+            line = 0
+            for dep in dependencies.values():
+                resolved_target = dep.get("metadata", {}).get("resolved_target", "")
+                if resolved_target == resolved_id and dep.get("source", "") == caller_id:
+                    line = dep.get("line", 0)
+                    break
+
+            key = (from_path, caller_id)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+
+            references.append({
+                "type": "call",
+                "from_symbol": caller_id,
+                "from_path": from_path,
+                "from_name": caller_symbol.get("name", ""),
+                "line": line,
+                "confidence": "high",  # From reverse index
+            })
+
+    # Also check reverse index by name (some deps might not be fully resolved)
+    if target_name in reverse_index:
+        for caller_id in reverse_index[target_name]:
+            caller_symbol = symbols.get(caller_id, {})
+            from_path = caller_symbol.get("path", "") or extract_path_from_source_id(caller_id)
+
+            if from_path == target_path:
+                continue
+
+            # Dedup across projects
+            dedup_key = get_dedup_key(caller_id)
+            if dedup_key in seen_paths:
+                continue
+            seen_paths.add(dedup_key)
+
+            key = (from_path, caller_id)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+
+            references.append({
+                "type": "call",
+                "from_symbol": caller_id,
+                "from_path": from_path,
+                "from_name": caller_symbol.get("name", ""),
+                "line": 0,
+                "confidence": "medium",
+            })
+
+    # Method 1: Search dependencies (calls, extends, implements, uses)
+    for _dep_id, dep in dependencies.items():
+        dep_type = dep.get("type", "")
+        target = dep.get("target", "")
+        resolved_target = dep.get("metadata", {}).get("resolved_target", "")
+
+        # Check if this dependency targets our symbol
+        if dep_type in ("calls", "extends", "implements", "uses") and (target in (resolved_id, target_name) or resolved_target == resolved_id):
+                source_id = dep.get("source", "")
+                source_symbol = symbols.get(source_id, {})
+
+                # Get path from symbol or extract from source_id
+                from_path = source_symbol.get("path", "") or extract_path_from_source_id(source_id)
+
+                # Skip self-references (same file)
+                if from_path == target_path:
+                    continue
+
+                # Dedup across projects
+                dedup_key = get_dedup_key(source_id)
+                if dedup_key in seen_paths:
+                    continue
+                seen_paths.add(dedup_key)
+
+                line = dep.get("line", 0)
+                key = (from_path, line)
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+
+                references.append({
+                    "type": dep_type,
+                    "from_symbol": source_id,
+                    "from_path": from_path,
+                    "from_name": source_symbol.get("name", ""),
+                    "line": line,
+                    "confidence": "high" if resolved_target else "medium",
+                })
+
+    # Method 2: Search content for symbol name usage
+    if target_name and len(target_name) >= 2:  # Avoid single-char names
+        pattern = rf'\b{re.escape(target_name)}\s*\('
+
+        for sym_id, sym in symbols.items():
+            if sym_id == resolved_id:
+                continue
+
+            sym_path = sym.get("path", "")
+            # Skip same file (self-references)
+            if sym_path == target_path:
+                continue
+
+            # Dedup across projects
+            dedup_key = get_dedup_key(sym_id)
+            if dedup_key in seen_paths:
+                continue
+
+            content = get_symbol_content_text(sym_id, sym)
+            matches = list(re.finditer(pattern, content))
+
+            if matches:
+                seen_paths.add(dedup_key)  # Only add if matches found
+
+                # Find line number of first match
+                first_match = matches[0]
+                line_offset = content[:first_match.start()].count('\n')
+                line = sym.get("start_line", 0) + line_offset
+
+                key = (sym_path, line)
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+
+                references.append({
+                    "type": "usage",
+                    "from_symbol": sym_id,
+                    "from_path": sym_path,
+                    "from_name": sym.get("name", ""),
+                    "line": line,
+                    "occurrences": len(matches),
+                    "confidence": "low",  # Content regex match
+                })
+
+    # Sort by confidence (high first), then by path
+    confidence_order = {"high": 0, "medium": 1, "low": 2}
+    references.sort(key=lambda x: (
+        confidence_order.get(x.get("confidence", "low"), 2),
+        x.get("from_path", ""),
+        x.get("line", 0)
+    ))
+
+    # Group by project
+    by_project = {}
+    for ref in references:
+        project = ref["from_symbol"].split(":")[0] if ":" in ref["from_symbol"] else "unknown"
+        if project not in by_project:
+            by_project[project] = []
+        by_project[project].append(ref)
+
+    # Count by confidence
+    confidence_counts = {"high": 0, "medium": 0, "low": 0}
+    for ref in references:
+        conf = ref.get("confidence", "low")
+        confidence_counts[conf] = confidence_counts.get(conf, 0) + 1
+
+    # next_action hint for AI
+    if len(references) == 0:
+        next_action = "No references found — may be dead code. Use find_dead_code to verify."
+    elif len(references) <= 5:
+        top = next((r for r in references if r.get("confidence") == "high"), references[0])
+        next_action = f"{len(references)} reference(s). Highest-confidence: {top.get('from_path', '')}:{top.get('from_name', '')}"
+    else:
+        next_action = f"{len(references)} references across {len(by_project)} project(s). Use impact_analysis for risk assessment."
+
+    return {
+        "symbol": resolved_id,
+        "name": target_name,
+        "total": len(references),  # Unique callers (deduped across projects)
+        "confidence_breakdown": confidence_counts,
+        "by_project": by_project,
+        "references": references,
+        "next_action": next_action,
+    }
+
+
+def impact_analysis(symbol_id: str) -> dict:
+    """
+    Impact analysis.
+
+    Determine which locations would be affected by modifying a symbol.
+    Uses the reverse_index for accurate lookups.
+    """
+    index = load_index()
+    symbols = index.get("symbols", {})
+    reverse_index = index.get("reverse_index", {})
+    dependencies = index.get("dependencies", {})
+
+    # Resolve symbol_id if partial
+    resolved_id = symbol_id
+    if symbol_id not in symbols:
+        for sid, sym in symbols.items():
+            if sym.get("name") == symbol_id and sym.get("type") in ("composable", "function", "class"):
+                    resolved_id = sid
+                    break
+        else:
+            for sid in symbols:
+                if symbol_id in sid:
+                    resolved_id = sid
+                    break
+
+    affected = []
+    seen_paths = set()  # Dedup across projects
+
+    def get_basename_key(source_id: str) -> str:
+        parts = source_id.split(":")
+        if len(parts) >= 4:
+            basename = parts[1].rsplit("/", 1)[-1]
+            return f"{basename}:{parts[2]}:{parts[3]}"
+        return source_id
+
+    # Method 1: Use reverse_index (most accurate)
+    if resolved_id in reverse_index:
+        for caller_id in reverse_index[resolved_id]:
+            dedup_key = get_basename_key(caller_id)
+            if dedup_key in seen_paths:
+                continue
+            seen_paths.add(dedup_key)
+
+            caller_symbol = symbols.get(caller_id, {})
+            affected.append({
+                "id": caller_id,
+                "path": caller_symbol.get("path", ""),
+                "name": caller_symbol.get("name", ""),
+                "type": caller_symbol.get("type", ""),
+                "reason": "Direct call",
+            })
+
+    # Method 2: Check resolved_target in dependencies
+    for _dep_id, dep in dependencies.items():
+        resolved_target = dep.get("metadata", {}).get("resolved_target", "")
+        if resolved_target == resolved_id:
+            source_id = dep.get("source", "")
+            dedup_key = get_basename_key(source_id)
+            if dedup_key in seen_paths:
+                continue
+            seen_paths.add(dedup_key)
+
+            source_symbol = symbols.get(source_id, {})
+            affected.append({
+                "id": source_id,
+                "path": source_symbol.get("path", ""),
+                "name": source_symbol.get("name", ""),
+                "type": dep.get("type", ""),
+                "reason": f"Via {dep.get('type', 'unknown')} dependency",
+            })
+
+    warning = ""
+    if len(affected) == 0:
+        suggestion = "This symbol is not referenced anywhere else and can be safely modified."
+    elif len(affected) <= 3:
+        warning = f"Modification affects {len(affected)} locations"
+        suggestion = "Impact is small. Recommend checking each call site individually."
+    elif len(affected) <= 10:
+        warning = f"⚠️ Modification affects {len(affected)} locations"
+        suggestion = "Moderate impact. Recommend careful evaluation."
+    else:
+        warning = f"⚠️ Modification affects {len(affected)} locations!"
+        suggestion = "High impact. Recommend cautious modification and thorough testing."
+
+    # next_action hint for AI
+    if len(affected) == 0:
+        next_action = "Safe to modify — no callers found."
+    elif len(affected) <= 3:
+        first = affected[0]
+        next_action = f"Low impact ({len(affected)} callers). Check first caller: {first.get('path', '')}:{first.get('name', '')}"
+    else:
+        next_action = f"High impact ({len(affected)} callers). Use edit_impact_preview for detailed call sites with code lines."
+
+    return {
+        "symbol": resolved_id,
+        "affected_count": len(affected),
+        "affected": affected[:20],  # Limit to top 20
+        "has_more": len(affected) > 20,
+        "warning": warning,
+        "suggestion": suggestion,
+        "next_action": next_action,
+    }
+
+
+def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
+    """
+    Preview the impact of editing a symbol before making changes.
+
+    Shows all call sites with actual code lines, risk assessment, and suggestions.
+    """
+    index = load_index()
+    symbols = index.get("symbols", {})
+    reverse_index = index.get("reverse_index", {})
+    index.get("dependencies", {})
+
+    # Resolve symbol_id (same pattern as find_references)
+    resolved_id = symbol_id
+    if symbol_id not in symbols:
+        for sid, sym in symbols.items():
+            if sym.get("name") == symbol_id and sym.get("type") in ("composable", "function", "class", "component"):
+                    resolved_id = sid
+                    break
+        else:
+            for sid in symbols:
+                if symbol_id in sid:
+                    resolved_id = sid
+                    break
+
+    target_symbol = symbols.get(resolved_id)
+    if not target_symbol:
+        return {"error": f"Symbol not found: {symbol_id}"}
+
+    target_name = target_symbol.get("name", "")
+    target_path = target_symbol.get("path", "")
+
+    # Collect call sites
+    call_sites = []
+    seen_keys = set()
+
+    def get_dedup_key(source_id: str) -> str:
+        parts = source_id.split(":")
+        if len(parts) >= 4:
+            basename = parts[1].rsplit("/", 1)[-1]
+            return f"{basename}:{parts[2]}:{parts[3]}"
+        return source_id
+
+    # From reverse_index
+    for caller_id in reverse_index.get(resolved_id, []):
+        dedup_key = get_dedup_key(caller_id)
+        if dedup_key in seen_keys:
+            continue
+        seen_keys.add(dedup_key)
+
+        caller_sym = symbols.get(caller_id, {})
+        caller_path = caller_sym.get("path", "")
+        if caller_path == target_path:
+            continue
+
+        # Get the actual code line
+        content = get_symbol_content_text(caller_id, caller_sym)
+        code_line = ""
+        line_num = 0
+        if content and target_name:
+            for i, line in enumerate(content.split("\n")):
+                if target_name in line:
+                    code_line = line.strip()[:120]
+                    line_num = caller_sym.get("start_line", 0) + i
+                    break
+
+        call_sites.append({
+            "file": caller_path,
+            "line": line_num,
+            "code": code_line,
+            "caller_name": caller_sym.get("name", ""),
+            "confidence": "high",
+        })
+
+    # Also check by name in reverse_index
+    for caller_id in reverse_index.get(target_name, []):
+        dedup_key = get_dedup_key(caller_id)
+        if dedup_key in seen_keys:
+            continue
+        seen_keys.add(dedup_key)
+
+        caller_sym = symbols.get(caller_id, {})
+        caller_path = caller_sym.get("path", "")
+        if caller_path == target_path:
+            continue
+
+        content = get_symbol_content_text(caller_id, caller_sym)
+        code_line = ""
+        line_num = 0
+        if content and target_name:
+            for i, line in enumerate(content.split("\n")):
+                if target_name in line:
+                    code_line = line.strip()[:120]
+                    line_num = caller_sym.get("start_line", 0) + i
+                    break
+
+        call_sites.append({
+            "file": caller_path,
+            "line": line_num,
+            "code": code_line,
+            "caller_name": caller_sym.get("name", ""),
+            "confidence": "medium",
+        })
+
+    # Limit to 30
+    call_sites = call_sites[:30]
+
+    # Group by project
+    by_project: dict[str, int] = {}
+    for cs in call_sites:
+        # Try to determine project from file path
+        for sid, sym in symbols.items():
+            if sym.get("path") == cs["file"]:
+                proj = sid.split(":")[0] if ":" in sid else "unknown"
+                by_project[proj] = by_project.get(proj, 0) + 1
+                break
+
+    total = len(call_sites)
+
+    # Risk assessment
+    change_risk_map = {
+        "rename": ("All call sites must update the name.", ["Update all call sites in a single commit", "Use find-and-replace across all files"]),
+        "delete": ("All call sites will break.", ["Ensure no code depends on this before deleting", "Consider deprecation first"]),
+        "signature_change": ("Call sites may need parameter updates.", ["Review each call site for compatibility", "Consider adding default parameters for backward compatibility"]),
+        "add_param": ("Call sites may need to pass the new argument.", ["Add default value to new parameter if possible", "Update call sites that need the new parameter"]),
+        "modify": ("Internal logic change only.", ["Run tests to verify behavior", "Check if return type/shape changed"]),
+    }
+    risk_info = change_risk_map.get(change_type, ("Unknown change type.", []))
+
+    if total == 0:
+        risk = "safe"
+        risk_reason = "No call sites found, safe to change."
+    elif total <= 3 and len(by_project) <= 1:
+        risk = "low"
+        risk_reason = f"{total} call site(s) in {len(by_project)} project(s)"
+    elif total <= 10:
+        risk = "moderate"
+        risk_reason = f"{total} call sites across {len(by_project)} project(s)"
+    else:
+        risk = "high"
+        risk_reason = f"{total} call sites across {len(by_project)} project(s)"
+
+    # For delete/rename, risk is always elevated
+    if change_type in ("delete", "rename") and total > 0:
+        risk = "high" if total > 3 else "moderate"
+
+    # next_action hint for AI
+    if total == 0:
+        next_action = "Safe to proceed — no call sites found."
+    elif change_type in ("rename", "delete"):
+        files_to_update = sorted({cs["file"] for cs in call_sites})
+        next_action = f"Update {len(files_to_update)} file(s): {', '.join(files_to_update[:5])}"
+    else:
+        next_action = f"Run tests after change. Use find_test_file to locate test files for {target_path}."
+
+    return {
+        "symbol": resolved_id,
+        "symbol_name": target_name,
+        "change_type": change_type,
+        "total_call_sites": total,
+        "call_sites": call_sites,
+        "by_project": by_project,
+        "risk": risk,
+        "risk_reason": risk_reason,
+        "change_description": risk_info[0],
+        "suggestions": risk_info[1],
+        "next_action": next_action,
+    }
+
+
+def cross_project_impact(
+    symbol_name: str,
+    source_project: str = None
+) -> dict:
+    """
+    Cross-project API change tracking.
+
+    When a function/class in one project changes, find which locations in other projects need updating.
+    """
+    index = load_index()
+    symbols = index.get("symbols", {})
+    reverse_index = index.get("reverse_index", {})
+    index.get("dependencies", {})
+
+    # Find source symbols
+    source_symbols = []
+    for sym_id, sym in symbols.items():
+        if sym.get("name") == symbol_name:
+            sym_project = sym_id.split(":")[0] if ":" in sym_id else ""
+            if source_project and source_project.lower() not in sym_project.lower():
+                continue
+            source_symbols.append({
+                "id": sym_id,
+                "project": sym_project,
+                "path": sym.get("path", ""),
+                "type": sym.get("type", ""),
+            })
+
+    if not source_symbols:
+        return {"error": f"Symbol '{symbol_name}' not found"}
+
+    # Find cross-project references
+    cross_project_refs = []
+
+    for source in source_symbols:
+        src_project = source["project"]
+        source_id = source["id"]
+
+        # Find references from reverse_index
+        callers = reverse_index.get(source_id, [])
+
+        for caller_id in callers:
+            caller_project = caller_id.split(":")[0] if ":" in caller_id else ""
+
+            # Only care about cross-project references
+            if caller_project == src_project:
+                continue
+
+            # Skip forked projects (flyto-cloud-dev is a fork of flyto-cloud)
+            if (src_project == "flyto-cloud" and caller_project == "flyto-cloud-dev") or \
+               (src_project == "flyto-cloud-dev" and caller_project == "flyto-cloud"):
+                continue
+
+            caller_sym = symbols.get(caller_id, {})
+            cross_project_refs.append({
+                "caller_id": caller_id,
+                "caller_project": caller_project,
+                "caller_path": caller_sym.get("path", ""),
+                "caller_name": caller_sym.get("name", ""),
+                "caller_type": caller_sym.get("type", ""),
+                "source_project": src_project,
+                "source_id": source_id,
+            })
+
+    # Group by project
+    by_affected_project = {}
+    for ref in cross_project_refs:
+        proj = ref["caller_project"]
+        if proj not in by_affected_project:
+            by_affected_project[proj] = []
+        by_affected_project[proj].append(ref)
+
+    # Generate suggestions
+    if len(cross_project_refs) == 0:
+        suggestion = f"'{symbol_name}' has no cross-project references and can be safely modified."
+        risk = "low"
+    elif len(by_affected_project) == 1:
+        suggestion = f"Modifying '{symbol_name}' will affect {len(cross_project_refs)} call sites in 1 other project."
+        risk = "medium"
+    else:
+        suggestion = f"⚠️ Modifying '{symbol_name}' will affect {len(by_affected_project)} other projects!"
+        risk = "high"
+
+    return {
+        "symbol_name": symbol_name,
+        "source_symbols": source_symbols,
+        "cross_project_refs": cross_project_refs,
+        "by_affected_project": {k: len(v) for k, v in by_affected_project.items()},
+        "affected_projects": list(by_affected_project.keys()),
+        "total_cross_refs": len(cross_project_refs),
+        "risk": risk,
+        "suggestion": suggestion,
+    }
+
+
+def dependency_graph(
+    file_path: str = None,
+    symbol_id: str = None,
+    project: str = None,
+    direction: str = "both",
+    max_depth: int = 2
+) -> dict:
+    """
+    Get dependency graph for a file, symbol, or project.
+
+    Shows what a module depends on (imports) and what depends on it (dependents).
+    """
+    index = load_index()
+    symbols = index.get("symbols", {})
+    dependencies = index.get("dependencies", {})
+
+    # Build dependency maps
+    imports_map = {}  # source -> [targets]
+    dependents_map = {}  # target -> [sources]
+
+    # Also use reverse_index for accurate dependents
+    reverse_index = index.get("reverse_index", {})
+
+    for _dep_id, dep in dependencies.items():
+        source = dep.get("source", "")
+        target = dep.get("target", "")
+        dep_type = dep.get("type", "")
+
+        # Extract file paths
+        source_path = source.split(":")[1] if ":" in source and len(source.split(":")) > 1 else ""
+
+        if source_path:
+            if source_path not in imports_map:
+                imports_map[source_path] = []
+            imports_map[source_path].append({
+                "target": target,
+                "type": dep_type,
+                "line": dep.get("line", 0),
+            })
+
+            # Use resolved_target for accurate dependents mapping
+            resolved_target = dep.get("metadata", {}).get("resolved_target", "")
+            if resolved_target:
+                target_path = resolved_target.split(":")[1] if ":" in resolved_target else ""
+                if target_path:
+                    if target_path not in dependents_map:
+                        dependents_map[target_path] = []
+                    dependents_map[target_path].append({
+                        "source": source_path,
+                        "source_id": source,
+                        "type": dep_type,
+                        "line": dep.get("line", 0),
+                    })
+
+    result = {
+        "query": {
+            "file_path": file_path,
+            "symbol_id": symbol_id,
+            "project": project,
+            "direction": direction,
+            "max_depth": max_depth,
+        },
+        "imports": [],
+        "dependents": [],
+        "summary": {},
+    }
+
+    target_paths = set()
+
+    # Determine target paths based on query
+    if file_path:
+        target_paths.add(file_path)
+    elif symbol_id:
+        # Extract path from symbol_id
+        if ":" in symbol_id and len(symbol_id.split(":")) > 1:
+            target_paths.add(symbol_id.split(":")[1])
+    elif project:
+        # Get all paths in project
+        for sid, sym in symbols.items():
+            if sid.startswith(project + ":"):
+                target_paths.add(sym.get("path", ""))
+
+    if not target_paths:
+        return {"error": "No valid target specified. Provide file_path, symbol_id, or project."}
+
+    # Collect imports (what target depends on)
+    if direction in ("both", "imports"):
+        seen_imports = set()
+        for path in target_paths:
+            for imp in imports_map.get(path, []):
+                target = imp["target"]
+                if target not in seen_imports:
+                    seen_imports.add(target)
+                    result["imports"].append({
+                        "from": path,
+                        "to": target,
+                        "type": imp["type"],
+                    })
+
+    # Collect dependents (what depends on target) - use reverse_index for accuracy
+    if direction in ("both", "dependents"):
+        seen_dependents = set()
+        for path in target_paths:
+            # First, use reverse_index (more accurate, includes 'uses' dependencies)
+            for sid, callers in reverse_index.items():
+                if ":" in sid:
+                    sym_path = sid.split(":")[1]
+                    if sym_path == path:
+                        for caller in callers:
+                            if ":" in caller:
+                                caller_path = caller.split(":")[1]
+                                if caller_path not in seen_dependents and caller_path not in target_paths:
+                                    seen_dependents.add(caller_path)
+                                    result["dependents"].append({
+                                        "from": caller_path,
+                                        "to": path,
+                                        "type": "calls",  # reverse_index doesn't track dep type
+                                    })
+
+            # Fallback: also check dependents_map for additional deps
+            for dep in dependents_map.get(path, []):
+                source = dep["source"]
+                if source not in seen_dependents and source not in target_paths:
+                    seen_dependents.add(source)
+                    result["dependents"].append({
+                        "from": source,
+                        "to": path,
+                        "type": dep["type"],
+                    })
+
+    # Generate summary
+    result["summary"] = {
+        "target_files": len(target_paths),
+        "imports_count": len(result["imports"]),
+        "dependents_count": len(result["dependents"]),
+        "import_types": {},
+        "dependent_types": {},
+    }
+
+    for imp in result["imports"]:
+        t = imp["type"]
+        result["summary"]["import_types"][t] = result["summary"]["import_types"].get(t, 0) + 1
+
+    for dep in result["dependents"]:
+        t = dep["type"]
+        result["summary"]["dependent_types"][t] = result["summary"]["dependent_types"].get(t, 0) + 1
+
+    return result

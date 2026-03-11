@@ -275,6 +275,66 @@ def get_vscode_tool_schemas() -> list:
 
 
 # =============================================================================
+# Lazy imports for tool dispatch
+# =============================================================================
+
+def _search():
+    try:
+        from .tools import search
+    except ImportError:
+        from tools import search
+    return search
+
+
+def _refs():
+    try:
+        from .tools import references
+    except ImportError:
+        from tools import references
+    return references
+
+
+def _info():
+    try:
+        from .tools import code_info
+    except ImportError:
+        from tools import code_info
+    return code_info
+
+
+def _maint():
+    try:
+        from .tools import maintenance
+    except ImportError:
+        from tools import maintenance
+    return maintenance
+
+
+def _quality():
+    try:
+        from . import quality
+    except ImportError:
+        import quality
+    return quality
+
+
+def _diff():
+    try:
+        from . import diff_impact
+    except ImportError:
+        import diff_impact
+    return diff_impact
+
+
+def _task():
+    try:
+        from .tools import task_analysis
+    except ImportError:
+        from tools import task_analysis
+    return task_analysis
+
+
+# =============================================================================
 # Unified tool dispatch
 # =============================================================================
 
@@ -286,20 +346,11 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
     Raises KeyError for unknown tool names.
 
     Args:
-        _idx_module: Optional pre-loaded mcp_server module (for VPS bridge which loads
-                     mcp_server via importlib). If None, uses relative import.
+        _idx_module: Deprecated. Kept for backward compatibility with VPS bridge.
     """
-    if _idx_module is not None:
-        _idx = _idx_module
-    else:
-        # Lazy import — works when running as package (python -m src.mcp_server)
-        try:
-            from . import mcp_server as _idx
-        except ImportError:
-            import mcp_server as _idx  # type: ignore[no-redef]
-
     _DISPATCH = {
-        "search_code": lambda args: _idx.search_by_keyword(
+        # Search tools
+        "search_code": lambda args: _search().search_by_keyword(
             query=args.get("query", ""),
             max_results=args.get("max_results", 20),
             symbol_type=args.get("symbol_type"),
@@ -307,118 +358,141 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             include_content=args.get("include_content", False),
             session_id=args.get("session_id"),
         ),
-        "get_symbol_content": lambda args: _idx.get_symbol_content(
+        "fulltext_search": lambda args: _search().fulltext_search(
+            query=args.get("query", ""),
+            search_type=args.get("search_type", "all"),
+            project=args.get("project"),
+            max_results=args.get("max_results", 50),
+        ),
+
+        # Reference & impact tools
+        "find_references": lambda args: _refs().find_references(
             args.get("symbol_id", ""),
         ),
-        "get_file_info": lambda args: _idx.get_file_info(
-            args.get("path", ""),
-        ),
-        "get_file_symbols": lambda args: _idx.get_file_symbols(
-            args.get("path", ""),
-        ),
-        "impact_analysis": lambda args: _idx.impact_analysis(
+        "impact_analysis": lambda args: _refs().impact_analysis(
             args.get("symbol_id", ""),
         ),
-        "list_categories": lambda args: _idx.list_categories(),
-        "list_apis": lambda args: _idx.list_apis(),
-        "list_projects": lambda args: _idx.list_projects(),
-        "find_references": lambda args: _idx.find_references(
-            args.get("symbol_id", ""),
+        "edit_impact_preview": lambda args: _refs().edit_impact_preview(
+            symbol_id=args.get("symbol_id", ""),
+            change_type=args.get("change_type", "modify"),
         ),
-        "dependency_graph": lambda args: _idx.dependency_graph(
+        "cross_project_impact": lambda args: _refs().cross_project_impact(
+            symbol_name=args.get("symbol_name", ""),
+            source_project=args.get("source_project"),
+        ),
+        "dependency_graph": lambda args: _refs().dependency_graph(
             file_path=args.get("file_path"),
             symbol_id=args.get("symbol_id"),
             project=args.get("project"),
             direction=args.get("direction", "both"),
             max_depth=args.get("max_depth", 2),
         ),
-        "fulltext_search": lambda args: _idx.fulltext_search(
-            query=args.get("query", ""),
-            search_type=args.get("search_type", "all"),
-            project=args.get("project"),
-            max_results=args.get("max_results", 50),
+
+        # Code info tools
+        "get_symbol_content": lambda args: _info().get_symbol_content(
+            args.get("symbol_id", ""),
         ),
-        "check_index_status": lambda args: _idx.check_index_status(),
-        "find_dead_code": lambda args: _idx.find_dead_code(
-            project=args.get("project"),
-            symbol_type=args.get("symbol_type"),
-            min_lines=args.get("min_lines", 5),
+        "get_file_info": lambda args: _info().get_file_info(
+            args.get("path", ""),
         ),
-        "find_todos": lambda args: _idx.find_todos(
-            project=args.get("project"),
-            priority=args.get("priority"),
-            max_results=args.get("max_results", 100),
+        "get_file_symbols": lambda args: _info().get_file_symbols(
+            args.get("path", ""),
         ),
-        "cross_project_impact": lambda args: _idx.cross_project_impact(
-            symbol_name=args.get("symbol_name", ""),
-            source_project=args.get("source_project"),
+        "get_file_context": lambda args: _info().get_file_context(
+            path=args.get("path", ""),
+            include_content=args.get("include_content", False),
         ),
-        "get_description": lambda args: _idx.get_description(
+        "list_categories": lambda args: _info().list_categories(),
+        "list_apis": lambda args: _info().list_apis(),
+        "list_projects": lambda args: _info().list_projects(),
+        "get_description": lambda args: _info().get_description(
             path=args.get("path", ""),
             project=args.get("project"),
         ),
-        "update_description": lambda args: _idx.update_description(
+        "update_description": lambda args: _info().update_description(
             path=args.get("path", ""),
             summary=args.get("summary", ""),
             project=args.get("project"),
         ),
-        "get_file_context": lambda args: _idx.get_file_context(
-            path=args.get("path", ""),
-            include_content=args.get("include_content", False),
-        ),
-        "find_test_file": lambda args: _idx.find_test_file(
+        "find_test_file": lambda args: _info().find_test_file(
             path=args.get("path", ""),
         ),
-        "edit_impact_preview": lambda args: _idx.edit_impact_preview(
-            symbol_id=args.get("symbol_id", ""),
-            change_type=args.get("change_type", "modify"),
+
+        # Maintenance tools
+        "find_dead_code": lambda args: _maint().find_dead_code(
+            project=args.get("project"),
+            symbol_type=args.get("symbol_type"),
+            min_lines=args.get("min_lines", 5),
         ),
-        "check_and_reindex": lambda args: _idx.check_and_reindex(
+        "find_todos": lambda args: _maint().find_todos(
+            project=args.get("project"),
+            priority=args.get("priority"),
+            max_results=args.get("max_results", 100),
+        ),
+        "check_index_status": lambda args: _maint().check_index_status(),
+        "check_and_reindex": lambda args: _maint().check_and_reindex(
             dry_run=args.get("dry_run", True),
             project=args.get("project"),
             auto_reindex=args.get("auto_reindex", False),
         ),
-        "impact_from_diff": lambda args: _idx.impact_from_diff(
-            mode=args.get("mode", "unstaged"),
-            base=args.get("base", ""),
-            project=args.get("project"),
-        ),
-        "session_track": lambda args: _idx.session_track(
+        "session_track": lambda args: _maint().session_track(
             session_id=args.get("session_id", ""),
             event_type=args.get("event_type", ""),
             target=args.get("target", ""),
             workspace_root=args.get("workspace_root", ""),
         ),
-        "session_get": lambda args: _idx.session_get(
+        "session_get": lambda args: _maint().session_get(
             session_id=args.get("session_id", ""),
         ),
-        # Code Quality tools
-        "find_complex_functions": lambda args: _idx.find_complex_functions(
+
+        # Code quality tools (from quality.py)
+        "find_complex_functions": lambda args: _quality().find_complex_functions(
             project=args.get("project"),
             max_results=args.get("max_results", 20),
             min_score=args.get("min_score", 1),
         ),
-        "find_duplicates": lambda args: _idx.find_duplicates(
+        "find_duplicates": lambda args: _quality().find_duplicates(
             project=args.get("project"),
             min_lines=args.get("min_lines", 6),
             max_results=args.get("max_results", 20),
         ),
-        "security_scan": lambda args: _idx.security_scan(
+        "security_scan": lambda args: _quality().security_scan(
             project=args.get("project"),
             severity=args.get("severity"),
             max_results=args.get("max_results", 50),
         ),
-        "find_stale_files": lambda args: _idx.find_stale_files(
+        "find_stale_files": lambda args: _quality().find_stale_files(
             project=args.get("project"),
             stale_days=args.get("stale_days", 180),
             max_results=args.get("max_results", 30),
         ),
-        "code_health_score": lambda args: _idx.code_health_score(
+        "code_health_score": lambda args: _quality().code_health_score(
             project=args.get("project"),
         ),
-        "suggest_refactoring": lambda args: _idx.suggest_refactoring(
+        "suggest_refactoring": lambda args: _quality().suggest_refactoring(
             project=args.get("project"),
             max_results=args.get("max_results", 20),
+        ),
+
+        # Diff impact tools (from diff_impact.py)
+        "impact_from_diff": lambda args: _diff().impact_from_diff(
+            mode=args.get("mode", "unstaged"),
+            base=args.get("base", ""),
+            project=args.get("project"),
+        ),
+
+        # Task analysis tools
+        "analyze_task": lambda args: _task().analyze_task(
+            description=args.get("description", ""),
+            targets=args.get("targets", []),
+            intent=args.get("intent", "refactor"),
+            project=args.get("project"),
+            options=args.get("options"),
+        ),
+        "task_gate_check": lambda args: _task().task_gate_check(
+            task_contract=args.get("task_contract", {}),
+            next_phase=args.get("next_phase"),
+            current_state=args.get("current_state", {}),
         ),
     }
 
