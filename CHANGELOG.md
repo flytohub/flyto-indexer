@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.1] — 2026-03-11
+
+### Added
+- `flyto-index setup-claude` CLI command — auto-appends task contract and tool usage instructions to CLAUDE.md
+  - Idempotent (skips if already added)
+  - `--remove` flag to cleanly remove the section
+  - Uses HTML comment markers to avoid interfering with other CLAUDE.md content
+
 ## [1.3.0] — 2026-03-11
 
 ### Added
