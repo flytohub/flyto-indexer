@@ -10,6 +10,7 @@ Core logic:
 
 import hashlib
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -226,22 +227,34 @@ def scan_directory_hashes(
         ".venv", "venv", ".pytest_cache", ".mypy_cache"
     ]
 
+    ignore_set = set(ignore_patterns)
+    ext_set = set(extensions)
     result = {}
 
-    for ext in extensions:
-        for file_path in root.rglob(f"*{ext}"):
-            # Check if this path should be ignored
+    for dirpath, dirnames, filenames in os.walk(root):
+        # Prune ignored directories in-place so os.walk skips them entirely
+        dirnames[:] = [
+            d for d in dirnames
+            if d not in ignore_set
+        ]
+
+        for fname in filenames:
+            # Check extension (e.g. ".py", ".ts")
+            _, ext = os.path.splitext(fname)
+            if ext not in ext_set:
+                continue
+
+            file_path = Path(dirpath) / fname
             rel_path = file_path.relative_to(root)
-            should_ignore = any(
-                pattern in str(rel_path)
-                for pattern in ignore_patterns
-            )
-            if should_ignore:
+
+            # Also check substring match for nested ignore patterns
+            rel_str = str(rel_path)
+            if any(p in rel_str for p in ignore_patterns):
                 continue
 
             try:
                 content = file_path.read_text(encoding="utf-8")
-                result[str(rel_path)] = compute_file_hash(content)
+                result[rel_str] = compute_file_hash(content)
             except Exception:
                 # Skip files that cannot be read
                 pass

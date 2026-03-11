@@ -21,6 +21,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .engine import _ensure_gitignore
 from .flyto_tags import compute_tag_stats, generate_tags, write_tags
 from .models import DependencyType, ProjectIndex, SymbolType
 
@@ -80,6 +81,7 @@ def generate_flyto_folder(
 
     nav_dir.mkdir(parents=True, exist_ok=True)
     index_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_gitignore(flyto_dir)
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     languages = _count_languages(project_index)
