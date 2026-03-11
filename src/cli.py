@@ -260,6 +260,10 @@ def cmd_init(args):
     index_dir.mkdir(parents=True, exist_ok=True)
     _ensure_gitignore(flyto_dir)
 
+    # Auto-exclude from IDE file watchers (WebStorm, VSCode, etc.)
+    from .engine import _ensure_ide_exclude
+    _ensure_ide_exclude(project_path)
+
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # Write flyto.json
