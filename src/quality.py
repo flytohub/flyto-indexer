@@ -57,13 +57,21 @@ def find_complex_functions(
         branches = 0
         returns = 0
 
+        # Find base indent of the function content
+        base_indent = 0
+        for line in lines:
+            stripped = line.strip()
+            if stripped:
+                base_indent = len(line) - len(line.lstrip())
+                break
+
         for line in lines:
             stripped = line.strip()
             if not stripped:
                 continue
 
             indent = len(line) - len(line.lstrip())
-            depth = indent // indent_unit
+            depth = max(0, (indent - base_indent) // indent_unit)
             max_depth = max(max_depth, depth)
 
             if is_python:

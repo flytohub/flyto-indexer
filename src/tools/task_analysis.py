@@ -282,12 +282,18 @@ def _overall_risk(max_score: float) -> str:
 # Target resolution
 # =========================================================================
 
-def _resolve_targets(targets: List[str]) -> List[dict]:
+def _resolve_targets(targets: List[str], project: str = None) -> List[dict]:
     """Resolve target names to symbol IDs using search."""
     resolved = []
     seen_ids = set()
     index = load_index()
     symbols = index.get("symbols", {})
+
+    # File-path extensions for path matching heuristic
+    _PATH_EXTENSIONS = (
+        ".py", ".ts", ".tsx", ".js", ".jsx", ".vue", ".go", ".rs",
+        ".java", ".kt", ".rb", ".cpp", ".c", ".h", ".cs", ".swift",
+    )
 
     for target in targets:
         # Try as exact symbol_id first
@@ -302,8 +308,31 @@ def _resolve_targets(targets: List[str]) -> List[dict]:
             seen_ids.add(target)
             continue
 
-        # Search by keyword
-        results = search_by_keyword(target, max_results=5)
+        # Try file path matching: if target looks like a path, search by path
+        is_path = "/" in target or any(target.endswith(ext) for ext in _PATH_EXTENSIONS)
+        if is_path:
+            matched = False
+            for sid, sym in symbols.items():
+                if project and not sid.lower().startswith(project.lower() + ":"):
+                    continue
+                sym_path = sym.get("path", "")
+                if sym_path and (sym_path == target or sym_path.endswith("/" + target)):
+                    if sid not in seen_ids:
+                        resolved.append({
+                            "input": target,
+                            "symbol_id": sid,
+                            "name": sym.get("name", ""),
+                            "type": sym.get("type", ""),
+                            "path": sym_path,
+                        })
+                        seen_ids.add(sid)
+                        matched = True
+                        break
+            if matched:
+                continue
+
+        # Search by keyword (with project filter)
+        results = search_by_keyword(target, max_results=5, project=project)
         matched = False
         for item in results.get("results", []):
             sid = item.get("symbol_id", "")
@@ -441,6 +470,15 @@ def _score_breaking_risk(resolved: List[dict], intent: str) -> dict:
     if signature_changes > 0:
         rationale_parts.append(f"{signature_changes} signature change(s) detected")
     rationale = "; ".join(rationale_parts) if rationale_parts else "No breaking risk detected"
+
+    # Reduce breaking risk for private/internal symbols
+    all_private = all(
+        t.get("name", "").startswith("_") or t.get("type") == "unknown"
+        for t in resolved
+    )
+    if all_private and score > 3.0:
+        score = max(2.0, score * 0.4)
+        rationale += "; targets are private/internal (risk reduced)"
 
     return {
         "score": score,
@@ -1556,7 +1594,7 @@ def analyze_task(
     task_id = f"task_{intent}_{task_hash}"
 
     # Resolve targets
-    resolved = _resolve_targets(targets)
+    resolved = _resolve_targets(targets, project=project)
 
     # Classify each target's natural intent
     classified = _classify_target_intent(resolved, intent)
