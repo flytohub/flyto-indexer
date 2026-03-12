@@ -35,7 +35,7 @@ AI:     *renames the function*
 ```
 You:    "Rename validateOrder to validate_order"
 
-AI:     → impact_analysis("validateOrder")
+AI:     → impact(target="validateOrder", change_type="rename")
 
         ⚠️ 7 call sites across 3 projects:
           backend/checkout.py:42     — calls validateOrder()
@@ -46,8 +46,9 @@ AI:     → impact_analysis("validateOrder")
           tests/test_orders.py:12    — unit test
           tests/test_api.py:88       — integration test
           Risk: HIGH — 3 projects affected
+          Test file: tests/test_orders.py
+          Cross-project: 2 other repos affected
 
-        → edit_impact_preview("validateOrder", change_type="rename")
         *renames all 7 call sites, updates tests, pushes clean code*
 ```
 
@@ -119,20 +120,30 @@ pip uninstall flyto-indexer
 
 Every tool an AI already has (grep, file read, glob) finds **text**. None of them answer **"what depends on this?"**
 
-`impact_analysis` builds a reverse dependency graph and tells you exactly what breaks:
+One call gives you everything — references, blast radius, cross-project impact, and test files:
 
 ```
-→ impact_analysis("useAuth")
+→ impact(target="useAuth")
 
-  12 references across 4 projects:
+  References: 12 across 4 projects
     flyto-cloud:  LoginPage.vue, RegisterPage.vue, AuthGuard.ts, api.ts
     flyto-pro:    vscode_agent/tools.py, middleware/auth.py
     flyto-vscode: ChatHandler.ts, AuthProvider.ts
     flyto-core:   modules/auth/login.py
   Risk: HIGH — shared across 4 projects
+  Cross-project: 3 other repos affected
+  Test file: tests/test_auth.py
+```
 
-→ edit_impact_preview("useAuth", change_type="signature_change")
-  Shows exact code lines at each call site that need updating.
+Works with uncommitted changes too:
+
+```
+→ impact(mode="unstaged")
+
+  3 symbols affected by your changes:
+    validate_order  — 5 callers, test: tests/test_orders.py
+    OrderSchema     — used in 2 API endpoints
+    format_receipt  — no callers (safe)
 ```
 
 ### Cross-Language API Tracking
@@ -140,7 +151,7 @@ Every tool an AI already has (grep, file read, glob) finds **text**. None of the
 Python backend endpoints automatically linked to TypeScript/Vue frontend callers:
 
 ```
-→ list_apis()
+→ structure(focus="apis")
 
   POST /api/checkout
     Defined in: backend/routes/order.py (create_order)
@@ -152,28 +163,36 @@ Detects FastAPI, Flask, Starlette decorators + `fetch()`, `axios`, `$http` calls
 
 ### Code Health & Security
 
+One call audits everything — auto-expands weak dimensions with detailed findings:
+
 ```
-→ code_health_score()            → security_scan()
+→ audit()
 
-  Score: 74/100 (C)               2 critical: hardcoded API keys
-  Complexity:    22/25             1 high: SQL string concatenation
-  Dead code:     18/25             0 medium
-  Documentation: 16/25
-  Modularity:    18/25
+  Health: 74/100 (C)
 
-→ suggest_refactoring()
+  ⚠️ Security (60/100) — auto-expanded:
+    2 critical: hardcoded API keys in config.py, settings.py
+    1 high: SQL string concatenation in query.py
 
-  [high]   process_data() — 87 lines, depth=6 → extract sub-functions
-  [medium] dead_fn() — unreferenced, 45 lines → safe to remove
-  [low]    utils.py — 800 lines → split into focused modules
+  ⚠️ Complexity (65/100) — auto-expanded:
+    process_data() — 87 lines, depth=6 → extract sub-functions
+
+  ✓ Dead code (90/100) — passing
+  ✓ Documentation (85/100) — passing
+
+  Git hotspots: order.py (42 commits, complexity=8.5)
+
+  Refactoring suggestions:
+    [high]   process_data() → extract sub-functions
+    [medium] dead_fn() — unreferenced, 45 lines → safe to remove
 ```
 
 ### Task Analysis — plan before you code
 
-`analyze_task` scores risk across 6 dimensions and generates an execution plan with concrete tool call sequences:
+Scores risk across 6 dimensions and generates an execution plan:
 
 ```
-→ analyze_task("Rename validateOrder to validate_order", intent="refactor")
+→ task(action="plan", description="Rename validateOrder to validate_order", intent="refactor")
 
   Dimensions:
     blast_radius:      HIGH (8.0)  — 7 callers across 3 projects
@@ -183,100 +202,44 @@ Detects FastAPI, Flask, Starlette decorators + `fetch()`, `axios`, `$http` calls
     complexity:        LOW (2.0)   — straightforward rename
     rollback_difficulty: MEDIUM (5.0) — multi-project change
 
-  Strategy: safe_refactor (upgraded from minimal_diff due to blast radius)
-
   Execution Plan:
     1. scope_callers       → find_references("validateOrder")
     2. verify_test_coverage → find_test_file("checkout.py")
     3. check_cross_project → cross_project_impact("validateOrder")
-    4. gate_before_plan    → task_gate_check(phase="plan")
+    4. ⛔ gate_before_plan → task_gate_check(phase="plan")
     5. preview_changes     → edit_impact_preview("validateOrder", "rename")
-    6. gate_before_apply   → task_gate_check(phase="apply")
+    6. ⛔ gate_before_apply → task_gate_check(phase="apply")
 ```
 
-Each step has pre-filled arguments and dependencies — AI follows the data structure, not prompts.
+Each step has pre-filled arguments — AI follows the data structure, not prompts.
+Server-side enforcement blocks skipping gates.
 
 ## Tools
 
-32 MCP tools. Organized by what they do:
+5 smart tools. Each one auto-enriches results with related data — no need to pick between dozens of granular tools.
 
-**Impact & Dependencies** — the reason to install this
-
-| Tool | What it answers |
-|------|----------------|
-| `impact_analysis` | "What breaks if I change this?" |
-| `impact_from_diff` | "What's the blast radius of my uncommitted changes?" |
-| `find_references` | "Who calls this function?" (with file + line) |
-| `cross_project_impact` | "Which other repos use this?" |
-| `edit_impact_preview` | "Show me the exact lines affected by this rename" |
-| `dependency_graph` | "What does this file import / what imports it?" |
-
-**Task Analysis** — plan before you code
-
-| Tool | What it answers |
-|------|----------------|
-| `analyze_task` | "What's the risk profile and execution plan for this change?" |
-| `task_gate_check` | "Is it safe to proceed to the next phase?" |
-
-**Code Quality** — catch problems before review
-
-| Tool | What it answers |
-|------|----------------|
-| `code_health_score` | "How healthy is this project?" (0-100, A-F) |
-| `security_scan` | "Any hardcoded secrets or injection risks?" |
-| `find_dead_code` | "What's safe to delete?" |
-| `find_complex_functions` | "Which functions need refactoring?" |
-| `suggest_refactoring` | "What should I fix first?" |
-| `find_duplicates` | "Where's the copy-pasted code?" |
-| `find_stale_files` | "What hasn't been touched in months?" |
-| `find_todos` | "What's the tech debt backlog?" |
+| Tool | What it answers | Auto-enrichment |
+|------|----------------|-----------------|
+| `search` | "Find code by name or description" | Merges BM25 + semantic search, attaches callers and file context |
+| `impact` | "What breaks if I change this?" | References + blast radius + cross-project + test files in one call |
+| `audit` | "How healthy is this project?" | Health score (0-100), auto-expands weak dimensions with findings |
+| `task` | "Plan, gate-check, or validate changes" | Risk scoring, execution plans, linter + tests |
+| `structure` | "Show me the project layout" | Projects, APIs, dependencies, type contracts |
 
 <details>
-<summary>All 32 tools (including search, metadata, session, task analysis)</summary>
+<summary>What each tool replaces</summary>
 
-**Search & Discovery**
+**`search`** replaces: `search_code`, `semantic_search`, `fulltext_search`, `get_file_info`, `get_file_symbols`, `get_symbol_content`, `get_file_context`
 
-| Tool | Description |
-|------|-------------|
-| `search_code` | BM25-ranked symbol search |
-| `get_symbol_content` | Full source of a function/class |
-| `get_file_symbols` | All symbols in a file |
-| `get_file_info` | File purpose, category, keywords |
-| `get_file_context` | One-call: symbols + deps + test file |
-| `fulltext_search` | Search comments, strings, TODOs |
+**`impact`** replaces: `find_references`, `impact_analysis`, `batch_impact_analysis`, `edit_impact_preview`, `cross_project_impact`, `impact_from_diff`
 
-**Project Overview**
+**`audit`** replaces: `code_health_score`, `security_scan`, `find_dead_code`, `find_complex_functions`, `find_duplicates`, `suggest_refactoring`, `find_stale_files`, `find_todos`, `coverage_gaps`
 
-| Tool | Description |
-|------|-------------|
-| `list_projects` | Indexed projects with stats |
-| `list_categories` | Code categories (auth, payment...) |
-| `list_apis` | API endpoints + cross-language callers |
-| `check_index_status` | Is the index fresh or stale? |
+**`task`** replaces: `analyze_task`, `task_gate_check`, `validate_changes`
 
-**File Metadata**
+**`structure`** replaces: `list_projects`, `list_apis`, `list_categories`, `dependency_graph`, `check_api_contracts`, `contract_drift`, `extract_type_schema`
 
-| Tool | Description |
-|------|-------------|
-| `find_test_file` | Source → test file mapping |
-| `get_description` | Semantic one-liner for a file |
-| `update_description` | Write/update file description |
-
-**Session & Indexing**
-
-| Tool | Description |
-|------|-------------|
-| `session_track` | Track events for search boosting |
-| `session_get` | Inspect session state |
-| `check_and_reindex` | Detect changes + live reindex |
-| `impact_from_diff` | Git diff → symbol impact analysis |
-
-**Task Analysis**
-
-| Tool | Description |
-|------|-------------|
-| `analyze_task` | Multi-dimensional risk assessment with execution plan |
-| `task_gate_check` | Phase gate validation before proceeding |
+All legacy tools remain available in dispatch for backward compatibility and execution plan steps.
 
 </details>
 
@@ -306,7 +269,8 @@ flyto-index scan .
 .flyto-index/
 ├── index.json       # Symbols + dependency graph + reverse index
 ├── content.jsonl    # Source code (lazy-loaded)
-├── bm25.json        # Search index
+├── bm25.json        # BM25 keyword search index
+├── semantic.json    # TF-IDF + learned ConceptGraph (v2.2+)
 └── manifest.json    # Change tracking
 ```
 
