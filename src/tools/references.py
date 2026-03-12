@@ -478,26 +478,11 @@ def impact_analysis(symbol_id: str) -> dict:
     }
 
 
-def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
+def _collect_call_sites(resolved_id, target_name, target_path, reverse_index, symbols):
+    """Collect call sites from reverse_index by resolved_id and target_name.
+
+    Returns (call_sites, seen_keys) where seen_keys tracks dedup state.
     """
-    Preview the impact of editing a symbol before making changes.
-
-    Shows all call sites with actual code lines, risk assessment, and suggestions.
-    """
-    index = load_index()
-    symbols = index.get("symbols", {})
-    reverse_index = index.get("reverse_index", {})
-    index.get("dependencies", {})
-
-    resolved_id = resolve_symbol(symbol_id, symbols)
-    target_symbol = symbols.get(resolved_id)
-    if not target_symbol:
-        return {"error": f"Symbol not found: {symbol_id}"}
-
-    target_name = target_symbol.get("name", "")
-    target_path = target_symbol.get("path", "")
-
-    # Collect call sites
     call_sites = []
     seen_keys = set()
 
@@ -508,88 +493,51 @@ def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
             return f"{basename}:{parts[2]}:{parts[3]}"
         return source_id
 
-    # From reverse_index
-    for caller_id in reverse_index.get(resolved_id, []):
-        dedup_key = get_dedup_key(caller_id)
-        if dedup_key in seen_keys:
-            continue
-        seen_keys.add(dedup_key)
+    def _process_callers(caller_ids, confidence):
+        for caller_id in caller_ids:
+            dedup_key = get_dedup_key(caller_id)
+            if dedup_key in seen_keys:
+                continue
+            seen_keys.add(dedup_key)
 
-        caller_sym = symbols.get(caller_id, {})
-        caller_path = caller_sym.get("path", "")
-        if caller_path == target_path:
-            continue
+            caller_sym = symbols.get(caller_id, {})
+            caller_path = caller_sym.get("path", "")
+            if caller_path == target_path:
+                continue
 
-        # Get the actual code line
-        content = get_symbol_content_text(caller_id, caller_sym)
-        code_line = ""
-        line_num = 0
-        if content and target_name:
-            for i, line in enumerate(content.split("\n")):
-                if target_name in line:
-                    code_line = line.strip()[:120]
-                    line_num = caller_sym.get("start_line", 0) + i
-                    break
+            # Get the actual code line
+            content = get_symbol_content_text(caller_id, caller_sym)
+            code_line = ""
+            line_num = 0
+            if content and target_name:
+                for i, line in enumerate(content.split("\n")):
+                    if target_name in line:
+                        code_line = line.strip()[:120]
+                        line_num = caller_sym.get("start_line", 0) + i
+                        break
 
-        call_sites.append({
-            "file": caller_path,
-            "line": line_num,
-            "code": code_line,
-            "caller_name": caller_sym.get("name", ""),
-            "confidence": "high",
-        })
+            call_sites.append({
+                "file": caller_path,
+                "line": line_num,
+                "code": code_line,
+                "caller_name": caller_sym.get("name", ""),
+                "confidence": confidence,
+            })
+
+    # From reverse_index by resolved_id
+    _process_callers(reverse_index.get(resolved_id, []), "high")
 
     # Also check by name in reverse_index
-    for caller_id in reverse_index.get(target_name, []):
-        dedup_key = get_dedup_key(caller_id)
-        if dedup_key in seen_keys:
-            continue
-        seen_keys.add(dedup_key)
+    _process_callers(reverse_index.get(target_name, []), "medium")
 
-        caller_sym = symbols.get(caller_id, {})
-        caller_path = caller_sym.get("path", "")
-        if caller_path == target_path:
-            continue
+    return call_sites, seen_keys
 
-        content = get_symbol_content_text(caller_id, caller_sym)
-        code_line = ""
-        line_num = 0
-        if content and target_name:
-            for i, line in enumerate(content.split("\n")):
-                if target_name in line:
-                    code_line = line.strip()[:120]
-                    line_num = caller_sym.get("start_line", 0) + i
-                    break
 
-        call_sites.append({
-            "file": caller_path,
-            "line": line_num,
-            "code": code_line,
-            "caller_name": caller_sym.get("name", ""),
-            "confidence": "medium",
-        })
+def _assess_edit_risk(total, by_project, change_type):
+    """Compute risk level, reason, change description, and suggestions.
 
-    # Limit to 30
-    call_sites = call_sites[:30]
-
-    # Build path→project lookup (O(N) once, not O(N*M))
-    path_to_project: dict[str, str] = {}
-    for sid in symbols:
-        parts = sid.split(":")
-        if len(parts) >= 2:
-            sym_path = symbols[sid].get("path", "")
-            if sym_path and sym_path not in path_to_project:
-                path_to_project[sym_path] = parts[0]
-
-    # Group by project
-    by_project: dict[str, int] = {}
-    for cs in call_sites:
-        proj = path_to_project.get(cs["file"], "unknown")
-        by_project[proj] = by_project.get(proj, 0) + 1
-
-    total = len(call_sites)
-
-    # Risk assessment
+    Returns a dict with keys: risk, risk_reason, change_description, suggestions.
+    """
     change_risk_map = {
         "rename": ("All call sites must update the name.", ["Update all call sites in a single commit", "Use find-and-replace across all files"]),
         "delete": ("All call sites will break.", ["Ensure no code depends on this before deleting", "Consider deprecation first"]),
@@ -616,6 +564,58 @@ def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
     if change_type in ("delete", "rename") and total > 0:
         risk = "high" if total > 3 else "moderate"
 
+    return {
+        "risk": risk,
+        "risk_reason": risk_reason,
+        "change_description": risk_info[0],
+        "suggestions": risk_info[1],
+    }
+
+
+def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
+    """
+    Preview the impact of editing a symbol before making changes.
+
+    Shows all call sites with actual code lines, risk assessment, and suggestions.
+    """
+    index = load_index()
+    symbols = index.get("symbols", {})
+    reverse_index = index.get("reverse_index", {})
+
+    resolved_id = resolve_symbol(symbol_id, symbols)
+    target_symbol = symbols.get(resolved_id)
+    if not target_symbol:
+        return {"error": f"Symbol not found: {symbol_id}"}
+
+    target_name = target_symbol.get("name", "")
+    target_path = target_symbol.get("path", "")
+
+    # Collect call sites (limit to 30)
+    call_sites, _seen = _collect_call_sites(
+        resolved_id, target_name, target_path, reverse_index, symbols
+    )
+    call_sites = call_sites[:30]
+
+    # Build path->project lookup (O(N) once, not O(N*M))
+    path_to_project: dict[str, str] = {}
+    for sid in symbols:
+        parts = sid.split(":")
+        if len(parts) >= 2:
+            sym_path = symbols[sid].get("path", "")
+            if sym_path and sym_path not in path_to_project:
+                path_to_project[sym_path] = parts[0]
+
+    # Group by project
+    by_project: dict[str, int] = {}
+    for cs in call_sites:
+        proj = path_to_project.get(cs["file"], "unknown")
+        by_project[proj] = by_project.get(proj, 0) + 1
+
+    total = len(call_sites)
+
+    # Risk assessment
+    risk_result = _assess_edit_risk(total, by_project, change_type)
+
     # next_action hint for AI
     if total == 0:
         next_action = "Safe to proceed — no call sites found."
@@ -632,10 +632,10 @@ def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
         "total_call_sites": total,
         "call_sites": call_sites,
         "by_project": by_project,
-        "risk": risk,
-        "risk_reason": risk_reason,
-        "change_description": risk_info[0],
-        "suggestions": risk_info[1],
+        "risk": risk_result["risk"],
+        "risk_reason": risk_result["risk_reason"],
+        "change_description": risk_result["change_description"],
+        "suggestions": risk_result["suggestions"],
         "next_action": next_action,
     }
 

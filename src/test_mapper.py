@@ -71,6 +71,12 @@ class TestMapper:
                     self._test_to_source[best] = source
 
         # Layer 2: Import analysis (for unmapped test files)
+        self._build_by_import_analysis(project_files, dependencies)
+
+    def _build_by_import_analysis(
+        self, project_files: dict[str, set[str]], dependencies: dict
+    ) -> None:
+        """Layer 2: link unmapped test files to source via import analysis."""
         for _dep_id, dep in dependencies.items():
             if dep.get("type") != "imports":
                 continue

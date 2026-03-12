@@ -54,6 +54,114 @@ PROJECTS = [
 INDEX_DIR = FLYTOHUB_ROOT / "flyto-indexer" / ".flyto-index"
 
 
+def _display_changes(changes):
+    """Print added/modified/deleted file sections."""
+    for label, key, prefix in [
+        ("New files", "added", "+"),
+        ("Modified files", "modified", "~"),
+        ("Deleted files", "deleted", "-"),
+    ]:
+        items = changes[key]
+        if not items:
+            continue
+        print(f"\n  {label}:")
+        for f in items[:10]:
+            print(f"    {prefix} {f}")
+        if len(items) > 10:
+            print(f"    ... and {len(items) - 10} more")
+
+
+def _merge_project_maps(projects, index_dir):
+    """Load and merge per-project PROJECT_MAP files into a single dict."""
+    merged = {
+        "audited_at": datetime.now().isoformat(),
+        "total_files": 0,
+        "projects": projects,
+        "files": {},
+        "categories": {},
+        "api_map": {},
+        "keyword_index": {},
+    }
+
+    for project_name in projects:
+        project_map_path = index_dir / project_name / "PROJECT_MAP.json"
+        if not project_map_path.exists():
+            continue
+
+        project_map = json.loads(project_map_path.read_text())
+
+        # Merge files
+        for path, audit in project_map.get("files", {}).items():
+            full_path = f"{project_name}/{path}"
+            audit["project"] = project_name
+            merged["files"][full_path] = audit
+
+        # Merge dict-of-lists sections
+        for section in ("categories", "api_map", "keyword_index"):
+            for key, paths in project_map.get(section, {}).items():
+                if key not in merged[section]:
+                    merged[section][key] = []
+                merged[section][key].extend([f"{project_name}/{p}" for p in paths])
+
+    merged["total_files"] = len(merged["files"])
+    return merged
+
+
+def _audit_project(project_name, project_path, index_dir, args, auditor):
+    """Run incremental audit for a single project. Returns a stats dict."""
+    stats = {"added": 0, "modified": 0, "deleted": 0, "unchanged": 0, "audited": 0}
+
+    print(f"\n{'=' * 60}")
+    print(f"Project: {project_name}")
+    print(f"{'=' * 60}")
+
+    project_index_dir = index_dir / project_name
+    incremental = IncrementalAuditor(project_path, project_index_dir)
+
+    # Scan files
+    current_files = incremental.scan_files()
+    print(f"Found {len(current_files)} files")
+
+    # Detect changes
+    changes = incremental.find_changes(current_files)
+    print(f"  Added:     {len(changes['added'])}")
+    print(f"  Modified:  {len(changes['modified'])}")
+    print(f"  Deleted:   {len(changes['deleted'])}")
+    print(f"  Unchanged: {len(changes['unchanged'])}")
+
+    _display_changes(changes)
+
+    stats["added"] = len(changes["added"])
+    stats["modified"] = len(changes["modified"])
+    stats["deleted"] = len(changes["deleted"])
+    stats["unchanged"] = len(changes["unchanged"])
+
+    # Dry run only displays, does not execute
+    if args.dry_run:
+        return stats
+
+    # Execute audit
+    files_to_audit = changes["added"] + changes["modified"]
+    if args.full:
+        files_to_audit = list(current_files.keys())
+        print(f"\n  Force full audit: {len(files_to_audit)} files")
+
+    if files_to_audit:
+        print(f"\n  Auditing {len(files_to_audit)} files...")
+        new_audits = incremental.audit_files(files_to_audit, auditor)
+        incremental.update_project_map(new_audits, changes["deleted"])
+        incremental.save(current_files)
+        print(f"  ✅ Audited {len(new_audits)} files")
+        stats["audited"] = len(new_audits)
+    elif changes["deleted"]:
+        # Only deletions, update the index
+        incremental.update_project_map({}, changes["deleted"])
+        incremental.save(current_files)
+        print("  ✅ Updated index (removed deleted files)")
+
+    return stats
+
+
 def main():
     parser = argparse.ArgumentParser(description="Incremental audit for Flyto projects")
     parser.add_argument("--full", action="store_true", help="Force full audit")
@@ -80,18 +188,8 @@ def main():
     # Select projects
     projects = [args.project] if args.project else PROJECTS
 
-    # Load existing PROJECT_MAP
-    merged_map_path = INDEX_DIR / "PROJECT_MAP.json"
-    merged_map = {}
-    if merged_map_path.exists():
-        merged_map = json.loads(merged_map_path.read_text())
-
     total_stats = {
-        "added": 0,
-        "modified": 0,
-        "deleted": 0,
-        "unchanged": 0,
-        "audited": 0,
+        "added": 0, "modified": 0, "deleted": 0, "unchanged": 0, "audited": 0,
     }
 
     # Audit each project
@@ -101,128 +199,17 @@ def main():
             print(f"\n⚠️ Project not found: {project_name}")
             continue
 
-        print(f"\n{'=' * 60}")
-        print(f"Project: {project_name}")
-        print(f"{'=' * 60}")
-
-        # Project index directory
-        project_index_dir = INDEX_DIR / project_name
-        incremental = IncrementalAuditor(project_path, project_index_dir)
-
-        # Scan files
-        current_files = incremental.scan_files()
-        print(f"Found {len(current_files)} files")
-
-        # Detect changes
-        changes = incremental.find_changes(current_files)
-        print(f"  Added:     {len(changes['added'])}")
-        print(f"  Modified:  {len(changes['modified'])}")
-        print(f"  Deleted:   {len(changes['deleted'])}")
-        print(f"  Unchanged: {len(changes['unchanged'])}")
-
-        # Display changed files
-        if changes["added"]:
-            print(f"\n  New files:")
-            for f in changes["added"][:10]:
-                print(f"    + {f}")
-            if len(changes["added"]) > 10:
-                print(f"    ... and {len(changes['added']) - 10} more")
-
-        if changes["modified"]:
-            print(f"\n  Modified files:")
-            for f in changes["modified"][:10]:
-                print(f"    ~ {f}")
-            if len(changes["modified"]) > 10:
-                print(f"    ... and {len(changes['modified']) - 10} more")
-
-        if changes["deleted"]:
-            print(f"\n  Deleted files:")
-            for f in changes["deleted"][:10]:
-                print(f"    - {f}")
-            if len(changes["deleted"]) > 10:
-                print(f"    ... and {len(changes['deleted']) - 10} more")
-
-        # Dry run only displays, does not execute
-        if args.dry_run:
-            total_stats["added"] += len(changes["added"])
-            total_stats["modified"] += len(changes["modified"])
-            total_stats["deleted"] += len(changes["deleted"])
-            total_stats["unchanged"] += len(changes["unchanged"])
-            continue
-
-        # Execute audit
-        files_to_audit = changes["added"] + changes["modified"]
-        if args.full:
-            files_to_audit = list(current_files.keys())
-            print(f"\n  Force full audit: {len(files_to_audit)} files")
-
-        if files_to_audit:
-            print(f"\n  Auditing {len(files_to_audit)} files...")
-            new_audits = incremental.audit_files(files_to_audit, auditor)
-            incremental.update_project_map(new_audits, changes["deleted"])
-            incremental.save(current_files)
-            print(f"  ✅ Audited {len(new_audits)} files")
-            total_stats["audited"] += len(new_audits)
-        elif changes["deleted"]:
-            # Only deletions, update the index
-            incremental.update_project_map({}, changes["deleted"])
-            incremental.save(current_files)
-            print("  ✅ Updated index (removed deleted files)")
-
-        total_stats["added"] += len(changes["added"])
-        total_stats["modified"] += len(changes["modified"])
-        total_stats["deleted"] += len(changes["deleted"])
-        total_stats["unchanged"] += len(changes["unchanged"])
+        stats = _audit_project(project_name, project_path, INDEX_DIR, args, auditor)
+        for key in total_stats:
+            total_stats[key] += stats[key]
 
     # Merge all projects' PROJECT_MAP
     if not args.dry_run:
         print("\n" + "=" * 60)
         print("Merging PROJECT_MAP...")
 
-        merged = {
-            "audited_at": datetime.now().isoformat(),
-            "total_files": 0,
-            "projects": projects,
-            "files": {},
-            "categories": {},
-            "api_map": {},
-            "keyword_index": {},
-        }
-
-        for project_name in projects:
-            project_map_path = INDEX_DIR / project_name / "PROJECT_MAP.json"
-            if not project_map_path.exists():
-                continue
-
-            project_map = json.loads(project_map_path.read_text())
-
-            # Merge files
-            for path, audit in project_map.get("files", {}).items():
-                full_path = f"{project_name}/{path}"
-                audit["project"] = project_name
-                merged["files"][full_path] = audit
-
-            # Merge categories
-            for cat, paths in project_map.get("categories", {}).items():
-                if cat not in merged["categories"]:
-                    merged["categories"][cat] = []
-                merged["categories"][cat].extend([f"{project_name}/{p}" for p in paths])
-
-            # Merge api_map
-            for api, paths in project_map.get("api_map", {}).items():
-                if api not in merged["api_map"]:
-                    merged["api_map"][api] = []
-                merged["api_map"][api].extend([f"{project_name}/{p}" for p in paths])
-
-            # Merge keyword_index
-            for kw, paths in project_map.get("keyword_index", {}).items():
-                if kw not in merged["keyword_index"]:
-                    merged["keyword_index"][kw] = []
-                merged["keyword_index"][kw].extend([f"{project_name}/{p}" for p in paths])
-
-        merged["total_files"] = len(merged["files"])
-
-        # Save
+        merged = _merge_project_maps(projects, INDEX_DIR)
+        merged_map_path = INDEX_DIR / "PROJECT_MAP.json"
         merged_map_path.write_text(json.dumps(merged, indent=2, ensure_ascii=False))
         print(f"✅ Saved: {merged_map_path}")
 

@@ -87,76 +87,107 @@ class PythonScanner(BaseScanner):
         for node in ast.walk(tree):
             # Classes
             if isinstance(node, ast.ClassDef):
-                class_symbol = self._create_class_symbol(
-                    node, rel_path, lines
+                cls_syms, cls_deps = self._process_class_node(
+                    node, rel_path, lines, file_source_id
                 )
-                symbols.append(class_symbol)
-
-                # Create extends dependencies for base classes
-                for base in node.bases:
-                    base_name = None
-                    if isinstance(base, ast.Name):
-                        base_name = base.id
-                    elif isinstance(base, ast.Attribute):
-                        base_name = base.attr
-                    if base_name:
-                        dep = Dependency(
-                            source_id=class_symbol.id,
-                            target_id=base_name,
-                            dep_type=DependencyType.EXTENDS,
-                            source_line=node.lineno,
-                            metadata={"base_class": base_name},
-                        )
-                        dependencies.append(dep)
-
-                # Methods
-                for item in node.body:
-                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        method_symbol = self._create_method_symbol(
-                            item, node.name, rel_path, lines
-                        )
-                        symbols.append(method_symbol)
+                symbols.extend(cls_syms)
+                dependencies.extend(cls_deps)
 
             # Top-level functions (sync and async)
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                # Ensure it is top-level (not a method)
                 if self._is_top_level(node, tree):
-                    func_symbol = self._create_function_symbol(
-                        node, rel_path, lines
+                    func_syms = self._process_function_node(
+                        node, rel_path, lines, tree
                     )
-                    symbols.append(func_symbol)
-
-                    # Check for API endpoint decorators
-                    for decorator in node.decorator_list:
-                        api_info = self._extract_api_decorator(decorator, node)
-                        if api_info:
-                            # Include method in name to avoid ID collision
-                            # (e.g. GET /api/users vs POST /api/users)
-                            api_name = f"{api_info['method']} {api_info['path']}"
-                            api_symbol = Symbol(
-                                project=self.project,
-                                path=rel_path,
-                                symbol_type=SymbolType.API,
-                                name=api_name,
-                                start_line=node.lineno,
-                                end_line=node.end_lineno or node.lineno,
-                                content="",
-                                summary=f"{api_info['method']} {api_info['path']} -> {api_info['handler']}",
-                                language="python",
-                            )
-                            api_symbol.metadata = {
-                                "method": api_info["method"],
-                                "url": api_info["path"],
-                                "handler": api_info["handler"],
-                            }
-                            api_symbol.compute_hash()
-                            symbols.append(api_symbol)
+                    symbols.extend(func_syms)
 
         # Compute hash for each symbol
         for symbol in symbols:
             symbol.compute_hash()
 
         return symbols, dependencies
+
+    def _process_class_node(
+        self,
+        node: ast.ClassDef,
+        rel_path: str,
+        lines: list[str],
+        file_source_id: str,
+    ) -> tuple[list[Symbol], list[Dependency]]:
+        """Process a single ClassDef node, returning its symbols and dependencies."""
+        symbols: list[Symbol] = []
+        dependencies: list[Dependency] = []
+
+        class_symbol = self._create_class_symbol(node, rel_path, lines)
+        symbols.append(class_symbol)
+
+        # Create extends dependencies for base classes
+        for base in node.bases:
+            base_name = None
+            if isinstance(base, ast.Name):
+                base_name = base.id
+            elif isinstance(base, ast.Attribute):
+                base_name = base.attr
+            if base_name:
+                dep = Dependency(
+                    source_id=class_symbol.id,
+                    target_id=base_name,
+                    dep_type=DependencyType.EXTENDS,
+                    source_line=node.lineno,
+                    metadata={"base_class": base_name},
+                )
+                dependencies.append(dep)
+
+        # Methods
+        for item in node.body:
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                method_symbol = self._create_method_symbol(
+                    item, node.name, rel_path, lines
+                )
+                symbols.append(method_symbol)
+
+        return symbols, dependencies
+
+    def _process_function_node(
+        self,
+        node: "ast.FunctionDef | ast.AsyncFunctionDef",
+        rel_path: str,
+        lines: list[str],
+        tree: ast.Module,
+    ) -> list[Symbol]:
+        """Process a top-level FunctionDef/AsyncFunctionDef, returning its symbols."""
+        symbols: list[Symbol] = []
+
+        func_symbol = self._create_function_symbol(node, rel_path, lines)
+        symbols.append(func_symbol)
+
+        # Check for API endpoint decorators
+        for decorator in node.decorator_list:
+            api_info = self._extract_api_decorator(decorator, node)
+            if api_info:
+                # Include method in name to avoid ID collision
+                # (e.g. GET /api/users vs POST /api/users)
+                api_name = f"{api_info['method']} {api_info['path']}"
+                api_symbol = Symbol(
+                    project=self.project,
+                    path=rel_path,
+                    symbol_type=SymbolType.API,
+                    name=api_name,
+                    start_line=node.lineno,
+                    end_line=node.end_lineno or node.lineno,
+                    content="",
+                    summary=f"{api_info['method']} {api_info['path']} -> {api_info['handler']}",
+                    language="python",
+                )
+                api_symbol.metadata = {
+                    "method": api_info["method"],
+                    "url": api_info["path"],
+                    "handler": api_info["handler"],
+                }
+                api_symbol.compute_hash()
+                symbols.append(api_symbol)
+
+        return symbols
 
     def _extract_imports(self, tree: ast.AST) -> list[dict]:
         """Extract import statements"""

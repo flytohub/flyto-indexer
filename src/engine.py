@@ -771,10 +771,14 @@ class IndexEngine:
             if resolved:
                 dep.metadata["resolved_target"] = resolved
 
-    def _resolve_re_export_deps(self, file_imports, changed_paths: set = None):
-        """Resolve dependencies through re-export chains."""
-        # Build re_export_map: {(exporter_path, exported_name) -> original_module}
-        re_export_map = {}  # (exporter_path, name) -> original_module_key
+    def _build_re_export_map(self):
+        """Build re-export map from index dependencies.
+
+        Returns:
+            dict mapping (exporter_path, exported_name) to original_module.
+            Star re-exports use "*" as the name key.
+        """
+        re_export_map = {}
         for _dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "re_exports":
                 continue
@@ -787,8 +791,33 @@ class IndexEngine:
             for name in names:
                 re_export_map[(exporter_path, name)] = original_module
             if is_star:
-                # For star re-exports, store with empty name as wildcard
                 re_export_map[(exporter_path, "*")] = original_module
+        return re_export_map
+
+    @staticmethod
+    def _match_exporter_path(import_module: str, exp_path: str) -> bool:
+        """Check if an import module name matches an exporter's file path.
+
+        Handles direct name/path matches, __init__.py/index.ts directory
+        access patterns, and @/ or ./ alias resolution.
+        """
+        exp_base = exp_path.rsplit('/', 1)[-1].rsplit('.', 1)[0]
+        exp_parent = exp_path.rsplit('.', 1)[0]
+        exp_dir = exp_path.rsplit('/', 1)[0] if '/' in exp_path else ''
+        is_init = exp_base in ('__init__', 'index')
+
+        if import_module in (exp_base, exp_parent, exp_path):
+            return True
+        if is_init and (import_module == exp_dir or
+                        import_module.endswith('/' + exp_dir.rsplit('/', 1)[-1]) if exp_dir else False):
+            return True
+        if import_module.replace('@/', 'src/').replace('./', '') in exp_path:
+            return True
+        return False
+
+    def _resolve_re_export_deps(self, file_imports, changed_paths: set = None):
+        """Resolve dependencies through re-export chains."""
+        re_export_map = self._build_re_export_map()
 
         if re_export_map:
             # Build exporter_path set for quick lookup
@@ -818,23 +847,7 @@ class IndexEngine:
 
                 # Check if any exporter path matches the import module
                 for exp_path in exporter_paths:
-                    # Match: import module name matches exporter's file path
-                    exp_base = exp_path.rsplit('/', 1)[-1].rsplit('.', 1)[0]
-                    exp_parent = exp_path.rsplit('.', 1)[0]
-                    exp_dir = exp_path.rsplit('/', 1)[0] if '/' in exp_path else ''
-                    # __init__.py / index.ts are accessed by their directory name
-                    is_init = exp_base in ('__init__', 'index')
-
-                    match = False
-                    if import_module in (exp_base, exp_parent, exp_path):
-                        match = True
-                    elif is_init and (import_module == exp_dir or
-                                     import_module.endswith('/' + exp_dir.rsplit('/', 1)[-1]) if exp_dir else False):
-                        match = True
-                    elif import_module.replace('@/', 'src/').replace('./', '') in exp_path:
-                        match = True
-
-                    if not match:
+                    if not self._match_exporter_path(import_module, exp_path):
                         continue
 
                     # Look up the original module through the re-export chain

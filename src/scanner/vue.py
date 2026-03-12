@@ -122,7 +122,11 @@ class VueScanner(BaseScanner):
                     target_id=api_call["url"],
                     dep_type=DependencyType.API_CALLS,
                     source_line=api_call["line"],
-                    metadata={"method": api_call["method"], "url": api_call["url"]},
+                    metadata={
+                        "method": api_call["method"],
+                        "url": api_call["url"],
+                        "raw_url": api_call["raw_url"],
+                    },
                 )
                 dependencies.append(dep)
 
@@ -371,45 +375,68 @@ class VueScanner(BaseScanner):
 
         return calls
 
-    # Patterns for detecting frontend API calls
+    # Patterns for detecting frontend HTTP API calls (must contain /api/)
     _API_CALL_PATTERNS = [
-        # fetch('/api/users') or fetch(`/api/users`)
-        re.compile(r"""fetch\s*\(\s*[`'"](\/[^`'"]+)[`'"]\s*"""),
-        # axios.get('/api/users') etc.
-        re.compile(r"""axios\s*\.\s*(get|post|put|delete|patch)\s*\(\s*[`'"](\/[^`'"]+)[`'"]\s*""", re.I),
-        # api.get('/users'), $http.get('/users'), etc.
-        re.compile(r"""(?:api|\$http|http|request)\s*\.\s*(get|post|put|delete|patch)\s*\(\s*[`'"](\/[^`'"]+)[`'"]\s*""", re.I),
+        # fetch("/api/..."), useFetch("/api/..."), useAsyncData("/api/..."), $fetch("/api/...")
+        re.compile(r'''(?:fetch|useFetch|useAsyncData|\$fetch)\s*\(\s*[`"']([^`"']*?/api/[^`"']*?)[`"']'''),
+        # axios.get("/path"), axios.post("/path"), etc. — known HTTP client, any URL
+        re.compile(r'''axios\s*\.\s*(get|post|put|delete|patch)\s*\(\s*[`"']([^`"']*?)[`"']''', re.I),
+        # api.get("/path"), $api.post("/path"), http.get("/path") — known HTTP client, any URL
+        re.compile(r'''(?:\$?api|http|\$http|request)\s*\.\s*(get|post|put|delete|patch)\s*\(\s*[`"']([^`"']*?)[`"']''', re.I),
+        # Generic: any string literal with /api/ in a function call context
+        re.compile(r'''[`"']([^`"']*?/api/[^`"']*?)[`"']\s*[,)]'''),
     ]
+
+    # Regex to strip query params and normalize template variables
+    _TEMPLATE_VAR_RE = re.compile(r'\$\{[^}]*\}')
+
+    @staticmethod
+    def _normalize_api_url(url: str) -> str:
+        """Normalize API URL: strip query params, replace template vars with *."""
+        url = url.split('?')[0]
+        url = VueScanner._TEMPLATE_VAR_RE.sub('*', url)
+        return url
 
     def _extract_api_calls(self, script: str, offset: int) -> list[dict]:
         """
-        Extract frontend API calls (fetch, axios, $http, etc.)
+        Extract frontend HTTP API calls (fetch, axios, $http, etc.)
+
+        Only detects URLs containing '/api/' to avoid false positives.
 
         Args:
             script: Script content
             offset: Line offset (script start line)
 
-        Returns list of {method, url, line}.
+        Returns list of {method, url, line, raw_url}.
         """
         results = []
-        seen = set()
+        seen: set[str] = set()
 
         for pattern in self._API_CALL_PATTERNS:
             for match in pattern.finditer(script):
                 groups = match.groups()
                 if len(groups) == 1:
                     method = "GET"
-                    url = groups[0]
+                    raw_url = groups[0]
                 else:
                     method = groups[0].upper()
-                    url = groups[1]
+                    raw_url = groups[1]
 
+                url = self._normalize_api_url(raw_url)
                 rel_line = script[:match.start()].count('\n') + 1
                 line = offset + rel_line
-                key = (method, url, line)
-                if key not in seen:
-                    seen.add(key)
-                    results.append({"method": method, "url": url, "line": line})
+
+                # Deduplicate by normalized URL per file
+                if url in seen:
+                    continue
+                seen.add(url)
+
+                results.append({
+                    "method": method,
+                    "url": url,
+                    "line": line,
+                    "raw_url": raw_url,
+                })
 
         return results
 

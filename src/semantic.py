@@ -42,6 +42,124 @@ class ConceptGraph:
     def __init__(self):
         self.related: dict[str, list[tuple[str, float]]] = {}  # term -> [(related_term, weight)]
 
+    @staticmethod
+    def _add_cooccurrence(cooccur, tokens_a: set, tokens_b: set, weight: float):
+        """Record co-occurrence between two token sets efficiently.
+
+        Uses set intersection to avoid O(T1*T2) — only shared terms are
+        skipped, and each pair is visited once via sorted iteration.
+        """
+        for t1 in tokens_a:
+            for t2 in tokens_b:
+                if t1 != t2:
+                    cooccur[t1][t2] += weight
+                    cooccur[t2][t1] += weight
+
+    @staticmethod
+    def _add_group_cooccurrence(cooccur, token_sets: list, weight: float):
+        """Record co-occurrence for a group of symbols.
+
+        Merges all tokens into one set per file, then records each
+        token pair once. O(T^2) where T is unique tokens in group,
+        instead of O(S^2 * T^2) for S symbol pairs.
+        """
+        merged = set()
+        for ts in token_sets:
+            merged |= ts
+        merged_list = sorted(merged)  # sorted for determinism
+        n = len(merged_list)
+        for i in range(n):
+            for j in range(i + 1, n):
+                cooccur[merged_list[i]][merged_list[j]] += weight
+                cooccur[merged_list[j]][merged_list[i]] += weight
+
+    @classmethod
+    def _collect_file_cooccurrence(cls, cooccur, file_to_syms, sym_tokens):
+        """Signal 1: File co-location — symbols in the same file share terms."""
+        for path, sids in file_to_syms.items():
+            if len(sids) < 2:
+                continue
+            file_token_sets = [sym_tokens[s] for s in sids if s in sym_tokens]
+            if len(file_token_sets) < 2:
+                continue
+            cls._add_group_cooccurrence(cooccur, file_token_sets, 1.0)
+
+    @classmethod
+    def _collect_import_cooccurrence(cls, cooccur, deps, sym_tokens):
+        """Signal 2: Import edges — connected symbols have related vocabulary."""
+        for dep_id, dep in deps.items():
+            if isinstance(dep, dict):
+                src = dep.get("source", "")
+                tgt = dep.get("target", "")
+            else:
+                src = dep.source_id
+                tgt = dep.target_id
+
+            src_tokens = sym_tokens.get(src, set())
+            tgt_tokens = sym_tokens.get(tgt, set())
+            if src_tokens and tgt_tokens:
+                cls._add_cooccurrence(cooccur, src_tokens, tgt_tokens, 2.0)
+
+    @classmethod
+    def _collect_caller_cooccurrence(cls, cooccur, reverse_index, sym_tokens):
+        """Signal 3: Shared callers — symbols called by the same code are similar."""
+        caller_to_callees: dict[str, set[str]] = defaultdict(set)
+        for callee_sid, callers in reverse_index.items():
+            if isinstance(callers, list):
+                for caller in callers:
+                    caller_id = caller if isinstance(caller, str) else caller.get("id", "")
+                    if caller_id:
+                        caller_to_callees[caller_id].add(callee_sid)
+
+        for caller_id, callees in caller_to_callees.items():
+            callee_list = [c for c in callees if c in sym_tokens]
+            if len(callee_list) < 2:
+                continue
+            callee_token_sets = [sym_tokens[c] for c in callee_list]
+            cls._add_group_cooccurrence(cooccur, callee_token_sets, 1.5)
+
+    @staticmethod
+    def _compute_pmi(cooccur, max_related: int = 15) -> dict[str, list[tuple[str, float]]]:
+        """Compute PMI (Pointwise Mutual Information) from co-occurrence counts.
+
+        PMI(x,y) = log(P(x,y) / (P(x) * P(y)))
+
+        Returns:
+            {term: [(related_term, pmi_score), ...]} for each term with
+            at least 2 occurrences, keeping top max_related by PMI.
+        """
+        term_freq: dict[str, float] = defaultdict(float)
+        total_cooccur = 0.0
+        for t1, neighbors in cooccur.items():
+            for t2, count in neighbors.items():
+                term_freq[t1] += count
+                total_cooccur += count
+
+        if total_cooccur == 0:
+            return {}
+
+        related: dict[str, list[tuple[str, float]]] = {}
+        for term, neighbors in cooccur.items():
+            if term_freq[term] < 2:  # skip very rare terms
+                continue
+            scored = []
+            for rel, count in neighbors.items():
+                if term_freq[rel] < 2:
+                    continue
+                # PMI with Laplace smoothing
+                p_xy = (count + 0.1) / total_cooccur
+                p_x = term_freq[term] / total_cooccur
+                p_y = term_freq[rel] / total_cooccur
+                pmi = math.log(p_xy / (p_x * p_y + 1e-10))
+                if pmi > 0:  # only positive associations
+                    scored.append((rel, round(pmi, 3)))
+
+            scored.sort(key=lambda x: -x[1])
+            if scored:
+                related[term] = scored[:max_related]
+
+        return related
+
     @classmethod
     def build_from_index(cls, index_data: dict) -> "ConceptGraph":
         """Build concept graph from a flyto-indexer index dict.
@@ -66,11 +184,9 @@ class ConceptGraph:
             if tokens:
                 sym_tokens[sid] = tokens
 
-        # --- Signal 1: File co-location ---
         # Group symbols by file path
         file_to_syms: dict[str, list[str]] = defaultdict(list)
         for sid in sym_tokens:
-            # Extract path from symbol_id: "project:path:type:name"
             parts = sid.split(":")
             if len(parts) >= 3:
                 path = parts[1]
@@ -83,109 +199,14 @@ class ConceptGraph:
                     if sid in sym_tokens and sid not in file_to_syms.get(path, []):
                         file_to_syms[path].append(sid)
 
-        # Count co-occurrences: terms that appear together in same-file symbols
+        # Collect co-occurrences from three signals
         cooccur: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+        cls._collect_file_cooccurrence(cooccur, file_to_syms, sym_tokens)
+        cls._collect_import_cooccurrence(cooccur, deps, sym_tokens)
+        cls._collect_caller_cooccurrence(cooccur, reverse_index, sym_tokens)
 
-        def _add_cooccurrence(tokens_a: set, tokens_b: set, weight: float):
-            """Record co-occurrence between two token sets efficiently.
-
-            Uses set intersection to avoid O(T1*T2) — only shared terms are
-            skipped, and each pair is visited once via sorted iteration.
-            """
-            for t1 in tokens_a:
-                for t2 in tokens_b:
-                    if t1 != t2:
-                        cooccur[t1][t2] += weight
-                        cooccur[t2][t1] += weight
-
-        def _add_group_cooccurrence(token_sets: list, weight: float):
-            """Record co-occurrence for a group of symbols.
-
-            Merges all tokens into one set per file, then records each
-            token pair once. O(T^2) where T is unique tokens in group,
-            instead of O(S^2 * T^2) for S symbol pairs.
-            """
-            merged = set()
-            for ts in token_sets:
-                merged |= ts
-            merged_list = sorted(merged)  # sorted for determinism
-            n = len(merged_list)
-            for i in range(n):
-                for j in range(i + 1, n):
-                    cooccur[merged_list[i]][merged_list[j]] += weight
-                    cooccur[merged_list[j]][merged_list[i]] += weight
-
-        for path, sids in file_to_syms.items():
-            if len(sids) < 2:
-                continue
-            file_token_sets = [sym_tokens[s] for s in sids if s in sym_tokens]
-            if len(file_token_sets) < 2:
-                continue
-            _add_group_cooccurrence(file_token_sets, 1.0)
-
-        # --- Signal 2: Import edges ---
-        for dep_id, dep in deps.items():
-            if isinstance(dep, dict):
-                src = dep.get("source", "")
-                tgt = dep.get("target", "")
-            else:
-                src = dep.source_id
-                tgt = dep.target_id
-
-            src_tokens = sym_tokens.get(src, set())
-            tgt_tokens = sym_tokens.get(tgt, set())
-            if src_tokens and tgt_tokens:
-                _add_cooccurrence(src_tokens, tgt_tokens, 2.0)
-
-        # --- Signal 3: Shared callers ---
-        # Build caller→callees map, then find symbols that share callers
-        caller_to_callees: dict[str, set[str]] = defaultdict(set)
-        for callee_sid, callers in reverse_index.items():
-            if isinstance(callers, list):
-                for caller in callers:
-                    caller_id = caller if isinstance(caller, str) else caller.get("id", "")
-                    if caller_id:
-                        caller_to_callees[caller_id].add(callee_sid)
-
-        for caller_id, callees in caller_to_callees.items():
-            callee_list = [c for c in callees if c in sym_tokens]
-            if len(callee_list) < 2:
-                continue
-            callee_token_sets = [sym_tokens[c] for c in callee_list]
-            _add_group_cooccurrence(callee_token_sets, 1.5)
-
-        # --- Compute PMI (Pointwise Mutual Information) ---
-        # PMI(x,y) = log(P(x,y) / (P(x) * P(y)))
-        term_freq: dict[str, float] = defaultdict(float)
-        total_cooccur = 0.0
-        for t1, neighbors in cooccur.items():
-            for t2, count in neighbors.items():
-                term_freq[t1] += count
-                total_cooccur += count
-
-        if total_cooccur == 0:
-            return graph
-
-        # For each term, keep top-K related terms by PMI
-        max_related = 15
-        for term, neighbors in cooccur.items():
-            if term_freq[term] < 2:  # skip very rare terms
-                continue
-            scored = []
-            for related, count in neighbors.items():
-                if term_freq[related] < 2:
-                    continue
-                # PMI with Laplace smoothing
-                p_xy = (count + 0.1) / total_cooccur
-                p_x = term_freq[term] / total_cooccur
-                p_y = term_freq[related] / total_cooccur
-                pmi = math.log(p_xy / (p_x * p_y + 1e-10))
-                if pmi > 0:  # only positive associations
-                    scored.append((related, round(pmi, 3)))
-
-            scored.sort(key=lambda x: -x[1])
-            if scored:
-                graph.related[term] = scored[:max_related]
+        # Compute PMI and populate graph
+        graph.related = cls._compute_pmi(cooccur, max_related=15)
 
         return graph
 

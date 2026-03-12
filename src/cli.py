@@ -1052,26 +1052,16 @@ def cmd_setup_claude(args):
     return None
 
 
-def cmd_check(args):
-    """CI-friendly impact check — exits non-zero when changes are risky."""
-    from .engine import IndexEngine
-
-    project_path = Path(args.path).resolve()
-    project_name = project_path.name
-
-    engine = IndexEngine(project_name, project_path)
-
-    # Detect changed files
-    changed_files = []
+def _detect_changed_files(args, engine, project_path):
+    """Detect changed files via git diff (if --base given) or index staleness."""
     if args.base:
-        # Use git diff against base ref
         try:
             result = subprocess.run(
                 ["git", "-C", str(project_path), "diff", "--name-only", f"{args.base}...HEAD"],
                 capture_output=True, text=True, timeout=30,
             )
             if result.returncode == 0:
-                changed_files = [f for f in result.stdout.strip().split("\n") if f]
+                return [f for f in result.stdout.strip().split("\n") if f]
             else:
                 print(f"git diff failed: {result.stderr.strip()}", file=sys.stderr)
                 sys.exit(1)
@@ -1081,31 +1071,35 @@ def cmd_check(args):
         except subprocess.TimeoutExpired:
             print("git diff timed out", file=sys.stderr)
             sys.exit(1)
-    else:
-        # Use index staleness — re-scan and detect via incremental
-        from .indexer.incremental import scan_directory_hashes
 
-        extensions = []
-        for scanner in engine.scanners:
-            extensions.extend(scanner.supported_extensions)
+    # Use index staleness — re-scan and detect via incremental
+    from .indexer.incremental import scan_directory_hashes
 
-        current_hashes = scan_directory_hashes(
-            project_path, extensions,
-            ignore_patterns=[
-                "node_modules", "__pycache__", ".git", "dist", "build",
-                ".venv", "venv", ".pytest_cache", ".flyto-index", ".flyto",
-            ],
-        )
-        changes = engine.incremental.detect_changes(current_hashes)
-        changed_files = changes.all_changed()
+    extensions = []
+    for scanner in engine.scanners:
+        extensions.extend(scanner.supported_extensions)
 
-    # For each changed file, find symbols and compute impact
+    current_hashes = scan_directory_hashes(
+        project_path, extensions,
+        ignore_patterns=[
+            "node_modules", "__pycache__", ".git", "dist", "build",
+            ".venv", "venv", ".pytest_cache", ".flyto-index", ".flyto",
+        ],
+    )
+    changes = engine.incremental.detect_changes(current_hashes)
+    return changes.all_changed()
+
+
+def _compute_symbol_impact(changed_files, engine):
+    """For each changed file, find symbols and compute impact chains.
+
+    Returns (symbol_details, total_affected, all_affected_files).
+    """
     total_affected = 0
     all_affected_files = set()
     symbol_details = []
 
     for rel_path in changed_files:
-        # Find symbols defined in this file
         for sym_id, sym in engine.index.symbols.items():
             if sym.path == rel_path:
                 chain = engine.index.get_impact_chain(sym_id, max_depth=3)
@@ -1127,6 +1121,48 @@ def cmd_check(args):
                     })
                     total_affected += len(affected_ids)
                     all_affected_files.update(affected_paths)
+
+    return symbol_details, total_affected, all_affected_files
+
+
+def _format_check_output(output, symbol_details, args):
+    """Print check results as JSON or human-readable text."""
+    if hasattr(args, "as_json") and args.as_json:
+        print(json.dumps(output, indent=2, ensure_ascii=False))
+        return
+
+    print(f"Risk: {output['risk']}")
+    print(f"Changed files: {output['changed_files']}")
+    print(f"Total affected symbols: {output['total_affected']}")
+    print(f"Affected files: {output['affected_files']}")
+    print(f"Threshold: {output['threshold']}")
+    print()
+
+    if symbol_details:
+        for detail in symbol_details[:10]:
+            print(f"  {detail['name']} ({detail['path']})")
+            print(f"    → {detail['affected_count']} affected symbols in {len(detail['affected_files'])} files")
+        if len(symbol_details) > 10:
+            print(f"  ... and {len(symbol_details) - 10} more symbols")
+        print()
+
+    if output["pass"]:
+        print(f"PASS: risk {output['risk']} < threshold {output['threshold']}")
+    else:
+        print(f"FAIL: risk {output['risk']} >= threshold {output['threshold']}")
+
+
+def cmd_check(args):
+    """CI-friendly impact check — exits non-zero when changes are risky."""
+    from .engine import IndexEngine
+
+    project_path = Path(args.path).resolve()
+    project_name = project_path.name
+
+    engine = IndexEngine(project_name, project_path)
+
+    changed_files = _detect_changed_files(args, engine, project_path)
+    symbol_details, total_affected, all_affected_files = _compute_symbol_impact(changed_files, engine)
 
     # Compute aggregate risk
     if total_affected >= 20:
@@ -1151,28 +1187,7 @@ def cmd_check(args):
         "symbols": symbol_details,
     }
 
-    if hasattr(args, "as_json") and args.as_json:
-        print(json.dumps(output, indent=2, ensure_ascii=False))
-    else:
-        print(f"Risk: {risk}")
-        print(f"Changed files: {len(changed_files)}")
-        print(f"Total affected symbols: {total_affected}")
-        print(f"Affected files: {len(all_affected_files)}")
-        print(f"Threshold: {args.threshold.upper()}")
-        print()
-
-        if symbol_details:
-            for detail in symbol_details[:10]:
-                print(f"  {detail['name']} ({detail['path']})")
-                print(f"    → {detail['affected_count']} affected symbols in {len(detail['affected_files'])} files")
-            if len(symbol_details) > 10:
-                print(f"  ... and {len(symbol_details) - 10} more symbols")
-            print()
-
-        if should_fail:
-            print(f"FAIL: risk {risk} >= threshold {args.threshold.upper()}")
-        else:
-            print(f"PASS: risk {risk} < threshold {args.threshold.upper()}")
+    _format_check_output(output, symbol_details, args)
 
     if should_fail:
         sys.exit(1)

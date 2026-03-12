@@ -239,6 +239,41 @@ def _write_generation(index_dir: Path):
         pass
 
 
+def _merge_index_into(merged: dict, idx: dict):
+    """Merge a single index dict into the base merged dict in-place.
+
+    Handles symbols, dependencies, reverse_index, files, and
+    routes/api_endpoints merging.
+    """
+    # Merge symbols
+    for k, v in idx.get("symbols", {}).items():
+        merged.setdefault("symbols", {})[k] = v
+    # Merge dependencies
+    for k, v in idx.get("dependencies", {}).items():
+        merged.setdefault("dependencies", {})[k] = v
+    # Merge reverse_index
+    for k, v in idx.get("reverse_index", {}).items():
+        existing = merged.setdefault("reverse_index", {}).get(k, [])
+        if isinstance(v, list):
+            for item in v:
+                if item not in existing:
+                    existing.append(item)
+            merged["reverse_index"][k] = existing
+    # Merge files
+    for k, v in idx.get("files", {}).items():
+        merged.setdefault("files", {})[k] = v
+    # Merge routes/api_endpoints (may be list or dict depending on index version)
+    for key in ("routes", "api_endpoints"):
+        incoming = idx.get(key, [])
+        existing = merged.get(key)
+        if isinstance(incoming, list) and isinstance(existing, list):
+            existing.extend(incoming)
+        elif isinstance(incoming, dict):
+            merged.setdefault(key, {}).update(incoming)
+        elif isinstance(incoming, list) and existing is None:
+            merged[key] = list(incoming)
+
+
 def load_index() -> dict:
     """Load and merge all discovered indexes, with caching.
 
@@ -283,33 +318,7 @@ def load_index() -> dict:
             proj = idx.get("project", "")
             if proj and proj not in projects:
                 projects.append(proj)
-            # Merge symbols
-            for k, v in idx.get("symbols", {}).items():
-                merged.setdefault("symbols", {})[k] = v
-            # Merge dependencies
-            for k, v in idx.get("dependencies", {}).items():
-                merged.setdefault("dependencies", {})[k] = v
-            # Merge reverse_index
-            for k, v in idx.get("reverse_index", {}).items():
-                existing = merged.setdefault("reverse_index", {}).get(k, [])
-                if isinstance(v, list):
-                    for item in v:
-                        if item not in existing:
-                            existing.append(item)
-                    merged["reverse_index"][k] = existing
-            # Merge files
-            for k, v in idx.get("files", {}).items():
-                merged.setdefault("files", {})[k] = v
-            # Merge routes/api_endpoints (may be list or dict depending on index version)
-            for key in ("routes", "api_endpoints"):
-                incoming = idx.get(key, [])
-                existing = merged.get(key)
-                if isinstance(incoming, list) and isinstance(existing, list):
-                    existing.extend(incoming)
-                elif isinstance(incoming, dict):
-                    merged.setdefault(key, {}).update(incoming)
-                elif isinstance(incoming, list) and existing is None:
-                    merged[key] = list(incoming)
+            _merge_index_into(merged, idx)
 
         merged["projects"] = projects
         _index_cache = merged

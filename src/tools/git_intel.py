@@ -60,6 +60,25 @@ def _get_project_root(project: Optional[str] = None) -> Tuple[str, str]:
 
     root = project_roots.get(proj_name)
     if not root or not os.path.isdir(root):
+        # Fallback: try to find project root from index directory
+        # The index is usually at <project_root>/.flyto-index/
+        try:
+            from ..index_store import _discover_index_dirs
+        except ImportError:
+            from index_store import _discover_index_dirs
+
+        for idx_dir in _discover_index_dirs():
+            candidate = idx_dir.parent
+            if candidate.is_dir():
+                git_root = _find_git_root(str(candidate))
+                if git_root:
+                    return proj_name, str(candidate)
+
+        # Last resort: try CWD
+        cwd_git = _find_git_root(os.getcwd())
+        if cwd_git:
+            return proj_name, cwd_git
+
         raise ValueError(f"Project root not found on disk: {proj_name}")
     return proj_name, root
 
@@ -225,9 +244,9 @@ def git_hotspots(project: Optional[str] = None, max_results: int = 20) -> dict:
     if proj_prefix == ".":
         proj_prefix = ""
 
-    # Count commits per file and track recent authors
+    # Count commits per file and track per-author commit counts
     file_commits = {}   # type: Dict[str, int]
-    file_authors = {}   # type: Dict[str, set]
+    file_authors = {}   # type: Dict[str, Dict[str, int]]
 
     for entry in entries:
         for f in entry["files"]:
@@ -239,8 +258,9 @@ def git_hotspots(project: Optional[str] = None, max_results: int = 20) -> dict:
                 continue
             file_commits[rel] = file_commits.get(rel, 0) + 1
             if rel not in file_authors:
-                file_authors[rel] = set()
-            file_authors[rel].add(entry["author"])
+                file_authors[rel] = {}
+            author = entry["author"]
+            file_authors[rel][author] = file_authors[rel].get(author, 0) + 1
 
     # Cross-reference with complexity
     complexity_lookup = {}  # type: Dict[str, float]
@@ -261,13 +281,15 @@ def git_hotspots(project: Optional[str] = None, max_results: int = 20) -> dict:
     for path, count in file_commits.items():
         cx = complexity_lookup.get(path, 0)
         hotspot_score = count * (1 + cx / 10.0)
+        author_counts = file_authors.get(path, {})
         hotspots.append({
             "path": path,
             "project": proj_name,
             "commit_count": count,
             "complexity_score": cx,
             "hotspot_score": round(hotspot_score, 2),
-            "recent_authors": sorted(file_authors.get(path, set())),
+            "recent_authors": sorted(author_counts.keys()),
+            "primary_author": max(author_counts, key=author_counts.get) if author_counts else "",
         })
 
     hotspots.sort(key=lambda h: h["hotspot_score"], reverse=True)

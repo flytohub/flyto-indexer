@@ -138,6 +138,93 @@ RESOURCE_TEMPLATES = [
 ]
 
 
+# =============================================================================
+# MCP Prompts
+# =============================================================================
+
+PROMPTS = [
+    {
+        "name": "code-review",
+        "description": "Review code changes for quality, security, and correctness",
+        "arguments": [
+            {"name": "focus", "description": "Focus area: security, performance, correctness, or all", "required": False},
+        ],
+    },
+    {
+        "name": "refactor-plan",
+        "description": "Plan a refactoring task with risk assessment",
+        "arguments": [
+            {"name": "target", "description": "File or symbol to refactor", "required": True},
+            {"name": "goal", "description": "What the refactoring should achieve", "required": False},
+        ],
+    },
+    {
+        "name": "impact-check",
+        "description": "Check the impact of uncommitted changes before committing",
+        "arguments": [],
+    },
+]
+
+
+def _get_prompt(name: str, arguments: dict = None) -> dict:
+    """Generate a prompt template with pre-filled tool calls."""
+    arguments = arguments or {}
+
+    if name == "code-review":
+        focus = arguments.get("focus", "all")
+        return {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "type": "text",
+                        "text": f"Review my uncommitted changes. Focus: {focus}.\n\n"
+                               "Steps:\n"
+                               "1. Run impact(mode='unstaged') to see what changed\n"
+                               "2. Run audit(focus='security') if focus is security\n"
+                               "3. Summarize findings with risk level and actionable suggestions",
+                    },
+                },
+            ],
+        }
+    elif name == "refactor-plan":
+        target = arguments.get("target", "")
+        goal = arguments.get("goal", "reduce complexity")
+        return {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "type": "text",
+                        "text": f"Plan a refactoring for: {target}\nGoal: {goal}\n\n"
+                               "Steps:\n"
+                               f"1. Run task(action='plan', targets=['{target}'], intent='refactor')\n"
+                               "2. Follow the execution plan\n"
+                               "3. After changes, run task(action='validate')",
+                    },
+                },
+            ],
+        }
+    elif name == "impact-check":
+        return {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "type": "text",
+                        "text": "Check the impact of my uncommitted changes.\n\n"
+                               "Steps:\n"
+                               "1. Run impact(mode='unstaged') to analyze changes\n"
+                               "2. For any high-impact changes, run impact(target='symbol_name') for details\n"
+                               "3. Summarize: what's safe, what needs attention, suggested test commands",
+                    },
+                },
+            ],
+        }
+    else:
+        return {"error": f"Unknown prompt: {name}"}
+
+
 def _read_resource(uri: str) -> dict:
     """Read an MCP resource by URI."""
     try:
@@ -202,6 +289,7 @@ def handle_request(request: dict):
             "capabilities": {
                 "tools": {"listChanged": False},
                 "resources": {"listChanged": False},
+                "prompts": {"listChanged": False},
                 "logging": {},
             },
             "serverInfo": {
@@ -254,6 +342,18 @@ def handle_request(request: dict):
         result = _read_resource(uri)
         if "error" in result:
             send_error(id, -32002, result["error"])
+        else:
+            send_response(id, result)
+
+    elif method == "prompts/list":
+        send_response(id, {"prompts": PROMPTS})
+
+    elif method == "prompts/get":
+        prompt_name = params.get("name", "")
+        prompt_args = params.get("arguments", {})
+        result = _get_prompt(prompt_name, prompt_args)
+        if "error" in result:
+            send_error(id, -32602, result["error"])
         else:
             send_response(id, result)
 

@@ -117,6 +117,53 @@ def _enrich(label: str, func, *args, **kwargs):
         return None
 
 
+def _truncate_list(data: dict, key: str, max_items: int = 20):
+    """Truncate a list field in-place, adding has_more flag."""
+    items = data.get(key)
+    if isinstance(items, list) and len(items) > max_items:
+        data[key] = items[:max_items]
+        data[f"{key}_total"] = len(items)
+        data[f"{key}_has_more"] = True
+
+
+def _truncate_structure_lists(result: dict):
+    """Truncate apis and categories in structure results for LLM consumption."""
+    # APIs: keep top 20 by call_count
+    apis_data = result.get("apis")
+    if isinstance(apis_data, dict):
+        for sub_key in ("endpoints", "apis", "results"):
+            items = apis_data.get(sub_key)
+            if isinstance(items, list) and len(items) > 20:
+                sorted_items = sorted(items, key=lambda x: x.get("call_count", 0), reverse=True)
+                apis_data[sub_key] = sorted_items[:20]
+                apis_data[f"{sub_key}_total"] = len(items)
+                apis_data[f"{sub_key}_has_more"] = True
+    elif isinstance(apis_data, list) and len(apis_data) > 20:
+        sorted_items = sorted(apis_data, key=lambda x: x.get("call_count", 0) if isinstance(x, dict) else 0, reverse=True)
+        result["apis"] = sorted_items[:20]
+        result["apis_total"] = len(apis_data)
+        result["apis_has_more"] = True
+
+    # Categories: convert {cat: [file_list]} to {cat: count} (summary only)
+    cats = result.get("categories")
+    if isinstance(cats, dict):
+        # Check if values are lists (full file lists) vs already summarized
+        cat_data = cats.get("categories", cats)
+        if isinstance(cat_data, dict):
+            summarized = {}
+            for cat_name, file_list in cat_data.items():
+                if isinstance(file_list, list):
+                    summarized[cat_name] = len(file_list)
+                else:
+                    summarized[cat_name] = file_list  # already a count or other value
+            if cats.get("categories") is not None:
+                cats["categories"] = summarized
+                cats["categories_summarized"] = True
+            else:
+                result["categories"] = summarized
+                result["categories_summarized"] = True
+
+
 # ---------------------------------------------------------------------------
 # 1. search — unified code search with auto-enrichment
 # ---------------------------------------------------------------------------
@@ -218,6 +265,10 @@ def smart_impact(target: str = None, mode: str = None, change_type: str = "modif
                     if isinstance(test, dict) and not test.get("error"):
                         change["test_file"] = test.get("test_file") or test.get("path")
 
+        # Truncate changes list for LLM consumption
+        if isinstance(diff_result, dict):
+            _truncate_list(diff_result, "changes", max_items=15)
+
         return {"mode": "diff", "diff_mode": mode, "result": diff_result}
 
     # --- Symbol mode: analyze specific target ---
@@ -270,6 +321,15 @@ def smart_impact(target: str = None, mode: str = None, change_type: str = "modif
         test = _enrich("test_file", info.find_test_file, symbol_path)
         if isinstance(test, dict) and not test.get("error"):
             result["test_file"] = test.get("test_file") or test.get("path")
+
+    # --- Smart truncation for LLM consumption ---
+    if isinstance(result.get("references"), dict):
+        _truncate_list(result["references"], "references", max_items=20)
+    if isinstance(result.get("impact"), dict):
+        _truncate_list(result["impact"], "affected_files", max_items=20)
+        _truncate_list(result["impact"], "affected_symbols", max_items=20)
+    if isinstance(result.get("cross_project"), dict):
+        _truncate_list(result["cross_project"], "impacts", max_items=10)
 
     result["target"] = target
     result["change_type"] = change_type
@@ -350,6 +410,17 @@ def smart_audit(project: str = None, focus: str = None) -> dict:
         if r is not None:
             result["refactoring_suggestions"] = r
 
+    # --- Smart truncation: cap all list fields for LLM consumption ---
+    for key in ("security_findings", "complex_functions", "dead_code",
+                "coverage_gaps", "refactoring_suggestions"):
+        val = result.get(key)
+        if isinstance(val, dict):
+            # These enrichments often return {results: [...], ...}
+            for sub_key in list(val.keys()):
+                _truncate_list(val, sub_key, max_items=10)
+        elif isinstance(val, list):
+            _truncate_list(result, key, max_items=10)
+
     return result
 
 
@@ -427,6 +498,8 @@ def smart_structure(project: str = None, focus: str = None,
         drift = _enrich("contract_drift", tc.contract_drift, project=project)
         if isinstance(drift, dict) and drift.get("drifts"):
             result["contract_drift"] = drift
+
+        _truncate_structure_lists(result)
         return result
 
     # --- Dependencies focus ---
@@ -475,4 +548,5 @@ def smart_structure(project: str = None, focus: str = None,
         if r is not None:
             result["index_status"] = r
 
+    _truncate_structure_lists(result)
     return result

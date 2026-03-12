@@ -3,8 +3,11 @@
 import json
 import os
 import re
+from collections import namedtuple
 from datetime import datetime
 from pathlib import Path
+
+ReferenceContext = namedtuple('ReferenceContext', ['names', 'files', 'classes'])
 
 try:
     from ..index_store import (
@@ -56,11 +59,10 @@ def _build_reference_sets(dependencies):
                         if part[0].isupper():
                             referenced_classes.add(part)
 
-    return referenced_names, imported_files, referenced_classes
+    return ReferenceContext(names=referenced_names, files=imported_files, classes=referenced_classes)
 
 
-def _is_potentially_dead(sym_id, sym, referenced_names, imported_files,
-                         referenced_classes, dependencies, symbols,
+def _is_potentially_dead(sym_id, sym, ref_ctx, dependencies, symbols,
                          _same_file_content_cache):
     """Return True if the symbol should be considered dead code."""
     sym_type = sym.get("type", "")
@@ -97,21 +99,21 @@ def _is_potentially_dead(sym_id, sym, referenced_names, imported_files,
         return False
     if sym_name.startswith("_") and not sym_name.startswith("__"):
         return False
-    if sym_name in referenced_names:
+    if sym_name in ref_ctx.names:
         return False
 
     if sym_type == "method" and "." in sym_name:
         method_only = sym_name.split(".")[-1]
-        if method_only in referenced_names:
+        if method_only in ref_ctx.names:
             return False
         class_name = sym_name.split(".")[0]
-        if class_name in referenced_classes or class_name in referenced_names:
+        if class_name in ref_ctx.classes or class_name in ref_ctx.names:
             return False
-    if sym_type == "class" and sym_name in referenced_classes:
+    if sym_type == "class" and sym_name in ref_ctx.classes:
         return False
 
     file_basename = sym_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-    if file_basename in imported_files or sym_path in imported_files:
+    if file_basename in ref_ctx.files or sym_path in ref_ctx.files:
         return False
 
     if sym_type == "composable":
@@ -173,7 +175,7 @@ def find_dead_code(project=None, symbol_type=None, min_lines=5):
     reverse_index = index.get("reverse_index", {})
     dependencies = index.get("dependencies", {})
 
-    referenced_names, imported_files, referenced_classes = _build_reference_sets(dependencies)
+    ref_ctx = _build_reference_sets(dependencies)
 
     dead_code = []
     _same_file_content_cache = {}
@@ -198,8 +200,7 @@ def find_dead_code(project=None, symbol_type=None, min_lines=5):
         if ref_count > 0 or len(callers) > 0:
             continue
 
-        if not _is_potentially_dead(sym_id, sym, referenced_names, imported_files,
-                                    referenced_classes, dependencies, symbols,
+        if not _is_potentially_dead(sym_id, sym, ref_ctx, dependencies, symbols,
                                     _same_file_content_cache):
             continue
 
