@@ -9,26 +9,29 @@ If `.flyto-index/` does not exist in the project root, run this before using any
 flyto-index scan .
 ```
 
-### ALWAYS use flyto-indexer tools when:
-- **Auditing or reviewing** a project → `code_health_score`, `security_scan`, `find_dead_code`, `find_complex_functions`
-- **Understanding code** → `search_code`, `list_projects`, `list_apis`, `dependency_graph`
-- **Before modifying code** → `analyze_task` (call FIRST), then follow the `execution_plan`
-- **Checking impact** → `impact_analysis`, `find_references`, `edit_impact_preview`, `cross_project_impact`
-- **Batch impact** → `batch_impact_analysis` for multiple symbols at once
-- **During modifications** → `task_gate_check` at each phase gate before proceeding
-- **After modifications** → `validate_changes` to run ruff + pytest
+### 5 Smart Tools (v2.3.0+)
+
+flyto-indexer exposes 5 consolidated tools. Each one auto-enriches results with related data — no need to pick between dozens of granular tools.
+
+| Tool | When to use | Auto-enrichment |
+|------|------------|-----------------|
+| `search` | Find code by keyword or natural language | Callers (top 5), file siblings, concept expansion |
+| `impact` | What breaks if I change this? | Cross-project impact, test files, edit preview |
+| `audit` | Code quality review | Auto-expands weak dimensions (security, complexity, dead code, coverage), git hotspots |
+| `task` | Plan/gate/validate workflow | Untested changes on validation failure |
+| `structure` | Project overview, APIs, dependencies | APIs, categories, index status, contract drift |
 
 ### Workflow for code changes
-1. `analyze_task` — get risk dimensions, constraints, and execution plan
+1. `task(action='plan')` — get risk dimensions, constraints, and execution plan
 2. Follow `execution_plan` steps in order — each step has tool name and pre-filled args
-3. `task_gate_check` at gate steps — server-side enforcement blocks skipping gates
+3. `task(action='gate')` at gate steps — server-side enforcement blocks skipping gates
 4. Respect `constraints.max_files_per_step`
-5. `validate_changes` — run linter + tests after making changes
+5. `task(action='validate')` — run linter + tests after making changes
 
-### Key features (v1.7+)
+### Key features
+- **Smart tools**: 5 intent-based entry points replace 45+ granular tools. Association-based triggering auto-enriches results server-side.
+- **Learned ConceptGraph**: Semantic search learns term relationships from file co-location, import graph, and shared callers (PMI scoring). No manual keyword maps.
 - **Execution Guard**: Server-side enforcement prevents skipping execution plan gates. If blocked, the response includes a `recovery_plan` with exact next steps.
-- **validate_changes**: MCP tool that runs `ruff check` + `pytest` on a project. Use after code changes.
-- **batch_impact_analysis**: Analyze multiple symbols in one call (index loaded once, results deduplicated).
+- **Atomic writes**: Index files written via temp+rename to prevent corruption on crash.
 - **Smart auto-reindex**: Detects file changes every 10s (fast mtime check) and full scan every 5min. Only reindexes affected projects.
-- **V2 task contracts**: Multi-target execution plans, mixed-intent task splitting (compound contracts).
 <!-- flyto-indexer end -->
