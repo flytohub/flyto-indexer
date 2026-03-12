@@ -464,10 +464,11 @@ MCP_TOOLS: list = [
         "title": "Semantic Search",
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
-            "Natural language → code search using TF-IDF cosine similarity with concept expansion. "
-            "Unlike search_code (keyword/BM25), this understands that 'handle payment failure' should match "
-            "process_refund(), charge_customer(), etc. Expands queries via a concept taxonomy "
-            "(30+ domains: auth, payment, database, API, error handling, UI, state, async, ...). "
+            "Natural language → code search using TF-IDF cosine similarity with learned concept expansion. "
+            "Unlike search_code (keyword/BM25), this learns concept relationships from the codebase itself: "
+            "file co-location, import graph, and shared callers. No manual keyword maps. "
+            "Example: 'handle payment failure' finds process_refund() because they co-occur in the same files "
+            "and share callers — not because someone manually mapped 'payment' to 'refund'. "
             "Best for: exploratory queries, understanding unfamiliar codebases, finding code by intent. "
             "Use search_code for exact symbol name lookups; use this for conceptual/natural language queries."
         ),

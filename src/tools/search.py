@@ -534,15 +534,10 @@ def semantic_search(
             by_project[proj] = []
         by_project[proj].append(r)
 
-    # Show expanded concepts for transparency
-    try:
-        try:
-            from ..semantic import expand_concepts
-        except ImportError:
-            from semantic import expand_concepts
-        expanded = expand_concepts(query)
-    except Exception:
-        expanded = []
+    # Show learned concept expansion for transparency
+    expanded = []
+    if semantic and semantic.concept_graph.related:
+        expanded = semantic.concept_graph.expand(query, max_expansion=15)
 
     return {
         "query": query,

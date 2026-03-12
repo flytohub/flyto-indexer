@@ -205,7 +205,7 @@ def handle_request(request: dict):
             "serverInfo": {
                 "name": "flyto-indexer",
                 "title": "Flyto Code Indexer",
-                "version": "2.2.0",
+                "version": "2.2.1",
                 "description": "Code analysis MCP server — impact analysis, dependency tracking, dead code detection, security scanning, and code health scoring across any project.",
                 "websiteUrl": "https://github.com/flytohub/flyto-indexer",
             },

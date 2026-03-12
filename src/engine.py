@@ -1133,9 +1133,15 @@ class IndexEngine:
         bm25.build(documents)
         bm25.save(self.index_dir / "bm25.json")
 
-        # Build semantic (TF-IDF) index alongside BM25
+        # Build semantic (TF-IDF) index with code-derived concept graph
+        index_data = {
+            "symbols": {sid: s.to_dict() for sid, s in self.index.symbols.items()},
+            "files": {k: v.to_dict() for k, v in self.index.files.items()},
+            "dependencies": {k: v.to_dict() for k, v in self.index.dependencies.items()},
+            "reverse_index": self.index.reverse_index,
+        }
         semantic = SemanticIndex()
-        semantic.build(documents)
+        semantic.build(documents, index_data=index_data)
         semantic.save(self.index_dir / "semantic.json")
 
     def _deserialize_index(self, data: dict) -> ProjectIndex:
