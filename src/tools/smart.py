@@ -108,6 +108,15 @@ def _type_mod():
     return m
 
 
+def _enrich(label: str, func, *args, **kwargs):
+    """Call an enrichment function, log and swallow errors."""
+    try:
+        return func(*args, **kwargs)
+    except Exception as e:
+        logger.debug("enrich[%s] failed: %s", label, e)
+        return None
+
+
 # ---------------------------------------------------------------------------
 # 1. search — unified code search with auto-enrichment
 # ---------------------------------------------------------------------------
@@ -155,29 +164,23 @@ def smart_search(query: str, project: str = None, include_content: bool = False)
             continue
 
         # Auto-attach callers (top 5)
-        try:
-            ref_result = refs.find_references(sid)
-            if isinstance(ref_result, dict) and ref_result.get("references"):
-                r["callers"] = [
-                    {"caller": c.get("caller_id", ""), "path": c.get("path", ""), "line": c.get("line")}
-                    for c in ref_result["references"][:5]
-                ]
-                r["caller_count"] = ref_result.get("references_count", len(ref_result["references"]))
-        except Exception:
-            pass
+        ref_result = _enrich("callers", refs.find_references, sid)
+        if isinstance(ref_result, dict) and ref_result.get("references"):
+            r["callers"] = [
+                {"caller": c.get("caller_id", ""), "path": c.get("path", ""), "line": c.get("line")}
+                for c in ref_result["references"][:5]
+            ]
+            r["caller_count"] = ref_result.get("references_count", len(ref_result["references"]))
 
         # Auto-attach file siblings (other symbols in same file)
         path = r.get("path", "")
         if path:
-            try:
-                siblings = info.get_file_symbols(path)
-                if isinstance(siblings, dict) and siblings.get("symbols"):
-                    r["file_siblings"] = [
-                        s.get("name", "") for s in siblings["symbols"]
-                        if s.get("name") != r.get("name")
-                    ][:10]
-            except Exception:
-                pass
+            siblings = _enrich("siblings", info.get_file_symbols, path)
+            if isinstance(siblings, dict) and siblings.get("symbols"):
+                r["file_siblings"] = [
+                    s.get("name", "") for s in siblings["symbols"]
+                    if s.get("name") != r.get("name")
+                ][:10]
 
     # Show concept expansion if available
     concept_expansion = sem_raw.get("concept_expansion", []) if isinstance(sem_raw, dict) else []
@@ -211,12 +214,9 @@ def smart_impact(target: str = None, mode: str = None, change_type: str = "modif
             for change in diff_result.get("changes", [])[:10]:
                 path = change.get("file", "")
                 if path:
-                    try:
-                        test = info.find_test_file(path)
-                        if isinstance(test, dict) and not test.get("error"):
-                            change["test_file"] = test.get("test_file") or test.get("path")
-                    except Exception:
-                        pass
+                    test = _enrich("diff_test_file", info.find_test_file, path)
+                    if isinstance(test, dict) and not test.get("error"):
+                        change["test_file"] = test.get("test_file") or test.get("path")
 
         return {"mode": "diff", "diff_mode": mode, "result": diff_result}
 
@@ -232,6 +232,7 @@ def smart_impact(target: str = None, mode: str = None, change_type: str = "modif
         if isinstance(ref_result, dict):
             result["references"] = ref_result
     except Exception as e:
+        logger.debug("find_references failed for %s: %s", target, e)
         result["references_error"] = str(e)
 
     # Impact analysis (blast radius)
@@ -240,49 +241,35 @@ def smart_impact(target: str = None, mode: str = None, change_type: str = "modif
         if isinstance(impact_result, dict):
             result["impact"] = impact_result
     except Exception as e:
+        logger.debug("impact_analysis failed for %s: %s", target, e)
         result["impact_error"] = str(e)
 
     # Edit impact preview (exact lines affected)
     if change_type != "modify":
-        try:
-            preview = refs.edit_impact_preview(symbol_id=target, change_type=change_type)
-            if isinstance(preview, dict):
-                result["edit_preview"] = preview
-        except Exception:
-            pass
+        preview = _enrich("edit_preview", refs.edit_impact_preview, symbol_id=target, change_type=change_type)
+        if isinstance(preview, dict):
+            result["edit_preview"] = preview
 
     # --- Auto: cross-project impact if multiple projects ---
-    try:
-        projects = info.list_projects()
-        if isinstance(projects, dict) and projects.get("count", 0) > 1:
-            # Extract symbol name from symbol_id
-            sym_name = target.split(":")[-1] if ":" in target else target
-            source_proj = target.split(":")[0] if ":" in target else None
-            try:
-                cross = refs.cross_project_impact(
-                    symbol_name=sym_name,
-                    source_project=source_proj,
-                )
-                if isinstance(cross, dict) and cross.get("impacts"):
-                    result["cross_project"] = cross
-            except Exception:
-                pass
-    except Exception:
-        pass
+    projects = _enrich("list_projects", info.list_projects)
+    if isinstance(projects, dict) and projects.get("count", 0) > 1:
+        sym_name = target.split(":")[-1] if ":" in target else target
+        source_proj = target.split(":")[0] if ":" in target else None
+        cross = _enrich("cross_project", refs.cross_project_impact,
+                        symbol_name=sym_name, source_project=source_proj)
+        if isinstance(cross, dict) and cross.get("impacts"):
+            result["cross_project"] = cross
 
     # --- Auto: find test file ---
-    try:
-        symbol_path = ""
-        if isinstance(result.get("references"), dict):
-            symbol_path = result["references"].get("target_file", "")
-        if not symbol_path and isinstance(result.get("impact"), dict):
-            symbol_path = result["impact"].get("target_file", "")
-        if symbol_path:
-            test = info.find_test_file(symbol_path)
-            if isinstance(test, dict) and not test.get("error"):
-                result["test_file"] = test.get("test_file") or test.get("path")
-    except Exception:
-        pass
+    symbol_path = ""
+    if isinstance(result.get("references"), dict):
+        symbol_path = result["references"].get("target_file", "")
+    if not symbol_path and isinstance(result.get("impact"), dict):
+        symbol_path = result["impact"].get("target_file", "")
+    if symbol_path:
+        test = _enrich("test_file", info.find_test_file, symbol_path)
+        if isinstance(test, dict) and not test.get("error"):
+            result["test_file"] = test.get("test_file") or test.get("path")
 
     result["target"] = target
     result["change_type"] = change_type
@@ -306,6 +293,7 @@ def smart_audit(project: str = None, focus: str = None) -> dict:
         if isinstance(health, dict):
             result["health"] = health
     except Exception as e:
+        logger.debug("code_health_score failed: %s", e)
         result["health_error"] = str(e)
 
     score_data = result.get("health", {})
@@ -323,65 +311,44 @@ def smart_audit(project: str = None, focus: str = None) -> dict:
 
     # --- Security ---
     if "security" in should_expand or focus == "security":
-        try:
-            result["security_findings"] = quality.security_scan(
-                project=project, max_results=10,
-            )
-        except Exception:
-            pass
+        r = _enrich("security_scan", quality.security_scan, project=project, max_results=10)
+        if r is not None:
+            result["security_findings"] = r
 
     # --- Complexity ---
     if "complexity" in should_expand or focus == "complexity":
-        try:
-            result["complex_functions"] = quality.find_complex_functions(
-                project=project, max_results=10,
-            )
-        except Exception:
-            pass
-        try:
-            result["duplicates"] = quality.find_duplicates(
-                project=project, max_results=5,
-            )
-        except Exception:
-            pass
+        r = _enrich("complex_functions", quality.find_complex_functions, project=project, max_results=10)
+        if r is not None:
+            result["complex_functions"] = r
+        r = _enrich("duplicates", quality.find_duplicates, project=project, max_results=5)
+        if r is not None:
+            result["duplicates"] = r
 
     # --- Dead code ---
     if "dead_code" in should_expand or focus == "dead_code":
-        try:
-            maint = _maint_mod()
-            result["dead_code"] = maint.find_dead_code(
-                project=project, min_lines=5,
-            )
-        except Exception:
-            pass
+        maint = _maint_mod()
+        r = _enrich("dead_code", maint.find_dead_code, project=project, min_lines=5)
+        if r is not None:
+            result["dead_code"] = r
 
     # --- Coverage ---
     if "coverage" in should_expand or focus == "coverage":
-        try:
-            cov = _coverage_mod()
-            result["coverage_gaps"] = cov.coverage_gaps(
-                project=project, max_results=10,
-            )
-        except Exception:
-            pass
+        cov = _coverage_mod()
+        r = _enrich("coverage_gaps", cov.coverage_gaps, project=project, max_results=10)
+        if r is not None:
+            result["coverage_gaps"] = r
 
     # --- Always include git hotspots (high-churn + complex = highest risk) ---
-    try:
-        result["git_hotspots"] = git.git_hotspots(
-            project=project, max_results=5,
-        )
-    except Exception:
-        pass
+    r = _enrich("git_hotspots", git.git_hotspots, project=project, max_results=5)
+    if r is not None:
+        result["git_hotspots"] = r
 
     # Suggest refactoring if overall score < 80
     overall = score_data.get("score", 100)
     if overall < 80 or focus == "all":
-        try:
-            result["refactoring_suggestions"] = quality.suggest_refactoring(
-                project=project, max_results=10,
-            )
-        except Exception:
-            pass
+        r = _enrich("suggest_refactoring", quality.suggest_refactoring, project=project, max_results=10)
+        if r is not None:
+            result["refactoring_suggestions"] = r
 
     return result
 
@@ -423,13 +390,10 @@ def smart_task(action: str, description: str = "", targets: list = None,
 
         # Auto-attach: if tests fail, show untested changes
         if isinstance(result, dict) and not result.get("tests_passed", True):
-            try:
-                cov = _coverage_mod()
-                result["untested_changes"] = cov.untested_changes(
-                    project=project, mode="unstaged",
-                )
-            except Exception:
-                pass
+            cov = _coverage_mod()
+            r = _enrich("untested_changes", cov.untested_changes, project=project, mode="unstaged")
+            if r is not None:
+                result["untested_changes"] = r
 
         return result
 
@@ -451,23 +415,18 @@ def smart_structure(project: str = None, focus: str = None,
 
     # --- APIs focus ---
     if focus == "apis":
-        try:
-            result["apis"] = info.list_apis()
-        except Exception:
-            pass
-        try:
-            result["categories"] = info.list_categories()
-        except Exception:
-            pass
+        r = _enrich("list_apis", info.list_apis)
+        if r is not None:
+            result["apis"] = r
+        r = _enrich("list_categories", info.list_categories)
+        if r is not None:
+            result["categories"] = r
 
         # Auto: check for contract drift across projects
-        try:
-            tc = _type_mod()
-            drift = tc.contract_drift(project=project)
-            if isinstance(drift, dict) and drift.get("drifts"):
-                result["contract_drift"] = drift
-        except Exception:
-            pass
+        tc = _type_mod()
+        drift = _enrich("contract_drift", tc.contract_drift, project=project)
+        if isinstance(drift, dict) and drift.get("drifts"):
+            result["contract_drift"] = drift
         return result
 
     # --- Dependencies focus ---
@@ -478,46 +437,42 @@ def smart_structure(project: str = None, focus: str = None,
                 project=project, direction="both", max_depth=2,
             )
         except Exception as e:
+            logger.debug("dependency_graph failed: %s", e)
             result["graph_error"] = str(e)
         return result
 
     # --- Types focus ---
     if focus == "types":
+        tc = _type_mod()
         if symbol_id:
-            try:
-                tc = _type_mod()
-                result["schema"] = tc.extract_type_schema(symbol_id=symbol_id)
-            except Exception:
-                pass
-        try:
-            tc = _type_mod()
-            result["contract_drift"] = tc.contract_drift(project=project)
-        except Exception:
-            pass
+            r = _enrich("extract_type_schema", tc.extract_type_schema, symbol_id=symbol_id)
+            if r is not None:
+                result["schema"] = r
+        r = _enrich("contract_drift", tc.contract_drift, project=project)
+        if r is not None:
+            result["contract_drift"] = r
         return result
 
     # --- Default: project overview ---
     try:
         result["projects"] = info.list_projects()
     except Exception as e:
+        logger.debug("list_projects failed: %s", e)
         result["projects_error"] = str(e)
 
     # If specific project, add more detail
     if project:
-        try:
-            result["apis"] = info.list_apis()
-        except Exception:
-            pass
-        try:
-            result["categories"] = info.list_categories()
-        except Exception:
-            pass
+        r = _enrich("list_apis", info.list_apis)
+        if r is not None:
+            result["apis"] = r
+        r = _enrich("list_categories", info.list_categories)
+        if r is not None:
+            result["categories"] = r
 
         # Auto: check index freshness
-        try:
-            maint = _maint_mod()
-            result["index_status"] = maint.check_index_status()
-        except Exception:
-            pass
+        maint = _maint_mod()
+        r = _enrich("check_index_status", maint.check_index_status)
+        if r is not None:
+            result["index_status"] = r
 
     return result

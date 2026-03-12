@@ -70,9 +70,8 @@ def _check_rate_limit(session_id: str = "") -> bool:
         _rate_limit_timestamps.popleft()
     if len(_rate_limit_timestamps) >= _RATE_LIMIT_MAX:
         return False
-    _rate_limit_timestamps.append(now)
 
-    # Per-session rate limit
+    # Per-session rate limit (check BEFORE appending to global)
     if session_id:
         if session_id not in _session_rate_limits:
             _session_rate_limits[session_id] = deque()
@@ -87,6 +86,9 @@ def _check_rate_limit(session_id: str = "") -> bool:
         if len(_session_rate_limits) > 200:
             oldest_key = min(_session_rate_limits, key=lambda k: _session_rate_limits[k][-1] if _session_rate_limits[k] else 0)
             del _session_rate_limits[oldest_key]
+
+    # Append to global only after all checks pass
+    _rate_limit_timestamps.append(now)
 
     return True
 
@@ -502,7 +504,8 @@ def main():
         except Exception as e:
             sys.stderr.write(f"[flyto-indexer] Error: {e}\n")
             sys.stderr.flush()
-            print(json.dumps({"jsonrpc": "2.0", "error": {"code": -32000, "message": str(e)}}), flush=True)
+            req_id = request.get("id") if isinstance(request, dict) else None
+            print(json.dumps({"jsonrpc": "2.0", "id": req_id, "error": {"code": -32000, "message": str(e)}}), flush=True)
 
 
 if __name__ == "__main__":

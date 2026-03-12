@@ -86,22 +86,42 @@ class ConceptGraph:
         # Count co-occurrences: terms that appear together in same-file symbols
         cooccur: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
 
+        def _add_cooccurrence(tokens_a: set, tokens_b: set, weight: float):
+            """Record co-occurrence between two token sets efficiently.
+
+            Uses set intersection to avoid O(T1*T2) — only shared terms are
+            skipped, and each pair is visited once via sorted iteration.
+            """
+            for t1 in tokens_a:
+                for t2 in tokens_b:
+                    if t1 != t2:
+                        cooccur[t1][t2] += weight
+                        cooccur[t2][t1] += weight
+
+        def _add_group_cooccurrence(token_sets: list, weight: float):
+            """Record co-occurrence for a group of symbols.
+
+            Merges all tokens into one set per file, then records each
+            token pair once. O(T^2) where T is unique tokens in group,
+            instead of O(S^2 * T^2) for S symbol pairs.
+            """
+            merged = set()
+            for ts in token_sets:
+                merged |= ts
+            merged_list = sorted(merged)  # sorted for determinism
+            n = len(merged_list)
+            for i in range(n):
+                for j in range(i + 1, n):
+                    cooccur[merged_list[i]][merged_list[j]] += weight
+                    cooccur[merged_list[j]][merged_list[i]] += weight
+
         for path, sids in file_to_syms.items():
             if len(sids) < 2:
                 continue
-            # Merge all tokens in this file
-            file_tokens: list[set[str]] = [sym_tokens[s] for s in sids if s in sym_tokens]
-            if len(file_tokens) < 2:
+            file_token_sets = [sym_tokens[s] for s in sids if s in sym_tokens]
+            if len(file_token_sets) < 2:
                 continue
-
-            # For each pair of symbol token sets, record co-occurrence
-            for i in range(len(file_tokens)):
-                for j in range(i + 1, len(file_tokens)):
-                    for t1 in file_tokens[i]:
-                        for t2 in file_tokens[j]:
-                            if t1 != t2:
-                                cooccur[t1][t2] += 1.0
-                                cooccur[t2][t1] += 1.0
+            _add_group_cooccurrence(file_token_sets, 1.0)
 
         # --- Signal 2: Import edges ---
         for dep_id, dep in deps.items():
@@ -115,11 +135,7 @@ class ConceptGraph:
             src_tokens = sym_tokens.get(src, set())
             tgt_tokens = sym_tokens.get(tgt, set())
             if src_tokens and tgt_tokens:
-                for t1 in src_tokens:
-                    for t2 in tgt_tokens:
-                        if t1 != t2:
-                            cooccur[t1][t2] += 2.0  # imports weighted higher
-                            cooccur[t2][t1] += 2.0
+                _add_cooccurrence(src_tokens, tgt_tokens, 2.0)
 
         # --- Signal 3: Shared callers ---
         # Build caller→callees map, then find symbols that share callers
@@ -135,13 +151,8 @@ class ConceptGraph:
             callee_list = [c for c in callees if c in sym_tokens]
             if len(callee_list) < 2:
                 continue
-            for i in range(len(callee_list)):
-                for j in range(i + 1, len(callee_list)):
-                    for t1 in sym_tokens[callee_list[i]]:
-                        for t2 in sym_tokens[callee_list[j]]:
-                            if t1 != t2:
-                                cooccur[t1][t2] += 1.5  # shared caller weight
-                                cooccur[t2][t1] += 1.5
+            callee_token_sets = [sym_tokens[c] for c in callee_list]
+            _add_group_cooccurrence(callee_token_sets, 1.5)
 
         # --- Compute PMI (Pointwise Mutual Information) ---
         # PMI(x,y) = log(P(x,y) / (P(x) * P(y)))

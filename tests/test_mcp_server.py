@@ -76,12 +76,18 @@ def _reset_index_cache():
     old_content_loaded = mcp_server._content_loaded
     old_test_mapper = mcp_server._test_mapper
     old_session_store = mcp_server._session_store
+    old_bm25 = index_store._bm25_cache
+    old_gen = index_store._cache_generation
+    # Prevent generation check from invalidating mock indexes during tests
+    index_store._cache_generation = float("inf")
     yield
     mcp_server._index_cache = old_cache
     mcp_server._content_cache = old_content_cache
     mcp_server._content_loaded = old_content_loaded
     mcp_server._test_mapper = old_test_mapper
     mcp_server._session_store = old_session_store
+    index_store._bm25_cache = old_bm25
+    index_store._cache_generation = old_gen
 
 
 # =========================================================================
@@ -209,6 +215,11 @@ class TestSearchByKeyword:
             projects=["proj"],
         )
         mcp_server._index_cache = mock_index
+        # Prevent generation check from invalidating our mock index
+        index_store._cache_generation = float("inf")
+        # Disable BM25 to avoid loading real .flyto-index/bm25.json from disk.
+        # Use False (not None) because None triggers _load_bm25() to reload.
+        index_store._bm25_cache = False
 
         result = search_by_keyword("validate")
         assert result["total"] >= 2

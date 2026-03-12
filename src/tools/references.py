@@ -7,6 +7,11 @@ try:
 except ImportError:
     from index_store import load_index, get_symbol_content_text
 
+try:
+    from .resolver import resolve_symbol, get_dedup_key as _resolver_dedup_key
+except ImportError:
+    from resolver import resolve_symbol, get_dedup_key as _resolver_dedup_key
+
 
 def find_references(symbol_id: str) -> dict:
     """
@@ -22,31 +27,7 @@ def find_references(symbol_id: str) -> dict:
     dependencies = index.get("dependencies", {})
     reverse_index = index.get("reverse_index", {})
 
-    # Resolve symbol_id if partial
-    resolved_id = symbol_id
-    if symbol_id not in symbols:
-        # Try exact name match first
-        name_matches = []
-        partial_matches = []
-        for sid, sym in symbols.items():
-            sym_name = sym.get("name", "")
-            if sym_name == symbol_id:
-                name_matches.append(sid)
-            elif symbol_id in sid or sid.endswith(symbol_id):
-                partial_matches.append(sid)
-
-        if name_matches:
-            # Prefer composables/functions over methods
-            for sid in name_matches:
-                sym = symbols[sid]
-                if sym.get("type") in ("composable", "function"):
-                    resolved_id = sid
-                    break
-            else:
-                resolved_id = name_matches[0]
-        elif partial_matches:
-            resolved_id = partial_matches[0]
-
+    resolved_id = resolve_symbol(symbol_id, symbols)
     target_symbol = symbols.get(resolved_id)
     if not target_symbol:
         return {"error": f"Symbol not found: {symbol_id}"}
@@ -190,8 +171,9 @@ def find_references(symbol_id: str) -> dict:
                     "confidence": "high" if resolved_target else "medium",
                 })
 
-    # Method 2: Search content for symbol name usage
-    if target_name and len(target_name) >= 2:  # Avoid single-char names
+    # Method 2: Search content for symbol name usage (capped to avoid O(N*C) at scale)
+    _CONTENT_SEARCH_MAX = 5000  # Skip content fallback for very large indexes
+    if target_name and len(target_name) >= 2 and len(symbols) <= _CONTENT_SEARCH_MAX:
         pattern = rf'\b{re.escape(target_name)}\s*\('
 
         for sym_id, sym in symbols.items():
@@ -288,18 +270,7 @@ def impact_analysis(symbol_id: str) -> dict:
     reverse_index = index.get("reverse_index", {})
     dependencies = index.get("dependencies", {})
 
-    # Resolve symbol_id if partial
-    resolved_id = symbol_id
-    if symbol_id not in symbols:
-        for sid, sym in symbols.items():
-            if sym.get("name") == symbol_id and sym.get("type") in ("composable", "function", "class"):
-                    resolved_id = sid
-                    break
-        else:
-            for sid in symbols:
-                if symbol_id in sid:
-                    resolved_id = sid
-                    break
+    resolved_id = resolve_symbol(symbol_id, symbols)
 
     affected = []
     seen_paths = set()  # Dedup across projects
@@ -391,19 +362,7 @@ def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
     reverse_index = index.get("reverse_index", {})
     index.get("dependencies", {})
 
-    # Resolve symbol_id (same pattern as find_references)
-    resolved_id = symbol_id
-    if symbol_id not in symbols:
-        for sid, sym in symbols.items():
-            if sym.get("name") == symbol_id and sym.get("type") in ("composable", "function", "class", "component"):
-                    resolved_id = sid
-                    break
-        else:
-            for sid in symbols:
-                if symbol_id in sid:
-                    resolved_id = sid
-                    break
-
+    resolved_id = resolve_symbol(symbol_id, symbols)
     target_symbol = symbols.get(resolved_id)
     if not target_symbol:
         return {"error": f"Symbol not found: {symbol_id}"}
@@ -486,15 +445,20 @@ def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
     # Limit to 30
     call_sites = call_sites[:30]
 
+    # Build path→project lookup (O(N) once, not O(N*M))
+    path_to_project: dict[str, str] = {}
+    for sid in symbols:
+        parts = sid.split(":")
+        if len(parts) >= 2:
+            sym_path = symbols[sid].get("path", "")
+            if sym_path and sym_path not in path_to_project:
+                path_to_project[sym_path] = parts[0]
+
     # Group by project
     by_project: dict[str, int] = {}
     for cs in call_sites:
-        # Try to determine project from file path
-        for sid, sym in symbols.items():
-            if sym.get("path") == cs["file"]:
-                proj = sid.split(":")[0] if ":" in sid else "unknown"
-                by_project[proj] = by_project.get(proj, 0) + 1
-                break
+        proj = path_to_project.get(cs["file"], "unknown")
+        by_project[proj] = by_project.get(proj, 0) + 1
 
     total = len(call_sites)
 

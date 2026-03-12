@@ -672,10 +672,13 @@ class TestGetFileContext:
             "project_roots": {},
         }
 
+        import index_store as _idx
         old_cache = mcp_server._index_cache
         old_mapper = mcp_server._test_mapper
+        old_gen = _idx._cache_generation
         mcp_server._index_cache = mock_index
         mcp_server._test_mapper = None  # Force rebuild with mock index
+        _idx._cache_generation = float("inf")  # prevent generation check invalidating mock
         try:
             result = get_file_context("src/auth.py")
             assert result["path"] == "src/auth.py"
@@ -688,6 +691,7 @@ class TestGetFileContext:
         finally:
             mcp_server._index_cache = old_cache
             mcp_server._test_mapper = old_mapper
+            _idx._cache_generation = old_gen
 
 
 # =========================================================================
@@ -724,8 +728,11 @@ class TestEditImpactPreview:
             "project_roots": {},
         }
 
+        import index_store as _idx
         old_cache = mcp_server._index_cache
+        old_gen = _idx._cache_generation
         mcp_server._index_cache = mock_index
+        _idx._cache_generation = float("inf")
         try:
             result = mcp_server.edit_impact_preview("helper", change_type="rename")
             assert result["change_type"] == "rename"
@@ -734,6 +741,7 @@ class TestEditImpactPreview:
             assert "suggestions" in result
         finally:
             mcp_server._index_cache = old_cache
+            _idx._cache_generation = old_gen
 
     def test_no_callers(self):
         """Symbol with no callers is safe to change."""
@@ -754,14 +762,18 @@ class TestEditImpactPreview:
             "project_roots": {},
         }
 
+        import index_store as _idx
         old_cache = mcp_server._index_cache
+        old_gen = _idx._cache_generation
         mcp_server._index_cache = mock_index
+        _idx._cache_generation = float("inf")
         try:
             result = mcp_server.edit_impact_preview("lonely", change_type="delete")
             assert result["total_call_sites"] == 0
             assert result["risk"] == "safe"
         finally:
             mcp_server._index_cache = old_cache
+            _idx._cache_generation = old_gen
 
 
 if __name__ == "__main__":

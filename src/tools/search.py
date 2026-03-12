@@ -141,8 +141,38 @@ def search_by_keyword(
             for doc_id, score in raw_results:
                 bm25_scores[doc_id] = (score / max_score) * 30.0 if max_score > 0 else 0
 
-    # Search symbols
-    for symbol_id, symbol in index.get("symbols", {}).items():
+    # Build candidate set: BM25 hits + name matches (avoid full linear scan)
+    all_symbols = index.get("symbols", {})
+
+    # Build candidate set to avoid full linear scan at scale.
+    # Use BM25 hits + name matches as candidates when BM25 covers the symbols.
+    # Fall back to full scan when BM25 is stale/missing/empty.
+    _bm25_covers_symbols = bm25_scores and any(sid in all_symbols for sid in bm25_scores)
+    if _bm25_covers_symbols:
+        candidates: dict = {}
+
+        # BM25 candidates (already pre-scored)
+        for sid in bm25_scores:
+            if sid in all_symbols:
+                candidates[sid] = all_symbols[sid]
+
+        # Name/summary match candidates (scan names only — cheap string ops)
+        for symbol_id, symbol in all_symbols.items():
+            if symbol_id in candidates:
+                continue
+            name = symbol.get("name", "").lower()
+            if any(w in name for w in query_words):
+                candidates[symbol_id] = symbol
+            elif synonym_tokens and any(w in name for w in synonym_tokens):
+                candidates[symbol_id] = symbol
+            elif query_lower == name:
+                candidates[symbol_id] = symbol
+    else:
+        # No BM25 index or BM25 out of sync — fall back to full scan
+        candidates = all_symbols
+
+    # Search candidate symbols
+    for symbol_id, symbol in candidates.items():
         # Project filter
         sym_project = symbol_id.split(":")[0] if ":" in symbol_id else ""
         if project and project.lower() not in sym_project.lower():
