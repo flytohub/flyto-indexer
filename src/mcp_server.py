@@ -96,9 +96,9 @@ def _check_rate_limit(session_id: str = "") -> bool:
 # =============================================================================
 
 try:
-    from .tool_registry import MCP_TOOLS as TOOLS
+    from .tool_registry import SMART_TOOLS as TOOLS
 except ImportError:
-    from tool_registry import MCP_TOOLS as TOOLS
+    from tool_registry import SMART_TOOLS as TOOLS
 
 
 # =============================================================================
@@ -205,7 +205,7 @@ def handle_request(request: dict):
             "serverInfo": {
                 "name": "flyto-indexer",
                 "title": "Flyto Code Indexer",
-                "version": "2.2.1",
+                "version": "2.3.0",
                 "description": "Code analysis MCP server — impact analysis, dependency tracking, dead code detection, security scanning, and code health scoring across any project.",
                 "websiteUrl": "https://github.com/flytohub/flyto-indexer",
             },
@@ -213,31 +213,22 @@ def handle_request(request: dict):
                 "flyto-indexer provides {tool_count} code analysis tools. "
                 "ALWAYS use these tools — do NOT fall back to Grep/Read for tasks they cover.\n\n"
                 "When asked to AUDIT or REVIEW a project:\n"
-                "  1. code_health_score → overall quality score\n"
-                "  2. security_scan → hardcoded secrets, injection risks\n"
-                "  3. find_dead_code → unreferenced code safe to delete\n"
-                "  4. find_complex_functions → functions needing refactoring\n"
-                "  5. suggest_refactoring → prioritized improvement list\n\n"
+                "  1. audit → overall quality score + auto-expands weak dimensions\n\n"
                 "When asked to MODIFY or REFACTOR code:\n"
-                "  1. analyze_task → risk assessment + execution plan (call FIRST)\n"
+                "  1. task(action='plan') → risk assessment + execution plan (call FIRST)\n"
                 "  2. MANDATORY: Execute EVERY step in the execution_plan sequentially.\n"
                 "     Each step has: tool name, pre-filled args, and dependencies.\n"
                 "     Do NOT skip steps. Do NOT edit code until all inspect/assess steps complete.\n"
-                "  3. task_gate_check → call at EVERY gate step before proceeding.\n"
+                "  3. task(action='gate') → call at EVERY gate step before proceeding.\n"
                 "     If gate returns pass=false, STOP and report to user.\n"
                 "  4. Only after all gates pass, proceed to make changes.\n"
-                "  5. After making changes, call validate_changes to run ruff + pytest.\n\n"
+                "  5. task(action='validate') → run ruff + pytest after making changes.\n\n"
                 "When asked to UNDERSTAND or EXPLORE code:\n"
-                "  1. search_code → find symbols by name\n"
-                "  2. list_projects → discover indexed projects\n"
-                "  3. list_apis → API endpoints + cross-language callers\n"
-                "  4. dependency_graph → imports and dependents\n\n"
+                "  1. search → find symbols by name or natural language\n"
+                "  2. structure → discover projects, APIs, dependencies\n\n"
                 "When checking IMPACT of changes:\n"
-                "  1. impact_analysis → what breaks if you change this\n"
-                "  2. find_references → who calls this function\n"
-                "  3. edit_impact_preview → exact lines affected\n"
-                "  4. cross_project_impact → which other repos use this\n"
-                "  5. impact_from_diff → blast radius of uncommitted changes"
+                "  1. impact(target='symbol_name') → references + blast radius + cross-project\n"
+                "  2. impact(mode='unstaged') → blast radius of uncommitted changes"
             ).format(tool_count=len(TOOLS)),
         })
 
@@ -322,17 +313,21 @@ def _handle_tool_call(id: Any, params: dict):
             return
 
         # Execution guard: record step completion + register new task
+        _is_plan = (
+            tool_name == "analyze_task"
+            or (tool_name == "task" and arguments.get("action") == "plan")
+        )
         try:
             record_tool_call(tool_name, arguments)
-            if tool_name == "analyze_task" and isinstance(result, dict):
+            if _is_plan and isinstance(result, dict):
                 register_task(result)
         except (NameError, AttributeError, TypeError) as e:
             logger.debug("Guard record skipped: %s", e)
 
         result_text = json.dumps(result, ensure_ascii=False, indent=2)
 
-        # Structural enforcement: inject directive after analyze_task
-        if tool_name == "analyze_task" and isinstance(result, dict):
+        # Structural enforcement: inject directive after analyze_task / task(plan)
+        if _is_plan and isinstance(result, dict):
             result_text += _build_analyze_task_directive(result)
 
         send_response(id, {

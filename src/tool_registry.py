@@ -922,10 +922,226 @@ MCP_TOOLS: list = [
 
 
 # =============================================================================
-# Derived: canonical tool name set (auto-generated from MCP_TOOLS)
+# Smart Tools — 5 consolidated entry points (exposed to MCP)
+#
+# These replace the 45+ granular tools for MCP listing.
+# Old tools remain in dispatch for backward compat and internal use.
 # =============================================================================
 
-INDEXER_TOOL_NAMES: Set[str] = {tool["name"] for tool in MCP_TOOLS}
+SMART_TOOLS: list = [
+    {
+        "name": "search",
+        "title": "Search Code",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "description": (
+            "Find code by keyword or natural language. Runs BM25 keyword search AND "
+            "semantic search (TF-IDF with learned concept expansion) simultaneously, "
+            "merges results, and auto-enriches top hits with:\n"
+            "- Callers: who calls this symbol (top 5)\n"
+            "- File siblings: other symbols in the same file\n"
+            "Use this for ALL code search needs — no need to pick between search modes."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["query"],
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query — symbol name, keyword, or natural language description",
+                },
+                "project": {
+                    "type": "string",
+                    "description": "Filter to specific project (optional)",
+                },
+                "include_content": {
+                    "type": "boolean",
+                    "description": "Include source code in results (default: false)",
+                    "default": False,
+                },
+            },
+        },
+    },
+    {
+        "name": "impact",
+        "title": "Impact Analysis",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "description": (
+            "Analyze what breaks if you change something. Two modes:\n\n"
+            "1. Symbol mode (target): finds all references, blast radius, cross-project impact, "
+            "and related test files — all in one call.\n"
+            "2. Diff mode (mode): analyzes uncommitted/staged/committed changes, maps affected "
+            "symbols, and finds their test files.\n\n"
+            "Auto-enriches with:\n"
+            "- Cross-project impact (if multiple projects indexed)\n"
+            "- Test file mapping for affected code\n"
+            "- Edit preview for rename/delete/signature changes"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "description": "Symbol ID or name to analyze (e.g., 'process_refund' or 'proj:path:function:name')",
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["unstaged", "staged", "committed", "branch"],
+                    "description": "Diff mode — analyze changes instead of a specific symbol",
+                },
+                "change_type": {
+                    "type": "string",
+                    "enum": ["modify", "rename", "delete", "signature_change", "add_param"],
+                    "description": "Type of change planned (default: modify). Affects edit preview detail.",
+                    "default": "modify",
+                },
+                "project": {
+                    "type": "string",
+                    "description": "Filter to specific project (optional)",
+                },
+            },
+        },
+    },
+    {
+        "name": "audit",
+        "title": "Code Audit",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "description": (
+            "Comprehensive code quality audit. Starts with a health score (0-100), "
+            "then automatically expands any dimension scoring below 80 with detailed findings:\n"
+            "- Security < 80 → shows hardcoded secrets, injection risks\n"
+            "- Complexity < 80 → shows complex functions, duplicates\n"
+            "- Dead code < 80 → shows unreferenced symbols\n"
+            "- Coverage < 80 → shows untested high-impact code\n\n"
+            "Always includes git hotspots (high-churn + complex files).\n"
+            "Use 'focus' to force expansion of a specific dimension regardless of score."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {
+                    "type": "string",
+                    "description": "Filter to specific project (optional)",
+                },
+                "focus": {
+                    "type": "string",
+                    "enum": ["security", "complexity", "dead_code", "coverage", "all"],
+                    "description": "Force expansion of a specific dimension (optional). 'all' expands everything.",
+                },
+            },
+        },
+    },
+    {
+        "name": "task",
+        "title": "Task Workflow",
+        "annotations": {"readOnlyHint": False, "openWorldHint": False},
+        "description": (
+            "Plan, gate-check, or validate code changes. Three actions:\n\n"
+            "1. plan: Analyze a task before starting — returns risk dimensions (0-10), "
+            "constraints, and a step-by-step execution plan with pre-filled tool args.\n"
+            "2. gate: Check if you can proceed to the next phase. Server-side enforcement "
+            "blocks skipping required gates. If pass=false, STOP.\n"
+            "3. validate: Run ruff linter + pytest after making changes. Auto-attaches "
+            "untested change analysis if tests fail.\n\n"
+            "Workflow: plan → (follow execution steps) → gate → (edit code) → validate"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["action"],
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["plan", "gate", "validate"],
+                    "description": "Workflow action to perform",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "(plan) What you want to do",
+                },
+                "targets": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "(plan) Files or symbols to modify",
+                },
+                "intent": {
+                    "type": "string",
+                    "enum": ["refactor", "bugfix", "feature", "cleanup", "migration"],
+                    "description": "(plan) Type of change (default: refactor)",
+                    "default": "refactor",
+                },
+                "task_contract": {
+                    "type": "object",
+                    "description": "(gate) The task contract from a previous plan action",
+                },
+                "next_phase": {
+                    "type": "string",
+                    "description": "(gate) Phase to enter: inspect, assess, implement, verify",
+                },
+                "current_state": {
+                    "type": "object",
+                    "description": "(gate) Current progress state",
+                },
+                "project": {
+                    "type": "string",
+                    "description": "Project name (optional)",
+                },
+                "run_tests": {
+                    "type": "boolean",
+                    "description": "(validate) Run pytest (default: true)",
+                    "default": True,
+                },
+                "test_path": {
+                    "type": "string",
+                    "description": "(validate) Specific test file or directory",
+                },
+            },
+        },
+    },
+    {
+        "name": "structure",
+        "title": "Project Structure",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "description": (
+            "Explore project structure, APIs, dependencies, and type contracts.\n\n"
+            "Focus modes:\n"
+            "- (default/overview): lists all projects with symbol/file counts + index status\n"
+            "- apis: all API endpoints + categories + contract drift detection\n"
+            "- dependencies: import/dependent graph for a file or symbol\n"
+            "- types: type schemas + cross-project contract drift\n\n"
+            "Auto-enriches project-level queries with API counts, categories, and index freshness."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {
+                    "type": "string",
+                    "description": "Filter to specific project (optional)",
+                },
+                "focus": {
+                    "type": "string",
+                    "enum": ["apis", "dependencies", "types"],
+                    "description": "What to explore (default: project overview)",
+                },
+                "symbol_id": {
+                    "type": "string",
+                    "description": "(dependencies/types) Symbol to analyze",
+                },
+                "path": {
+                    "type": "string",
+                    "description": "(dependencies) File path to analyze",
+                },
+            },
+        },
+    },
+]
+
+SMART_TOOL_NAMES: Set[str] = {tool["name"] for tool in SMART_TOOLS}
+
+
+# =============================================================================
+# Derived: canonical tool name set (all tools including legacy)
+# =============================================================================
+
+INDEXER_TOOL_NAMES: Set[str] = {tool["name"] for tool in MCP_TOOLS} | SMART_TOOL_NAMES
 
 
 # =============================================================================
@@ -1156,6 +1372,14 @@ def _type_contracts():
     return type_contracts
 
 
+def _smart():
+    try:
+        from .tools import smart
+    except ImportError:
+        from tools import smart
+    return smart
+
+
 # =============================================================================
 # Unified tool dispatch
 # =============================================================================
@@ -1378,6 +1602,41 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
         ),
         "contract_drift": lambda args: _type_contracts().contract_drift(
             project=args.get("project"),
+        ),
+
+        # Smart tools (consolidated entry points)
+        "search": lambda args: _smart().smart_search(
+            query=args.get("query", ""),
+            project=args.get("project"),
+            include_content=args.get("include_content", False),
+        ),
+        "impact": lambda args: _smart().smart_impact(
+            target=args.get("target"),
+            mode=args.get("mode"),
+            change_type=args.get("change_type", "modify"),
+            project=args.get("project"),
+        ),
+        "audit": lambda args: _smart().smart_audit(
+            project=args.get("project"),
+            focus=args.get("focus"),
+        ),
+        "task": lambda args: _smart().smart_task(
+            action=args.get("action", "plan"),
+            description=args.get("description", ""),
+            targets=args.get("targets"),
+            intent=args.get("intent", "refactor"),
+            task_contract=args.get("task_contract"),
+            next_phase=args.get("next_phase"),
+            current_state=args.get("current_state"),
+            project=args.get("project"),
+            run_tests=args.get("run_tests", True),
+            test_path=args.get("test_path"),
+        ),
+        "structure": lambda args: _smart().smart_structure(
+            project=args.get("project"),
+            focus=args.get("focus"),
+            symbol_id=args.get("symbol_id"),
+            path=args.get("path"),
         ),
     }
 

@@ -74,9 +74,11 @@ class TestIndexerToolNames:
         assert isinstance(INDEXER_TOOL_NAMES, set)
 
     def test_derived_from_mcp_tools(self):
-        """INDEXER_TOOL_NAMES must match exactly the names in MCP_TOOLS."""
+        """INDEXER_TOOL_NAMES includes all MCP_TOOLS + SMART_TOOLS names."""
+        from tool_registry import SMART_TOOLS
         mcp_names = {t["name"] for t in MCP_TOOLS}
-        assert INDEXER_TOOL_NAMES == mcp_names
+        smart_names = {t["name"] for t in SMART_TOOLS}
+        assert INDEXER_TOOL_NAMES == mcp_names | smart_names
 
     def test_contains_core_tools(self):
         assert "search_code" in INDEXER_TOOL_NAMES
