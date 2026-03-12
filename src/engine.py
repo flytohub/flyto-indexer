@@ -265,19 +265,24 @@ class IndexEngine:
         # Update index
         self._update_index(result, changes)
 
+        # Extract changed_paths for incremental downstream processing
+        changed_paths = None
+        if incremental and changes and not changes.is_empty():
+            changed_paths = set(changes.all_changed() + changes.deleted)
+
         # Resolve dependencies and build reverse index
         t_resolve_start = time.monotonic()
-        self._resolve_dependencies()
+        self._resolve_dependencies(changed_paths=changed_paths)
         t_resolve_end = time.monotonic()
 
         t_reverse_start = time.monotonic()
-        self._build_reverse_index()
+        self._build_reverse_index(changed_paths=changed_paths)
         t_reverse_end = time.monotonic()
 
-        # Save index + build BM25
+        # Save index + build search indexes
         t_save_start = time.monotonic()
         self._save_index()
-        self._build_bm25_index()
+        self._update_search_indexes(changed_paths=changed_paths)
         t_save_end = time.monotonic()
 
         # Apply incremental changes to manifest
@@ -513,20 +518,22 @@ class IndexEngine:
         for manifest in result.manifests:
             self.index.files[manifest.path] = manifest
 
-    def _resolve_dependencies(self):
+    def _resolve_dependencies(self, changed_paths: set = None):
         """
         Resolve dependencies, converting raw call names to full symbol IDs
 
-        Improved: only resolves when the source file actually imports the target
+        Improved: only resolves when the source file actually imports the target.
+        When changed_paths is provided, only re-resolves deps whose source file
+        is in changed_paths. Lookup tables are always built from the full index (cheap).
         """
         name_to_ids = self._build_name_lookup()
         file_imports = self._build_file_imports()
         module_to_symbols = self._build_module_to_symbols()
-        self._resolve_api_call_deps()
-        self._resolve_call_deps(name_to_ids, file_imports, module_to_symbols)
-        self._resolve_re_export_deps(file_imports)
-        self._resolve_same_file_calls()
-        self._resolve_global_fallback(name_to_ids)
+        self._resolve_api_call_deps(changed_paths=changed_paths)
+        self._resolve_call_deps(name_to_ids, file_imports, module_to_symbols, changed_paths=changed_paths)
+        self._resolve_re_export_deps(file_imports, changed_paths=changed_paths)
+        self._resolve_same_file_calls(changed_paths=changed_paths)
+        self._resolve_global_fallback(name_to_ids, changed_paths=changed_paths)
 
     def _build_name_lookup(self):
         """Build symbol name -> symbol_id lookup table."""
@@ -575,7 +582,7 @@ class IndexEngine:
                     module_to_symbols[mod_key].append(sid)
         return module_to_symbols
 
-    def _resolve_api_call_deps(self):
+    def _resolve_api_call_deps(self, changed_paths: set = None):
         """Resolve API_CALLS -> API symbols cross-reference."""
         # API symbol names are "METHOD /path" (e.g., "GET /api/users")
         api_path_map = {}  # url_path -> [symbol_ids]
@@ -590,6 +597,8 @@ class IndexEngine:
 
         for _dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "api_calls":
+                continue
+            if not self._dep_in_changed_paths(dep, changed_paths):
                 continue
             target_url = dep.target_id
             dep_method = dep.metadata.get("method", "GET")
@@ -611,10 +620,12 @@ class IndexEngine:
                         break
                 dep.metadata["resolved_target"] = resolved
 
-    def _resolve_call_deps(self, name_to_ids, file_imports, module_to_symbols):
+    def _resolve_call_deps(self, name_to_ids, file_imports, module_to_symbols, changed_paths: set = None):
         """Resolve each call dependency using import information and module lookups."""
         for _dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "calls":
+                continue
+            if not self._dep_in_changed_paths(dep, changed_paths):
                 continue
 
             target = dep.target_id
@@ -675,7 +686,7 @@ class IndexEngine:
             if resolved:
                 dep.metadata["resolved_target"] = resolved
 
-    def _resolve_re_export_deps(self, file_imports):
+    def _resolve_re_export_deps(self, file_imports, changed_paths: set = None):
         """Resolve dependencies through re-export chains."""
         # Build re_export_map: {(exporter_path, exported_name) -> original_module}
         re_export_map = {}  # (exporter_path, name) -> original_module_key
@@ -702,6 +713,8 @@ class IndexEngine:
             # matches a re-exporter and resolve through the chain
             for _dep_id, dep in self.index.dependencies.items():
                 if dep.dep_type.value not in ('calls', 'uses'):
+                    continue
+                if not self._dep_in_changed_paths(dep, changed_paths):
                     continue
                 if dep.metadata.get("resolved_target"):
                     continue  # Already resolved
@@ -759,7 +772,7 @@ class IndexEngine:
                     if dep.metadata.get("resolved_target"):
                         break
 
-    def _resolve_same_file_calls(self):
+    def _resolve_same_file_calls(self, changed_paths: set = None):
         """Resolve unresolved calls to symbols defined in the same file."""
         # For unresolved calls, check if the target exists as a symbol in the
         # same file. This catches local function calls that don't require imports.
@@ -778,6 +791,8 @@ class IndexEngine:
 
         for _dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "calls":
+                continue
+            if not self._dep_in_changed_paths(dep, changed_paths):
                 continue
             if dep.metadata.get("resolved_target"):
                 continue
@@ -811,10 +826,12 @@ class IndexEngine:
                         dep.metadata["resolved_target"] = sym_id
                         break
 
-    def _resolve_global_fallback(self, name_to_ids):
+    def _resolve_global_fallback(self, name_to_ids, changed_paths: set = None):
         """Resolve still-unresolved calls via single-candidate name match (unambiguous only)."""
         for _dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "calls":
+                continue
+            if not self._dep_in_changed_paths(dep, changed_paths):
                 continue
             if dep.metadata.get("resolved_target"):
                 continue
@@ -830,13 +847,24 @@ class IndexEngine:
             if len(candidates) == 1:
                 dep.metadata["resolved_target"] = candidates[0]
 
+    @staticmethod
+    def _extract_path_from_sid(symbol_id: str) -> str:
+        """Extract file path from a symbol_id like 'project:path/to/file.py:type:name'."""
+        parts = symbol_id.split(":")
+        if len(parts) >= 2:
+            return parts[1]
+        return ""
+
     def _extract_path(self, source_id: str) -> str:
         """Extract file path from source_id"""
-        if ":" in source_id:
-            parts = source_id.split(":")
-            if len(parts) >= 2:
-                return parts[1]
-        return ""
+        return self._extract_path_from_sid(source_id)
+
+    def _dep_in_changed_paths(self, dep, changed_paths: set) -> bool:
+        """Return True if a dependency's source file is in changed_paths."""
+        if changed_paths is None:
+            return True
+        source_path = self._extract_path(dep.source_id)
+        return source_path in changed_paths
 
     # Language built-in names, excluded from reference tracking (cannot trace to definition)
     BUILTIN_NAMES = {
@@ -859,7 +887,7 @@ class IndexEngine:
     # Tracked dependency types (not just calls)
     TRACKED_DEP_TYPES = {'calls', 'extends', 'implements', 'uses', 're_exports'}
 
-    def _build_reverse_index(self):
+    def _build_reverse_index(self, changed_paths: set = None):
         """
         Build reverse index: symbol_id -> referenced by whom
 
@@ -867,16 +895,56 @@ class IndexEngine:
         - Tracks multiple dependency types (calls, extends, implements, uses)
         - Only filters language built-in names
         - Deduplicates by project path (avoids double-counting from forks)
+
+        When changed_paths is provided, does an incremental update:
+        1. Purge stale entries from changed_paths
+        2. Re-add only deps involving changed_paths
+        3. Recalculate ref counts only for affected symbols
         """
-        reverse_index = self._build_reverse_from_deps()
-        name_to_ids = self._build_name_lookup()
-        self._build_reverse_from_imports(reverse_index, name_to_ids)
-        self._detect_dict_dispatch_refs(reverse_index)
+        if changed_paths is not None:
+            # Incremental mode: start from existing reverse_index
+            reverse_index = dict(self.index.reverse_index) if self.index.reverse_index else {}
 
-        # Save reverse index
-        self.index.reverse_index = reverse_index
+            # Phase 1: Purge stale entries
+            # Remove callers whose source file is in changed_paths
+            affected_targets = set()
+            for target_sid, callers in list(reverse_index.items()):
+                new_callers = [
+                    c for c in callers
+                    if self._extract_path_from_sid(c) not in changed_paths
+                ]
+                if len(new_callers) != len(callers):
+                    affected_targets.add(target_sid)
+                    reverse_index[target_sid] = new_callers
 
-        self._calculate_reference_counts(reverse_index)
+            # Remove target keys whose path is in changed_paths
+            for target_sid in list(reverse_index.keys()):
+                if self._extract_path_from_sid(target_sid) in changed_paths:
+                    affected_targets.add(target_sid)
+                    del reverse_index[target_sid]
+
+            # Phase 2: Re-add deps involving changed_paths
+            self._build_reverse_from_deps_incremental(reverse_index, changed_paths, affected_targets)
+            name_to_ids = self._build_name_lookup()
+            self._build_reverse_from_imports_incremental(reverse_index, name_to_ids, changed_paths, affected_targets)
+            self._detect_dict_dispatch_refs_incremental(reverse_index, changed_paths, affected_targets)
+
+            # Save reverse index
+            self.index.reverse_index = reverse_index
+
+            # Phase 3: Recalculate ref counts only for affected symbols
+            self._calculate_reference_counts(reverse_index, affected_only=affected_targets)
+        else:
+            # Full rebuild
+            reverse_index = self._build_reverse_from_deps()
+            name_to_ids = self._build_name_lookup()
+            self._build_reverse_from_imports(reverse_index, name_to_ids)
+            self._detect_dict_dispatch_refs(reverse_index)
+
+            # Save reverse index
+            self.index.reverse_index = reverse_index
+
+            self._calculate_reference_counts(reverse_index)
 
     def _build_reverse_from_deps(self):
         """Build initial reverse index from tracked dependency types."""
@@ -941,6 +1009,146 @@ class IndexEngine:
                 reverse_index[resolved].append(source)
 
         return reverse_index
+
+    def _build_reverse_from_deps_incremental(self, reverse_index, changed_paths, affected_targets):
+        """Re-add dep-based reverse entries for deps involving changed_paths."""
+        for _dep_id, dep in self.index.dependencies.items():
+            if dep.dep_type.value not in self.TRACKED_DEP_TYPES:
+                continue
+            source_path = self._extract_path(dep.source_id)
+            if source_path not in changed_paths:
+                continue
+
+            resolved = dep.metadata.get("resolved_target")
+            if not resolved and dep.dep_type.value in ('extends', 'implements'):
+                target_name = dep.target_id
+                for sid, sym in self.index.symbols.items():
+                    if sym.name == target_name:
+                        resolved = sid
+                        break
+            if not resolved and dep.dep_type.value == 'uses':
+                target = dep.target_id
+                if ':' in target:
+                    parts = target.split(':')
+                    if len(parts) >= 3:
+                        sym_type = parts[-2]
+                        sym_name = parts[-1]
+                        for sid, sym in self.index.symbols.items():
+                            if (sym.name == sym_name and
+                                sym.symbol_type.value == sym_type and
+                                sid.startswith(self.project_name + ":")):
+                                resolved = sid
+                                break
+            if not resolved:
+                continue
+            target_symbol = self.index.symbols.get(resolved)
+            if not target_symbol:
+                continue
+            target_name = target_symbol.name.split('.')[-1]
+            if target_name.lower() in self.BUILTIN_NAMES:
+                continue
+            source = dep.source_id
+            if resolved not in reverse_index:
+                reverse_index[resolved] = []
+            if source not in reverse_index[resolved]:
+                reverse_index[resolved].append(source)
+            affected_targets.add(resolved)
+
+    def _build_reverse_from_imports_incremental(self, reverse_index, name_to_ids, changed_paths, affected_targets):
+        """Re-add import-based reverse entries for deps involving changed_paths."""
+        path_to_module_keys = {}
+        for sid, symbol in self.index.symbols.items():
+            path = symbol.path
+            if path not in path_to_module_keys:
+                keys = set()
+                base = path.rsplit('/', 1)[-1].rsplit('.', 1)[0]
+                parent = path.rsplit('.', 1)[0]
+                keys.update([base, parent, path])
+                if base in ('__init__', 'index') and '/' in path:
+                    dir_name = path.rsplit('/', 1)[0]
+                    keys.add(dir_name)
+                    if '/' in dir_name:
+                        keys.add(dir_name.rsplit('/', 1)[-1])
+                path_to_module_keys[path] = keys
+
+        for _dep_id, dep in self.index.dependencies.items():
+            if dep.dep_type.value != "imports":
+                continue
+            source_path = self._extract_path(dep.source_id)
+            if source_path not in changed_paths:
+                continue
+
+            source = dep.source_id
+            target_module = dep.target_id
+            names = dep.metadata.get("names", [])
+            norm_module = target_module.replace('@/', 'src/').replace('./', '').replace('../', '')
+
+            for name in names:
+                if name.lower() in self.BUILTIN_NAMES or len(name) <= 1:
+                    continue
+                candidates = name_to_ids.get(name, [])
+                if not candidates:
+                    continue
+                resolved = None
+                for cid in candidates:
+                    sym = self.index.symbols.get(cid)
+                    if not sym:
+                        continue
+                    mod_keys = path_to_module_keys.get(sym.path, set())
+                    if (target_module in mod_keys or
+                            norm_module in sym.path or
+                            any(target_module.endswith(k) or k.endswith(target_module)
+                                for k in mod_keys if len(k) > 3)):
+                        resolved = cid
+                        break
+                if not resolved and len(candidates) == 1:
+                    resolved = candidates[0]
+                if resolved:
+                    if resolved not in reverse_index:
+                        reverse_index[resolved] = []
+                    if source not in reverse_index[resolved]:
+                        reverse_index[resolved].append(source)
+                    affected_targets.add(resolved)
+
+    def _detect_dict_dispatch_refs_incremental(self, reverse_index, changed_paths, affected_targets):
+        """Re-detect dict dispatch refs for symbols in changed_paths."""
+        _file_content_cache = {}
+        MAX_CONTENT_SCAN = 100_000
+
+        for sid, symbol in self.index.symbols.items():
+            if symbol.path not in changed_paths:
+                continue
+            if sid in reverse_index:
+                continue
+            if symbol.symbol_type.value not in ('function', 'method'):
+                continue
+            bare_name = symbol.name.split('.')[-1] if '.' in symbol.name else symbol.name
+            if not bare_name or len(bare_name) <= 2:
+                continue
+            file_key = f"{symbol.project}:{symbol.path}"
+            if file_key not in _file_content_cache:
+                parts = []
+                total_size = 0
+                for other_id, other_sym in self.index.symbols.items():
+                    if other_sym.path == symbol.path and other_sym.project == symbol.project:
+                        content = other_sym.content
+                        if content:
+                            total_size += len(content)
+                            if total_size > MAX_CONTENT_SCAN:
+                                break
+                            parts.append((other_id, content))
+                _file_content_cache[file_key] = parts if total_size <= MAX_CONTENT_SCAN else []
+            name_pat = re.compile(r'\b' + re.escape(bare_name) + r'\b')
+            for other_id, content in _file_content_cache[file_key]:
+                if other_id == sid:
+                    continue
+                if name_pat.search(content):
+                    if sid not in reverse_index:
+                        reverse_index[sid] = []
+                    if other_id not in reverse_index[sid]:
+                        reverse_index[sid].append(other_id)
+                    affected_targets.add(sid)
+                    break
 
     def _build_reverse_from_imports(self, reverse_index, name_to_ids):
         """Add import-based references to the reverse index.
@@ -1052,9 +1260,18 @@ class IndexEngine:
                         reverse_index[sid].append(other_id)
                     break  # One caller is enough to mark as referenced
 
-    def _calculate_reference_counts(self, reverse_index):
-        """Calculate reference count for each symbol, deduplicating by project path."""
-        for sid, symbol in self.index.symbols.items():
+    def _calculate_reference_counts(self, reverse_index, affected_only: set = None):
+        """Calculate reference count for each symbol, deduplicating by project path.
+
+        Args:
+            reverse_index: The full reverse index dict.
+            affected_only: If provided, only recalculate counts for these symbol IDs.
+        """
+        symbols_to_update = affected_only if affected_only is not None else self.index.symbols.keys()
+        for sid in symbols_to_update:
+            symbol = self.index.symbols.get(sid)
+            if not symbol:
+                continue
             callers = reverse_index.get(sid, [])
             # Extract unique file paths (strip project prefix)
             unique_paths = set()
@@ -1114,17 +1331,20 @@ class IndexEngine:
             from index_store import _write_generation
         _write_generation(self.index_dir)
 
+    def _build_symbol_doc(self, symbol) -> str:
+        """Build BM25/semantic document text for a symbol."""
+        parts = [symbol.name]
+        if symbol.summary:
+            parts.append(symbol.summary)
+        if symbol.content:
+            parts.append(symbol.content[:300])
+        return " ".join(parts)
+
     def _build_bm25_index(self):
-        """Build BM25 search index from symbols and save to disk."""
+        """Build BM25 search index from symbols and save to disk (full rebuild)."""
         documents = {}
         for sid, symbol in self.index.symbols.items():
-            # Build document text: name + summary + first 300 chars of content
-            parts = [symbol.name]
-            if symbol.summary:
-                parts.append(symbol.summary)
-            if symbol.content:
-                parts.append(symbol.content[:300])
-            documents[sid] = " ".join(parts)
+            documents[sid] = self._build_symbol_doc(symbol)
 
         if not documents:
             return
@@ -1143,6 +1363,51 @@ class IndexEngine:
         semantic = SemanticIndex()
         semantic.build(documents, index_data=index_data)
         semantic.save(self.index_dir / "semantic.json")
+
+    def _update_search_indexes(self, changed_paths: set = None):
+        """Update BM25 and semantic search indexes.
+
+        When changed_paths is provided:
+        - BM25: incremental update (remove old docs, add new docs)
+        - Semantic: mark as stale for lazy rebuild (concept graph needs full data)
+
+        When changed_paths is None: full rebuild of both.
+        """
+        if changed_paths is None:
+            self._build_bm25_index()
+            return
+
+        # Incremental BM25 update
+        bm25_path = self.index_dir / "bm25.json"
+        bm25 = BM25Index.load(bm25_path)
+        if bm25 is None:
+            # No existing index, do full build
+            self._build_bm25_index()
+            return
+
+        # Compute which symbol IDs to remove and add
+        removed_ids = set()
+        added_docs = {}
+        for sid, symbol in self.index.symbols.items():
+            if symbol.path in changed_paths:
+                added_docs[sid] = self._build_symbol_doc(symbol)
+
+        # Also remove any docs from BM25 whose path is in changed_paths
+        # (they may have been deleted or renamed)
+        for doc_id in bm25.doc_ids:
+            doc_path = self._extract_path_from_sid(doc_id)
+            if doc_path in changed_paths:
+                removed_ids.add(doc_id)
+
+        bm25.update_docs(removed_ids, added_docs)
+        bm25.save(bm25_path)
+
+        # Mark semantic index as stale (lazy rebuild on next load)
+        stale_marker = self.index_dir / ".semantic_stale"
+        try:
+            stale_marker.write_text("1")
+        except OSError:
+            pass
 
     def _deserialize_index(self, data: dict) -> ProjectIndex:
         """Deserialize index from JSON"""

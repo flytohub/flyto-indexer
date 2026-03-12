@@ -364,8 +364,65 @@ def _load_bm25():
     return _bm25_cache
 
 
+def _rebuild_semantic_index(index_dir: Path):
+    """Rebuild the semantic index from current index data.
+
+    Called lazily when a .semantic_stale marker is found.
+    """
+    try:
+        from .semantic import SemanticIndex
+        from .bm25 import tokenize
+    except ImportError:
+        from semantic import SemanticIndex
+        from bm25 import tokenize
+
+    index_data = load_index()
+    if not index_data:
+        return None
+
+    symbols = index_data.get("symbols", {})
+    if not symbols:
+        return None
+
+    # Build document texts (same logic as engine._build_symbol_doc)
+    documents = {}
+    for sid, sym in symbols.items():
+        if isinstance(sym, dict):
+            name = sym.get("name", "")
+            summary = sym.get("summary", "")
+            content = sym.get("content", "")
+        else:
+            name = sym.name
+            summary = sym.summary
+            content = sym.content
+        parts = [name]
+        if summary:
+            parts.append(summary)
+        if content:
+            parts.append(content[:300])
+        documents[sid] = " ".join(parts)
+
+    if not documents:
+        return None
+
+    semantic = SemanticIndex()
+    semantic.build(documents, index_data=index_data)
+
+    try:
+        from .safe_io import atomic_write_json
+    except ImportError:
+        from safe_io import atomic_write_json
+
+    semantic.save(index_dir / "semantic.json")
+    return semantic
+
+
 def _load_semantic():
-    """Load or return the cached semantic (TF-IDF) index."""
+    """Load or return the cached semantic (TF-IDF) index.
+
+    If a .semantic_stale marker exists, rebuilds the semantic index
+    from current index data before loading.
+    """
     global _semantic_cache
     if _semantic_cache is not None:
         return _semantic_cache
@@ -373,6 +430,22 @@ def _load_semantic():
         from .semantic import SemanticIndex
     except ImportError:
         from semantic import SemanticIndex
+
+    # Check for stale marker in all discovered index dirs
+    for d in _discover_index_dirs():
+        stale_marker = d / ".semantic_stale"
+        if stale_marker.exists():
+            logger.info("Semantic index stale, rebuilding from %s", d)
+            try:
+                rebuilt = _rebuild_semantic_index(d)
+                if rebuilt:
+                    _semantic_cache = rebuilt
+                stale_marker.unlink(missing_ok=True)
+            except (OSError, RuntimeError) as e:
+                logger.warning("Failed to rebuild semantic index: %s", e)
+            if _semantic_cache is not None:
+                return _semantic_cache
+
     semantic_path = INDEX_DIR / "semantic.json"
     _semantic_cache = SemanticIndex.load(semantic_path)
     return _semantic_cache

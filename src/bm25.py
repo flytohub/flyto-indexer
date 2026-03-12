@@ -158,6 +158,54 @@ class BM25Index:
         scores.sort(key=lambda x: -x[1])
         return scores[:top_k]
 
+    def update_docs(self, removed_ids: set, added_docs: dict):
+        """Incrementally update the index by removing and adding documents.
+
+        Avoids re-tokenizing unchanged documents. Recomputes df/idf from
+        the preserved tf maps.
+
+        Args:
+            removed_ids: Set of doc_ids to remove.
+            added_docs: {doc_id: text_content} mapping of new/updated docs to add.
+        """
+        if not removed_ids and not added_docs:
+            return
+
+        # --- Phase 1: Remove docs ---
+        if removed_ids:
+            keep_indices = []
+            for i, doc_id in enumerate(self.doc_ids):
+                if doc_id not in removed_ids:
+                    keep_indices.append(i)
+
+            self.doc_ids = [self.doc_ids[i] for i in keep_indices]
+            self.doc_lens = [self.doc_lens[i] for i in keep_indices]
+            self.tf = [self.tf[i] for i in keep_indices]
+
+        # --- Phase 2: Add new docs ---
+        for doc_id, text in added_docs.items():
+            tokens = tokenize(text)
+            self.doc_ids.append(doc_id)
+            self.doc_lens.append(len(tokens))
+
+            tf_map: dict[str, int] = {}
+            for token in tokens:
+                tf_map[token] = tf_map.get(token, 0) + 1
+            self.tf.append(tf_map)
+
+        # --- Phase 3: Recompute df/idf from preserved tf maps ---
+        self.N = len(self.doc_ids)
+        self.avgdl = sum(self.doc_lens) / self.N if self.N > 0 else 0.0
+
+        self.df = {}
+        for tf_map in self.tf:
+            for term in tf_map:
+                self.df[term] = self.df.get(term, 0) + 1
+
+        self.idf = {}
+        for term, df in self.df.items():
+            self.idf[term] = math.log((self.N - df + 0.5) / (df + 0.5) + 1)
+
     def save(self, path: Path):
         """Save BM25 index to JSON file (atomic write)."""
         try:
