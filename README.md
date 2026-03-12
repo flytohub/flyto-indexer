@@ -250,7 +250,7 @@ All legacy tools remain available in dispatch for backward compatibility and exe
 | Python | AST | Functions, classes, methods, decorators, API routes |
 | TypeScript/JS | Custom | Functions, classes, interfaces, types, API calls |
 | Vue | SFC | Components, composables, emits, props |
-| Go | Custom | Functions, structs, methods, interfaces |
+| Go | Custom | Functions, structs, methods, interfaces, embeddings, type aliases, const/var, impl tracking |
 | Rust | Custom | Functions, structs, impl blocks, traits |
 | Java | Custom | Classes, methods, interfaces, annotations |
 
@@ -263,7 +263,8 @@ flyto-index scan .
 1. **Parse** — AST (Python) or regex (others) extracts every function, class, and import
 2. **Graph** — Builds dependency graph + reverse index (caller → callee)
 3. **Serve** — MCP server answers queries from the graph in memory
-4. **Incremental** — Re-scans only changed files (content hash tracking)
+4. **Incremental** — Re-scans only changed files, incrementally patches reverse_index and BM25 (10-50x faster than full rebuild)
+5. **LSP** — Optional type-aware references via pyright/tsserver/gopls/rust-analyzer (zero deps, graceful fallback)
 
 ```
 .flyto-index/

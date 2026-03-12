@@ -30,8 +30,11 @@ flyto-indexer exposes 5 consolidated tools. Each one auto-enriches results with 
 
 ### Key features
 - **Smart tools**: 5 intent-based entry points replace 45+ granular tools. Association-based triggering auto-enriches results server-side.
+- **Incremental indexing**: Only rebuilds reverse_index, BM25, and dependencies for changed files. Semantic index lazy-rebuilds on next search. 10-50x faster auto-reindex.
+- **LSP integration**: Optional type-aware references via pyright, tsserver, gopls, rust-analyzer. Zero deps — graceful fallback when no LSP available.
 - **Learned ConceptGraph**: Semantic search learns term relationships from file co-location, import graph, and shared callers (PMI scoring). No manual keyword maps.
+- **Enhanced Go scanner**: Struct method deps, interface implementation tracking, struct embedding, type aliases, const/var detection.
 - **Execution Guard**: Server-side enforcement prevents skipping execution plan gates. If blocked, the response includes a `recovery_plan` with exact next steps.
 - **Atomic writes**: Index files written via temp+rename to prevent corruption on crash.
-- **Smart auto-reindex**: Detects file changes every 10s (fast mtime check) and full scan every 5min. Only reindexes affected projects.
+- **Smart auto-reindex**: Detects file changes every 10s (fast mtime check). Incremental updates proportional to change set.
 <!-- flyto-indexer end -->
