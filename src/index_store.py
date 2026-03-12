@@ -84,6 +84,7 @@ _bm25_cache = None
 _semantic_cache = None
 _test_mapper = None
 _session_store = None
+_lsp_manager = None
 _cache_generation: float = 0.0
 
 # ---------------------------------------------------------------------------
@@ -401,6 +402,21 @@ def _get_session_store():
     return _session_store
 
 
+def _get_lsp_manager():
+    """Return the cached LSPManager instance, or None if LSP is disabled."""
+    global _lsp_manager
+    if _lsp_manager is None:
+        try:
+            try:
+                from .lsp.manager import LSPManager
+            except ImportError:
+                from lsp.manager import LSPManager
+            _lsp_manager = LSPManager.get_instance()
+        except Exception:
+            return None
+    return _lsp_manager
+
+
 # ---------------------------------------------------------------------------
 # Cache management
 # ---------------------------------------------------------------------------
@@ -424,7 +440,7 @@ def _update_cache_generation():
 def invalidate_caches():
     """Reset all caches to their initial states, forcing a fresh reload."""
     global _index_cache, _content_cache, _content_loaded
-    global _bm25_cache, _semantic_cache, _test_mapper, _cache_generation
+    global _bm25_cache, _semantic_cache, _test_mapper, _lsp_manager, _cache_generation
     _index_cache = None
     _content_cache = {}
     _content_loaded = False
@@ -432,3 +448,18 @@ def invalidate_caches():
     _semantic_cache = None
     _test_mapper = None
     _cache_generation = 0.0
+    # Shutdown LSP servers on cache invalidation
+    if _lsp_manager is not None:
+        try:
+            _lsp_manager.shutdown_all()
+        except Exception:
+            pass
+        _lsp_manager = None
+        try:
+            try:
+                from .lsp.manager import LSPManager
+            except ImportError:
+                from lsp.manager import LSPManager
+            LSPManager.reset_instance()
+        except Exception:
+            pass

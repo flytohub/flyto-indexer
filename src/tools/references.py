@@ -1,5 +1,6 @@
 """Reference and impact analysis tools for flyto-indexer MCP server."""
 
+import logging
 import re
 
 try:
@@ -11,6 +12,8 @@ try:
     from .resolver import resolve_symbol, get_dedup_key as _resolver_dedup_key
 except ImportError:
     from resolver import resolve_symbol, get_dedup_key as _resolver_dedup_key
+
+logger = logging.getLogger("flyto-indexer.references")
 
 
 def find_references(symbol_id: str) -> dict:
@@ -216,6 +219,15 @@ def find_references(symbol_id: str) -> dict:
                     "confidence": "low",  # Content regex match
                 })
 
+    # Method 3: LSP enrichment (type-aware references from language servers)
+    lsp_refs = _enrich_with_lsp(resolved_id, target_symbol, index)
+    if lsp_refs:
+        for ref in lsp_refs:
+            key = (ref["from_path"], ref.get("line", 0))
+            if key not in seen_keys:
+                seen_keys.add(key)
+                references.append(ref)
+
     # Sort by confidence (high first), then by path
     confidence_order = {"high": 0, "medium": 1, "low": 2}
     references.sort(key=lambda x: (
@@ -256,6 +268,82 @@ def find_references(symbol_id: str) -> dict:
         "references": references,
         "next_action": next_action,
     }
+
+
+def _enrich_with_lsp(resolved_id: str, target_symbol: dict, index: dict) -> list:
+    """Attempt to get type-aware references via LSP.
+
+    Returns a list of reference dicts (same format as find_references entries),
+    or an empty list if LSP is unavailable or fails.
+    """
+    try:
+        try:
+            from ..index_store import _get_lsp_manager
+        except ImportError:
+            from index_store import _get_lsp_manager
+
+        manager = _get_lsp_manager()
+        if manager is None:
+            return []
+
+        target_path = target_symbol.get("path", "")
+        if not target_path:
+            return []
+
+        language = manager.language_for_path(target_path)
+        if not language:
+            return []
+
+        # Determine project root from index metadata
+        project_root = index.get("project_root", "")
+        if not project_root:
+            # Fallback: try to infer from index dir
+            import os
+            project_root = os.environ.get("FLYTO_INDEX_DIR", "")
+            if project_root:
+                project_root = str(os.path.dirname(project_root))
+            else:
+                project_root = os.getcwd()
+
+        client = manager.get_client(language, project_root)
+        if client is None:
+            return []
+
+        try:
+            from ..lsp.mapper import symbol_to_lsp_position, lsp_locations_to_references
+        except ImportError:
+            from lsp.mapper import symbol_to_lsp_position, lsp_locations_to_references
+
+        pos = symbol_to_lsp_position(target_symbol, project_root)
+        if pos is None:
+            return []
+
+        uri, line, col = pos
+
+        # Open the document so the server knows about it
+        import os
+        abs_path = os.path.join(project_root, target_path)
+        if not os.path.isfile(abs_path):
+            abs_path = target_path
+        try:
+            with open(abs_path, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+            lsp_cfg = {"python": "python", "typescript": "typescript",
+                       "go": "go", "rust": "rust"}
+            lang_id = lsp_cfg.get(language, language)
+            client.did_open(uri, lang_id, text)
+        except (OSError, IOError):
+            pass
+
+        locations = client.text_document_references(uri, line, col)
+        if not locations:
+            return []
+
+        return lsp_locations_to_references(locations, index)
+
+    except Exception as e:
+        logger.debug("LSP enrichment failed: %s", e, exc_info=True)
+        return []
 
 
 def impact_analysis(symbol_id: str) -> dict:
