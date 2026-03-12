@@ -23,12 +23,8 @@ except ImportError:
     from tools.search import _TODO_PATTERNS
 
 
-def find_dead_code(project=None, symbol_type=None, min_lines=5):
-    index = load_index()
-    symbols = index.get("symbols", {})
-    reverse_index = index.get("reverse_index", {})
-    dependencies = index.get("dependencies", {})
-
+def _build_reference_sets(dependencies):
+    """Extract referenced names, imported files, and referenced classes from dependencies."""
     referenced_names = set()
     imported_files = set()
     referenced_classes = set()
@@ -60,7 +56,18 @@ def find_dead_code(project=None, symbol_type=None, min_lines=5):
                         if part[0].isupper():
                             referenced_classes.add(part)
 
-    dead_code = []
+    return referenced_names, imported_files, referenced_classes
+
+
+def _is_potentially_dead(sym_id, sym, referenced_names, imported_files,
+                         referenced_classes, dependencies, symbols,
+                         _same_file_content_cache):
+    """Return True if the symbol should be considered dead code."""
+    sym_type = sym.get("type", "")
+    sym_name = sym.get("name", "")
+    sym_project = sym_id.split(":")[0] if ":" in sym_id else ""
+    sym_path = sym.get("path", "")
+
     should_be_referenced = {"function", "method", "composable", "component", "class"}
     entry_point_patterns = [
         "main", "index", "app", "App", "Main",
@@ -79,6 +86,96 @@ def find_dead_code(project=None, symbol_type=None, min_lines=5):
         "setup", "data", "computed", "methods", "watch",
     }
 
+    if sym_type not in should_be_referenced:
+        return False
+    is_entry_point = any(p in sym_name for p in entry_point_patterns)
+    if is_entry_point:
+        return False
+    if sym_name in lifecycle_methods:
+        return False
+    if sym_type == "function" and sym_path.endswith(".vue"):
+        return False
+    if sym_name.startswith("_") and not sym_name.startswith("__"):
+        return False
+    if sym_name in referenced_names:
+        return False
+
+    if sym_type == "method" and "." in sym_name:
+        method_only = sym_name.split(".")[-1]
+        if method_only in referenced_names:
+            return False
+        class_name = sym_name.split(".")[0]
+        if class_name in referenced_classes or class_name in referenced_names:
+            return False
+    if sym_type == "class" and sym_name in referenced_classes:
+        return False
+
+    file_basename = sym_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    if file_basename in imported_files or sym_path in imported_files:
+        return False
+
+    if sym_type == "composable":
+        is_imported = False
+        for dep in dependencies.values():
+            if dep.get("type") == "imports":
+                target = dep.get("target", "")
+                names = dep.get("metadata", {}).get("names", [])
+                target_basename = target.rsplit("/", 1)[-1].rsplit(".", 1)[0] if target else ""
+                if target_basename == file_basename or target_basename == sym_name:
+                    is_imported = True
+                    break
+                if sym_name in names:
+                    is_imported = True
+                    break
+        if is_imported:
+            return False
+
+    if sym_type in ("class", "component") and file_basename == sym_name:
+        is_imported = False
+        for dep in dependencies.values():
+            if dep.get("type") == "imports":
+                target = dep.get("target", "")
+                if sym_name in target or file_basename in target:
+                    is_imported = True
+                    break
+        if is_imported:
+            return False
+
+    # Check for dict/list dispatch patterns: the symbol name may
+    # appear as a bare reference (dict value, list element, callback
+    # assignment) inside another symbol in the same file.
+    bare_name = sym_name.split(".")[-1] if "." in sym_name else sym_name
+    if bare_name and len(bare_name) > 2:
+        file_key = f"{sym_project}:{sym_path}"
+        if file_key not in _same_file_content_cache:
+            parts = []
+            for other_id, other_sym in symbols.items():
+                other_proj = other_id.split(":")[0] if ":" in other_id else ""
+                if other_sym.get("path", "") == sym_path and other_proj == sym_project:
+                    text = get_symbol_content_text(other_id, other_sym)
+                    if text:
+                        parts.append((other_id, text))
+            _same_file_content_cache[file_key] = parts
+
+        name_pat = re.compile(r'\b' + re.escape(bare_name) + r'\b')
+        for other_id, text in _same_file_content_cache[file_key]:
+            if other_id == sym_id:
+                continue
+            if name_pat.search(text):
+                return False
+
+    return True
+
+
+def find_dead_code(project=None, symbol_type=None, min_lines=5):
+    index = load_index()
+    symbols = index.get("symbols", {})
+    reverse_index = index.get("reverse_index", {})
+    dependencies = index.get("dependencies", {})
+
+    referenced_names, imported_files, referenced_classes = _build_reference_sets(dependencies)
+
+    dead_code = []
     _same_file_content_cache = {}
 
     for sym_id, sym in symbols.items():
@@ -91,104 +188,30 @@ def find_dead_code(project=None, symbol_type=None, min_lines=5):
             continue
         if symbol_type and sym_type != symbol_type:
             continue
-        if sym_type not in should_be_referenced:
-            continue
 
         lines = sym.get("end_line", 0) - sym.get("start_line", 0)
         if lines < min_lines:
             continue
-        is_entry_point = any(p in sym_name for p in entry_point_patterns)
-        if is_entry_point:
-            continue
-        if sym_name in lifecycle_methods:
-            continue
-        if sym_type == "function" and sym_path.endswith(".vue"):
-            continue
-        if sym_name.startswith("_") and not sym_name.startswith("__"):
-            continue
-        if sym_name in referenced_names:
-            continue
-
-        if sym_type == "method" and "." in sym_name:
-            method_only = sym_name.split(".")[-1]
-            if method_only in referenced_names:
-                continue
-            class_name = sym_name.split(".")[0]
-            if class_name in referenced_classes or class_name in referenced_names:
-                continue
-        if sym_type == "class" and sym_name in referenced_classes:
-            continue
-
-        file_basename = sym_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-        if file_basename in imported_files or sym_path in imported_files:
-            continue
-
-        if sym_type == "composable":
-            is_imported = False
-            for dep in dependencies.values():
-                if dep.get("type") == "imports":
-                    target = dep.get("target", "")
-                    names = dep.get("metadata", {}).get("names", [])
-                    target_basename = target.rsplit("/", 1)[-1].rsplit(".", 1)[0] if target else ""
-                    if target_basename == file_basename or target_basename == sym_name:
-                        is_imported = True
-                        break
-                    if sym_name in names:
-                        is_imported = True
-                        break
-            if is_imported:
-                continue
-
-        if sym_type in ("class", "component") and file_basename == sym_name:
-            is_imported = False
-            for dep in dependencies.values():
-                if dep.get("type") == "imports":
-                    target = dep.get("target", "")
-                    if sym_name in target or file_basename in target:
-                        is_imported = True
-                        break
-            if is_imported:
-                continue
 
         ref_count = sym.get("ref_count", 0)
         callers = reverse_index.get(sym_id, [])
-        if ref_count == 0 and len(callers) == 0:
-            # Check for dict/list dispatch patterns: the symbol name may
-            # appear as a bare reference (dict value, list element, callback
-            # assignment) inside another symbol in the same file.
-            bare_name = sym_name.split(".")[-1] if "." in sym_name else sym_name
-            if bare_name and len(bare_name) > 2:
-                file_key = f"{sym_project}:{sym_path}"
-                if file_key not in _same_file_content_cache:
-                    parts = []
-                    for other_id, other_sym in symbols.items():
-                        other_proj = other_id.split(":")[0] if ":" in other_id else ""
-                        if other_sym.get("path", "") == sym_path and other_proj == sym_project:
-                            text = get_symbol_content_text(other_id, other_sym)
-                            if text:
-                                parts.append((other_id, text))
-                    _same_file_content_cache[file_key] = parts
+        if ref_count > 0 or len(callers) > 0:
+            continue
 
-                name_pat = re.compile(r'\b' + re.escape(bare_name) + r'\b')
-                found_in_sibling = False
-                for other_id, text in _same_file_content_cache[file_key]:
-                    if other_id == sym_id:
-                        continue
-                    if name_pat.search(text):
-                        found_in_sibling = True
-                        break
-                if found_in_sibling:
-                    continue
+        if not _is_potentially_dead(sym_id, sym, referenced_names, imported_files,
+                                    referenced_classes, dependencies, symbols,
+                                    _same_file_content_cache):
+            continue
 
-            dead_code.append({
-                "symbol_id": sym_id,
-                "name": sym_name,
-                "type": sym_type,
-                "path": sym_path,
-                "project": sym_project,
-                "lines": lines,
-                "start_line": sym.get("start_line", 0),
-            })
+        dead_code.append({
+            "symbol_id": sym_id,
+            "name": sym_name,
+            "type": sym_type,
+            "path": sym_path,
+            "project": sym_project,
+            "lines": lines,
+            "start_line": sym.get("start_line", 0),
+        })
 
     dead_code.sort(key=lambda x: x["lines"], reverse=True)
 

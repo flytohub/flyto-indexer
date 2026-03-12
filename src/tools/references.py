@@ -16,70 +16,52 @@ except ImportError:
 logger = logging.getLogger("flyto-indexer.references")
 
 
-def find_references(symbol_id: str) -> dict:
+def _extract_path_from_source_id(source_id: str) -> str:
+    """Extract file path from source_id like project:path:type:name"""
+    parts = source_id.split(":")
+    if len(parts) >= 2:
+        return parts[1]
+    return ""
+
+
+def _get_dedup_key(source_id: str) -> str:
     """
-    Find all places that reference this symbol.
+    Get dedup key for cross-project deduplication.
 
-    Uses:
-    1. Reverse index (pre-computed during indexing)
-    2. Resolved dependencies
-    3. Content search as fallback
+    Uses project + basename + type + name to distinguish same-named
+    symbols across different projects:
+    - flyto-cloud:src/.../Cart.vue:component:Cart -> flyto-cloud:Cart.vue:component:Cart
+    - flyto-landing:src/.../Cart.vue:component:Cart -> flyto-landing:Cart.vue:component:Cart
     """
-    index = load_index()
-    symbols = index.get("symbols", {})
-    dependencies = index.get("dependencies", {})
-    reverse_index = index.get("reverse_index", {})
+    parts = source_id.split(":")
+    if len(parts) >= 4:
+        # project:path:type:name -> project:basename(path):type:name
+        project = parts[0]
+        path = parts[1]
+        basename = path.rsplit("/", 1)[-1]  # Get filename only
+        return f"{project}:{basename}:{parts[2]}:{parts[3]}"
+    elif len(parts) >= 2:
+        return parts[1]
+    return source_id
 
-    resolved_id = resolve_symbol(symbol_id, symbols)
-    target_symbol = symbols.get(resolved_id)
-    if not target_symbol:
-        return {"error": f"Symbol not found: {symbol_id}"}
 
-    target_name = target_symbol.get("name", "")
-    target_path = target_symbol.get("path", "")
+def _find_refs_from_reverse_index(resolved_id, reverse_index, symbols, target_path, seen_keys, seen_paths, dependencies):
+    """Method 0: Use pre-computed reverse index (fastest & most accurate), plus name-based reverse index lookup."""
     references = []
-    seen_keys = set()  # Use (path, line) as key to avoid duplicates
-    seen_paths = set()  # Track unique paths for dedup across projects
+    target_name = symbols.get(resolved_id, {}).get("name", "")
 
-    def extract_path_from_source_id(source_id: str) -> str:
-        """Extract file path from source_id like project:path:type:name"""
-        parts = source_id.split(":")
-        if len(parts) >= 2:
-            return parts[1]
-        return ""
-
-    def get_dedup_key(source_id: str) -> str:
-        """
-        Get dedup key for cross-project deduplication.
-
-        Uses project + basename + type + name to distinguish same-named
-        symbols across different projects:
-        - flyto-cloud:src/.../Cart.vue:component:Cart -> flyto-cloud:Cart.vue:component:Cart
-        - flyto-landing:src/.../Cart.vue:component:Cart -> flyto-landing:Cart.vue:component:Cart
-        """
-        parts = source_id.split(":")
-        if len(parts) >= 4:
-            # project:path:type:name -> project:basename(path):type:name
-            project = parts[0]
-            path = parts[1]
-            basename = path.rsplit("/", 1)[-1]  # Get filename only
-            return f"{project}:{basename}:{parts[2]}:{parts[3]}"
-        elif len(parts) >= 2:
-            return parts[1]
-        return source_id
-
-    # Method 0: Use pre-computed reverse index (fastest & most accurate)
+    # Exact resolved_id lookup
     if resolved_id in reverse_index:
         for caller_id in reverse_index[resolved_id]:
             caller_symbol = symbols.get(caller_id, {})
-            from_path = caller_symbol.get("path", "") or extract_path_from_source_id(caller_id)
+            from_path = caller_symbol.get("path", "") or _extract_path_from_source_id(caller_id)
 
             # Skip self-references
             if from_path == target_path:
                 continue
 
             # Dedup across projects (flyto-cloud vs flyto-cloud-dev)
-            dedup_key = get_dedup_key(caller_id)
+            dedup_key = _get_dedup_key(caller_id)
             if dedup_key in seen_paths:
                 continue
             seen_paths.add(dedup_key)
@@ -110,13 +92,13 @@ def find_references(symbol_id: str) -> dict:
     if target_name in reverse_index:
         for caller_id in reverse_index[target_name]:
             caller_symbol = symbols.get(caller_id, {})
-            from_path = caller_symbol.get("path", "") or extract_path_from_source_id(caller_id)
+            from_path = caller_symbol.get("path", "") or _extract_path_from_source_id(caller_id)
 
             if from_path == target_path:
                 continue
 
             # Dedup across projects
-            dedup_key = get_dedup_key(caller_id)
+            dedup_key = _get_dedup_key(caller_id)
             if dedup_key in seen_paths:
                 continue
             seen_paths.add(dedup_key)
@@ -135,7 +117,13 @@ def find_references(symbol_id: str) -> dict:
                 "confidence": "medium",
             })
 
-    # Method 1: Search dependencies (calls, extends, implements, uses)
+    return references
+
+
+def _find_refs_from_dependencies(resolved_id, target_name, dependencies, symbols, target_path, seen_keys, seen_paths):
+    """Method 1: Search dependencies (calls, extends, implements, uses)."""
+    references = []
+
     for _dep_id, dep in dependencies.items():
         dep_type = dep.get("type", "")
         target = dep.get("target", "")
@@ -147,14 +135,14 @@ def find_references(symbol_id: str) -> dict:
                 source_symbol = symbols.get(source_id, {})
 
                 # Get path from symbol or extract from source_id
-                from_path = source_symbol.get("path", "") or extract_path_from_source_id(source_id)
+                from_path = source_symbol.get("path", "") or _extract_path_from_source_id(source_id)
 
                 # Skip self-references (same file)
                 if from_path == target_path:
                     continue
 
                 # Dedup across projects
-                dedup_key = get_dedup_key(source_id)
+                dedup_key = _get_dedup_key(source_id)
                 if dedup_key in seen_paths:
                     continue
                 seen_paths.add(dedup_key)
@@ -174,50 +162,101 @@ def find_references(symbol_id: str) -> dict:
                     "confidence": "high" if resolved_target else "medium",
                 })
 
-    # Method 2: Search content for symbol name usage (capped to avoid O(N*C) at scale)
+    return references
+
+
+def _find_refs_from_content(resolved_id, target_name, target_path, symbols, seen_keys, seen_paths):
+    """Method 2: Search content for symbol name usage (capped to avoid O(N*C) at scale)."""
+    references = []
     _CONTENT_SEARCH_MAX = 5000  # Skip content fallback for very large indexes
-    if target_name and len(target_name) >= 2 and len(symbols) <= _CONTENT_SEARCH_MAX:
-        pattern = rf'\b{re.escape(target_name)}\s*\('
 
-        for sym_id, sym in symbols.items():
-            if sym_id == resolved_id:
+    if not target_name or len(target_name) < 2 or len(symbols) > _CONTENT_SEARCH_MAX:
+        return references
+
+    pattern = rf'\b{re.escape(target_name)}\s*\('
+
+    for sym_id, sym in symbols.items():
+        if sym_id == resolved_id:
+            continue
+
+        sym_path = sym.get("path", "")
+        # Skip same file (self-references)
+        if sym_path == target_path:
+            continue
+
+        # Dedup across projects
+        dedup_key = _get_dedup_key(sym_id)
+        if dedup_key in seen_paths:
+            continue
+
+        content = get_symbol_content_text(sym_id, sym)
+        matches = list(re.finditer(pattern, content))
+
+        if matches:
+            seen_paths.add(dedup_key)  # Only add if matches found
+
+            # Find line number of first match
+            first_match = matches[0]
+            line_offset = content[:first_match.start()].count('\n')
+            line = sym.get("start_line", 0) + line_offset
+
+            key = (sym_path, line)
+            if key in seen_keys:
                 continue
+            seen_keys.add(key)
 
-            sym_path = sym.get("path", "")
-            # Skip same file (self-references)
-            if sym_path == target_path:
-                continue
+            references.append({
+                "type": "usage",
+                "from_symbol": sym_id,
+                "from_path": sym_path,
+                "from_name": sym.get("name", ""),
+                "line": line,
+                "occurrences": len(matches),
+                "confidence": "low",  # Content regex match
+            })
 
-            # Dedup across projects
-            dedup_key = get_dedup_key(sym_id)
-            if dedup_key in seen_paths:
-                continue
+    return references
 
-            content = get_symbol_content_text(sym_id, sym)
-            matches = list(re.finditer(pattern, content))
 
-            if matches:
-                seen_paths.add(dedup_key)  # Only add if matches found
+def find_references(symbol_id: str) -> dict:
+    """
+    Find all places that reference this symbol.
 
-                # Find line number of first match
-                first_match = matches[0]
-                line_offset = content[:first_match.start()].count('\n')
-                line = sym.get("start_line", 0) + line_offset
+    Uses:
+    1. Reverse index (pre-computed during indexing)
+    2. Resolved dependencies
+    3. Content search as fallback
+    """
+    index = load_index()
+    symbols = index.get("symbols", {})
+    dependencies = index.get("dependencies", {})
+    reverse_index = index.get("reverse_index", {})
 
-                key = (sym_path, line)
-                if key in seen_keys:
-                    continue
-                seen_keys.add(key)
+    resolved_id = resolve_symbol(symbol_id, symbols)
+    target_symbol = symbols.get(resolved_id)
+    if not target_symbol:
+        return {"error": f"Symbol not found: {symbol_id}"}
 
-                references.append({
-                    "type": "usage",
-                    "from_symbol": sym_id,
-                    "from_path": sym_path,
-                    "from_name": sym.get("name", ""),
-                    "line": line,
-                    "occurrences": len(matches),
-                    "confidence": "low",  # Content regex match
-                })
+    target_name = target_symbol.get("name", "")
+    target_path = target_symbol.get("path", "")
+    references = []
+    seen_keys = set()  # Use (path, line) as key to avoid duplicates
+    seen_paths = set()  # Track unique paths for dedup across projects
+
+    # Method 0: Use pre-computed reverse index (fastest & most accurate) + name-based lookup
+    references.extend(_find_refs_from_reverse_index(
+        resolved_id, reverse_index, symbols, target_path, seen_keys, seen_paths, dependencies
+    ))
+
+    # Method 1: Search dependencies (calls, extends, implements, uses)
+    references.extend(_find_refs_from_dependencies(
+        resolved_id, target_name, dependencies, symbols, target_path, seen_keys, seen_paths
+    ))
+
+    # Method 2: Search content for symbol name usage (capped to avoid O(N*C) at scale)
+    references.extend(_find_refs_from_content(
+        resolved_id, target_name, target_path, symbols, seen_keys, seen_paths
+    ))
 
     # Method 3: LSP enrichment (type-aware references from language servers)
     lsp_refs = _enrich_with_lsp(resolved_id, target_symbol, index)
@@ -696,6 +735,57 @@ def cross_project_impact(
     }
 
 
+def _collect_imports(target_paths, imports_map):
+    """Collect what the target paths depend on (imports)."""
+    results = []
+    seen_imports = set()
+    for path in target_paths:
+        for imp in imports_map.get(path, []):
+            target = imp["target"]
+            if target not in seen_imports:
+                seen_imports.add(target)
+                results.append({
+                    "from": path,
+                    "to": target,
+                    "type": imp["type"],
+                })
+    return results
+
+
+def _collect_dependents(target_paths, reverse_index, dependents_map):
+    """Collect what depends on the target paths (dependents), using reverse_index for accuracy."""
+    results = []
+    seen_dependents = set()
+    for path in target_paths:
+        # First, use reverse_index (more accurate, includes 'uses' dependencies)
+        for sid, callers in reverse_index.items():
+            if ":" in sid:
+                sym_path = sid.split(":")[1]
+                if sym_path == path:
+                    for caller in callers:
+                        if ":" in caller:
+                            caller_path = caller.split(":")[1]
+                            if caller_path not in seen_dependents and caller_path not in target_paths:
+                                seen_dependents.add(caller_path)
+                                results.append({
+                                    "from": caller_path,
+                                    "to": path,
+                                    "type": "calls",  # reverse_index doesn't track dep type
+                                })
+
+        # Fallback: also check dependents_map for additional deps
+        for dep in dependents_map.get(path, []):
+            source = dep["source"]
+            if source not in seen_dependents and source not in target_paths:
+                seen_dependents.add(source)
+                results.append({
+                    "from": source,
+                    "to": path,
+                    "type": dep["type"],
+                })
+    return results
+
+
 def dependency_graph(
     file_path: str = None,
     symbol_id: str = None,
@@ -783,48 +873,11 @@ def dependency_graph(
 
     # Collect imports (what target depends on)
     if direction in ("both", "imports"):
-        seen_imports = set()
-        for path in target_paths:
-            for imp in imports_map.get(path, []):
-                target = imp["target"]
-                if target not in seen_imports:
-                    seen_imports.add(target)
-                    result["imports"].append({
-                        "from": path,
-                        "to": target,
-                        "type": imp["type"],
-                    })
+        result["imports"] = _collect_imports(target_paths, imports_map)
 
     # Collect dependents (what depends on target) - use reverse_index for accuracy
     if direction in ("both", "dependents"):
-        seen_dependents = set()
-        for path in target_paths:
-            # First, use reverse_index (more accurate, includes 'uses' dependencies)
-            for sid, callers in reverse_index.items():
-                if ":" in sid:
-                    sym_path = sid.split(":")[1]
-                    if sym_path == path:
-                        for caller in callers:
-                            if ":" in caller:
-                                caller_path = caller.split(":")[1]
-                                if caller_path not in seen_dependents and caller_path not in target_paths:
-                                    seen_dependents.add(caller_path)
-                                    result["dependents"].append({
-                                        "from": caller_path,
-                                        "to": path,
-                                        "type": "calls",  # reverse_index doesn't track dep type
-                                    })
-
-            # Fallback: also check dependents_map for additional deps
-            for dep in dependents_map.get(path, []):
-                source = dep["source"]
-                if source not in seen_dependents and source not in target_paths:
-                    seen_dependents.add(source)
-                    result["dependents"].append({
-                        "from": source,
-                        "to": path,
-                        "type": dep["type"],
-                    })
+        result["dependents"] = _collect_dependents(target_paths, reverse_index, dependents_map)
 
     # Generate summary
     result["summary"] = {

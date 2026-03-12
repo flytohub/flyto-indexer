@@ -98,8 +98,6 @@ class JavaScanner(BaseScanner):
 
     def scan_file(self, file_path: Path, content: str) -> tuple[list[Symbol], list[Dependency]]:
         """Scan Java file."""
-        symbols = []
-        dependencies = []
         lines = content.splitlines()
         rel_path = str(file_path)
         file_source_id = f"{self.project}:{rel_path}:file:{file_path.stem}"
@@ -109,12 +107,39 @@ class JavaScanner(BaseScanner):
         if package_match:
             package_match.group(1).strip()
 
-        # Extract imports
+        # Scan each type
+        import_deps = self._scan_imports(content, file_source_id)
+
+        class_symbols, class_deps, class_blocks = self._scan_classes(content, lines, rel_path)
+        iface_symbols, iface_deps, iface_blocks = self._scan_interfaces(content, lines, rel_path)
+        enum_symbols, enum_deps, enum_blocks = self._scan_enums(content, lines, rel_path)
+        annotation_symbols = self._scan_annotations(content, lines, rel_path)
+
+        all_blocks = class_blocks + iface_blocks + enum_blocks
+
+        method_symbols = self._scan_methods(content, lines, rel_path, all_blocks)
+        constructor_symbols = self._scan_constructors(content, lines, rel_path, all_blocks)
+
+        # Aggregate results
+        symbols = (
+            class_symbols + iface_symbols + enum_symbols
+            + annotation_symbols + method_symbols + constructor_symbols
+        )
+        dependencies = import_deps + class_deps + iface_deps + enum_deps
+
+        # Compute hashes
+        for symbol in symbols:
+            symbol.compute_hash()
+
+        return symbols, dependencies
+
+    def _scan_imports(self, content: str, file_source_id: str) -> list[Dependency]:
+        """Extract import dependencies."""
+        dependencies = []
         for match in self.IMPORT_PATTERN.finditer(content):
             import_path = match.group(1).strip()
             line = content[:match.start()].count('\n') + 1
 
-            # Parse import path
             parts = import_path.split(".")
             class_name = parts[-1] if parts else import_path
 
@@ -126,11 +151,14 @@ class JavaScanner(BaseScanner):
                 metadata={"names": [class_name]},
             )
             dependencies.append(dep)
+        return dependencies
 
-        # Track class positions for method attribution
+    def _scan_classes(self, content: str, lines: list[str], rel_path: str) -> tuple[list[Symbol], list[Dependency], list[dict]]:
+        """Extract class symbols, dependencies, and block positions."""
+        symbols = []
+        dependencies = []
         class_blocks = []
 
-        # Extract classes
         for match in self.CLASS_PATTERN.finditer(content):
             name = match.group(1)
             extends = match.group(2)
@@ -187,7 +215,14 @@ class JavaScanner(BaseScanner):
             )
             symbols.append(symbol)
 
-        # Extract interfaces
+        return symbols, dependencies, class_blocks
+
+    def _scan_interfaces(self, content: str, lines: list[str], rel_path: str) -> tuple[list[Symbol], list[Dependency], list[dict]]:
+        """Extract interface symbols, dependencies, and block positions."""
+        symbols = []
+        dependencies = []
+        class_blocks = []
+
         for match in self.INTERFACE_PATTERN.finditer(content):
             name = match.group(1)
             extends = match.group(2)
@@ -231,7 +266,14 @@ class JavaScanner(BaseScanner):
             )
             symbols.append(symbol)
 
-        # Extract enums
+        return symbols, dependencies, class_blocks
+
+    def _scan_enums(self, content: str, lines: list[str], rel_path: str) -> tuple[list[Symbol], list[Dependency], list[dict]]:
+        """Extract enum symbols, dependencies, and block positions."""
+        symbols = []
+        dependencies = []
+        class_blocks = []
+
         for match in self.ENUM_PATTERN.finditer(content):
             name = match.group(1)
             implements = match.group(2)
@@ -262,7 +304,11 @@ class JavaScanner(BaseScanner):
             )
             symbols.append(symbol)
 
-        # Extract annotation types
+        return symbols, dependencies, class_blocks
+
+    def _scan_annotations(self, content: str, lines: list[str], rel_path: str) -> list[Symbol]:
+        """Extract annotation type symbols."""
+        symbols = []
         for match in self.ANNOTATION_PATTERN.finditer(content):
             name = match.group(1)
             start_line = content[:match.start()].count('\n') + 1
@@ -282,8 +328,11 @@ class JavaScanner(BaseScanner):
                 exports=[name],
             )
             symbols.append(symbol)
+        return symbols
 
-        # Extract methods
+    def _scan_methods(self, content: str, lines: list[str], rel_path: str, class_blocks: list[dict]) -> list[Symbol]:
+        """Extract method symbols."""
+        symbols = []
         for match in self.METHOD_PATTERN.finditer(content):
             pos = match.start()
             return_type = match.group(1)
@@ -330,8 +379,11 @@ class JavaScanner(BaseScanner):
                 imports=[enclosing_class],
             )
             symbols.append(symbol)
+        return symbols
 
-        # Extract constructors
+    def _scan_constructors(self, content: str, lines: list[str], rel_path: str, class_blocks: list[dict]) -> list[Symbol]:
+        """Extract constructor symbols."""
+        symbols = []
         for match in self.CONSTRUCTOR_PATTERN.finditer(content):
             pos = match.start()
             constructor_name = match.group(1)
@@ -367,12 +419,7 @@ class JavaScanner(BaseScanner):
                 imports=[enclosing_class],
             )
             symbols.append(symbol)
-
-        # Compute hashes
-        for symbol in symbols:
-            symbol.compute_hash()
-
-        return symbols, dependencies
+        return symbols
 
     def _find_block_end(self, content: str, start_pos: int, start_line: int) -> int:
         """Find matching closing brace."""

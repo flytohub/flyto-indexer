@@ -44,6 +44,184 @@ _STRING_PATTERNS = [
 ]
 
 
+def _search_todos(content: str, query_lower: str, sym: dict) -> list:
+    """Search for TODO/FIXME/XXX/HACK/NOTE matches in content."""
+    matches = []
+    for m in _FULLTEXT_TODO_PATTERN.finditer(content):
+        if query_lower in m.group(0).lower():
+            line_num = content[:m.start()].count('\n') + 1
+            matches.append({
+                "type": "todo",
+                "tag": m.group(1).upper(),
+                "text": m.group(2).strip()[:100],
+                "line": sym.get("start_line", 0) + line_num - 1,
+            })
+    return matches
+
+
+def _search_comments(content: str, query_lower: str, sym: dict) -> list:
+    """Search comments (Python + JS single-line + multi-line) for query."""
+    matches = []
+    # Python comments
+    for m in _PY_COMMENT_PATTERN.finditer(content):
+        if query_lower in m.group(1).lower():
+            line_num = content[:m.start()].count('\n') + 1
+            matches.append({
+                "type": "comment",
+                "text": m.group(1).strip()[:100],
+                "line": sym.get("start_line", 0) + line_num - 1,
+            })
+
+    # JS/TS single-line comments
+    for m in _JS_COMMENT_PATTERN.finditer(content):
+        if query_lower in m.group(1).lower():
+            line_num = content[:m.start()].count('\n') + 1
+            matches.append({
+                "type": "comment",
+                "text": m.group(1).strip()[:100],
+                "line": sym.get("start_line", 0) + line_num - 1,
+            })
+
+    # Multi-line comments
+    for m in _MULTI_COMMENT_PATTERN.finditer(content):
+        if query_lower in m.group(0).lower():
+            line_num = content[:m.start()].count('\n') + 1
+            text = m.group(0).replace('/*', '').replace('*/', '').strip()
+            matches.append({
+                "type": "comment",
+                "text": text[:100],
+                "line": sym.get("start_line", 0) + line_num - 1,
+            })
+    return matches
+
+
+def _search_strings(content: str, query_lower: str, sym: dict) -> list:
+    """Search string literals for query."""
+    matches = []
+    for pattern in _STRING_PATTERNS:
+        for m in pattern.finditer(content):
+            if query_lower in m.group(1).lower():
+                line_num = content[:m.start()].count('\n') + 1
+                matches.append({
+                    "type": "string",
+                    "text": m.group(1)[:100],
+                    "line": sym.get("start_line", 0) + line_num - 1,
+                })
+    return matches
+
+
+def _search_general(content: str, query_pattern, sym: dict) -> list:
+    """General content search — returns at most one match per symbol."""
+    matches = []
+    for m in query_pattern.finditer(content):
+        line_num = content[:m.start()].count('\n') + 1
+        # Get context around match
+        start = max(0, m.start() - 30)
+        end = min(len(content), m.end() + 30)
+        context = content[start:end].replace('\n', ' ').strip()
+        matches.append({
+            "type": "content",
+            "text": context[:100],
+            "line": sym.get("start_line", 0) + line_num - 1,
+        })
+        break  # Only first match per symbol for general search
+    return matches
+
+
+def _score_symbol(
+    symbol_id: str,
+    symbol: dict,
+    query_lower: str,
+    query_words: list,
+    synonym_tokens: set,
+    all_search_words: list,
+    bm25_scores: dict,
+    boost_paths: set,
+) -> tuple:
+    """Score a symbol for keyword search. Returns (score, match_reasons) or None if no match."""
+    score = 0
+    match_reason = []
+    path = symbol.get("path", "").lower()
+    name = symbol.get("name", "").lower()
+    sym_type = symbol.get("type", "")
+
+    # === BM25 base score (if available) ===
+    bm25_score = bm25_scores.get(symbol_id, 0)
+    if bm25_score > 0:
+        score += bm25_score
+        match_reason.append("bm25")
+
+    # === Text matching (additive bonuses) ===
+    # Name match (high weight) — check original query words
+    if any(w in name for w in query_words):
+        score += 10
+        match_reason.append("name")
+
+    # Exact match bonus
+    if query_lower == name:
+        score += 20
+
+    # Synonym name match — name contains an expanded synonym term
+    if synonym_tokens and any(w in name for w in synonym_tokens):
+        score += 5
+        if "synonym" not in match_reason:
+            match_reason.append("synonym")
+
+    # Fuzzy name match (Levenshtein on symbol name vs query)
+    fuzzy = _fuzzy_score(query_lower, name)
+    if fuzzy >= 0.6:
+        fuzzy_pts = fuzzy * 15.0  # scale 0.6-1.0 → 9-15 points
+        score += fuzzy_pts
+        if "fuzzy" not in match_reason:
+            match_reason.append("fuzzy")
+
+    # Summary match — check both original and expanded words
+    summary = symbol.get("summary", "").lower()
+    if any(w in summary for w in query_words):
+        score += 5
+        match_reason.append("summary")
+    elif synonym_tokens and any(w in summary for w in synonym_tokens):
+        score += 3
+        match_reason.append("summary_synonym")
+
+    # Content match (only if no BM25 hit — avoid double-loading)
+    if bm25_score == 0:
+        content = get_symbol_content_text(symbol_id, symbol).lower()
+        if any(w in content for w in all_search_words):
+            score += 1
+            match_reason.append("content")
+
+    # Skip if no match at all
+    if score == 0:
+        return None
+
+    # === Smart weighting ===
+    # 1. Symbol type weight
+    type_weight = TYPE_WEIGHTS.get(sym_type, 0)
+    score += type_weight
+
+    # 2. Reference count weight (more refs = more important)
+    ref_count = symbol.get("ref_count", 0)
+    ref_bonus = min(ref_count * 0.5, 10)  # capped at +10
+    score += ref_bonus
+
+    # 3. Path weight (demote test files)
+    if any(p in path for p in LOW_PRIORITY_PATHS):
+        score -= 5
+
+    # 4. Export weight (bonus for public APIs)
+    if symbol.get("exports"):
+        score += 3
+
+    # 5. Session boost (bonus for recently viewed files)
+    if boost_paths and path:
+        raw_path = symbol.get("path", "")
+        if raw_path in boost_paths:
+            score += 8
+
+    return (round(score, 1), match_reason, ref_count)
+
+
 def _fuzzy_score(query: str, name: str) -> float:
     """Levenshtein-based similarity between query and symbol name, 0.0 to 1.0.
 
@@ -183,84 +361,14 @@ def search_by_keyword(
         if symbol_type and symbol_type.lower() != sym_type.lower():
             continue
 
-        score = 0
-        match_reason = []
-        path = symbol.get("path", "").lower()
-
-        # === BM25 base score (if available) ===
-        bm25_score = bm25_scores.get(symbol_id, 0)
-        if bm25_score > 0:
-            score += bm25_score
-            match_reason.append("bm25")
-
-        # === Text matching (additive bonuses) ===
-        # Name match (high weight) — check original query words
-        name = symbol.get("name", "").lower()
-        if any(w in name for w in query_words):
-            score += 10
-            match_reason.append("name")
-
-        # Exact match bonus
-        if query_lower == name:
-            score += 20
-
-        # Synonym name match — name contains an expanded synonym term
-        if synonym_tokens and any(w in name for w in synonym_tokens):
-            score += 5
-            if "synonym" not in match_reason:
-                match_reason.append("synonym")
-
-        # Fuzzy name match (Levenshtein on symbol name vs query)
-        fuzzy = _fuzzy_score(query_lower, name)
-        if fuzzy >= 0.6:
-            fuzzy_pts = fuzzy * 15.0  # scale 0.6-1.0 → 9-15 points
-            score += fuzzy_pts
-            if "fuzzy" not in match_reason:
-                match_reason.append("fuzzy")
-
-        # Summary match — check both original and expanded words
-        summary = symbol.get("summary", "").lower()
-        if any(w in summary for w in query_words):
-            score += 5
-            match_reason.append("summary")
-        elif synonym_tokens and any(w in summary for w in synonym_tokens):
-            score += 3
-            match_reason.append("summary_synonym")
-
-        # Content match (only if no BM25 hit — avoid double-loading)
-        if bm25_score == 0:
-            content = get_symbol_content_text(symbol_id, symbol).lower()
-            if any(w in content for w in all_search_words):
-                score += 1
-                match_reason.append("content")
-
-        # Skip if no match at all
-        if score == 0:
+        scored = _score_symbol(
+            symbol_id, symbol, query_lower, query_words,
+            synonym_tokens, all_search_words, bm25_scores, boost_paths,
+        )
+        if scored is None:
             continue
 
-        # === Smart weighting ===
-        # 1. Symbol type weight
-        type_weight = TYPE_WEIGHTS.get(sym_type, 0)
-        score += type_weight
-
-        # 2. Reference count weight (more refs = more important)
-        ref_count = symbol.get("ref_count", 0)
-        ref_bonus = min(ref_count * 0.5, 10)  # capped at +10
-        score += ref_bonus
-
-        # 3. Path weight (demote test files)
-        if any(p in path for p in LOW_PRIORITY_PATHS):
-            score -= 5
-
-        # 4. Export weight (bonus for public APIs)
-        if symbol.get("exports"):
-            score += 3
-
-        # 5. Session boost (bonus for recently viewed files)
-        if boost_paths and path:
-            raw_path = symbol.get("path", "")
-            if raw_path in boost_paths:
-                score += 8
+        score, match_reason, ref_count = scored
 
         result = {
             "project": sym_project,
@@ -270,7 +378,7 @@ def search_by_keyword(
             "type": sym_type,
             "line": symbol.get("start_line", 0),
             "summary": symbol.get("summary", "")[:150],
-            "score": round(score, 1),
+            "score": score,
             "ref_count": ref_count,
             "match": ", ".join(match_reason),
         }
@@ -344,76 +452,16 @@ def fulltext_search(
 
         # Search based on type
         if search_type in ("all", "todo"):
-            # Find TODOs, FIXMEs, XXX, HACK, NOTE
-            for m in _FULLTEXT_TODO_PATTERN.finditer(content):
-                if query_lower in m.group(0).lower():
-                    line_num = content[:m.start()].count('\n') + 1
-                    matches.append({
-                        "type": "todo",
-                        "tag": m.group(1).upper(),
-                        "text": m.group(2).strip()[:100],
-                        "line": sym.get("start_line", 0) + line_num - 1,
-                    })
+            matches.extend(_search_todos(content, query_lower, sym))
 
         if search_type in ("all", "comment"):
-            # Find comments containing query
-            # Python comments
-            for m in _PY_COMMENT_PATTERN.finditer(content):
-                if query_lower in m.group(1).lower():
-                    line_num = content[:m.start()].count('\n') + 1
-                    matches.append({
-                        "type": "comment",
-                        "text": m.group(1).strip()[:100],
-                        "line": sym.get("start_line", 0) + line_num - 1,
-                    })
-
-            # JS/TS single-line comments
-            for m in _JS_COMMENT_PATTERN.finditer(content):
-                if query_lower in m.group(1).lower():
-                    line_num = content[:m.start()].count('\n') + 1
-                    matches.append({
-                        "type": "comment",
-                        "text": m.group(1).strip()[:100],
-                        "line": sym.get("start_line", 0) + line_num - 1,
-                    })
-
-            # Multi-line comments
-            for m in _MULTI_COMMENT_PATTERN.finditer(content):
-                if query_lower in m.group(0).lower():
-                    line_num = content[:m.start()].count('\n') + 1
-                    text = m.group(0).replace('/*', '').replace('*/', '').strip()
-                    matches.append({
-                        "type": "comment",
-                        "text": text[:100],
-                        "line": sym.get("start_line", 0) + line_num - 1,
-                    })
+            matches.extend(_search_comments(content, query_lower, sym))
 
         if search_type in ("all", "string"):
-            # Find strings containing query
-            for pattern in _STRING_PATTERNS:
-                for m in pattern.finditer(content):
-                    if query_lower in m.group(1).lower():
-                        line_num = content[:m.start()].count('\n') + 1
-                        matches.append({
-                            "type": "string",
-                            "text": m.group(1)[:100],
-                            "line": sym.get("start_line", 0) + line_num - 1,
-                        })
+            matches.extend(_search_strings(content, query_lower, sym))
 
         if search_type == "all" and not matches:
-            # General content search if no specific matches
-            for m in query_pattern.finditer(content):
-                line_num = content[:m.start()].count('\n') + 1
-                # Get context around match
-                start = max(0, m.start() - 30)
-                end = min(len(content), m.end() + 30)
-                context = content[start:end].replace('\n', ' ').strip()
-                matches.append({
-                    "type": "content",
-                    "text": context[:100],
-                    "line": sym.get("start_line", 0) + line_num - 1,
-                })
-                break  # Only first match per symbol for general search
+            matches.extend(_search_general(content, query_pattern, sym))
 
         if matches:
             results.append({

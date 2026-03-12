@@ -803,6 +803,124 @@ def extract_type_schema(symbol_id: str) -> dict:
 # Tool 2: check_api_contracts
 # =============================================================================
 
+def _find_handler_for_api(api_sym: dict, api_path: str, api_line: int, symbols: dict):
+    """Find the handler function near an API endpoint.
+
+    Returns (handler_sid, handler_sym) or None if no handler found.
+    """
+    for sid, sym in symbols.items():
+        if sym.get("path") != api_path:
+            continue
+        if sym.get("type") not in ("function", "method"):
+            continue
+        sym_start = sym.get("start_line", 0)
+        if 0 < sym_start - api_line <= 5:
+            return sid, sym
+    return None
+
+
+def _extract_return_type_name(handler_content: str):
+    """Extract return type name from handler content.
+
+    Checks -> ReturnType annotation and response_model= parameter.
+    Returns the type name string or None.
+    """
+    # Check -> ReturnType or -> ReturnType[Inner]
+    ret_match = re.search(r'->\s*([A-Za-z_]\w*(?:\[[\w\[\], ]*\])?)', handler_content)
+    if ret_match:
+        return ret_match.group(1)
+
+    # Check response_model=TypeName
+    resp_match = re.search(r'response_model\s*=\s*([A-Za-z_]\w*(?:\[[\w\[\], ]*\])?)', handler_content)
+    if resp_match:
+        return resp_match.group(1)
+
+    return None
+
+
+def _find_producer_schema(actual_type: str, api_project: str, symbols: dict):
+    """Find and extract the producer's type schema.
+
+    Searches the index for actual_type within api_project and extracts fields.
+    Returns the schema dict or None.
+    """
+    for sid, sym in symbols.items():
+        if sym.get("name") != actual_type:
+            continue
+        sym_project_check = sid.split(":")[0] if ":" in sid else ""
+        if sym_project_check == api_project:
+            content = get_symbol_content_text(sid, sym)
+            if content:
+                lang = _detect_language(sym.get("path", ""))
+                if lang == "python":
+                    schema = _extract_python_fields(content, actual_type, all_symbols=symbols)
+                elif lang == "typescript":
+                    schema = _extract_ts_fields(content, actual_type, all_symbols=symbols)
+                else:
+                    continue
+                if schema and schema.get("fields"):
+                    return schema
+    return None
+
+
+def _find_consumer_mismatches(handler_sid: str, api_sid: str, api_project: str,
+                              producer_schema: dict, consumer_project: str,
+                              symbols: dict, reverse_index: dict) -> list:
+    """Find consumer type mismatches for an API endpoint.
+
+    Finds references from other projects and compares their type schemas
+    against the producer schema.
+    Returns list of consumer mismatch dicts.
+    """
+    consumer_refs = set()
+    for ref_target in (handler_sid, api_sid):
+        for ref_id in reverse_index.get(ref_target, []):
+            ref_project = ref_id.split(":")[0] if ":" in ref_id else ""
+            if ref_project == api_project:
+                continue
+            if consumer_project and consumer_project.lower() not in ref_project.lower():
+                continue
+            consumer_refs.add((ref_id, ref_project))
+
+    consumers = []
+    for ref_id, ref_project in consumer_refs:
+        ref_sym = symbols.get(ref_id, {})
+        ref_path = ref_sym.get("path", "")
+        ref_lang = _detect_language(ref_path)
+
+        # Search ALL type symbols in the consumer project (not just same file)
+        for csid, csym in symbols.items():
+            csym_project = csid.split(":")[0] if ":" in csid else ""
+            if csym_project != ref_project:
+                continue
+            if csym.get("type") not in ("interface", "type", "class"):
+                continue
+            c_content = get_symbol_content_text(csid, csym)
+            if not c_content:
+                continue
+            c_name = csym.get("name", "")
+            c_path = csym.get("path", "")
+            c_lang = _detect_language(c_path)
+
+            if c_lang == "typescript":
+                consumer_type = _extract_ts_fields(c_content, c_name, all_symbols=symbols)
+            elif c_lang == "python":
+                consumer_type = _extract_python_fields(c_content, c_name, all_symbols=symbols)
+            else:
+                continue
+            if consumer_type and consumer_type.get("fields"):
+                mismatches = _compare_schemas(producer_schema, consumer_type)
+                if mismatches:
+                    consumers.append({
+                        "project": ref_project,
+                        "type": consumer_type,
+                        "symbol_id": csid,
+                        "mismatches": mismatches,
+                    })
+
+    return consumers
+
+
 def check_api_contracts(source_project: str = None, consumer_project: str = None) -> dict:
     """Check type contracts between API producers and consumers.
 
@@ -836,40 +954,17 @@ def check_api_contracts(source_project: str = None, consumer_project: str = None
         api_line = api_sym.get("start_line", 0)
 
         # Find handler function near the API endpoint
-        handler_sym = None
-        handler_sid = None
-        for sid, sym in symbols.items():
-            if sym.get("path") != api_path:
-                continue
-            if sym.get("type") not in ("function", "method"):
-                continue
-            sym_start = sym.get("start_line", 0)
-            if 0 < sym_start - api_line <= 5:
-                handler_sym = sym
-                handler_sid = sid
-                break
-
-        if not handler_sym:
+        handler_result = _find_handler_for_api(api_sym, api_path, api_line, symbols)
+        if not handler_result:
             continue
+        handler_sid, handler_sym = handler_result
 
         handler_content = get_symbol_content_text(handler_sid, handler_sym)
         if not handler_content:
             continue
 
-        # Extract return type — support generics like Response[User]
-        return_type_name = None
-
-        # Check -> ReturnType or -> ReturnType[Inner]
-        ret_match = re.search(r'->\s*([A-Za-z_]\w*(?:\[[\w\[\], ]*\])?)', handler_content)
-        if ret_match:
-            return_type_name = ret_match.group(1)
-
-        # Check response_model=TypeName
-        if not return_type_name:
-            resp_match = re.search(r'response_model\s*=\s*([A-Za-z_]\w*(?:\[[\w\[\], ]*\])?)', handler_content)
-            if resp_match:
-                return_type_name = resp_match.group(1)
-
+        # Extract return type
+        return_type_name = _extract_return_type_name(handler_content)
         if not return_type_name:
             continue
 
@@ -877,71 +972,16 @@ def check_api_contracts(source_project: str = None, consumer_project: str = None
         actual_type = return_type_name.split('[')[0]
 
         # Find the return type in the index
-        producer_schema = None
-        for sid, sym in symbols.items():
-            if sym.get("name") != actual_type:
-                continue
-            sym_project_check = sid.split(":")[0] if ":" in sid else ""
-            if sym_project_check == api_project:
-                content = get_symbol_content_text(sid, sym)
-                if content:
-                    lang = _detect_language(sym.get("path", ""))
-                    if lang == "python":
-                        producer_schema = _extract_python_fields(content, actual_type, all_symbols=symbols)
-                    elif lang == "typescript":
-                        producer_schema = _extract_ts_fields(content, actual_type, all_symbols=symbols)
-                    if producer_schema and producer_schema.get("fields"):
-                        break
-
-        if not producer_schema or not producer_schema.get("fields"):
+        producer_schema = _find_producer_schema(actual_type, api_project, symbols)
+        if not producer_schema:
             continue
 
         # Find consumers: references from other projects
-        consumers = []
-        consumer_refs = set()
-        for ref_target in (handler_sid, api_sid):
-            for ref_id in reverse_index.get(ref_target, []):
-                ref_project = ref_id.split(":")[0] if ":" in ref_id else ""
-                if ref_project == api_project:
-                    continue
-                if consumer_project and consumer_project.lower() not in ref_project.lower():
-                    continue
-                consumer_refs.add((ref_id, ref_project))
-
-        for ref_id, ref_project in consumer_refs:
-            ref_sym = symbols.get(ref_id, {})
-            ref_path = ref_sym.get("path", "")
-            ref_lang = _detect_language(ref_path)
-
-            # Search ALL type symbols in the consumer project (not just same file)
-            for csid, csym in symbols.items():
-                csym_project = csid.split(":")[0] if ":" in csid else ""
-                if csym_project != ref_project:
-                    continue
-                if csym.get("type") not in ("interface", "type", "class"):
-                    continue
-                c_content = get_symbol_content_text(csid, csym)
-                if not c_content:
-                    continue
-                c_name = csym.get("name", "")
-                c_path = csym.get("path", "")
-                c_lang = _detect_language(c_path)
-
-                if c_lang == "typescript":
-                    consumer_type = _extract_ts_fields(c_content, c_name, all_symbols=symbols)
-                elif c_lang == "python":
-                    consumer_type = _extract_python_fields(c_content, c_name, all_symbols=symbols)
-                else:
-                    continue
-                if consumer_type and consumer_type.get("fields"):
-                    mismatches = _compare_schemas(producer_schema, consumer_type)
-                    if mismatches:
-                        consumers.append({
-                            "project": ref_project,
-                            "type": consumer_type,
-                            "symbol_id": csid,
-                            "mismatches": mismatches,
-                        })
+        consumers = _find_consumer_mismatches(
+            handler_sid, api_sid, api_project,
+            producer_schema, consumer_project,
+            symbols, reverse_index,
+        )
 
         if consumers:
             contracts.append({
