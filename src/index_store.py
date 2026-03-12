@@ -8,10 +8,13 @@ without circular dependencies.
 
 import gzip
 import json
+import logging
 import os
 import sys
 import time as _time
 from pathlib import Path
+
+logger = logging.getLogger("flyto-indexer.store")
 
 # ---------------------------------------------------------------------------
 # Index directory (configurable via env var)
@@ -78,6 +81,7 @@ _index_cache: dict = None
 _content_cache: dict = {}
 _content_loaded: bool = False
 _bm25_cache = None
+_semantic_cache = None
 _test_mapper = None
 _session_store = None
 _cache_generation: float = 0.0
@@ -176,9 +180,8 @@ def _maybe_auto_reindex():
             f"[flyto-indexer] Auto-reindex: done ({total_reindexed} projects updated)\n"
         )
         sys.stderr.flush()
-    except Exception as e:
-        sys.stderr.write(f"[flyto-indexer] Auto-reindex error: {e}\n")
-        sys.stderr.flush()
+    except (OSError, json.JSONDecodeError, RuntimeError) as e:
+        logger.warning("Auto-reindex error: %s", e, exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -327,8 +330,8 @@ def load_content_file() -> dict:
                         if line:
                             record = json.loads(line)
                             _content_cache[record["id"]] = record["content"]
-            except Exception:
-                pass
+            except (json.JSONDecodeError, KeyError, OSError) as e:
+                logger.warning("Failed to load content from %s: %s", content_file, e)
     _content_loaded = True
     return _content_cache
 
@@ -358,6 +361,20 @@ def _load_bm25():
     bm25_path = INDEX_DIR / "bm25.json"
     _bm25_cache = BM25Index.load(bm25_path)
     return _bm25_cache
+
+
+def _load_semantic():
+    """Load or return the cached semantic (TF-IDF) index."""
+    global _semantic_cache
+    if _semantic_cache is not None:
+        return _semantic_cache
+    try:
+        from .semantic import SemanticIndex
+    except ImportError:
+        from semantic import SemanticIndex
+    semantic_path = INDEX_DIR / "semantic.json"
+    _semantic_cache = SemanticIndex.load(semantic_path)
+    return _semantic_cache
 
 
 def _get_test_mapper():
@@ -407,10 +424,11 @@ def _update_cache_generation():
 def invalidate_caches():
     """Reset all caches to their initial states, forcing a fresh reload."""
     global _index_cache, _content_cache, _content_loaded
-    global _bm25_cache, _test_mapper, _cache_generation
+    global _bm25_cache, _semantic_cache, _test_mapper, _cache_generation
     _index_cache = None
     _content_cache = {}
     _content_loaded = False
     _bm25_cache = None
+    _semantic_cache = None
     _test_mapper = None
     _cache_generation = 0.0

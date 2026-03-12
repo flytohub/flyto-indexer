@@ -159,7 +159,12 @@ class BM25Index:
         return scores[:top_k]
 
     def save(self, path: Path):
-        """Save BM25 index to JSON file."""
+        """Save BM25 index to JSON file (atomic write)."""
+        try:
+            from .safe_io import atomic_write_json
+        except ImportError:
+            from safe_io import atomic_write_json
+
         data = {
             "k1": self.k1,
             "b": self.b,
@@ -171,7 +176,7 @@ class BM25Index:
             "idf": self.idf,
             "tf": self.tf,
         }
-        path.write_text(json.dumps(data, ensure_ascii=False))
+        atomic_write_json(path, data, indent=0)
 
     @classmethod
     def load(cls, path: Path) -> Optional["BM25Index"]:

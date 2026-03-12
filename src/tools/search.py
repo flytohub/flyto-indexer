@@ -7,6 +7,7 @@ try:
         load_index,
         get_symbol_content_text,
         _load_bm25,
+        _load_semantic,
         _get_session_store,
         TYPE_WEIGHTS,
         LOW_PRIORITY_PATHS,
@@ -17,6 +18,7 @@ except ImportError:
         load_index,
         get_symbol_content_text,
         _load_bm25,
+        _load_semantic,
         _get_session_store,
         TYPE_WEIGHTS,
         LOW_PRIORITY_PATHS,
@@ -419,4 +421,135 @@ def fulltext_search(
         "type_counts": type_counts,
         "by_project": by_project,
         "results": results[:max_results],
+    }
+
+
+def semantic_search(
+    query: str,
+    project: str = None,
+    max_results: int = 20,
+    include_content: bool = False,
+) -> dict:
+    """
+    Natural language → code search using TF-IDF cosine similarity with concept expansion.
+
+    Unlike search_by_keyword (BM25), this expands the query through a concept taxonomy
+    so "handle payment failure" matches process_refund(), charge_customer(), etc.
+
+    Scoring:
+        - Semantic similarity: 0-50 (TF-IDF cosine with concept expansion)
+        - Type importance: +3~15 (composable > function > method)
+        - Reference count: +0.5 per ref (max +10)
+        - Path importance: -5 if in tests/
+    """
+    index = load_index()
+    semantic = _load_semantic()
+
+    if not semantic:
+        # Fallback: if no semantic index exists, delegate to keyword search
+        return search_by_keyword(
+            query=query,
+            max_results=max_results,
+            project=project,
+            include_content=include_content,
+        )
+
+    # Get semantic similarity scores
+    raw_scores = semantic.search(query, top_k=200)
+    if not raw_scores:
+        return {
+            "query": query,
+            "search_mode": "semantic",
+            "total": 0,
+            "showing": 0,
+            "results": [],
+            "hint": "No semantic matches. Try search_code for exact keyword matching.",
+        }
+
+    # Normalize to 0-50 range
+    max_sim = raw_scores[0][1] if raw_scores else 1.0
+    sim_scores = {sid: (sim / max_sim) * 50.0 for sid, sim in raw_scores}
+
+    results = []
+    symbols = index.get("symbols", {})
+
+    for symbol_id, base_score in sim_scores.items():
+        symbol = symbols.get(symbol_id)
+        if not symbol:
+            continue
+
+        # Project filter
+        sym_project = symbol_id.split(":")[0] if ":" in symbol_id else ""
+        if project and project.lower() not in sym_project.lower():
+            continue
+
+        score = base_score
+        path = symbol.get("path", "").lower()
+
+        # Type importance
+        sym_type = symbol.get("type", "")
+        score += TYPE_WEIGHTS.get(sym_type, 0)
+
+        # Reference count bonus
+        ref_count = symbol.get("ref_count", 0)
+        score += min(ref_count * 0.5, 10)
+
+        # Demote test files
+        if any(p in path for p in LOW_PRIORITY_PATHS):
+            score -= 5
+
+        result = {
+            "project": sym_project,
+            "path": symbol.get("path", ""),
+            "symbol_id": symbol_id,
+            "name": symbol.get("name", ""),
+            "type": sym_type,
+            "line": symbol.get("start_line", 0),
+            "summary": symbol.get("summary", "")[:150],
+            "score": round(score, 1),
+            "similarity": round(base_score, 1),
+            "ref_count": ref_count,
+        }
+        if include_content:
+            full_content = get_symbol_content_text(symbol_id, symbol)
+            result["snippet"] = full_content[:500]
+        results.append(result)
+
+    # Sort by score
+    results.sort(key=lambda x: -x["score"])
+
+    # Deduplicate
+    seen = set()
+    unique = []
+    for r in results:
+        if r["symbol_id"] not in seen:
+            seen.add(r["symbol_id"])
+            unique.append(r)
+
+    # Group by project
+    by_project = {}
+    for r in unique[:max_results]:
+        proj = r["project"]
+        if proj not in by_project:
+            by_project[proj] = []
+        by_project[proj].append(r)
+
+    # Show expanded concepts for transparency
+    try:
+        try:
+            from ..semantic import expand_concepts
+        except ImportError:
+            from semantic import expand_concepts
+        expanded = expand_concepts(query)
+    except Exception:
+        expanded = []
+
+    return {
+        "query": query,
+        "search_mode": "semantic",
+        "concepts_expanded": sorted(expanded)[:30],
+        "total": len(unique),
+        "showing": min(len(unique), max_results),
+        "by_project": by_project,
+        "results": unique[:max_results],
     }

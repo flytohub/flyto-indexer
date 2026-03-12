@@ -17,8 +17,12 @@ from typing import Optional
 
 try:
     from .bm25 import BM25Index
+    from .safe_io import atomic_write_text, atomic_write_lines, atomic_write_json
+    from .semantic import SemanticIndex
 except ImportError:
     from bm25 import BM25Index
+    from safe_io import atomic_write_text, atomic_write_lines, atomic_write_json
+    from semantic import SemanticIndex
 
 from .context.loader import ContextLoader
 from .indexer import IncrementalIndexer, scan_directory_hashes
@@ -515,16 +519,27 @@ class IndexEngine:
 
         Improved: only resolves when the source file actually imports the target
         """
-        # Build symbol name -> symbol_id lookup table
+        name_to_ids = self._build_name_lookup()
+        file_imports = self._build_file_imports()
+        module_to_symbols = self._build_module_to_symbols()
+        self._resolve_api_call_deps()
+        self._resolve_call_deps(name_to_ids, file_imports, module_to_symbols)
+        self._resolve_re_export_deps(file_imports)
+        self._resolve_same_file_calls()
+        self._resolve_global_fallback(name_to_ids)
+
+    def _build_name_lookup(self):
+        """Build symbol name -> symbol_id lookup table."""
         name_to_ids = {}
         for sid, symbol in self.index.symbols.items():
             name = symbol.name
             if name not in name_to_ids:
                 name_to_ids[name] = []
             name_to_ids[name].append(sid)
+        return name_to_ids
 
-        # Build file path -> imports mapping
-        # imports format: {imported_name: module_path}
+    def _build_file_imports(self):
+        """Build file path -> imports mapping. imports format: {imported_name: module_path}"""
         file_imports = {}  # path -> {name: module}
         for _dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "imports":
@@ -541,9 +556,10 @@ class IndexEngine:
             names = dep.metadata.get("names", [])
             for name in names:
                 file_imports[source_path][name] = module
+        return file_imports
 
-        # Build module path -> symbol_ids mapping
-        # Used to find actual symbols from import paths
+    def _build_module_to_symbols(self):
+        """Build module path -> symbol_ids mapping. Used to find actual symbols from import paths."""
         module_to_symbols = {}
         for sid, symbol in self.index.symbols.items():
             path = symbol.path
@@ -557,8 +573,10 @@ class IndexEngine:
                     module_to_symbols[mod_key] = []
                 if sid not in module_to_symbols[mod_key]:
                     module_to_symbols[mod_key].append(sid)
+        return module_to_symbols
 
-        # Resolve API_CALLS → API symbols cross-reference
+    def _resolve_api_call_deps(self):
+        """Resolve API_CALLS -> API symbols cross-reference."""
         # API symbol names are "METHOD /path" (e.g., "GET /api/users")
         api_path_map = {}  # url_path -> [symbol_ids]
         for sid, symbol in self.index.symbols.items():
@@ -593,7 +611,8 @@ class IndexEngine:
                         break
                 dep.metadata["resolved_target"] = resolved
 
-        # Resolve each call dependency
+    def _resolve_call_deps(self, name_to_ids, file_imports, module_to_symbols):
+        """Resolve each call dependency using import information and module lookups."""
         for _dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "calls":
                 continue
@@ -656,7 +675,8 @@ class IndexEngine:
             if resolved:
                 dep.metadata["resolved_target"] = resolved
 
-        # --- Re-export chain resolution pass ---
+    def _resolve_re_export_deps(self, file_imports):
+        """Resolve dependencies through re-export chains."""
         # Build re_export_map: {(exporter_path, exported_name) -> original_module}
         re_export_map = {}  # (exporter_path, name) -> original_module_key
         for _dep_id, dep in self.index.dependencies.items():
@@ -739,7 +759,8 @@ class IndexEngine:
                     if dep.metadata.get("resolved_target"):
                         break
 
-        # --- Same-file call resolution pass ---
+    def _resolve_same_file_calls(self):
+        """Resolve unresolved calls to symbols defined in the same file."""
         # For unresolved calls, check if the target exists as a symbol in the
         # same file. This catches local function calls that don't require imports.
         file_symbols = {}  # path -> {name: symbol_id}
@@ -790,9 +811,8 @@ class IndexEngine:
                         dep.metadata["resolved_target"] = sym_id
                         break
 
-        # --- Global fallback resolution pass ---
-        # For still-unresolved calls, try name_to_ids with single-candidate match.
-        # Only match if there's exactly one symbol with that name (unambiguous).
+    def _resolve_global_fallback(self, name_to_ids):
+        """Resolve still-unresolved calls via single-candidate name match (unambiguous only)."""
         for _dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "calls":
                 continue
@@ -848,6 +868,18 @@ class IndexEngine:
         - Only filters language built-in names
         - Deduplicates by project path (avoids double-counting from forks)
         """
+        reverse_index = self._build_reverse_from_deps()
+        name_to_ids = self._build_name_lookup()
+        self._build_reverse_from_imports(reverse_index, name_to_ids)
+        self._detect_dict_dispatch_refs(reverse_index)
+
+        # Save reverse index
+        self.index.reverse_index = reverse_index
+
+        self._calculate_reference_counts(reverse_index)
+
+    def _build_reverse_from_deps(self):
+        """Build initial reverse index from tracked dependency types."""
         reverse_index = {}  # symbol_id -> [caller_ids]
 
         for _dep_id, dep in self.index.dependencies.items():
@@ -908,16 +940,14 @@ class IndexEngine:
             if source not in reverse_index[resolved]:
                 reverse_index[resolved].append(source)
 
-        # --- Import-based reference tracking ---
-        # If file A imports symbol X, then X's reverse index should include A.
-        # This catches the vast majority of "who depends on this symbol" cases.
-        name_to_ids = {}
-        for sid, symbol in self.index.symbols.items():
-            name = symbol.name
-            if name not in name_to_ids:
-                name_to_ids[name] = []
-            name_to_ids[name].append(sid)
+        return reverse_index
 
+    def _build_reverse_from_imports(self, reverse_index, name_to_ids):
+        """Add import-based references to the reverse index.
+
+        If file A imports symbol X, then X's reverse index should include A.
+        This catches the vast majority of "who depends on this symbol" cases.
+        """
         # Build module path -> file path mapping for import resolution
         path_to_module_keys = {}  # file_path -> set of module keys
         for sid, symbol in self.index.symbols.items():
@@ -976,10 +1006,13 @@ class IndexEngine:
                     if source not in reverse_index[resolved]:
                         reverse_index[resolved].append(source)
 
-        # --- Dict dispatch detection pass ---
-        # For unreferenced symbols, check if their name appears as a bare
-        # reference (dict value, list element, callback) in a sibling symbol
-        # in the same file.
+    def _detect_dict_dispatch_refs(self, reverse_index):
+        """Detect dict dispatch / bare reference patterns for unreferenced symbols.
+
+        For unreferenced symbols, check if their name appears as a bare
+        reference (dict value, list element, callback) in a sibling symbol
+        in the same file.
+        """
         _file_content_cache = {}  # file_key -> [(symbol_id, content)]
         MAX_CONTENT_SCAN = 100_000  # Skip files larger than 100KB total
 
@@ -1019,11 +1052,8 @@ class IndexEngine:
                         reverse_index[sid].append(other_id)
                     break  # One caller is enough to mark as referenced
 
-        # Save reverse index
-        self.index.reverse_index = reverse_index
-
-        # Calculate reference count for each symbol
-        # Deduplicate by project path (avoids double-counting from forks)
+    def _calculate_reference_counts(self, reverse_index):
+        """Calculate reference count for each symbol, deduplicating by project path."""
         for sid, symbol in self.index.symbols.items():
             callers = reverse_index.get(sid, [])
             # Extract unique file paths (strip project prefix)
@@ -1048,13 +1078,14 @@ class IndexEngine:
         index_file = self.index_dir / "index.json"
         content_file = self.index_dir / "content.jsonl"
 
-        # Save content to JSONL if requested
+        # Save content to JSONL if requested (atomic write)
         if separate_content:
-            with open(content_file, 'w', encoding='utf-8') as f:
+            def _content_lines():
                 for symbol in self.index.symbols.values():
                     if symbol.content:
                         record = symbol.to_content_record()
-                        f.write(json.dumps(record, ensure_ascii=False) + '\n')
+                        yield json.dumps(record, ensure_ascii=False) + '\n'
+            atomic_write_lines(content_file, _content_lines())
 
         # Main index without content (compact mode)
         data = {
@@ -1074,7 +1105,7 @@ class IndexEngine:
             "has_content_file": separate_content,
         }
 
-        index_file.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+        atomic_write_json(index_file, data)
 
         # Bump generation counter so in-memory caches know to reload
         try:
@@ -1101,6 +1132,11 @@ class IndexEngine:
         bm25 = BM25Index()
         bm25.build(documents)
         bm25.save(self.index_dir / "bm25.json")
+
+        # Build semantic (TF-IDF) index alongside BM25
+        semantic = SemanticIndex()
+        semantic.build(documents)
+        semantic.save(self.index_dir / "semantic.json")
 
     def _deserialize_index(self, data: dict) -> ProjectIndex:
         """Deserialize index from JSON"""
