@@ -81,3 +81,40 @@ def encode_message(body: bytes) -> bytes:
     """Encode a JSON-RPC body with Content-Length header."""
     header = f"Content-Length: {len(body)}\r\n\r\n"
     return header.encode("ascii") + body
+
+
+def utf16_offset(line: str, byte_col: int) -> int:
+    """Convert a Python str index (byte_col) to a UTF-16 code-unit offset.
+
+    LSP uses UTF-16 offsets for character positions. This converts a Python
+    string index (which counts Unicode code points) to the equivalent UTF-16
+    code-unit count.
+
+    Characters outside the BMP (e.g., emoji) use 2 UTF-16 code units (surrogate pair).
+    """
+    if byte_col <= 0:
+        return 0
+    # Clamp to string length
+    clamped = min(byte_col, len(line))
+    prefix = line[:clamped]
+    # Encode to UTF-16-LE and divide by 2 to get code units
+    return len(prefix.encode("utf-16-le")) // 2
+
+
+def byte_offset_from_utf16(line: str, utf16_col: int) -> int:
+    """Convert a UTF-16 code-unit offset to a Python str index.
+
+    This is the inverse of utf16_offset(). Given a UTF-16 column from an LSP
+    server, return the corresponding Python string index.
+    """
+    if utf16_col <= 0:
+        return 0
+    count = 0
+    for i, ch in enumerate(line):
+        # Each character takes 1 or 2 UTF-16 code units
+        code_units = 2 if ord(ch) > 0xFFFF else 1
+        count += code_units
+        if count >= utf16_col:
+            return i + 1
+    # utf16_col beyond end of line
+    return len(line)

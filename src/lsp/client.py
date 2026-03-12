@@ -23,7 +23,12 @@ class LSPClient:
 
     Communication uses JSON-RPC 2.0 over stdio with Content-Length framing.
     All public methods return None/empty on error, never raise.
+
+    Includes a process watchdog: if the server crashes mid-request, the client
+    will attempt up to MAX_RESTARTS automatic restarts before giving up.
     """
+
+    MAX_RESTARTS = 3
 
     def __init__(self, command: List[str], root_uri: str, timeout: float = 10.0):
         self._command = command
@@ -36,6 +41,8 @@ class LSPClient:
         self._events: Dict[int, threading.Event] = {}
         self._reader_thread: Optional[threading.Thread] = None
         self._alive = False
+        self._restart_count = 0
+        self._permanently_dead = False
 
     @property
     def alive(self) -> bool:
@@ -83,17 +90,72 @@ class LSPClient:
         self._send_notification("initialized", {})
         return True
 
+    def _check_alive(self) -> bool:
+        """Check if the subprocess is still running.
+
+        Returns True if alive. If dead and restarts available, attempts one
+        restart and returns the result. If permanently dead, returns False.
+        """
+        if self._permanently_dead:
+            return False
+        if self._alive and self._process is not None and self._process.poll() is None:
+            return True
+        # Process is dead
+        self._alive = False
+        logger.debug("LSP server %s found dead (poll=%s)", self._command,
+                     self._process.poll() if self._process else "no-process")
+        return self._restart()
+
+    def _restart(self) -> bool:
+        """Attempt to restart the LSP server.
+
+        Returns True if restart succeeded, False otherwise.
+        Increments restart counter; marks permanently dead after MAX_RESTARTS.
+        """
+        if self._restart_count >= self.MAX_RESTARTS:
+            logger.debug("LSP server %s exceeded max restarts (%d), marking permanently dead",
+                         self._command, self.MAX_RESTARTS)
+            self._permanently_dead = True
+            self._cleanup_zombie()
+            return False
+
+        self._restart_count += 1
+        logger.debug("LSP server %s restart attempt %d/%d",
+                     self._command, self._restart_count, self.MAX_RESTARTS)
+
+        # Clean up old process
+        self._cleanup_zombie()
+
+        # Try starting fresh
+        return self.start()
+
+    def _cleanup_zombie(self):
+        """Ensure the subprocess is fully killed and reaped."""
+        self._alive = False
+        if self._process is not None:
+            try:
+                self._process.kill()
+            except (OSError, ProcessLookupError):
+                pass
+            try:
+                self._process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                logger.debug("LSP process %s did not exit after kill+wait", self._command)
+            except Exception:
+                pass
+            self._process = None
+
     def shutdown(self):
         """Send shutdown + exit, then clean up."""
         if not self.alive:
-            self._kill()
+            self._cleanup_zombie()
             return
         try:
             self._send_request("shutdown", None)
             self._send_notification("exit", None)
         except Exception:
             pass
-        self._kill()
+        self._cleanup_zombie()
 
     def _kill(self):
         """Force-kill the subprocess."""
@@ -176,9 +238,15 @@ class LSPClient:
         return locations
 
     def _send_request(self, method: str, params) -> Optional[dict]:
-        """Send a JSON-RPC request and wait for the response."""
-        if not self.alive:
+        """Send a JSON-RPC request and wait for the response.
+
+        If the server is dead, attempts one auto-restart before giving up.
+        Handles BrokenPipeError, JSONDecodeError, and timeout gracefully.
+        """
+        # Check alive with watchdog (may trigger restart)
+        if not self._check_alive():
             return None
+
         with self._lock:
             self._request_id += 1
             req_id = self._request_id
@@ -191,7 +259,12 @@ class LSPClient:
         if params is not None:
             msg["params"] = params
 
-        if not self._write_message(msg):
+        try:
+            if not self._write_message(msg):
+                return None
+        except BrokenPipeError:
+            logger.debug("LSP BrokenPipeError sending %s (id=%d)", method, req_id)
+            self._alive = False
             return None
 
         if not event.wait(timeout=self._timeout):
@@ -204,12 +277,16 @@ class LSPClient:
 
     def _send_notification(self, method: str, params):
         """Send a JSON-RPC notification (no response expected)."""
-        if not self.alive:
+        if not self._check_alive():
             return
         msg = {"jsonrpc": "2.0", "method": method}
         if params is not None:
             msg["params"] = params
-        self._write_message(msg)
+        try:
+            self._write_message(msg)
+        except BrokenPipeError:
+            logger.debug("LSP BrokenPipeError sending notification %s", method)
+            self._alive = False
 
     def _write_message(self, msg: dict) -> bool:
         """Serialize and write a JSON-RPC message to stdin."""
@@ -252,7 +329,8 @@ class LSPClient:
 
                 try:
                     msg = json.loads(body)
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                    logger.debug("LSP: malformed response body: %s", e)
                     continue
 
                 # Handle response (has 'id' and either 'result' or 'error')

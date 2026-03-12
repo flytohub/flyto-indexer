@@ -472,8 +472,10 @@ class TestLoadIndex:
     def test_missing_index_file_returns_empty_dict(self):
         """When no index file exists, load_index should return {}."""
         mcp_server._index_cache = None
+        index_store._cache_generation = 0.0  # allow reload
         with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
+            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)), \
+                 patch.object(index_store, "_discover_index_dirs", return_value=[Path(tmpdir)]):
                 # No index.json or index.json.gz in tmpdir
                 result = load_index()
                 assert result == {}
@@ -489,11 +491,13 @@ class TestLoadIndex:
     def test_plain_json_loading(self):
         """Should load plain index.json when gzip version is absent."""
         mcp_server._index_cache = None
+        index_store._cache_generation = 0.0
         with tempfile.TemporaryDirectory() as tmpdir:
             index_data = {"symbols": {"test:a.py:function:foo": {"name": "foo"}}}
             Path(tmpdir, "index.json").write_text(json.dumps(index_data))
 
-            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
+            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)), \
+                 patch.object(index_store, "_discover_index_dirs", return_value=[Path(tmpdir)]):
                 result = load_index()
                 assert "symbols" in result
                 assert "test:a.py:function:foo" in result["symbols"]
@@ -501,6 +505,7 @@ class TestLoadIndex:
     def test_gzip_loading_preferred(self):
         """Should prefer index.json.gz over index.json."""
         mcp_server._index_cache = None
+        index_store._cache_generation = 0.0
         with tempfile.TemporaryDirectory() as tmpdir:
             gz_data = {"symbols": {"gz_symbol": {}}, "source": "gzip"}
             plain_data = {"symbols": {"plain_symbol": {}}, "source": "plain"}
@@ -511,7 +516,8 @@ class TestLoadIndex:
 
             Path(tmpdir, "index.json").write_text(json.dumps(plain_data))
 
-            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
+            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)), \
+                 patch.object(index_store, "_discover_index_dirs", return_value=[Path(tmpdir)]):
                 result = load_index()
                 assert result.get("source") == "gzip"
 

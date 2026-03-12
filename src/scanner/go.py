@@ -87,6 +87,14 @@ class GoScanner(BaseScanner):
         r'^\s+(\*?(?:[\w.]+\.)?[A-Z]\w*)\s*$', re.MULTILINE
     )
 
+    # Go builtin types that should never be treated as embedded types
+    _EMBED_BLOCKLIST = frozenset({
+        "error", "string", "bool", "int", "int8", "int16", "int32", "int64",
+        "uint", "uint8", "uint16", "uint32", "uint64", "uintptr",
+        "float32", "float64", "complex64", "complex128", "byte", "rune",
+        "any", "comparable",
+    })
+
     # Embedded interfaces inside interface bodies (just a type name, no parens)
     INTERFACE_EMBED_PATTERN = re.compile(
         r'^\s+([A-Z_a-z]\w*)\s*$', re.MULTILINE
@@ -156,9 +164,16 @@ class GoScanner(BaseScanner):
             # Detect embedded types in struct body
             body_text = self._extract_body_text(content, match.end(), start_line, end_line)
             for embed_match in self.EMBED_PATTERN.finditer(body_text):
+                raw_line = embed_match.group(0).strip()
+                # Skip comment lines
+                if raw_line.startswith("//"):
+                    continue
                 embedded_type = embed_match.group(1).lstrip('*')
                 # Strip package prefix for local types (e.g., pkg.Type -> Type)
                 base_type = embedded_type.split('.')[-1] if '.' in embedded_type else embedded_type
+                # Skip builtin types that are never embedded
+                if base_type.lower() in self._EMBED_BLOCKLIST:
+                    continue
                 embed_line = start_line + body_text[:embed_match.start()].count('\n') + 1
                 dependencies.append(Dependency(
                     source_id=f"{self.project}:{rel_path}:class:{name}",

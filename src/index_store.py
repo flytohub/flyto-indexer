@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import time as _time
 from pathlib import Path
 
@@ -88,6 +89,13 @@ _lsp_manager = None
 _cache_generation: float = 0.0
 
 # ---------------------------------------------------------------------------
+# Reindex / load locks
+# ---------------------------------------------------------------------------
+
+_reindex_lock = threading.Lock()
+_load_lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
@@ -144,6 +152,10 @@ def _maybe_auto_reindex():
         return
     _last_full_check = now
 
+    # Non-blocking acquire: skip this cycle if another reindex is in progress
+    if not _reindex_lock.acquire(blocking=False):
+        logger.debug("Auto-reindex skipped: another reindex is in progress")
+        return
     try:
         try:
             from .watcher import FileWatcher
@@ -168,13 +180,13 @@ def _maybe_auto_reindex():
         sys.stderr.flush()
 
         try:
-            from .tools.maintenance import _perform_live_reindex
+            from .tools.maintenance import _perform_live_reindex_unlocked
         except ImportError:
-            from tools.maintenance import _perform_live_reindex
+            from tools.maintenance import _perform_live_reindex_unlocked
 
         total_reindexed = 0
         for proj in changed_projects:
-            result = _perform_live_reindex(project=proj)
+            result = _perform_live_reindex_unlocked(project=proj)
             total_reindexed += result.get("reindexed", 0)
 
         sys.stderr.write(
@@ -183,6 +195,8 @@ def _maybe_auto_reindex():
         sys.stderr.flush()
     except (OSError, json.JSONDecodeError, RuntimeError) as e:
         logger.warning("Auto-reindex error: %s", e, exc_info=True)
+    finally:
+        _reindex_lock.release()
 
 
 # ---------------------------------------------------------------------------
@@ -226,70 +240,82 @@ def _write_generation(index_dir: Path):
 
 
 def load_index() -> dict:
-    """Load and merge all discovered indexes, with caching."""
+    """Load and merge all discovered indexes, with caching.
+
+    Thread-safe: uses _load_lock to prevent duplicate disk loads when
+    multiple threads see a stale generation simultaneously.
+    """
     global _index_cache
+
+    # Fast path (no lock): return cached if still valid
     if _index_cache is not None:
-        if _check_generation():
-            invalidate_caches()
-        else:
+        if not _check_generation():
             return _index_cache
 
-    dirs = _discover_index_dirs()
-    if not dirs:
-        return {}
+    with _load_lock:
+        # Double-check after acquiring lock — another thread may have loaded already
+        if _index_cache is not None:
+            if not _check_generation():
+                return _index_cache
+            # Use unlocked variant to avoid deadlock with _reindex_lock
+            _invalidate_caches_unlocked()
 
-    # Load first index as base
-    merged = _load_single_index(dirs[0])
-    if not merged and len(dirs) <= 1:
-        return {}
-    if not merged:
-        merged = {}
+        dirs = _discover_index_dirs()
+        if not dirs:
+            return {}
 
-    # Merge additional indexes
-    projects = list(merged.get("projects", []))
-    if merged.get("project") and merged["project"] not in projects:
-        projects.append(merged["project"])
+        # Load first index as base
+        merged = _load_single_index(dirs[0])
+        if not merged and len(dirs) <= 1:
+            return {}
+        if not merged:
+            merged = {}
 
-    for d in dirs[1:]:
-        idx = _load_single_index(d)
-        if not idx:
-            continue
-        proj = idx.get("project", "")
-        if proj and proj not in projects:
-            projects.append(proj)
-        # Merge symbols
-        for k, v in idx.get("symbols", {}).items():
-            merged.setdefault("symbols", {})[k] = v
-        # Merge dependencies
-        for k, v in idx.get("dependencies", {}).items():
-            merged.setdefault("dependencies", {})[k] = v
-        # Merge reverse_index
-        for k, v in idx.get("reverse_index", {}).items():
-            existing = merged.setdefault("reverse_index", {}).get(k, [])
-            if isinstance(v, list):
-                for item in v:
-                    if item not in existing:
-                        existing.append(item)
-                merged["reverse_index"][k] = existing
-        # Merge files
-        for k, v in idx.get("files", {}).items():
-            merged.setdefault("files", {})[k] = v
-        # Merge routes/api_endpoints (may be list or dict depending on index version)
-        for key in ("routes", "api_endpoints"):
-            incoming = idx.get(key, [])
-            existing = merged.get(key)
-            if isinstance(incoming, list) and isinstance(existing, list):
-                existing.extend(incoming)
-            elif isinstance(incoming, dict):
-                merged.setdefault(key, {}).update(incoming)
-            elif isinstance(incoming, list) and existing is None:
-                merged[key] = list(incoming)
+        # Merge additional indexes
+        projects = list(merged.get("projects", []))
+        if merged.get("project") and merged["project"] not in projects:
+            projects.append(merged["project"])
 
-    merged["projects"] = projects
-    _index_cache = merged
-    # Record the latest generation mtime so subsequent checks are relative
-    _update_cache_generation()
-    return _index_cache
+        for d in dirs[1:]:
+            idx = _load_single_index(d)
+            if not idx:
+                continue
+            proj = idx.get("project", "")
+            if proj and proj not in projects:
+                projects.append(proj)
+            # Merge symbols
+            for k, v in idx.get("symbols", {}).items():
+                merged.setdefault("symbols", {})[k] = v
+            # Merge dependencies
+            for k, v in idx.get("dependencies", {}).items():
+                merged.setdefault("dependencies", {})[k] = v
+            # Merge reverse_index
+            for k, v in idx.get("reverse_index", {}).items():
+                existing = merged.setdefault("reverse_index", {}).get(k, [])
+                if isinstance(v, list):
+                    for item in v:
+                        if item not in existing:
+                            existing.append(item)
+                    merged["reverse_index"][k] = existing
+            # Merge files
+            for k, v in idx.get("files", {}).items():
+                merged.setdefault("files", {})[k] = v
+            # Merge routes/api_endpoints (may be list or dict depending on index version)
+            for key in ("routes", "api_endpoints"):
+                incoming = idx.get(key, [])
+                existing = merged.get(key)
+                if isinstance(incoming, list) and isinstance(existing, list):
+                    existing.extend(incoming)
+                elif isinstance(incoming, dict):
+                    merged.setdefault(key, {}).update(incoming)
+                elif isinstance(incoming, list) and existing is None:
+                    merged[key] = list(incoming)
+
+        merged["projects"] = projects
+        _index_cache = merged
+        # Record the latest generation mtime so subsequent checks are relative
+        _update_cache_generation()
+        return _index_cache
 
 
 def load_project_map() -> dict:
@@ -511,7 +537,17 @@ def _update_cache_generation():
 
 
 def invalidate_caches():
-    """Reset all caches to their initial states, forcing a fresh reload."""
+    """Reset all caches to their initial states, forcing a fresh reload.
+
+    Thread-safe: acquires _reindex_lock to prevent cache reset while
+    a reindex operation is in progress.
+    """
+    with _reindex_lock:
+        _invalidate_caches_unlocked()
+
+
+def _invalidate_caches_unlocked():
+    """Internal cache reset — caller must hold _reindex_lock or _load_lock."""
     global _index_cache, _content_cache, _content_loaded
     global _bm25_cache, _semantic_cache, _test_mapper, _lsp_manager, _cache_generation
     _index_cache = None

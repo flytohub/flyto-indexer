@@ -273,6 +273,7 @@ class IndexEngine:
         # Resolve dependencies and build reverse index
         t_resolve_start = time.monotonic()
         self._resolve_dependencies(changed_paths=changed_paths)
+        self._resolve_go_implementations()
         t_resolve_end = time.monotonic()
 
         t_reverse_start = time.monotonic()
@@ -534,6 +535,90 @@ class IndexEngine:
         self._resolve_re_export_deps(file_imports, changed_paths=changed_paths)
         self._resolve_same_file_calls(changed_paths=changed_paths)
         self._resolve_global_fallback(name_to_ids, changed_paths=changed_paths)
+
+    def _resolve_go_implementations(self):
+        """Cross-file: match Go struct method sets against interface method sets.
+
+        Runs after _resolve_dependencies(). For each project, collects all
+        interface method sets and struct method sets, then creates
+        DependencyType.IMPLEMENTS edges where a struct satisfies an interface
+        and no such edge exists yet (from in-file detection).
+        """
+        interfaces = {}   # {(project, iface_name): set(method_names)}
+        struct_methods = {}  # {(project, struct_name): set(method_names)}
+
+        for sid, sym in self.index.symbols.items():
+            stype = sym.symbol_type.value if hasattr(sym.symbol_type, 'value') else str(sym.symbol_type)
+            name = sym.name
+            params = sym.params or []
+            project = sid.split(":")[0] if ":" in sid else ""
+
+            if stype == "interface" and params:
+                interfaces[(project, name)] = set(params)
+            elif stype == "method" and "." in name:
+                receiver, method = name.split(".", 1)
+                struct_methods.setdefault((project, receiver), set()).add(method)
+
+        if not interfaces or not struct_methods:
+            return
+
+        # Collect existing IMPLEMENTS edges to avoid duplicates
+        existing_impls = set()
+        for dep in self.index.dependencies.values():
+            if dep.dep_type == DependencyType.IMPLEMENTS:
+                existing_impls.add((dep.source_id, dep.target_id))
+
+        # Build lookup: (project, name, type_prefix) -> symbol_id
+        # for quick struct/interface sid resolution
+        sid_lookup = {}  # (project, type_prefix, name) -> sid
+        for sid in self.index.symbols:
+            parts = sid.split(":")
+            if len(parts) >= 4:
+                proj = parts[0]
+                sym_type = parts[-2]  # "class" or "interface"
+                sym_name = parts[-1]
+                key = (proj, sym_type, sym_name)
+                # Keep first match (or could keep all, but one is sufficient)
+                if key not in sid_lookup:
+                    sid_lookup[key] = sid
+
+        new_count = 0
+        for (proj, struct_name), methods in struct_methods.items():
+            for (iproj, iface_name), iface_methods in interfaces.items():
+                if proj != iproj:
+                    continue  # only within same project
+                if not iface_methods or not iface_methods.issubset(methods):
+                    continue
+
+                struct_sid = sid_lookup.get((proj, "class", struct_name))
+                iface_sid = sid_lookup.get((proj, "interface", iface_name))
+
+                if not struct_sid or not iface_sid:
+                    continue
+                if (struct_sid, iface_sid) in existing_impls:
+                    continue
+
+                dep = Dependency(
+                    source_id=struct_sid,
+                    target_id=iface_sid,
+                    dep_type=DependencyType.IMPLEMENTS,
+                    source_line=0,
+                    metadata={"kind": "cross_file"},
+                )
+                self.index.dependencies[dep.id] = dep
+                existing_impls.add((struct_sid, iface_sid))
+
+                # Update reverse index if it exists
+                if self.index.reverse_index is not None:
+                    if iface_sid not in self.index.reverse_index:
+                        self.index.reverse_index[iface_sid] = []
+                    if struct_sid not in self.index.reverse_index[iface_sid]:
+                        self.index.reverse_index[iface_sid].append(struct_sid)
+
+                new_count += 1
+
+        if new_count > 0:
+            logger.debug("Cross-file Go implementations resolved: %d new edges", new_count)
 
     def _build_name_lookup(self):
         """Build symbol name -> symbol_id lookup table."""

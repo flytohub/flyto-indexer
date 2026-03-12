@@ -403,6 +403,27 @@ def check_index_status():
 
 
 def _perform_live_reindex(project=None):
+    """Reindex one or all projects.
+
+    Uses _reindex_lock to prevent concurrent reindex operations.
+    If the lock is already held, skips this call and returns a
+    'skipped' result instead of blocking.
+    """
+    try:
+        from ..index_store import _reindex_lock
+    except ImportError:
+        from index_store import _reindex_lock
+
+    if not _reindex_lock.acquire(blocking=False):
+        return {"reindexed": 0, "errors": 0, "results": [], "skipped": True}
+    try:
+        return _perform_live_reindex_unlocked(project)
+    finally:
+        _reindex_lock.release()
+
+
+def _perform_live_reindex_unlocked(project=None):
+    """Internal reindex — caller must hold _reindex_lock."""
     try:
         from ..engine import IndexEngine
     except ImportError:
