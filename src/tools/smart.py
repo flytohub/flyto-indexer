@@ -413,6 +413,15 @@ def smart_impact(target: str = None, mode: str = None, change_type: str = "modif
 
 def smart_audit(project: str = None, focus: str = None) -> dict:
     """Code health audit. Auto-expands weak dimensions with detailed findings."""
+    # Force incremental reindex before audit to ensure fresh data
+    try:
+        maint = _maint_mod()
+        reindex_result = maint.check_and_reindex(dry_run=False, project=project, auto_reindex=True)
+        if reindex_result.get("total_changes", 0) > 0:
+            logger.info("Pre-audit reindex: %d changes applied", reindex_result["total_changes"])
+    except Exception as e:
+        logger.debug("Pre-audit reindex skipped: %s", e)
+
     quality = _quality_mod()
     git = _git_mod()
 
