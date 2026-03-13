@@ -902,6 +902,31 @@ This project is indexed by [flyto-indexer](https://pypi.org/project/flyto-indexe
 2. Follow `execution_plan` steps in order — each step has tool name and pre-filled args
 3. `task_gate_check` at gate steps before proceeding to next phase
 4. Respect `constraints.max_files_per_step`
+
+### Project Rules (`.flyto-rules.yaml`)
+
+When the user corrects you (e.g., "don't put files there", "don't use that pattern"), do two things:
+1. Fix the immediate issue
+2. Write a verifiable rule so it's enforced permanently — use the flyto-indexer `add_rule` function or create/update `.flyto-rules.yaml` directly:
+
+```yaml
+# .flyto-rules.yaml
+architecture:
+  - rule: "description of the constraint"
+    glob_deny: ["pattern/**/*.ext"]           # files that should not exist
+    grep_deny: [{ pattern: 'regex', glob: "*.ext" }]  # code that should not appear
+    source: "user feedback YYYY-MM-DD"
+
+style:
+  - rule: "style convention"
+    grep_deny: [{ pattern: 'anti_pattern', glob: "*.ext" }]
+    example: "correct usage"
+
+conventions:
+  - rule: "text-only guidance (no automated check)"
+```
+
+The `audit` tool checks these rules automatically. This ensures corrections are never repeated — by any AI, any tool.
 <!-- flyto-indexer end -->
 """
 
