@@ -13,6 +13,71 @@ except ImportError:
     from tools.git_intel import _find_git_root, _get_cached_log, _get_project_root
 
 
+def _build_cooccurrence_matrix(
+    entries: list, proj_prefix: str,
+) -> Tuple[Dict[str, set], Dict[Tuple[str, str], set]]:
+    """Build per-file commit sets and co-occurrence pair matrix from git log entries."""
+    file_commits: Dict[str, set] = defaultdict(set)
+    pair_commits: Dict[Tuple[str, str], set] = defaultdict(set)
+
+    for entry in entries:
+        commit_hash = entry.get("hash", "")
+        rel_files = []
+        for f in entry.get("files", []):
+            if proj_prefix and not f.startswith(proj_prefix + "/"):
+                continue
+            rel = f[len(proj_prefix):].lstrip("/") if proj_prefix else f
+            if _is_noise_file(rel):
+                continue
+            rel_files.append(rel)
+
+        for f in rel_files:
+            file_commits[f].add(commit_hash)
+
+        if 2 <= len(rel_files) <= 30:
+            for i, a in enumerate(rel_files):
+                for b in rel_files[i + 1:]:
+                    pair = tuple(sorted([a, b]))
+                    pair_commits[pair].add(commit_hash)
+
+    return file_commits, pair_commits
+
+
+def _mine_association_rules(
+    file_commits: Dict[str, set],
+    pair_commits: Dict[Tuple[str, str], set],
+    total_commits: int,
+    min_support: int,
+    min_confidence: float,
+) -> list:
+    """Mine association rules from co-occurrence data."""
+    rules = []
+    for (a, b), commits in pair_commits.items():
+        support = len(commits)
+        if support < min_support:
+            continue
+
+        conf_a_to_b = support / len(file_commits[a]) if file_commits[a] else 0
+        conf_b_to_a = support / len(file_commits[b]) if file_commits[b] else 0
+        avg_confidence = (conf_a_to_b + conf_b_to_a) / 2
+
+        if avg_confidence < min_confidence:
+            continue
+
+        p_b = len(file_commits[b]) / total_commits if total_commits else 0
+        lift = avg_confidence / (p_b if p_b > 0 else 1)
+
+        rules.append({
+            "files": [a, b],
+            "support": support,
+            "confidence_a_to_b": round(conf_a_to_b, 3),
+            "confidence_b_to_a": round(conf_b_to_a, 3),
+            "avg_confidence": round(avg_confidence, 3),
+            "lift": round(lift, 2),
+        })
+    return rules
+
+
 def discover_change_clusters(
     project: Optional[str] = None,
     min_support: int = 3,
@@ -21,19 +86,7 @@ def discover_change_clusters(
 ) -> dict:
     """Discover groups of files that frequently change together.
 
-    Uses association rule mining on git commit history:
-    - support: how many commits include this file pair
-    - confidence: P(B changes | A changes)
-    - lift: confidence / P(B changes) — >1 means correlated
-
-    Args:
-        project: Filter to specific project
-        min_support: Minimum co-change count (default 3)
-        min_confidence: Minimum confidence ratio (default 0.3)
-        max_clusters: Maximum clusters to return (default 20)
-
-    Returns:
-        {clusters: [{files, support, avg_confidence, category}], summary}
+    Uses association rule mining on git commit history.
     """
     try:
         proj_name, proj_root = _get_project_root(project)
@@ -49,38 +102,12 @@ def discover_change_clusters(
     except RuntimeError as e:
         return {"error": str(e)}
 
-    git_root_abs = os.path.abspath(git_root)
-    proj_root_abs = os.path.abspath(proj_root)
-    proj_prefix = os.path.relpath(proj_root_abs, git_root_abs)
+    proj_prefix = os.path.relpath(os.path.abspath(proj_root), os.path.abspath(git_root))
     if proj_prefix == ".":
         proj_prefix = ""
 
-    # Build per-file commit sets and co-occurrence matrix
-    file_commits: Dict[str, set] = defaultdict(set)
-    pair_commits: Dict[Tuple[str, str], set] = defaultdict(set)
+    file_commits, pair_commits = _build_cooccurrence_matrix(entries, proj_prefix)
     total_commits = len(entries)
-
-    for entry in entries:
-        commit_hash = entry.get("hash", "")
-        rel_files = []
-        for f in entry.get("files", []):
-            if proj_prefix and not f.startswith(proj_prefix + "/"):
-                continue
-            rel = f[len(proj_prefix):].lstrip("/") if proj_prefix else f
-            # Skip non-code files
-            if _is_noise_file(rel):
-                continue
-            rel_files.append(rel)
-
-        for f in rel_files:
-            file_commits[f].add(commit_hash)
-
-        # Record co-occurrences (only for manageable commit sizes)
-        if 2 <= len(rel_files) <= 30:
-            for i, a in enumerate(rel_files):
-                for b in rel_files[i + 1:]:
-                    pair = tuple(sorted([a, b]))
-                    pair_commits[pair].add(commit_hash)
 
     if not pair_commits:
         return {
@@ -88,39 +115,12 @@ def discover_change_clusters(
             "summary": {"total_commits": total_commits, "total_files": len(file_commits)},
         }
 
-    # Mine association rules
-    rules = []
-    for (a, b), commits in pair_commits.items():
-        support = len(commits)
-        if support < min_support:
-            continue
+    rules = _mine_association_rules(file_commits, pair_commits, total_commits, min_support, min_confidence)
 
-        conf_a_to_b = support / len(file_commits[a]) if file_commits[a] else 0
-        conf_b_to_a = support / len(file_commits[b]) if file_commits[b] else 0
-        avg_confidence = (conf_a_to_b + conf_b_to_a) / 2
-
-        if avg_confidence < min_confidence:
-            continue
-
-        # Lift: how much more likely than random
-        p_b = len(file_commits[b]) / total_commits if total_commits else 0
-        lift = avg_confidence / (p_b if p_b > 0 else 1)
-
-        rules.append({
-            "files": [a, b],
-            "support": support,
-            "confidence_a_to_b": round(conf_a_to_b, 3),
-            "confidence_b_to_a": round(conf_b_to_a, 3),
-            "avg_confidence": round(avg_confidence, 3),
-            "lift": round(lift, 2),
-        })
-
-    # Merge pairwise rules into clusters using union-find
     clusters = _merge_into_clusters(rules, min_confidence)
     clusters.sort(key=lambda c: c["support"], reverse=True)
     clusters = clusters[:max_clusters]
 
-    # Categorize clusters
     for cluster in clusters:
         cluster["category"] = _categorize_cluster(cluster["files"])
 

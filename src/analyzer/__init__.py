@@ -6,6 +6,8 @@ from .dead_code import DeadCodeDetector, DeadCodeReport, detect_dead_code
 from .duplicates import DuplicateDetector, DuplicateReport, detect_duplicates
 from .security import SecurityReport, SecurityScanner, scan_security
 from .stale_files import StaleFileDetector, StaleReport, detect_stale_files
+from .rules import RulesChecker, RulesReport, RuleViolation, add_rule, check_rules, remove_rule
+from .taint import TaintAnalyzer, TaintFlow
 
 __all__ = [
     # Dead code
@@ -22,4 +24,9 @@ __all__ = [
     "APIConsistencyChecker", "APIConsistencyReport", "check_api_consistency",
     # Security
     "SecurityScanner", "SecurityReport", "scan_security",
+    # Taint analysis
+    "TaintAnalyzer", "TaintFlow",
+    # Project rules
+    "RulesChecker", "RulesReport", "RuleViolation",
+    "add_rule", "check_rules", "remove_rule",
 ]

@@ -1689,91 +1689,46 @@ def analyze_task(
     return contract
 
 
-def task_gate_check(
-    task_contract: dict,
-    next_phase: str = None,
-    current_state: dict = None,
-) -> dict:
-    """Check whether a task can proceed to the next phase.
+def _gate_check_compound(task_contract, next_phase, current_state):
+    """Handle gate check for compound contracts (multiple sub-tasks)."""
+    sub_tasks = task_contract.get("sub_tasks", [])
+    if not sub_tasks:
+        return {"error": "Compound contract has no sub_tasks"}
 
-    Accepts both gate phase names (inspect, plan_changes, apply_changes,
-    expand_changes, finalize) AND strategy-specific phase names
-    (e.g., apply_small_changes → apply_changes gate).
+    all_pass = True
+    all_blockers = []
+    for st in sub_tasks:
+        sub_result = task_gate_check(st, next_phase, current_state)
+        if sub_result.get("decision") == "blocked":
+            all_pass = False
+            for msg in sub_result.get("reason_codes", []):
+                prefixed = f"[{st['intent']}] {msg}"
+                if prefixed not in all_blockers:
+                    all_blockers.append(prefixed)
 
-    Args:
-        task_contract: The task contract from analyze_task()
-        next_phase: Phase to check entry for. Can be a gate phase name or
-            a strategy phase name (auto-mapped to the corresponding gate).
-        current_state: Dict of boolean flags for what has been completed, e.g.:
-            {
-                "impact_analysis_done": true,
-                "cross_project_check_done": false,
-                "tests_reviewed": false,
-                "human_review_completed": false,
-                "validation_passed": false,
-                "public_contract_change_detected": false
-            }
+    if all_pass:
+        return {"pass": True, "decision": "pass", "phase": next_phase, "reason_codes": [],
+                "message": f"Clear to proceed to {next_phase} (all {len(sub_tasks)} sub-tasks pass).",
+                "required_actions": []}
+    return {"pass": False, "decision": "blocked", "phase": next_phase, "reason_codes": all_blockers,
+            "message": f"Blocked: {'; '.join(all_blockers)}", "required_actions": all_blockers}
 
-    Returns:
-        Gate check result with decision, reason_codes, message, and required_actions.
-        When a strategy phase is mapped, includes strategy_phase and mapped_to_gate.
-    """
-    if not task_contract:
-        return {"error": "task_contract is required"}
 
-    # Handle compound contracts
-    if task_contract.get("task_profile", {}).get("compound") or task_contract.get("compound"):
-        sub_tasks = task_contract.get("sub_tasks", [])
-        if not sub_tasks:
-            return {"error": "Compound contract has no sub_tasks"}
-        # Check gate for each sub-task, return merged result
-        all_pass = True
-        all_blockers = []
-        for i, st in enumerate(sub_tasks):
-            sub_result = task_gate_check(st, next_phase, current_state)
-            if sub_result.get("decision") == "blocked":
-                all_pass = False
-                for msg in sub_result.get("reason_codes", []):
-                    prefixed = f"[{st['intent']}] {msg}"
-                    if prefixed not in all_blockers:
-                        all_blockers.append(prefixed)
-
-        if all_pass:
-            return {"pass": True, "decision": "pass", "phase": next_phase, "reason_codes": [], "message": f"Clear to proceed to {next_phase} (all {len(sub_tasks)} sub-tasks pass).", "required_actions": []}
-        else:
-            return {"pass": False, "decision": "blocked", "phase": next_phase, "reason_codes": all_blockers, "message": f"Blocked: {'; '.join(all_blockers)}", "required_actions": all_blockers}
-
-    state = current_state or {}
-    constraints = task_contract.get("constraints", {})
-
-    # Default next_phase: inspect
-    if not next_phase:
-        next_phase = "inspect"
-
-    # Map strategy phase to gate phase (if it's a strategy-specific name)
-    original_phase = next_phase
-    if next_phase not in GATE_PHASES and next_phase in _STRATEGY_TO_GATE:
-        next_phase = _STRATEGY_TO_GATE[next_phase]
-
-    # Check gate requirements
+def _collect_gate_blockers(next_phase, state, constraints):
+    """Collect blockers for a gate phase based on requirements and constraints."""
     blockers = []
     reason_codes = []
     required_actions = []
 
-    requirements = _GATE_REQUIREMENTS.get(next_phase, [])
-    for state_key, constraint_key, message in requirements:
-        # Only check if the constraint is active (or constraint_key is None = always check)
+    for state_key, constraint_key, message in _GATE_REQUIREMENTS.get(next_phase, []):
         if constraint_key is not None and not constraints.get(constraint_key):
             continue
-
-        # Check if the state condition is met
         if not state.get(state_key, False):
             blockers.append(message)
-            code = _REASON_CODES.get(state_key, state_key.upper())
-            reason_codes.append(code)
+            reason_codes.append(_REASON_CODES.get(state_key, state_key.upper()))
             required_actions.append(state_key)
 
-    # Special: check for public contract change needing human review
+    # Public contract change requires human review for later phases
     if (state.get("public_contract_change_detected")
             and constraints.get("must_request_human_review_on_public_contract_change")
             and not state.get("human_review_completed")
@@ -1784,23 +1739,50 @@ def task_gate_check(
             reason_codes.append("HUMAN_REVIEW_REQUIRED_FOR_PUBLIC_CONTRACT_CHANGE")
             required_actions.append("complete_human_review_for_public_contract_change")
 
-    # Determine decision
-    if blockers:
-        decision = "blocked"
-        message = f"Cannot enter {next_phase}. " + " ".join(blockers)
-    else:
-        decision = "pass"
-        message = f"Clear to proceed to {next_phase}."
+    return blockers, reason_codes, required_actions
 
+
+def task_gate_check(
+    task_contract: dict,
+    next_phase: str = None,
+    current_state: dict = None,
+) -> dict:
+    """Check whether a task can proceed to the next phase.
+
+    Accepts both gate phase names (inspect, plan_changes, apply_changes,
+    expand_changes, finalize) AND strategy-specific phase names
+    (e.g., apply_small_changes → apply_changes gate).
+    """
+    if not task_contract:
+        return {"error": "task_contract is required"}
+
+    # Handle compound contracts
+    if task_contract.get("task_profile", {}).get("compound") or task_contract.get("compound"):
+        return _gate_check_compound(task_contract, next_phase, current_state)
+
+    state = current_state or {}
+    constraints = task_contract.get("constraints", {})
+
+    if not next_phase:
+        next_phase = "inspect"
+
+    # Map strategy phase to gate phase
+    original_phase = next_phase
+    if next_phase not in GATE_PHASES and next_phase in _STRATEGY_TO_GATE:
+        next_phase = _STRATEGY_TO_GATE[next_phase]
+
+    blockers, reason_codes, required_actions = _collect_gate_blockers(next_phase, state, constraints)
+
+    passed = not blockers
     result = {
-        "pass": decision == "pass",
-        "decision": decision,
+        "pass": passed,
+        "decision": "pass" if passed else "blocked",
         "phase": next_phase,
         "reason_codes": reason_codes,
-        "message": message,
+        "message": f"Clear to proceed to {next_phase}." if passed
+                   else f"Cannot enter {next_phase}. " + " ".join(blockers),
         "required_actions": required_actions,
     }
-    # Include mapping info when a strategy phase was mapped to a gate phase
     if original_phase != next_phase:
         result["strategy_phase"] = original_phase
         result["mapped_to_gate"] = next_phase

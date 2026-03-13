@@ -90,6 +90,17 @@ def _find_coverage_data(project_root: str) -> Tuple[str, str]:
     return "none", ""
 
 
+def _decode_numbits(numbits: bytes) -> Set[int]:
+    """Decode coverage.py numbits bitmap to a set of line numbers."""
+    lines: Set[int] = set()
+    if numbits:
+        for byte_idx, byte_val in enumerate(numbits):
+            for bit in range(8):
+                if byte_val & (1 << bit):
+                    lines.add(byte_idx * 8 + bit + 1)
+    return lines
+
+
 def _parse_coverage_sqlite(db_path: str) -> Dict[str, Set[int]]:
     """Parse .coverage SQLite file (coverage.py v5+ format).
 
@@ -103,16 +114,13 @@ def _parse_coverage_sqlite(db_path: str) -> Dict[str, Set[int]]:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # Read file table
         try:
             cursor.execute("SELECT id, path FROM file")
         except sqlite3.OperationalError:
             conn.close()
             return result
-
         files = {row[0]: row[1] for row in cursor.fetchall()}
 
-        # Read line_bits table
         try:
             cursor.execute("SELECT file_id, numbits FROM line_bits")
         except sqlite3.OperationalError:
@@ -124,22 +132,13 @@ def _parse_coverage_sqlite(db_path: str) -> Dict[str, Set[int]]:
                 continue
 
             file_path = files[file_id]
-
-            # Make path relative to project root
             if os.path.isabs(file_path):
                 try:
                     file_path = os.path.relpath(file_path, project_root)
                 except ValueError:
-                    pass  # Different drives on Windows
+                    pass
 
-            # Decode numbits bitmap
-            lines: Set[int] = set()
-            if numbits:
-                for byte_idx, byte_val in enumerate(numbits):
-                    for bit in range(8):
-                        if byte_val & (1 << bit):
-                            lines.add(byte_idx * 8 + bit + 1)
-
+            lines = _decode_numbits(numbits)
             if file_path in result:
                 result[file_path].update(lines)
             else:

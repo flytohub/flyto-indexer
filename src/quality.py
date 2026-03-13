@@ -225,6 +225,37 @@ def security_scan(
                 "recommendation": issue.recommendation,
             })
 
+        # Taint analysis (AST-based flow tracking)
+        try:
+            from .analyzer.taint import TaintAnalyzer
+        except ImportError:
+            try:
+                from analyzer.taint import TaintAnalyzer
+            except ImportError:
+                TaintAnalyzer = None
+
+        if TaintAnalyzer is not None:
+            try:
+                taint_analyzer = TaintAnalyzer(Path(root), index=index)
+                taint_flows = taint_analyzer.analyze()
+                for flow in taint_flows:
+                    if severity and flow.severity != severity:
+                        continue
+                    flow_desc = " → ".join(flow.flow_chain) if flow.flow_chain else ""
+                    all_issues.append({
+                        "project": proj,
+                        "file": flow.file_path,
+                        "line": flow.line,
+                        "severity": flow.severity,
+                        "category": f"taint_flow:{flow.category}",
+                        "description": f"{flow.category}: user input from {flow.source_expr} → {flow.sink_expr}",
+                        "code": f"Flow: {flow_desc}",
+                        "recommendation": flow.recommendation,
+                    })
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).debug("Taint analysis skipped: %s", e)
+
     severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     all_issues.sort(key=lambda x: severity_order.get(x["severity"], 4))
 
@@ -238,6 +269,45 @@ def security_scan(
         "total_issues": len(all_issues),
         "by_severity": by_severity,
         "issues": all_issues[:max_results],
+    }
+
+
+def rules_check(project: str = None) -> dict:
+    """Check project compliance against .flyto-rules.yaml."""
+    try:
+        from .analyzer.rules import check_rules as _check
+    except ImportError:
+        from analyzer.rules import _check
+
+    index = load_index()
+    project_roots = index.get("project_roots", {})
+    projects = index.get("projects", [])
+
+    if project:
+        projects = [p for p in projects if project.lower() in p.lower()]
+
+    all_violations = []
+    total_rules = 0
+    rules_checked = 0
+
+    for proj in projects:
+        root = project_roots.get(proj)
+        if not root or not Path(root).exists():
+            continue
+
+        result = _check(Path(root))
+        total_rules += result.get("total_rules", 0)
+        rules_checked += result.get("rules_checked", 0)
+
+        for v in result.get("violations", []):
+            v["project"] = proj
+            all_violations.append(v)
+
+    return {
+        "total_rules": total_rules,
+        "rules_checked": rules_checked,
+        "total_violations": len(all_violations),
+        "violations": all_violations[:50],
     }
 
 

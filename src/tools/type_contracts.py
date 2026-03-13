@@ -133,12 +133,71 @@ def _unwrap_annotated(annotation: ast.expr) -> ast.expr:
     return annotation.slice
 
 
+def _detect_model_type(node: ast.ClassDef) -> tuple:
+    """Detect the model type and base class names from a class definition.
+
+    Returns (model_type, base_names) where model_type is one of:
+    'pydantic', 'typeddict', 'dataclass', 'class'.
+    """
+    base_names = []
+    for base in node.bases:
+        if isinstance(base, ast.Name):
+            base_names.append(base.id)
+        elif isinstance(base, ast.Attribute):
+            base_names.append(base.attr)
+
+    if "BaseModel" in base_names:
+        return "pydantic", base_names
+    if "TypedDict" in base_names:
+        return "typeddict", base_names
+
+    for dec in node.decorator_list:
+        dec_name = ""
+        if isinstance(dec, ast.Name):
+            dec_name = dec.id
+        elif isinstance(dec, ast.Call) and isinstance(dec.func, ast.Name):
+            dec_name = dec.func.id
+        elif isinstance(dec, ast.Attribute):
+            dec_name = dec.attr
+        if dec_name == "dataclass":
+            return "dataclass", base_names
+
+    return "class", base_names
+
+
+def _extract_class_fields(node: ast.ClassDef) -> dict:
+    """Extract annotated fields from a class body."""
+    fields = {}
+    for item in node.body:
+        if not isinstance(item, ast.AnnAssign):
+            continue
+        if not isinstance(item.target, ast.Name):
+            continue
+
+        annotation = _unwrap_annotated(item.annotation)
+        try:
+            field_type = ast.unparse(annotation)
+        except Exception:
+            field_type = "complex"
+
+        field_info = {
+            "type": field_type,
+            "optional": _is_optional_annotation(annotation),
+            "has_default": item.value is not None,
+        }
+        alias = _extract_field_alias(item)
+        if alias:
+            field_info["alias"] = alias
+
+        fields[item.target.id] = field_info
+    return fields
+
+
 def _extract_python_fields(content: str, class_name: str, all_symbols: dict = None) -> dict:
     """Extract field schema from a Python class definition using AST.
 
     Supports Pydantic BaseModel, @dataclass, TypedDict, and plain classes.
     Walks inheritance chain if all_symbols is provided.
-    Returns dict with name, model_type, fields mapping, and bases list.
     """
     try:
         tree = ast.parse(content)
@@ -146,40 +205,13 @@ def _extract_python_fields(content: str, class_name: str, all_symbols: dict = No
         return {"name": class_name, "model_type": "unknown", "fields": {}, "error": "SyntaxError"}
 
     for node in ast.walk(tree):
-        if not isinstance(node, ast.ClassDef):
-            continue
-        if node.name != class_name:
+        if not isinstance(node, ast.ClassDef) or node.name != class_name:
             continue
 
-        # Detect model type from base classes
-        model_type = "class"
-        base_names = []
-        for base in node.bases:
-            if isinstance(base, ast.Name):
-                base_names.append(base.id)
-            elif isinstance(base, ast.Attribute):
-                base_names.append(base.attr)
+        model_type, base_names = _detect_model_type(node)
 
-        if "BaseModel" in base_names:
-            model_type = "pydantic"
-        elif "TypedDict" in base_names:
-            model_type = "typeddict"
-        else:
-            for dec in node.decorator_list:
-                dec_name = ""
-                if isinstance(dec, ast.Name):
-                    dec_name = dec.id
-                elif isinstance(dec, ast.Call) and isinstance(dec.func, ast.Name):
-                    dec_name = dec.func.id
-                elif isinstance(dec, ast.Attribute):
-                    dec_name = dec.attr
-                if dec_name == "dataclass":
-                    model_type = "dataclass"
-                    break
-
+        # Merge parent fields first
         fields = {}
-
-        # Walk inheritance chain: merge parent fields first
         if all_symbols and base_names:
             for base_name in base_names:
                 if base_name in ("BaseModel", "TypedDict", "object"):
@@ -188,38 +220,7 @@ def _extract_python_fields(content: str, class_name: str, all_symbols: dict = No
                 if parent_fields:
                     fields.update(parent_fields)
 
-        for item in node.body:
-            if not isinstance(item, ast.AnnAssign):
-                continue
-            if not isinstance(item.target, ast.Name):
-                continue
-
-            field_name = item.target.id
-
-            # Unwrap Annotated[T, Field(...)] → T
-            annotation = _unwrap_annotated(item.annotation)
-
-            try:
-                field_type = ast.unparse(annotation)
-            except Exception:
-                field_type = "complex"
-
-            # Detect Optional
-            optional = _is_optional_annotation(annotation)
-            has_default = item.value is not None
-
-            # Extract Pydantic Field alias
-            alias = _extract_field_alias(item)
-
-            field_info = {
-                "type": field_type,
-                "optional": optional,
-                "has_default": has_default,
-            }
-            if alias:
-                field_info["alias"] = alias
-
-            fields[field_name] = field_info
+        fields.update(_extract_class_fields(node))
 
         return {
             "name": class_name,

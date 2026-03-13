@@ -98,18 +98,6 @@ def _extract_python_signatures(content: str) -> List[Signature]:
 # JS/TS: regex-based extraction
 # ---------------------------------------------------------------------------
 
-_JS_FUNC_PATTERN = re.compile(
-    r'(?:export\s+)?'
-    r'(?P<async>async\s+)?'
-    r'(?:function\s+(?P<fname>\w+)|'      # function foo(
-    r'(?:const|let|var)\s+(?P<vname>\w+)\s*=\s*(?:async\s+)?(?:\([^)]*\)|[^=])*=>|'  # const foo = (...) =>
-    r'(?P<mname>\w+)\s*\()'               # method(
-    r'\s*\((?P<params>[^)]*)\)'
-    r'(?:\s*:\s*(?P<rtype>[^{=]+?))?'
-    r'\s*[{=]',
-    re.MULTILINE,
-)
-
 _JS_SIMPLE_FUNC = re.compile(
     r'(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)(?:\s*:\s*([^{]+?))?\s*\{',
     re.MULTILINE,

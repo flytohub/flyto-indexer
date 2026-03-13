@@ -187,6 +187,59 @@ One call audits everything — auto-expands weak dimensions with detailed findin
     [medium] dead_fn() — unreferenced, 45 lines → safe to remove
 ```
 
+### Taint Analysis — track data flow, not just patterns
+
+AST-based engine that tracks how untrusted data flows from sources to dangerous sinks. Unlike regex pattern matching, it follows variables through assignments, f-strings, and function calls — with sanitizer awareness to eliminate false positives.
+
+```
+→ audit(focus="security")
+
+  Taint flows detected:
+    [high] src/api/users.py:42
+      SQL injection: request.args.get('id') → cursor.execute(query)
+      Flow: request.args.get('id') → user_id → query (f-string) → cursor.execute()
+      Fix: Use parameterized query: cursor.execute(sql, params)
+
+    [critical] src/api/admin.py:18
+      RCE: request.form.get('code') → eval(code)
+      Fix: Never eval() user-controlled strings
+```
+
+- **Python**: Full AST analysis — tracks taint through assignments, f-strings, concat, for loops
+- **Cross-function**: Detects when tainted data is passed as an argument to a function with a dangerous sink
+- **JS/TS/Go**: Regex-based fallback for common taint patterns
+- **Sanitizer-aware**: `int()`, `html.escape()`, `shlex.quote()`, parameterized queries all break the taint chain
+- **Custom rules**: Add project-specific sources/sinks/sanitizers via `taint_rules.yaml`
+
+### Project Rules — AI learns from your corrections
+
+`.flyto-rules.yaml` — structured, versionable project conventions that audit enforces automatically.
+
+```yaml
+# .flyto-rules.yaml
+architecture:
+  - rule: "i18n files must be in flyto-i18n/"
+    glob_deny: ["flyto-cloud/**/*.locale.json"]
+
+style:
+  - rule: "Frontend does no data processing"
+    grep_deny: [{ pattern: '\breduce\s*\(', glob: "*.vue" }]
+
+conventions:
+  - rule: "Commit messages in English"
+```
+
+When you correct the AI ("don't put i18n files there"), it auto-writes a verifiable rule — so the mistake never happens again, for any AI, any tool:
+
+```
+User corrects AI → add_rule() writes .flyto-rules.yaml → audit checks compliance
+```
+
+- `glob_deny` — files in wrong locations
+- `grep_deny` — forbidden code patterns in specific file types
+- `conventions` — text-only guidance (no automated check)
+- Rules accumulate over time — no upfront config needed
+
 ### Task Analysis — plan before you code
 
 Scores risk across 6 dimensions and generates an execution plan:
@@ -222,7 +275,7 @@ Server-side enforcement blocks skipping gates.
 |------|----------------|-----------------|
 | `search` | "Find code by name or description" | Merges BM25 + semantic search, attaches callers and file context |
 | `impact` | "What breaks if I change this?" | References + blast radius + cross-project + test files in one call |
-| `audit` | "How healthy is this project?" | Health score (0-100), auto-expands weak dimensions with findings |
+| `audit` | "How healthy is this project?" | Health score (0-100), auto-expands weak dimensions, taint analysis, rules compliance |
 | `task` | "Plan, gate-check, or validate changes" | Risk scoring, execution plans, linter + tests |
 | `structure` | "Show me the project layout" | Projects, APIs, dependencies, type contracts |
 
@@ -233,7 +286,7 @@ Server-side enforcement blocks skipping gates.
 
 **`impact`** replaces: `find_references`, `impact_analysis`, `batch_impact_analysis`, `edit_impact_preview`, `cross_project_impact`, `impact_from_diff`
 
-**`audit`** replaces: `code_health_score`, `security_scan`, `find_dead_code`, `find_complex_functions`, `find_duplicates`, `suggest_refactoring`, `find_stale_files`, `find_todos`, `coverage_gaps`
+**`audit`** replaces: `code_health_score`, `security_scan`, `taint_analysis`, `rules_check`, `find_dead_code`, `find_complex_functions`, `find_duplicates`, `suggest_refactoring`, `find_stale_files`, `find_todos`, `coverage_gaps`
 
 **`task`** replaces: `analyze_task`, `task_gate_check`, `validate_changes`
 

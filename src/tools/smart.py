@@ -315,14 +315,11 @@ def _smart_impact_diff(mode: str, project: str = None) -> dict:
     return {"mode": "diff", "diff_mode": mode, "result": diff_result}
 
 
-def _smart_impact_symbol(target: str, change_type: str = "modify") -> dict:
-    """Handle symbol mode: analyze specific target."""
+def _impact_core_analysis(target: str, change_type: str) -> dict:
+    """Run core reference and impact analysis for a target symbol."""
     refs = _refs_mod()
-    info = _info_mod()
-
     result = {}
 
-    # Find references
     try:
         ref_result = refs.find_references(target)
         if isinstance(ref_result, dict):
@@ -331,7 +328,6 @@ def _smart_impact_symbol(target: str, change_type: str = "modify") -> dict:
         logger.debug("find_references failed for %s: %s", target, e)
         result["references_error"] = str(e)
 
-    # Impact analysis (blast radius)
     try:
         impact_result = refs.impact_analysis(target)
         if isinstance(impact_result, dict):
@@ -340,13 +336,20 @@ def _smart_impact_symbol(target: str, change_type: str = "modify") -> dict:
         logger.debug("impact_analysis failed for %s: %s", target, e)
         result["impact_error"] = str(e)
 
-    # Edit impact preview (exact lines affected)
     if change_type != "modify":
         preview = _enrich("edit_preview", refs.edit_impact_preview, symbol_id=target, change_type=change_type)
         if isinstance(preview, dict):
             result["edit_preview"] = preview
 
-    # --- Auto: cross-project impact if multiple projects ---
+    return result
+
+
+def _impact_auto_enrich(result: dict, target: str):
+    """Auto-attach cross-project impact, test file, call paths, and context budget."""
+    refs = _refs_mod()
+    info = _info_mod()
+
+    # Cross-project impact
     projects = _enrich("list_projects", info.list_projects)
     if isinstance(projects, dict) and projects.get("count", 0) > 1:
         sym_name = target.split(":")[-1] if ":" in target else target
@@ -356,7 +359,7 @@ def _smart_impact_symbol(target: str, change_type: str = "modify") -> dict:
         if isinstance(cross, dict) and cross.get("impacts"):
             result["cross_project"] = cross
 
-    # --- Auto: find test file ---
+    # Test file
     symbol_path = ""
     if isinstance(result.get("references"), dict):
         symbol_path = result["references"].get("target_file", "")
@@ -367,19 +370,20 @@ def _smart_impact_symbol(target: str, change_type: str = "modify") -> dict:
         if isinstance(test, dict) and not test.get("error"):
             result["test_file"] = test.get("test_file") or test.get("path")
 
-    # --- Auto: call path tracing (entry points → target) ---
+    # Call path tracing
     trace = _enrich("trace_paths", _trace_mod().trace_paths, target, direction="up", max_depth=6, max_paths=5)
     if isinstance(trace, dict) and trace.get("paths"):
         result["call_paths"] = trace
 
-    # --- Auto: context budget scoring + trimming ---
-    cb = _context_budget_mod()
+    # Context budget scoring
     if isinstance(result.get("references"), dict):
         refs_list = result["references"].get("references", [])
         if refs_list:
-            result["references"]["references"] = cb.score_references(refs_list, target)
+            result["references"]["references"] = _context_budget_mod().score_references(refs_list, target)
 
-    # --- Smart truncation for LLM consumption ---
+
+def _truncate_impact_results(result: dict):
+    """Cap impact result lists for LLM consumption."""
     if isinstance(result.get("references"), dict):
         _truncate_list(result["references"], "references", max_items=20)
     if isinstance(result.get("impact"), dict):
@@ -387,6 +391,13 @@ def _smart_impact_symbol(target: str, change_type: str = "modify") -> dict:
         _truncate_list(result["impact"], "affected_symbols", max_items=20)
     if isinstance(result.get("cross_project"), dict):
         _truncate_list(result["cross_project"], "impacts", max_items=10)
+
+
+def _smart_impact_symbol(target: str, change_type: str = "modify") -> dict:
+    """Handle symbol mode: analyze specific target."""
+    result = _impact_core_analysis(target, change_type)
+    _impact_auto_enrich(result, target)
+    _truncate_impact_results(result)
 
     result["target"] = target
     result["change_type"] = change_type
@@ -411,9 +422,8 @@ def smart_impact(target: str = None, mode: str = None, change_type: str = "modif
 # 3. audit — unified code quality with auto-expansion of weak dimensions
 # ---------------------------------------------------------------------------
 
-def smart_audit(project: str = None, focus: str = None) -> dict:
-    """Code health audit. Auto-expands weak dimensions with detailed findings."""
-    # Force incremental reindex before audit to ensure fresh data
+def _audit_reindex(project):
+    """Force incremental reindex before audit to ensure fresh data."""
     try:
         maint = _maint_mod()
         reindex_result = maint.check_and_reindex(dry_run=False, project=project, auto_reindex=True)
@@ -422,14 +432,12 @@ def smart_audit(project: str = None, focus: str = None) -> dict:
     except Exception as e:
         logger.debug("Pre-audit reindex skipped: %s", e)
 
-    quality = _quality_mod()
-    git = _git_mod()
 
+def _audit_health_score(project):
+    """Compute health score, returns (result_dict, score_data, breakdown)."""
     result = {}
-
-    # Always start with health score
     try:
-        health = quality.code_health_score(project=project)
+        health = _quality_mod().code_health_score(project=project)
         if isinstance(health, dict):
             result["health"] = health
     except Exception as e:
@@ -437,23 +445,36 @@ def smart_audit(project: str = None, focus: str = None) -> dict:
         result["health_error"] = str(e)
 
     score_data = result.get("health", {})
-    dimensions = score_data.get("dimensions", {})
+    breakdown = score_data.get("breakdown", {})
+    return result, score_data, breakdown
 
-    # Determine which dimensions to expand
-    should_expand = set()
+
+def _determine_dimensions_to_expand(focus, breakdown):
+    """Determine which audit dimensions need expansion."""
     if focus:
-        should_expand.add(focus)
-    else:
-        # Auto-expand dimensions scoring below 80
-        for dim_name, dim_data in dimensions.items():
-            if isinstance(dim_data, dict) and dim_data.get("score", 100) < 80:
-                should_expand.add(dim_name)
+        return {focus}
+    # Auto-expand dimensions scoring below 80% (20 out of 25)
+    return {
+        dim_name for dim_name, dim_data in breakdown.items()
+        if isinstance(dim_data, dict) and dim_data.get("score", 25) < 20
+    }
 
-    # --- Security ---
-    if "security" in should_expand or focus == "security":
+
+def _expand_audit_dimensions(result, should_expand, focus, project):
+    """Expand weak dimensions with detailed findings."""
+    quality = _quality_mod()
+
+    # --- Security (local pattern scan) ---
+    if "security" in should_expand or focus == "security" or focus == "all":
         r = _enrich("security_scan", quality.security_scan, project=project, max_results=10)
         if r is not None:
             result["security_findings"] = r
+
+    # --- Project rules (.flyto-rules.yaml) ---
+    if focus in (None, "all", "rules"):
+        r = _enrich("rules_check", quality.rules_check, project=project)
+        if isinstance(r, dict) and r.get("total_rules", 0) > 0:
+            result["rules_compliance"] = r
 
     # --- Complexity ---
     if "complexity" in should_expand or focus == "complexity":
@@ -466,46 +487,57 @@ def smart_audit(project: str = None, focus: str = None) -> dict:
 
     # --- Dead code ---
     if "dead_code" in should_expand or focus == "dead_code":
-        maint = _maint_mod()
-        r = _enrich("dead_code", maint.find_dead_code, project=project, min_lines=5)
+        r = _enrich("dead_code", _maint_mod().find_dead_code, project=project, min_lines=5)
         if r is not None:
             result["dead_code"] = r
 
     # --- Coverage ---
     if "coverage" in should_expand or focus == "coverage":
-        cov = _coverage_mod()
-        r = _enrich("coverage_gaps", cov.coverage_gaps, project=project, max_results=10)
+        r = _enrich("coverage_gaps", _coverage_mod().coverage_gaps, project=project, max_results=10)
         if r is not None:
             result["coverage_gaps"] = r
 
-    # --- Always include git hotspots (high-churn + complex = highest risk) ---
-    r = _enrich("git_hotspots", git.git_hotspots, project=project, max_results=5)
+
+def _audit_supplementary(result, score_data, project):
+    """Add git hotspots, stale symbols, and refactoring suggestions."""
+    r = _enrich("git_hotspots", _git_mod().git_hotspots, project=project, max_results=5)
     if r is not None:
         result["git_hotspots"] = r
 
-    # --- Stale symbols (heavily referenced but not recently modified) ---
     stale = _enrich("stale_symbols", _staleness_mod().find_stale_symbols,
                      project=project, stale_days=180, min_refs=3, max_results=10)
     if isinstance(stale, dict) and stale.get("stale_symbols"):
         result["stale_symbols"] = stale
 
-    # Suggest refactoring if overall score < 80
     overall = score_data.get("score", 100)
-    if overall < 80 or focus == "all":
-        r = _enrich("suggest_refactoring", quality.suggest_refactoring, project=project, max_results=10)
+    if overall < 80:
+        r = _enrich("suggest_refactoring", _quality_mod().suggest_refactoring, project=project, max_results=10)
         if r is not None:
             result["refactoring_suggestions"] = r
 
-    # --- Smart truncation: cap all list fields for LLM consumption ---
+
+def _truncate_audit_results(result):
+    """Cap all list fields for LLM consumption."""
     for key in ("security_findings", "complex_functions", "dead_code",
-                "coverage_gaps", "refactoring_suggestions"):
+                "coverage_gaps", "refactoring_suggestions", "rules_compliance"):
         val = result.get(key)
         if isinstance(val, dict):
-            # These enrichments often return {results: [...], ...}
             for sub_key in list(val.keys()):
                 _truncate_list(val, sub_key, max_items=10)
         elif isinstance(val, list):
             _truncate_list(result, key, max_items=10)
+
+
+def smart_audit(project: str = None, focus: str = None) -> dict:
+    """Code health audit. Auto-expands weak dimensions with detailed findings."""
+    _audit_reindex(project)
+
+    result, score_data, breakdown = _audit_health_score(project)
+    should_expand = _determine_dimensions_to_expand(focus, breakdown)
+
+    _expand_audit_dimensions(result, should_expand, focus, project)
+    _audit_supplementary(result, score_data, project)
+    _truncate_audit_results(result)
 
     return result
 

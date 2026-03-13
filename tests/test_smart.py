@@ -91,11 +91,11 @@ def mock_quality():
         mod.code_health_score.return_value = {
             "score": 72,
             "grade": "C",
-            "dimensions": {
-                "complexity": {"score": 65, "detail": "5 complex functions"},
-                "dead_code": {"score": 90, "detail": "2 unused symbols"},
-                "security": {"score": 60, "detail": "3 findings"},
-                "documentation": {"score": 85, "detail": "ok"},
+            "breakdown": {
+                "complexity": {"score": 15, "max": 25, "detail": "5 complex functions"},
+                "dead_code": {"score": 23, "max": 25, "detail": "2 unused symbols"},
+                "security": {"score": 12, "max": 25, "detail": "3 findings"},
+                "documentation": {"score": 22, "max": 25, "detail": "ok"},
             },
         }
         mod.security_scan.return_value = {"findings": [{"severity": "high"}], "count": 1}

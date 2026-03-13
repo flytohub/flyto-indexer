@@ -1062,65 +1062,66 @@ class IndexEngine:
 
             self._calculate_reference_counts(reverse_index)
 
+    def _resolve_dep_target(self, dep):
+        """Resolve a dependency to a target symbol ID.
+
+        Handles extends/implements (by name match) and uses (by type:name match).
+        Returns the resolved symbol ID, or None if unresolvable or a built-in.
+        """
+        resolved = dep.metadata.get("resolved_target")
+
+        # For extends/implements, match by target name
+        if not resolved and dep.dep_type.value in ('extends', 'implements'):
+            target_name = dep.target_id
+            for sid, sym in self.index.symbols.items():
+                if sym.name == target_name:
+                    resolved = sid
+                    break
+
+        # For uses, parse target_id format: path:type:name
+        if not resolved and dep.dep_type.value == 'uses':
+            target = dep.target_id
+            if ':' in target:
+                parts = target.split(':')
+                if len(parts) >= 3:
+                    sym_type = parts[-2]
+                    sym_name = parts[-1]
+                    for sid, sym in self.index.symbols.items():
+                        if (sym.name == sym_name and
+                            sym.symbol_type.value == sym_type and
+                            sid.startswith(self.project_name + ":")):
+                            resolved = sid
+                            break
+
+        if not resolved:
+            return None
+
+        target_symbol = self.index.symbols.get(resolved)
+        if not target_symbol:
+            return None
+
+        # Filter language built-ins
+        target_name = target_symbol.name.split('.')[-1]
+        if target_name.lower() in self.BUILTIN_NAMES:
+            return None
+
+        return resolved
+
     def _build_reverse_from_deps(self):
         """Build initial reverse index from tracked dependency types."""
-        reverse_index = {}  # symbol_id -> [caller_ids]
+        reverse_index = {}
 
         for _dep_id, dep in self.index.dependencies.items():
-            # Track multiple dependency types
             if dep.dep_type.value not in self.TRACKED_DEP_TYPES:
                 continue
 
-            # Get target (prefer resolved, otherwise use raw target)
-            resolved = dep.metadata.get("resolved_target")
-
-            # For extends/implements, use target_id directly
-            if not resolved and dep.dep_type.value in ('extends', 'implements'):
-                # Try to resolve from name_to_ids
-                target_name = dep.target_id
-                for sid, sym in self.index.symbols.items():
-                    if sym.name == target_name:
-                        resolved = sid
-                        break
-
-            # For uses type, try to resolve from target_id
-            # target_id format e.g.: @/composables/useToast:composable:useToast
-            # or: ../composables/useToast:composable:useToast
-            if not resolved and dep.dep_type.value == 'uses':
-                target = dep.target_id
-                if ':' in target:
-                    # Extract type:name portion
-                    parts = target.split(':')
-                    if len(parts) >= 3:
-                        sym_type = parts[-2]
-                        sym_name = parts[-1]
-                        # Find matching symbol in symbols
-                        for sid, sym in self.index.symbols.items():
-                            if (sym.name == sym_name and
-                                sym.symbol_type.value == sym_type and
-                                sid.startswith(self.project_name + ":")):
-                                resolved = sid
-                                break
-
+            resolved = self._resolve_dep_target(dep)
             if not resolved:
                 continue
 
-            # Check if target symbol exists
-            target_symbol = self.index.symbols.get(resolved)
-            if not target_symbol:
-                continue
-
-            target_name = target_symbol.name.split('.')[-1]  # Take the last part
-
-            # Only filter language built-ins (cannot trace to definition)
-            if target_name.lower() in self.BUILTIN_NAMES:
-                continue
-
             source = dep.source_id
-
             if resolved not in reverse_index:
                 reverse_index[resolved] = []
-
             if source not in reverse_index[resolved]:
                 reverse_index[resolved].append(source)
 
@@ -1135,34 +1136,10 @@ class IndexEngine:
             if source_path not in changed_paths:
                 continue
 
-            resolved = dep.metadata.get("resolved_target")
-            if not resolved and dep.dep_type.value in ('extends', 'implements'):
-                target_name = dep.target_id
-                for sid, sym in self.index.symbols.items():
-                    if sym.name == target_name:
-                        resolved = sid
-                        break
-            if not resolved and dep.dep_type.value == 'uses':
-                target = dep.target_id
-                if ':' in target:
-                    parts = target.split(':')
-                    if len(parts) >= 3:
-                        sym_type = parts[-2]
-                        sym_name = parts[-1]
-                        for sid, sym in self.index.symbols.items():
-                            if (sym.name == sym_name and
-                                sym.symbol_type.value == sym_type and
-                                sid.startswith(self.project_name + ":")):
-                                resolved = sid
-                                break
+            resolved = self._resolve_dep_target(dep)
             if not resolved:
                 continue
-            target_symbol = self.index.symbols.get(resolved)
-            if not target_symbol:
-                continue
-            target_name = target_symbol.name.split('.')[-1]
-            if target_name.lower() in self.BUILTIN_NAMES:
-                continue
+
             source = dep.source_id
             if resolved not in reverse_index:
                 reverse_index[resolved] = []
