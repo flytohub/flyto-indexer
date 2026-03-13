@@ -10,8 +10,10 @@ from pathlib import Path
 
 try:
     from .index_store import load_index, get_symbol_content_text
+    from .analyzer.complexity import _line_threshold_for_file, _is_test_file
 except ImportError:
     from index_store import load_index, get_symbol_content_text
+    from analyzer.complexity import _line_threshold_for_file, _is_test_file
 
 
 def find_complex_functions(
@@ -38,6 +40,11 @@ def find_complex_functions(
         if sym_type not in ("function", "method"):
             continue
 
+        # Skip test files — test functions are naturally long procedural flows
+        path = sym.get("path", "")
+        if _is_test_file(path):
+            continue
+
         total_analyzed += 1
         content = get_symbol_content_text(sym_id, sym)
         if not content:
@@ -49,7 +56,6 @@ def find_complex_functions(
         param_count = len(params_list) if isinstance(params_list, list) else 0
 
         # Detect language from path
-        path = sym.get("path", "")
         is_python = path.endswith(".py")
         indent_unit = 4 if is_python else 2
 
@@ -88,9 +94,10 @@ def find_complex_functions(
 
         score = 0
         issues = []
-        if line_count > 50:
-            score += (line_count - 50) // 10
-            issues.append(f"Too long ({line_count} lines)")
+        line_threshold = _line_threshold_for_file(path)
+        if line_count > line_threshold:
+            score += (line_count - line_threshold) // 10
+            issues.append(f"Too long ({line_count} lines, limit {line_threshold})")
         if max_depth > 3:
             score += (max_depth - 3) * 5
             issues.append(f"Nesting too deep (depth={max_depth})")
@@ -427,15 +434,60 @@ def code_health_score(project: str = None) -> dict:
     if total_symbols == 0:
         return {"error": "No symbols found", "score": 0, "grade": "N/A"}
 
-    # 1. Complexity score (0-25): penalty for functions > 50 lines
+    # 1. Complexity score (0-25): composite score (lines + depth + params + branches)
     func_count = 0
     complex_count = 0
     for sym_id, sym in symbols.items():
         if sym.get("type") not in ("function", "method"):
             continue
+        path = sym.get("path", "")
+        if _is_test_file(path):
+            continue
         func_count += 1
         content = get_symbol_content_text(sym_id, sym)
-        if content and len(content.split("\n")) > 50:
+        if not content:
+            continue
+        lines = content.split("\n")
+        line_count = len(lines)
+        # Compute composite score (same formula as FunctionComplexity.score)
+        line_threshold = _line_threshold_for_file(path)
+        score = 0
+        if line_count > line_threshold:
+            score += (line_count - line_threshold) // 10
+        # Approximate depth from indentation
+        base_indent = 0
+        for ln in lines:
+            stripped = ln.strip()
+            if stripped:
+                base_indent = len(ln) - len(ln.lstrip())
+                break
+        is_python = path.endswith(".py")
+        indent_unit = 4 if is_python else 2
+        max_depth = 0
+        branches = 0
+        param_count = len(sym.get("params", []) or [])
+        for ln in lines:
+            stripped = ln.strip()
+            if not stripped:
+                continue
+            indent = len(ln) - len(ln.lstrip())
+            depth = max(0, (indent - base_indent) // indent_unit)
+            max_depth = max(max_depth, depth)
+            if is_python:
+                branch_kws = ("if ", "elif ", "for ", "while ", "try:", "except ", "with ")
+            else:
+                branch_kws = ("if ", "if(", "else if ", "for ", "for(", "while ", "while(", "switch ", "switch(", "try ", "try{", "catch ", "catch(")
+            for kw in branch_kws:
+                if stripped.startswith(kw):
+                    branches += 1
+                    break
+        if max_depth > 3:
+            score += (max_depth - 3) * 5
+        if param_count > 5:
+            score += (param_count - 5) * 2
+        if branches > 10:
+            score += (branches - 10)
+        if score >= 5:
             complex_count += 1
 
     if func_count > 0:
@@ -524,7 +576,7 @@ def code_health_score(project: str = None) -> dict:
         "breakdown": {
             "complexity": {
                 "score": complexity_score, "max": 25,
-                "detail": f"{complex_count}/{func_count} functions over 50 lines",
+                "detail": f"{complex_count}/{func_count} functions with high composite complexity (score >= 5)",
             },
             "dead_code": {
                 "score": dead_score, "max": 25,
@@ -547,7 +599,8 @@ def code_health_score(project: str = None) -> dict:
 def _suggest_fix_for_complexity(fn: dict) -> str:
     """Generate a refactoring suggestion for a complex function."""
     parts = []
-    if fn.get("lines", 0) > 50:
+    line_threshold = _line_threshold_for_file(fn.get("path", ""))
+    if fn.get("lines", 0) > line_threshold:
         parts.append("Extract sub-functions to reduce length")
     if fn.get("max_depth", 0) > 3:
         parts.append("Use early returns or guard clauses to reduce nesting")

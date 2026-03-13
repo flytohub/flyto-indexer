@@ -15,6 +15,29 @@ from pathlib import Path
 from typing import Optional
 
 
+# File-type-aware line thresholds
+_COMPONENT_EXTENSIONS = frozenset((".vue", ".tsx", ".jsx"))
+_TEST_PATTERNS = ("test_", "_test.", ".test.", ".spec.", "/test/", "/tests/", "/__tests__/")
+
+
+def _line_threshold_for_file(file_path: str) -> int:
+    """Return line-count threshold based on file type.
+
+    - .vue/.tsx/.jsx components: 100 (components are naturally longer)
+    - Everything else (.py, .ts, .js, .java, .go): 80
+    """
+    ext = Path(file_path).suffix.lower()
+    if ext in _COMPONENT_EXTENSIONS:
+        return 100
+    return 80
+
+
+def _is_test_file(file_path: str) -> bool:
+    """Check if file is a test file (excluded from complexity scoring)."""
+    lower = file_path.lower()
+    return any(p in lower for p in _TEST_PATTERNS)
+
+
 @dataclass
 class FunctionComplexity:
     """Function complexity"""
@@ -30,10 +53,15 @@ class FunctionComplexity:
 
     @property
     def score(self) -> int:
-        """Overall complexity score (higher = more complex)"""
+        """Overall complexity score (higher = more complex).
+
+        Uses file-type-aware line thresholds and combines multiple
+        dimensions: line count, nesting depth, parameters, branches.
+        """
+        threshold = _line_threshold_for_file(self.file_path)
         score = 0
-        if self.lines > 50:
-            score += (self.lines - 50) // 10
+        if self.lines > threshold:
+            score += (self.lines - threshold) // 10
         if self.max_depth > 3:
             score += (self.max_depth - 3) * 5
         if self.params > 5:
@@ -45,9 +73,10 @@ class FunctionComplexity:
     @property
     def issues(self) -> list[str]:
         """Issue list"""
+        threshold = _line_threshold_for_file(self.file_path)
         issues = []
-        if self.lines > 50:
-            issues.append(f"Too long ({self.lines} lines)")
+        if self.lines > threshold:
+            issues.append(f"Too long ({self.lines} lines, limit {threshold})")
         if self.max_depth > 3:
             issues.append(f"Nesting too deep (depth={self.max_depth})")
         if self.params > 5:
@@ -80,7 +109,7 @@ class ComplexityAnalyzer:
         extensions: list[str] = None,
         ignore_patterns: list[str] = None,
         # Thresholds
-        max_lines: int = 50,
+        max_lines: int = 80,
         max_depth: int = 4,
         max_params: int = 5,
         max_branches: int = 10,
