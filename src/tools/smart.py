@@ -108,6 +108,54 @@ def _type_mod():
     return m
 
 
+def _trace_mod():
+    try:
+        from . import trace as m
+    except ImportError:
+        import trace as m
+    return m
+
+
+def _change_patterns_mod():
+    try:
+        from . import change_patterns as m
+    except ImportError:
+        import change_patterns as m
+    return m
+
+
+def _conventions_mod():
+    try:
+        from . import conventions as m
+    except ImportError:
+        import conventions as m
+    return m
+
+
+def _staleness_mod():
+    try:
+        from . import staleness as m
+    except ImportError:
+        import staleness as m
+    return m
+
+
+def _context_budget_mod():
+    try:
+        from . import context_budget as m
+    except ImportError:
+        import context_budget as m
+    return m
+
+
+def _data_flow_mod():
+    try:
+        from . import data_flow as m
+    except ImportError:
+        import data_flow as m
+    return m
+
+
 def _enrich(label: str, func, *args, **kwargs):
     """Call an enrichment function, log and swallow errors."""
     try:
@@ -245,35 +293,32 @@ def smart_search(query: str, project: str = None, include_content: bool = False)
 # 2. impact — unified impact analysis with auto-enrichment
 # ---------------------------------------------------------------------------
 
-def smart_impact(target: str = None, mode: str = None, change_type: str = "modify",
-                 project: str = None) -> dict:
-    """Analyze impact of a change. Auto-attaches cross-project impact and test files."""
+def _smart_impact_diff(mode: str, project: str = None) -> dict:
+    """Handle diff mode: analyze uncommitted changes."""
+    info = _info_mod()
+    diff = _diff_mod()
+    diff_result = diff.impact_from_diff(mode=mode, project=project)
+
+    # Auto-attach test files for affected symbols
+    if isinstance(diff_result, dict):
+        for change in diff_result.get("changes", [])[:10]:
+            path = change.get("file", "")
+            if path:
+                test = _enrich("diff_test_file", info.find_test_file, path)
+                if isinstance(test, dict) and not test.get("error"):
+                    change["test_file"] = test.get("test_file") or test.get("path")
+
+    # Truncate changes list for LLM consumption
+    if isinstance(diff_result, dict):
+        _truncate_list(diff_result, "changes", max_items=15)
+
+    return {"mode": "diff", "diff_mode": mode, "result": diff_result}
+
+
+def _smart_impact_symbol(target: str, change_type: str = "modify") -> dict:
+    """Handle symbol mode: analyze specific target."""
     refs = _refs_mod()
     info = _info_mod()
-
-    # --- Diff mode: analyze uncommitted changes ---
-    if mode:
-        diff = _diff_mod()
-        diff_result = diff.impact_from_diff(mode=mode, project=project)
-
-        # Auto-attach test files for affected symbols
-        if isinstance(diff_result, dict):
-            for change in diff_result.get("changes", [])[:10]:
-                path = change.get("file", "")
-                if path:
-                    test = _enrich("diff_test_file", info.find_test_file, path)
-                    if isinstance(test, dict) and not test.get("error"):
-                        change["test_file"] = test.get("test_file") or test.get("path")
-
-        # Truncate changes list for LLM consumption
-        if isinstance(diff_result, dict):
-            _truncate_list(diff_result, "changes", max_items=15)
-
-        return {"mode": "diff", "diff_mode": mode, "result": diff_result}
-
-    # --- Symbol mode: analyze specific target ---
-    if not target:
-        return {"error": "Provide 'target' (symbol name/id) or 'mode' (unstaged/staged/committed)"}
 
     result = {}
 
@@ -322,6 +367,18 @@ def smart_impact(target: str = None, mode: str = None, change_type: str = "modif
         if isinstance(test, dict) and not test.get("error"):
             result["test_file"] = test.get("test_file") or test.get("path")
 
+    # --- Auto: call path tracing (entry points → target) ---
+    trace = _enrich("trace_paths", _trace_mod().trace_paths, target, direction="up", max_depth=6, max_paths=5)
+    if isinstance(trace, dict) and trace.get("paths"):
+        result["call_paths"] = trace
+
+    # --- Auto: context budget scoring + trimming ---
+    cb = _context_budget_mod()
+    if isinstance(result.get("references"), dict):
+        refs_list = result["references"].get("references", [])
+        if refs_list:
+            result["references"]["references"] = cb.score_references(refs_list, target)
+
     # --- Smart truncation for LLM consumption ---
     if isinstance(result.get("references"), dict):
         _truncate_list(result["references"], "references", max_items=20)
@@ -334,6 +391,20 @@ def smart_impact(target: str = None, mode: str = None, change_type: str = "modif
     result["target"] = target
     result["change_type"] = change_type
     return result
+
+
+def smart_impact(target: str = None, mode: str = None, change_type: str = "modify",
+                 project: str = None) -> dict:
+    """Analyze impact of a change. Auto-attaches cross-project impact and test files."""
+    # --- Diff mode: analyze uncommitted changes ---
+    if mode:
+        return _smart_impact_diff(mode, project)
+
+    # --- Symbol mode: analyze specific target ---
+    if not target:
+        return {"error": "Provide 'target' (symbol name/id) or 'mode' (unstaged/staged/committed)"}
+
+    return _smart_impact_symbol(target, change_type)
 
 
 # ---------------------------------------------------------------------------
@@ -403,6 +474,12 @@ def smart_audit(project: str = None, focus: str = None) -> dict:
     if r is not None:
         result["git_hotspots"] = r
 
+    # --- Stale symbols (heavily referenced but not recently modified) ---
+    stale = _enrich("stale_symbols", _staleness_mod().find_stale_symbols,
+                     project=project, stale_days=180, min_refs=3, max_results=10)
+    if isinstance(stale, dict) and stale.get("stale_symbols"):
+        result["stale_symbols"] = stale
+
     # Suggest refactoring if overall score < 80
     overall = score_data.get("score", 100)
     if overall < 80 or focus == "all":
@@ -436,12 +513,22 @@ def smart_task(action: str, description: str = "", targets: list = None,
     """Unified task workflow: plan, gate check, or validate."""
     if action == "plan":
         task = _task_mod()
-        return task.analyze_task(
+        result = task.analyze_task(
             description=description,
             targets=targets or [],
             intent=intent,
             project=project,
         )
+
+        # Auto-attach: suggest co-change files based on git history
+        if isinstance(result, dict) and targets:
+            cochanges = _enrich("suggest_cochanges",
+                                _change_patterns_mod().suggest_cochanges,
+                                target_files=targets, project=project)
+            if isinstance(cochanges, dict) and cochanges.get("suggestions"):
+                result["cochange_suggestions"] = cochanges
+
+        return result
 
     elif action == "gate":
         task = _task_mod()
@@ -524,6 +611,20 @@ def smart_structure(project: str = None, focus: str = None,
         r = _enrich("contract_drift", tc.contract_drift, project=project)
         if r is not None:
             result["contract_drift"] = r
+        return result
+
+    # --- Conventions focus ---
+    if focus == "conventions":
+        r = _enrich("conventions", _conventions_mod().extract_conventions, project=project)
+        if r is not None:
+            result["conventions"] = r
+        return result
+
+    # --- Change patterns focus ---
+    if focus == "change_patterns":
+        r = _enrich("change_clusters", _change_patterns_mod().discover_change_clusters, project=project)
+        if r is not None:
+            result["change_clusters"] = r
         return result
 
     # --- Default: project overview ---

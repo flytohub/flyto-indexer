@@ -487,6 +487,135 @@ def _parse_inline_ts_fields(body: str) -> dict:
 # Type normalization
 # =============================================================================
 
+def _normalize_python_type(type_str: str) -> str:
+    """Normalize a Python type string to common representation."""
+    lang = "python"
+
+    # Annotated[X, ...] -> normalize X
+    ann_match = re.match(r'^Annotated\[(.+)\]$', type_str)
+    if ann_match:
+        inner_args = _split_generic_args(ann_match.group(1))
+        if inner_args:
+            return _normalize_type(inner_args[0], lang)
+
+    # Literal["a", "b"] -> "a" | "b"
+    lit_match = re.match(r'^Literal\[(.+)\]$', type_str)
+    if lit_match:
+        parts = _split_generic_args(lit_match.group(1))
+        return " | ".join(p.strip() for p in parts)
+
+    # Optional[X] -> X | null
+    opt_match = re.match(r'^Optional\[(.+)\]$', type_str)
+    if opt_match:
+        inner = _normalize_type(opt_match.group(1), lang)
+        return f"{inner} | null"
+
+    # Union[X, Y, None] -> X | Y | null
+    union_match = re.match(r'^Union\[(.+)\]$', type_str)
+    if union_match:
+        parts = _split_generic_args(union_match.group(1))
+        normalized = []
+        has_none = False
+        for p in parts:
+            p = p.strip()
+            if p in ("None", "NoneType"):
+                has_none = True
+            else:
+                normalized.append(_normalize_type(p, lang))
+        result = " | ".join(normalized) if normalized else "any"
+        if has_none:
+            result += " | null"
+        return result
+
+    # list[X] / List[X] -> X[]
+    list_match = re.match(r'^(?:list|List)\[(.+)\]$', type_str)
+    if list_match:
+        inner = _normalize_type(list_match.group(1), lang)
+        return f"{inner}[]"
+
+    # tuple[X, Y, Z] -> [X, Y, Z] (fixed tuple) or X[] (homogeneous)
+    tuple_match = re.match(r'^(?:tuple|Tuple)\[(.+)\]$', type_str)
+    if tuple_match:
+        parts = _split_generic_args(tuple_match.group(1))
+        if len(parts) == 2 and parts[1].strip() == '...':
+            return f"{_normalize_type(parts[0], lang)}[]"
+        return "array"
+
+    # set[X] / Set[X] -> X[]
+    set_match = re.match(r'^(?:set|Set|frozenset|FrozenSet)\[(.+)\]$', type_str)
+    if set_match:
+        inner = _normalize_type(set_match.group(1), lang)
+        return f"{inner}[]"
+
+    # dict[K, V] / Dict[K, V] -> Record<K, V>
+    dict_match = re.match(r'^(?:dict|Dict)\[(.+)\]$', type_str)
+    if dict_match:
+        parts = _split_generic_args(dict_match.group(1))
+        if len(parts) == 2:
+            k = _normalize_type(parts[0], lang)
+            v = _normalize_type(parts[1], lang)
+            return f"Record<{k}, {v}>"
+        return "object"
+
+    # Callable[[X, Y], Z] -> (X, Y) => Z
+    callable_match = re.match(r'^(?:Callable|callable)\[(.+)\]$', type_str)
+    if callable_match:
+        return "function"
+
+    # X | None -> X | null (Python 3.10+ syntax)
+    if ' | ' in type_str:
+        parts = _split_generic_args(type_str, '|')
+        normalized = []
+        for p in parts:
+            p = p.strip()
+            normalized.append(_normalize_type(p, lang))
+        return " | ".join(normalized)
+
+    return _PY_TO_NORMALIZED.get(type_str, type_str)
+
+
+def _normalize_ts_type(type_str: str) -> str:
+    """Normalize a TypeScript type string to common representation."""
+    lang = "typescript"
+
+    # X[] -> X[]
+    arr_match = re.match(r'^(.+)\[\]$', type_str)
+    if arr_match:
+        inner = _normalize_type(arr_match.group(1), lang)
+        return f"{inner}[]"
+
+    # Array<X> -> X[]
+    arr_generic_match = re.match(r'^Array<(.+)>$', type_str)
+    if arr_generic_match:
+        inner = _normalize_type(arr_generic_match.group(1), lang)
+        return f"{inner}[]"
+
+    # Record<K, V> -> Record<K, V>
+    record_match = re.match(r'^Record<(.+)>$', type_str)
+    if record_match:
+        parts = _split_generic_args(record_match.group(1))
+        if len(parts) == 2:
+            k = _normalize_type(parts[0], lang)
+            v = _normalize_type(parts[1], lang)
+            return f"Record<{k}, {v}>"
+        return "object"
+
+    # Partial<X>, Required<X> -> keep as-is (structural)
+    # Pick<X, K>, Omit<X, K> -> keep as-is
+
+    # X | Y | null
+    if ' | ' in type_str:
+        parts = _split_generic_args(type_str, '|')
+        normalized = [_normalize_type(p.strip(), lang) for p in parts]
+        return " | ".join(normalized)
+
+    # X & Y (intersection) -> keep as compound
+    if ' & ' in type_str:
+        return type_str  # intersection types are structural
+
+    return _TS_TO_NORMALIZED.get(type_str, type_str)
+
+
 def _normalize_type(type_str: str, lang: str) -> str:
     """Normalize a type string for cross-language comparison.
 
@@ -498,125 +627,9 @@ def _normalize_type(type_str: str, lang: str) -> str:
         return "any"
 
     if lang == "python":
-        # Annotated[X, ...] -> normalize X
-        ann_match = re.match(r'^Annotated\[(.+)\]$', type_str)
-        if ann_match:
-            inner_args = _split_generic_args(ann_match.group(1))
-            if inner_args:
-                return _normalize_type(inner_args[0], lang)
-
-        # Literal["a", "b"] -> "a" | "b"
-        lit_match = re.match(r'^Literal\[(.+)\]$', type_str)
-        if lit_match:
-            parts = _split_generic_args(lit_match.group(1))
-            return " | ".join(p.strip() for p in parts)
-
-        # Optional[X] -> X | null
-        opt_match = re.match(r'^Optional\[(.+)\]$', type_str)
-        if opt_match:
-            inner = _normalize_type(opt_match.group(1), lang)
-            return f"{inner} | null"
-
-        # Union[X, Y, None] -> X | Y | null
-        union_match = re.match(r'^Union\[(.+)\]$', type_str)
-        if union_match:
-            parts = _split_generic_args(union_match.group(1))
-            normalized = []
-            has_none = False
-            for p in parts:
-                p = p.strip()
-                if p in ("None", "NoneType"):
-                    has_none = True
-                else:
-                    normalized.append(_normalize_type(p, lang))
-            result = " | ".join(normalized) if normalized else "any"
-            if has_none:
-                result += " | null"
-            return result
-
-        # list[X] / List[X] -> X[]
-        list_match = re.match(r'^(?:list|List)\[(.+)\]$', type_str)
-        if list_match:
-            inner = _normalize_type(list_match.group(1), lang)
-            return f"{inner}[]"
-
-        # tuple[X, Y, Z] -> [X, Y, Z] (fixed tuple) or X[] (homogeneous)
-        tuple_match = re.match(r'^(?:tuple|Tuple)\[(.+)\]$', type_str)
-        if tuple_match:
-            parts = _split_generic_args(tuple_match.group(1))
-            if len(parts) == 2 and parts[1].strip() == '...':
-                return f"{_normalize_type(parts[0], lang)}[]"
-            return "array"
-
-        # set[X] / Set[X] -> X[]
-        set_match = re.match(r'^(?:set|Set|frozenset|FrozenSet)\[(.+)\]$', type_str)
-        if set_match:
-            inner = _normalize_type(set_match.group(1), lang)
-            return f"{inner}[]"
-
-        # dict[K, V] / Dict[K, V] -> Record<K, V>
-        dict_match = re.match(r'^(?:dict|Dict)\[(.+)\]$', type_str)
-        if dict_match:
-            parts = _split_generic_args(dict_match.group(1))
-            if len(parts) == 2:
-                k = _normalize_type(parts[0], lang)
-                v = _normalize_type(parts[1], lang)
-                return f"Record<{k}, {v}>"
-            return "object"
-
-        # Callable[[X, Y], Z] -> (X, Y) => Z
-        callable_match = re.match(r'^(?:Callable|callable)\[(.+)\]$', type_str)
-        if callable_match:
-            return "function"
-
-        # X | None -> X | null (Python 3.10+ syntax)
-        if ' | ' in type_str:
-            parts = _split_generic_args(type_str, '|')
-            normalized = []
-            for p in parts:
-                p = p.strip()
-                normalized.append(_normalize_type(p, lang))
-            return " | ".join(normalized)
-
-        return _PY_TO_NORMALIZED.get(type_str, type_str)
-
+        return _normalize_python_type(type_str)
     elif lang == "typescript":
-        # X[] -> X[]
-        arr_match = re.match(r'^(.+)\[\]$', type_str)
-        if arr_match:
-            inner = _normalize_type(arr_match.group(1), lang)
-            return f"{inner}[]"
-
-        # Array<X> -> X[]
-        arr_generic_match = re.match(r'^Array<(.+)>$', type_str)
-        if arr_generic_match:
-            inner = _normalize_type(arr_generic_match.group(1), lang)
-            return f"{inner}[]"
-
-        # Record<K, V> -> Record<K, V>
-        record_match = re.match(r'^Record<(.+)>$', type_str)
-        if record_match:
-            parts = _split_generic_args(record_match.group(1))
-            if len(parts) == 2:
-                k = _normalize_type(parts[0], lang)
-                v = _normalize_type(parts[1], lang)
-                return f"Record<{k}, {v}>"
-            return "object"
-
-        # Partial<X>, Required<X> -> keep as-is (structural)
-        # Pick<X, K>, Omit<X, K> -> keep as-is
-
-        # X | Y | null
-        if ' | ' in type_str:
-            parts = _split_generic_args(type_str, '|')
-            normalized = [_normalize_type(p.strip(), lang) for p in parts]
-            return " | ".join(normalized)
-
-        # X & Y (intersection) -> keep as compound
-        if ' & ' in type_str:
-            return type_str  # intersection types are structural
-
-        return _TS_TO_NORMALIZED.get(type_str, type_str)
+        return _normalize_ts_type(type_str)
 
     return type_str
 

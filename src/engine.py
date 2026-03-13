@@ -718,58 +718,76 @@ class IndexEngine:
             if not source_path:
                 continue
 
-            resolved = None
             imports = file_imports.get(source_path, {})
 
             # Handle simple calls: useToast()
             call_name = target.split('.')[0]  # Take the first part
-
-            if call_name in imports:
-                # Found import, resolve using module path
-                module = imports[call_name]
-
-                # Method 1: Look up from module_to_symbols
-                for mod_key in [module, module.split('/')[-1], call_name]:
-                    if mod_key in module_to_symbols:
-                        candidates = module_to_symbols[mod_key]
-                        # Find name match
-                        for cid in candidates:
-                            sym = self.index.symbols.get(cid)
-                            if sym and sym.name == call_name:
-                                resolved = cid
-                                break
-                        if resolved:
-                            break
-
-                # Method 2: Look up from name_to_ids, but check path similarity
-                if not resolved and call_name in name_to_ids:
-                    candidates = name_to_ids[call_name]
-                    for cid in candidates:
-                        sym = self.index.symbols.get(cid)
-                        if sym:
-                            # Check if module path is related to symbol path
-                            norm_module = module.replace('@/', 'src/').replace('./', '')
-                            if norm_module in sym.path or sym.path.endswith(f"/{call_name}."):
-                                resolved = cid
-                                break
+            resolved = self._resolve_simple_call(call_name, imports, name_to_ids, module_to_symbols)
 
             # Handle method calls: obj.method()
             if not resolved and "." in target:
-                parts = target.split(".")
-                obj_name = parts[0]
-                method_name = parts[-1]
-
-                # Check if obj_name has an import
-                if obj_name in imports:
-                    # Find symbol in Class.method format
-                    for sid, sym in self.index.symbols.items():
-                        if sym.name == target or sym.name.endswith(f".{method_name}"):
-                            resolved = sid
-                            break
+                resolved = self._resolve_method_call(target, imports)
 
             # Update resolved_target
             if resolved:
                 dep.metadata["resolved_target"] = resolved
+
+    def _resolve_simple_call(self, call_name, imports, name_to_ids, module_to_symbols):
+        """Resolve a simple call (e.g. useToast()) via imports and name lookup.
+
+        Returns resolved symbol ID or None.
+        """
+        if call_name not in imports:
+            return None
+
+        resolved = None
+        # Found import, resolve using module path
+        module = imports[call_name]
+
+        # Method 1: Look up from module_to_symbols
+        for mod_key in [module, module.split('/')[-1], call_name]:
+            if mod_key in module_to_symbols:
+                candidates = module_to_symbols[mod_key]
+                # Find name match
+                for cid in candidates:
+                    sym = self.index.symbols.get(cid)
+                    if sym and sym.name == call_name:
+                        resolved = cid
+                        break
+                if resolved:
+                    break
+
+        # Method 2: Look up from name_to_ids, but check path similarity
+        if not resolved and call_name in name_to_ids:
+            candidates = name_to_ids[call_name]
+            for cid in candidates:
+                sym = self.index.symbols.get(cid)
+                if sym:
+                    # Check if module path is related to symbol path
+                    norm_module = module.replace('@/', 'src/').replace('./', '')
+                    if norm_module in sym.path or sym.path.endswith(f"/{call_name}."):
+                        resolved = cid
+                        break
+
+        return resolved
+
+    def _resolve_method_call(self, target, imports):
+        """Resolve a method call (e.g. obj.method()) via imports.
+
+        Returns resolved symbol ID or None.
+        """
+        parts = target.split(".")
+        obj_name = parts[0]
+        method_name = parts[-1]
+
+        # Check if obj_name has an import
+        if obj_name in imports:
+            # Find symbol in Class.method format
+            for sid, sym in self.index.symbols.items():
+                if sym.name == target or sym.name.endswith(f".{method_name}"):
+                    return sid
+
+        return None
 
     def _build_re_export_map(self):
         """Build re-export map from index dependencies.

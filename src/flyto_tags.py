@@ -152,10 +152,11 @@ def write_tags(tags: list[dict], tags_dir: Path):
 # Dead Code Detection (ported from mcp_server.py find_dead_code)
 # ---------------------------------------------------------------------------
 
-def _find_dead_code(index: ProjectIndex) -> dict[str, str]:
-    """Find dead code symbols. Returns {symbol_id: reason}."""
+def _collect_references(index: ProjectIndex) -> tuple[set[str], set[str], set[str]]:
+    """Collect all referenced names from dependencies.
 
-    # Stage 1: Collect all referenced names from dependencies
+    Returns (referenced_names, referenced_classes, imported_files).
+    """
     referenced_names: set[str] = set()
     imported_files: set[str] = set()
     referenced_classes: set[str] = set()
@@ -187,73 +188,92 @@ def _find_dead_code(index: ProjectIndex) -> dict[str, str]:
                         if part[0].isupper():
                             referenced_classes.add(part)
 
+    return referenced_names, referenced_classes, imported_files
+
+
+def _is_dead_symbol(
+    sym_id: str,
+    sym,
+    referenced_names: set[str],
+    referenced_classes: set[str],
+    imported_files: set[str],
+    index: ProjectIndex,
+) -> bool:
+    """Check if a single symbol qualifies as dead code."""
+    if sym.symbol_type not in SHOULD_BE_REFERENCED:
+        return False
+
+    lines = sym.end_line - sym.start_line
+    if lines < MIN_LINES:
+        return False
+
+    # Entry points
+    if any(p in sym.name for p in ENTRY_POINT_PATTERNS):
+        return False
+
+    # Lifecycle methods
+    if sym.name in LIFECYCLE_METHODS:
+        return False
+
+    # Vue template functions (hard to track @click handlers)
+    if sym.symbol_type == SymbolType.FUNCTION and sym.path.endswith(".vue"):
+        return False
+
+    # Exported symbols
+    if sym.exports:
+        return False
+
+    # Private methods (convention: _name but not __name)
+    if sym.name.startswith("_") and not sym.name.startswith("__"):
+        return False
+
+    # Check if name is referenced
+    if sym.name in referenced_names:
+        return False
+
+    # Method: also check method-only name and class name
+    if sym.symbol_type == SymbolType.METHOD and "." in sym.name:
+        method_only = sym.name.split(".")[-1]
+        if method_only in referenced_names:
+            return False
+        class_name = sym.name.split(".")[0]
+        if class_name in referenced_classes or class_name in referenced_names:
+            return False
+
+    # Class: check if class name is referenced
+    if sym.symbol_type == SymbolType.CLASS and sym.name in referenced_classes:
+        return False
+
+    # File-level import check (for classes/components)
+    file_basename = sym.path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    if file_basename in imported_files or sym.path in imported_files:
+        return False
+
+    # Composable: check if imported by any file
+    if sym.symbol_type == SymbolType.COMPOSABLE and _is_composable_imported(sym, file_basename, index):
+        return False
+
+    # Class/Component with matching filename: check if file is imported
+    if sym.symbol_type in (SymbolType.CLASS, SymbolType.COMPONENT) and file_basename == sym.name and _is_file_imported(sym, file_basename, index):
+        return False
+
+    # Final check: reverse_index
+    callers = index.reverse_index.get(sym_id, [])
+    return not (sym.reference_count > 0 or len(callers) > 0)
+
+
+def _find_dead_code(index: ProjectIndex) -> dict[str, str]:
+    """Find dead code symbols. Returns {symbol_id: reason}."""
+
+    # Stage 1: Collect all referenced names from dependencies
+    referenced_names, referenced_classes, imported_files = _collect_references(index)
+
     # Stage 2-4: Filter symbols
     dead: dict[str, str] = {}
 
     for sym_id, sym in index.symbols.items():
-        if sym.symbol_type not in SHOULD_BE_REFERENCED:
-            continue
-
-        lines = sym.end_line - sym.start_line
-        if lines < MIN_LINES:
-            continue
-
-        # Entry points
-        if any(p in sym.name for p in ENTRY_POINT_PATTERNS):
-            continue
-
-        # Lifecycle methods
-        if sym.name in LIFECYCLE_METHODS:
-            continue
-
-        # Vue template functions (hard to track @click handlers)
-        if sym.symbol_type == SymbolType.FUNCTION and sym.path.endswith(".vue"):
-            continue
-
-        # Exported symbols
-        if sym.exports:
-            continue
-
-        # Private methods (convention: _name but not __name)
-        if sym.name.startswith("_") and not sym.name.startswith("__"):
-            continue
-
-        # Check if name is referenced
-        if sym.name in referenced_names:
-            continue
-
-        # Method: also check method-only name and class name
-        if sym.symbol_type == SymbolType.METHOD and "." in sym.name:
-            method_only = sym.name.split(".")[-1]
-            if method_only in referenced_names:
-                continue
-            class_name = sym.name.split(".")[0]
-            if class_name in referenced_classes or class_name in referenced_names:
-                continue
-
-        # Class: check if class name is referenced
-        if sym.symbol_type == SymbolType.CLASS and sym.name in referenced_classes:
-            continue
-
-        # File-level import check (for classes/components)
-        file_basename = sym.path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-        if file_basename in imported_files or sym.path in imported_files:
-            continue
-
-        # Composable: check if imported by any file
-        if sym.symbol_type == SymbolType.COMPOSABLE and _is_composable_imported(sym, file_basename, index):
-            continue
-
-        # Class/Component with matching filename: check if file is imported
-        if sym.symbol_type in (SymbolType.CLASS, SymbolType.COMPONENT) and file_basename == sym.name and _is_file_imported(sym, file_basename, index):
-            continue
-
-        # Final check: reverse_index
-        callers = index.reverse_index.get(sym_id, [])
-        if sym.reference_count > 0 or len(callers) > 0:
-            continue
-
-        dead[sym_id] = "ref_count=0, no callers, not in referenced_names"
+        if _is_dead_symbol(sym_id, sym, referenced_names, referenced_classes, imported_files, index):
+            dead[sym_id] = "ref_count=0, no callers, not in referenced_names"
 
     return dead
 

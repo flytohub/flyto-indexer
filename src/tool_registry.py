@@ -974,7 +974,9 @@ SMART_TOOLS: list = [
             "Auto-enriches with:\n"
             "- Cross-project impact (if multiple projects indexed)\n"
             "- Test file mapping for affected code\n"
-            "- Edit preview for rename/delete/signature changes"
+            "- Edit preview for rename/delete/signature changes\n"
+            "- Call path tracing (entry points → target)\n"
+            "- Relevance-scored references (recency, confidence, proximity)"
         ),
         "inputSchema": {
             "type": "object",
@@ -1012,7 +1014,8 @@ SMART_TOOLS: list = [
             "- Complexity < 80 → shows complex functions, duplicates\n"
             "- Dead code < 80 → shows unreferenced symbols\n"
             "- Coverage < 80 → shows untested high-impact code\n\n"
-            "Always includes git hotspots (high-churn + complex files).\n"
+            "Always includes git hotspots (high-churn + complex files) and stale symbols "
+            "(heavily referenced but not modified in 180+ days).\n"
             "Use 'focus' to force expansion of a specific dimension regardless of score."
         ),
         "inputSchema": {
@@ -1037,7 +1040,8 @@ SMART_TOOLS: list = [
         "description": (
             "Plan, gate-check, or validate code changes. Three actions:\n\n"
             "1. plan: Analyze a task before starting — returns risk dimensions (0-10), "
-            "constraints, and a step-by-step execution plan with pre-filled tool args.\n"
+            "constraints, step-by-step execution plan, and co-change suggestions "
+            "(files that historically change together with the targets).\n"
             "2. gate: Check if you can proceed to the next phase. Server-side enforcement "
             "blocks skipping required gates. If pass=false, STOP.\n"
             "3. validate: Run ruff linter + pytest after making changes. Auto-attaches "
@@ -1106,7 +1110,9 @@ SMART_TOOLS: list = [
             "- (default/overview): lists all projects with symbol/file counts + index status\n"
             "- apis: all API endpoints + categories + contract drift detection\n"
             "- dependencies: import/dependent graph for a file or symbol\n"
-            "- types: type schemas + cross-project contract drift\n\n"
+            "- types: type schemas + cross-project contract drift\n"
+            "- conventions: naming styles, patterns, imports, error handling conventions\n"
+            "- change_patterns: files that frequently change together (from git history)\n\n"
             "Auto-enriches project-level queries with API counts, categories, and index freshness."
         ),
         "inputSchema": {
@@ -1118,7 +1124,7 @@ SMART_TOOLS: list = [
                 },
                 "focus": {
                     "type": "string",
-                    "enum": ["apis", "dependencies", "types"],
+                    "enum": ["apis", "dependencies", "types", "conventions", "change_patterns"],
                     "description": "What to explore (default: project overview)",
                 },
                 "symbol_id": {

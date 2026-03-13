@@ -1,6 +1,5 @@
 """Maintenance tools — dead code, TODOs, index status, reindex, sessions."""
 
-import json
 import os
 import re
 from collections import namedtuple
@@ -62,6 +61,34 @@ def _build_reference_sets(dependencies):
     return ReferenceContext(names=referenced_names, files=imported_files, classes=referenced_classes)
 
 
+def _has_same_file_reference(sym_id, sym_name, sym_project, sym_path,
+                             symbols, _same_file_content_cache):
+    """Check for dict/list dispatch patterns: the symbol name may
+    appear as a bare reference (dict value, list element, callback
+    assignment) inside another symbol in the same file."""
+    bare_name = sym_name.split(".")[-1] if "." in sym_name else sym_name
+    if bare_name and len(bare_name) > 2:
+        file_key = f"{sym_project}:{sym_path}"
+        if file_key not in _same_file_content_cache:
+            parts = []
+            for other_id, other_sym in symbols.items():
+                other_proj = other_id.split(":")[0] if ":" in other_id else ""
+                if other_sym.get("path", "") == sym_path and other_proj == sym_project:
+                    text = get_symbol_content_text(other_id, other_sym)
+                    if text:
+                        parts.append((other_id, text))
+            _same_file_content_cache[file_key] = parts
+
+        name_pat = re.compile(r'\b' + re.escape(bare_name) + r'\b')
+        for other_id, text in _same_file_content_cache[file_key]:
+            if other_id == sym_id:
+                continue
+            if name_pat.search(text):
+                return True
+
+    return False
+
+
 def _is_potentially_dead(sym_id, sym, ref_ctx, dependencies, symbols,
                          _same_file_content_cache):
     """Return True if the symbol should be considered dead code."""
@@ -116,57 +143,53 @@ def _is_potentially_dead(sym_id, sym, ref_ctx, dependencies, symbols,
     if file_basename in ref_ctx.files or sym_path in ref_ctx.files:
         return False
 
-    if sym_type == "composable":
-        is_imported = False
-        for dep in dependencies.values():
-            if dep.get("type") == "imports":
-                target = dep.get("target", "")
-                names = dep.get("metadata", {}).get("names", [])
-                target_basename = target.rsplit("/", 1)[-1].rsplit(".", 1)[0] if target else ""
-                if target_basename == file_basename or target_basename == sym_name:
-                    is_imported = True
-                    break
-                if sym_name in names:
-                    is_imported = True
-                    break
-        if is_imported:
-            return False
+    if sym_type == "composable" and any(
+        (dep.get("type") == "imports" and (
+            (dep.get("target", "").rsplit("/", 1)[-1].rsplit(".", 1)[0] in (file_basename, sym_name))
+            or sym_name in dep.get("metadata", {}).get("names", [])
+        ))
+        for dep in dependencies.values()
+    ):
+        return False
 
-    if sym_type in ("class", "component") and file_basename == sym_name:
-        is_imported = False
-        for dep in dependencies.values():
-            if dep.get("type") == "imports":
-                target = dep.get("target", "")
-                if sym_name in target or file_basename in target:
-                    is_imported = True
-                    break
-        if is_imported:
-            return False
+    if sym_type in ("class", "component") and file_basename == sym_name and any(
+        dep.get("type") == "imports" and (sym_name in dep.get("target", "") or file_basename in dep.get("target", ""))
+        for dep in dependencies.values()
+    ):
+        return False
 
-    # Check for dict/list dispatch patterns: the symbol name may
-    # appear as a bare reference (dict value, list element, callback
-    # assignment) inside another symbol in the same file.
-    bare_name = sym_name.split(".")[-1] if "." in sym_name else sym_name
-    if bare_name and len(bare_name) > 2:
-        file_key = f"{sym_project}:{sym_path}"
-        if file_key not in _same_file_content_cache:
-            parts = []
-            for other_id, other_sym in symbols.items():
-                other_proj = other_id.split(":")[0] if ":" in other_id else ""
-                if other_sym.get("path", "") == sym_path and other_proj == sym_project:
-                    text = get_symbol_content_text(other_id, other_sym)
-                    if text:
-                        parts.append((other_id, text))
-            _same_file_content_cache[file_key] = parts
+    return not _has_same_file_reference(sym_id, sym_name, sym_project, sym_path,
+                                        symbols, _same_file_content_cache)
 
-        name_pat = re.compile(r'\b' + re.escape(bare_name) + r'\b')
-        for other_id, text in _same_file_content_cache[file_key]:
-            if other_id == sym_id:
-                continue
-            if name_pat.search(text):
-                return False
 
-    return True
+def _format_dead_code_result(dead_code: list) -> dict:
+    dead_code.sort(key=lambda x: x["lines"], reverse=True)
+
+    by_project = {}
+    for item in dead_code:
+        proj = item["project"]
+        if proj not in by_project:
+            by_project[proj] = []
+        by_project[proj].append(item)
+
+    total_dead_lines = sum(item["lines"] for item in dead_code)
+
+    if dead_code:
+        largest = dead_code[0]
+        next_action = f"Largest dead symbol: {largest['name']} ({largest['lines']} lines) at {largest['path']}:{largest.get('start_line', 0)}. Use get_symbol_content to review before removing."
+    else:
+        next_action = "Codebase is clean — no dead code detected."
+
+    return {
+        "total": len(dead_code),
+        "total_dead": len(dead_code),
+        "total_dead_lines": total_dead_lines,
+        "by_project": {k: len(v) for k, v in by_project.items()},
+        "dead_symbols": dead_code[:20],
+        "top_20": dead_code[:20],
+        "suggestion": f"Found {len(dead_code)} unreferenced symbols, {total_dead_lines} total lines of code that can be considered for removal.",
+        "next_action": next_action,
+    }
 
 
 def find_dead_code(project=None, symbol_type=None, min_lines=5):
@@ -214,33 +237,7 @@ def find_dead_code(project=None, symbol_type=None, min_lines=5):
             "start_line": sym.get("start_line", 0),
         })
 
-    dead_code.sort(key=lambda x: x["lines"], reverse=True)
-
-    by_project = {}
-    for item in dead_code:
-        proj = item["project"]
-        if proj not in by_project:
-            by_project[proj] = []
-        by_project[proj].append(item)
-
-    total_dead_lines = sum(item["lines"] for item in dead_code)
-
-    if dead_code:
-        largest = dead_code[0]
-        next_action = f"Largest dead symbol: {largest['name']} ({largest['lines']} lines) at {largest['path']}:{largest.get('start_line', 0)}. Use get_symbol_content to review before removing."
-    else:
-        next_action = "Codebase is clean — no dead code detected."
-
-    return {
-        "total": len(dead_code),
-        "total_dead": len(dead_code),
-        "total_dead_lines": total_dead_lines,
-        "by_project": {k: len(v) for k, v in by_project.items()},
-        "dead_symbols": dead_code[:20],
-        "top_20": dead_code[:20],
-        "suggestion": f"Found {len(dead_code)} unreferenced symbols, {total_dead_lines} total lines of code that can be considered for removal.",
-        "next_action": next_action,
-    }
+    return _format_dead_code_result(dead_code)
 
 
 def find_todos(project=None, priority=None, max_results=100):

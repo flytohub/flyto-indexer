@@ -134,6 +134,21 @@ class RustScanner(BaseScanner):
                 "end": match.end() + self._find_block_length(content, match.end()),
             })
 
+        symbols.extend(self._scan_structs(content, lines, rel_path))
+        symbols.extend(self._scan_traits(content, lines, rel_path))
+        symbols.extend(self._scan_enums(content, lines, rel_path))
+        symbols.extend(self._scan_type_aliases(content, lines, rel_path))
+        symbols.extend(self._scan_functions(content, lines, rel_path, impl_blocks, trait_blocks))
+
+        # Compute hashes
+        for symbol in symbols:
+            symbol.compute_hash()
+
+        return symbols, dependencies
+
+    def _scan_structs(self, content: str, lines: list[str], rel_path: str) -> list[Symbol]:
+        """Extract struct symbols from Rust source."""
+        symbols = []
         # Extract structs
         for match in self.STRUCT_PATTERN.finditer(content):
             name = match.group(1)
@@ -167,7 +182,11 @@ class RustScanner(BaseScanner):
                 exports=[name] if not match.group(0).strip().startswith("pub(") else [],
             )
             symbols.append(symbol)
+        return symbols
 
+    def _scan_traits(self, content: str, lines: list[str], rel_path: str) -> list[Symbol]:
+        """Extract trait symbols from Rust source."""
+        symbols = []
         # Extract traits
         for match in self.TRAIT_PATTERN.finditer(content):
             name = match.group(1)
@@ -188,7 +207,11 @@ class RustScanner(BaseScanner):
                 exports=[name],
             )
             symbols.append(symbol)
+        return symbols
 
+    def _scan_enums(self, content: str, lines: list[str], rel_path: str) -> list[Symbol]:
+        """Extract enum symbols from Rust source."""
+        symbols = []
         # Extract enums
         for match in self.ENUM_PATTERN.finditer(content):
             name = match.group(1)
@@ -209,7 +232,11 @@ class RustScanner(BaseScanner):
                 exports=[name],
             )
             symbols.append(symbol)
+        return symbols
 
+    def _scan_type_aliases(self, content: str, lines: list[str], rel_path: str) -> list[Symbol]:
+        """Extract type alias symbols from Rust source."""
+        symbols = []
         # Extract type aliases
         for match in self.TYPE_ALIAS_PATTERN.finditer(content):
             name = match.group(1)
@@ -233,7 +260,12 @@ class RustScanner(BaseScanner):
                 exports=[name],
             )
             symbols.append(symbol)
+        return symbols
 
+    def _scan_functions(self, content: str, lines: list[str], rel_path: str,
+                        impl_blocks: list[dict], trait_blocks: list[dict]) -> list[Symbol]:
+        """Extract function and method symbols from Rust source."""
+        symbols = []
         # Extract top-level functions (not in impl blocks or trait blocks)
         for match in self.FN_PATTERN.finditer(content):
             pos = match.start()
@@ -297,12 +329,7 @@ class RustScanner(BaseScanner):
                 )
 
             symbols.append(symbol)
-
-        # Compute hashes
-        for symbol in symbols:
-            symbol.compute_hash()
-
-        return symbols, dependencies
+        return symbols
 
     def _parse_use_path(self, use_path: str) -> tuple[str, list[str]]:
         """Parse Rust use path to module and names."""

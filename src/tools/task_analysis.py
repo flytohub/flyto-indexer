@@ -1142,6 +1142,130 @@ def _build_decision_metadata(dimensions: Dict[str, dict], intent: str) -> dict:
     }
 
 
+def _plan_inspect_steps(symbol_ids, file_paths, first_sid, first_path,
+                        coupling_level, complexity_level, test_level, intent, _add):
+    """Phase 1: INSPECT — understand the landscape."""
+    # Collect all inspect step IDs for gate dependencies
+    inspect_step_ids = []
+
+    # Step(s): scope callers — one per symbol, up to MAX_INDIVIDUAL_INSPECT
+    ref_steps = []
+    if symbol_ids and intent != "feature":
+        individual_sids = symbol_ids[:MAX_INDIVIDUAL_INSPECT]
+        for idx, sid in enumerate(individual_sids):
+            # Single target: use plain purpose for V1 compatibility
+            purpose = "scope_callers" if len(symbol_ids) == 1 else f"scope_callers_{idx}"
+            sid_step = _add("find_references", {"symbol_id": sid}, purpose)
+            ref_steps.append(sid_step)
+        # Batch remainder if more than MAX_INDIVIDUAL_INSPECT
+        if len(symbol_ids) > MAX_INDIVIDUAL_INSPECT:
+            batch_sids = symbol_ids[MAX_INDIVIDUAL_INSPECT:]
+            batch_step = _add(
+                "impact_analysis",
+                {"symbol_id": batch_sids[0]},
+                "batch_scope_callers",
+            )
+            ref_steps.append(batch_step)
+        inspect_step_ids.extend(ref_steps)
+
+    # Back-compat alias for downstream deps (single-target case)
+    ref_step = ref_steps[0] if ref_steps else None
+
+    # Step(s): verify test coverage — one per unique file path
+    test_steps = []
+    if file_paths:
+        unique_test_paths = list(dict.fromkeys(file_paths))  # dedupe, preserve order
+        individual_paths = unique_test_paths[:MAX_INDIVIDUAL_INSPECT]
+        for idx, fpath in enumerate(individual_paths):
+            purpose = "verify_test_coverage" if len(unique_test_paths) == 1 else f"verify_test_coverage_{idx}"
+            t_step = _add(
+                "find_test_file", {"file_path": fpath}, purpose,
+                required=test_level in ("medium", "high"),
+            )
+            test_steps.append(t_step)
+        inspect_step_ids.extend(test_steps)
+
+    # Back-compat alias
+    test_step = test_steps[0] if test_steps else None
+
+    # Step: check cross-project usage (if coupling is a concern)
+    cross_step = None
+    if coupling_level in ("medium", "high") and first_sid:
+        cross_step = _add(
+            "find_references", {"symbol_id": first_sid}, "check_cross_project",
+            depends_on=[ref_step] if ref_step else [],
+        )
+        inspect_step_ids.append(cross_step)
+
+    # Step: map dependency graph (if complexity is a concern) — first path only
+    dep_step = None
+    if complexity_level in ("medium", "high") and first_path:
+        dep_step = _add(
+            "dependency_graph",
+            {"file_path": first_path, "direction": "both", "max_depth": 3},
+            "map_dependencies",
+            required=complexity_level == "high",
+        )
+        inspect_step_ids.append(dep_step)
+
+    return inspect_step_ids, ref_steps, ref_step, test_steps, test_step
+
+
+def _plan_assess_steps(symbol_ids, first_sid, blast_level, breaking_level,
+                       intent, ref_steps, ref_step, _add):
+    """Phase 2: ASSESS — quantify risk before making changes."""
+    assess_step_ids = []
+
+    # Step(s): impact analysis — one per symbol or batched
+    impact_steps = []
+    if symbol_ids:
+        if len(symbol_ids) <= MAX_INDIVIDUAL_INSPECT:
+            for idx, sid in enumerate(symbol_ids):
+                purpose = "assess_blast_radius" if len(symbol_ids) == 1 else f"assess_blast_radius_{idx}"
+                # Each impact step depends on its corresponding ref step if available
+                impact_deps = []
+                if idx < len(ref_steps):
+                    impact_deps.append(ref_steps[idx])
+                elif ref_step:
+                    impact_deps.append(ref_step)
+                i_step = _add(
+                    "impact_analysis", {"symbol_id": sid}, purpose,
+                    required=blast_level in ("medium", "high"),
+                    depends_on=impact_deps,
+                )
+                impact_steps.append(i_step)
+        else:
+            # Batch: single impact_analysis step using first sid as representative
+            impact_deps = [ref_steps[0]] if ref_steps else []
+            batch_impact = _add(
+                "impact_analysis", {"symbol_id": first_sid}, "batch_assess_blast_radius",
+                required=blast_level in ("medium", "high"),
+                depends_on=impact_deps,
+            )
+            impact_steps.append(batch_impact)
+        assess_step_ids.extend(impact_steps)
+
+    # Back-compat alias
+    impact_step = impact_steps[0] if impact_steps else None
+
+    # Step: edit impact preview (required when breaking is medium+) — first sid only
+    preview_step = None
+    if first_sid and breaking_level in ("medium", "high"):
+        change_type_map = {
+            "refactor": "signature_change", "bugfix": "modify",
+            "feature": "modify", "cleanup": "delete", "migration": "rename",
+        }
+        preview_step = _add(
+            "edit_impact_preview",
+            {"symbol_id": first_sid, "change_type": change_type_map.get(intent, "modify")},
+            "preview_change_risk",
+            depends_on=[impact_step] if impact_step else [],
+        )
+        assess_step_ids.append(preview_step)
+
+    return assess_step_ids, impact_step
+
+
 def _build_execution_plan(
     resolved: List[dict],
     dimensions: Dict[str, dict],
@@ -1211,121 +1335,19 @@ def _build_execution_plan(
     # Phase 1: INSPECT — understand the landscape
     # =================================================================
 
-    # Collect all inspect step IDs for gate dependencies
-    inspect_step_ids = []
-
-    # Step(s): scope callers — one per symbol, up to MAX_INDIVIDUAL_INSPECT
-    ref_steps = []
-    if symbol_ids and intent != "feature":
-        individual_sids = symbol_ids[:MAX_INDIVIDUAL_INSPECT]
-        for idx, sid in enumerate(individual_sids):
-            # Single target: use plain purpose for V1 compatibility
-            purpose = "scope_callers" if len(symbol_ids) == 1 else f"scope_callers_{idx}"
-            sid_step = _add("find_references", {"symbol_id": sid}, purpose)
-            ref_steps.append(sid_step)
-        # Batch remainder if more than MAX_INDIVIDUAL_INSPECT
-        if len(symbol_ids) > MAX_INDIVIDUAL_INSPECT:
-            batch_sids = symbol_ids[MAX_INDIVIDUAL_INSPECT:]
-            batch_step = _add(
-                "impact_analysis",
-                {"symbol_id": batch_sids[0]},
-                "batch_scope_callers",
-            )
-            ref_steps.append(batch_step)
-        inspect_step_ids.extend(ref_steps)
-
-    # Back-compat alias for downstream deps (single-target case)
-    ref_step = ref_steps[0] if ref_steps else None
-
-    # Step(s): verify test coverage — one per unique file path
-    test_steps = []
-    if file_paths:
-        unique_test_paths = list(dict.fromkeys(file_paths))  # dedupe, preserve order
-        individual_paths = unique_test_paths[:MAX_INDIVIDUAL_INSPECT]
-        for idx, fpath in enumerate(individual_paths):
-            purpose = "verify_test_coverage" if len(unique_test_paths) == 1 else f"verify_test_coverage_{idx}"
-            t_step = _add(
-                "find_test_file", {"file_path": fpath}, purpose,
-                required=test_level in ("medium", "high"),
-            )
-            test_steps.append(t_step)
-        inspect_step_ids.extend(test_steps)
-
-    # Back-compat alias
-    test_step = test_steps[0] if test_steps else None
-
-    # Step: check cross-project usage (if coupling is a concern)
-    cross_step = None
-    if coupling_level in ("medium", "high") and first_sid:
-        cross_step = _add(
-            "find_references", {"symbol_id": first_sid}, "check_cross_project",
-            depends_on=[ref_step] if ref_step else [],
-        )
-        inspect_step_ids.append(cross_step)
-
-    # Step: map dependency graph (if complexity is a concern) — first path only
-    dep_step = None
-    if complexity_level in ("medium", "high") and first_path:
-        dep_step = _add(
-            "dependency_graph",
-            {"file_path": first_path, "direction": "both", "max_depth": 3},
-            "map_dependencies",
-            required=complexity_level == "high",
-        )
-        inspect_step_ids.append(dep_step)
+    inspect_step_ids, ref_steps, ref_step, test_steps, test_step = _plan_inspect_steps(
+        symbol_ids, file_paths, first_sid, first_path,
+        coupling_level, complexity_level, test_level, intent, _add,
+    )
 
     # =================================================================
     # Phase 2: ASSESS — quantify risk before making changes
     # =================================================================
 
-    assess_step_ids = []
-
-    # Step(s): impact analysis — one per symbol or batched
-    impact_steps = []
-    if symbol_ids:
-        if len(symbol_ids) <= MAX_INDIVIDUAL_INSPECT:
-            for idx, sid in enumerate(symbol_ids):
-                purpose = "assess_blast_radius" if len(symbol_ids) == 1 else f"assess_blast_radius_{idx}"
-                # Each impact step depends on its corresponding ref step if available
-                impact_deps = []
-                if idx < len(ref_steps):
-                    impact_deps.append(ref_steps[idx])
-                elif ref_step:
-                    impact_deps.append(ref_step)
-                i_step = _add(
-                    "impact_analysis", {"symbol_id": sid}, purpose,
-                    required=blast_level in ("medium", "high"),
-                    depends_on=impact_deps,
-                )
-                impact_steps.append(i_step)
-        else:
-            # Batch: single impact_analysis step using first sid as representative
-            impact_deps = [ref_steps[0]] if ref_steps else []
-            batch_impact = _add(
-                "impact_analysis", {"symbol_id": first_sid}, "batch_assess_blast_radius",
-                required=blast_level in ("medium", "high"),
-                depends_on=impact_deps,
-            )
-            impact_steps.append(batch_impact)
-        assess_step_ids.extend(impact_steps)
-
-    # Back-compat alias
-    impact_step = impact_steps[0] if impact_steps else None
-
-    # Step: edit impact preview (required when breaking is medium+) — first sid only
-    preview_step = None
-    if first_sid and breaking_level in ("medium", "high"):
-        change_type_map = {
-            "refactor": "signature_change", "bugfix": "modify",
-            "feature": "modify", "cleanup": "delete", "migration": "rename",
-        }
-        preview_step = _add(
-            "edit_impact_preview",
-            {"symbol_id": first_sid, "change_type": change_type_map.get(intent, "modify")},
-            "preview_change_risk",
-            depends_on=[impact_step] if impact_step else [],
-        )
-        assess_step_ids.append(preview_step)
+    assess_step_ids, impact_step = _plan_assess_steps(
+        symbol_ids, first_sid, blast_level, breaking_level,
+        intent, ref_steps, ref_step, _add,
+    )
 
     # =================================================================
     # Phase 3: GATE — verify ready to proceed

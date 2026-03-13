@@ -105,28 +105,8 @@ def get_symbol_content(symbol_id: str) -> dict:
     }
 
 
-def get_file_context(path: str, include_content: bool = False) -> dict:
-    """
-    One-call context package: returns everything an agent needs about a file.
-
-    Aggregates: file info, symbols, imports, dependents, test file, related files.
-    All from cached data, zero I/O.
-    """
-    index = load_index()
-    symbols_map = index.get("symbols", {})
-    dependencies = index.get("dependencies", {})
-    reverse_index = index.get("reverse_index", {})
-
-    # 1. File info
-    info = get_file_info(path)
-    if "error" in info:
-        info = {"purpose": "", "category": "", "keywords": []}
-
-    # 2. Symbols in this file
-    file_symbols = get_file_symbols(path)
-    symbols_list = file_symbols.get("symbols", [])
-
-    # 3. Imports (dependencies where source is in this file)
+def _collect_file_imports(path: str, dependencies: dict) -> list[dict]:
+    """Collect imports for a file from dependencies where source is in this file."""
     imports = []
     seen_imports = set()
     for _dep_id, dep in dependencies.items():
@@ -139,8 +119,11 @@ def get_file_context(path: str, include_content: bool = False) -> dict:
                     seen_imports.add(target)
                     names = dep.get("metadata", {}).get("names", [])
                     imports.append({"target": target, "names": names})
+    return imports
 
-    # 4. Dependents (who references symbols in this file)
+
+def _collect_file_dependents(path: str, reverse_index: dict) -> list[dict]:
+    """Collect dependents (who references symbols in this file)."""
     dependents = []
     seen_deps = set()
     for sym_id, callers in reverse_index.items():
@@ -155,18 +138,18 @@ def get_file_context(path: str, include_content: bool = False) -> dict:
                 caller_path = caller_id.split(":")[1] if len(caller_id.split(":")) >= 2 else ""
                 if caller_path != path and caller_id not in seen_deps:
                     seen_deps.add(caller_id)
-                    symbols_map.get(caller_id, {})
                     dependents.append({
                         "from_path": caller_path,
                         "symbol_used": sym_name,
                         "confidence": "high",
                     })
+    return dependents
 
-    # 5. Test file
-    mapper = _get_test_mapper()
-    test_file = mapper.find_test(path)
 
-    # 6. Related files (1-hop import graph neighbors)
+def _collect_related_files(
+    path: str, imports: list[dict], dependents: list[dict], symbols_map: dict,
+) -> list[dict]:
+    """Collect related files (1-hop import graph neighbors)."""
     related_files = []
     related_seen = set()
     # Import targets
@@ -186,6 +169,40 @@ def get_file_context(path: str, include_content: bool = False) -> dict:
         if rpath not in related_seen:
             related_seen.add(rpath)
             related_files.append({"path": rpath, "relation": "imported_by"})
+    return related_files
+
+
+def get_file_context(path: str, include_content: bool = False) -> dict:
+    """
+    One-call context package: returns everything an agent needs about a file.
+
+    Aggregates: file info, symbols, imports, dependents, test file, related files.
+    All from cached data, zero I/O.
+    """
+    index = load_index()
+    symbols_map = index.get("symbols", {})
+
+    # 1. File info
+    info = get_file_info(path)
+    if "error" in info:
+        info = {"purpose": "", "category": "", "keywords": []}
+
+    # 2. Symbols in this file
+    file_symbols = get_file_symbols(path)
+    symbols_list = file_symbols.get("symbols", [])
+
+    # 3. Imports (dependencies where source is in this file)
+    imports = _collect_file_imports(path, index.get("dependencies", {}))
+
+    # 4. Dependents (who references symbols in this file)
+    dependents = _collect_file_dependents(path, index.get("reverse_index", {}))
+
+    # 5. Test file
+    mapper = _get_test_mapper()
+    test_file = mapper.find_test(path)
+
+    # 6. Related files (1-hop import graph neighbors)
+    related_files = _collect_related_files(path, imports, dependents, symbols_map)
 
     # 7. Optional: include content
     if include_content:

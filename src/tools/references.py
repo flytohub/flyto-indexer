@@ -752,37 +752,50 @@ def _collect_imports(target_paths, imports_map):
     return results
 
 
+def _dependents_from_reverse_index(path, reverse_index, seen_dependents, target_paths):
+    """Extract dependents for a single path from reverse_index (more accurate, includes 'uses' dependencies)."""
+    results = []
+    # First, use reverse_index (more accurate, includes 'uses' dependencies)
+    for sid, callers in reverse_index.items():
+        if ":" in sid:
+            sym_path = sid.split(":")[1]
+            if sym_path == path:
+                for caller in callers:
+                    if ":" in caller:
+                        caller_path = caller.split(":")[1]
+                        if caller_path not in seen_dependents and caller_path not in target_paths:
+                            seen_dependents.add(caller_path)
+                            results.append({
+                                "from": caller_path,
+                                "to": path,
+                                "type": "calls",  # reverse_index doesn't track dep type
+                            })
+    return results
+
+
+def _dependents_from_map(path, dependents_map, seen_dependents, target_paths):
+    """Extract dependents for a single path from dependents_map (fallback for additional deps)."""
+    results = []
+    # Fallback: also check dependents_map for additional deps
+    for dep in dependents_map.get(path, []):
+        source = dep["source"]
+        if source not in seen_dependents and source not in target_paths:
+            seen_dependents.add(source)
+            results.append({
+                "from": source,
+                "to": path,
+                "type": dep["type"],
+            })
+    return results
+
+
 def _collect_dependents(target_paths, reverse_index, dependents_map):
     """Collect what depends on the target paths (dependents), using reverse_index for accuracy."""
     results = []
     seen_dependents = set()
     for path in target_paths:
-        # First, use reverse_index (more accurate, includes 'uses' dependencies)
-        for sid, callers in reverse_index.items():
-            if ":" in sid:
-                sym_path = sid.split(":")[1]
-                if sym_path == path:
-                    for caller in callers:
-                        if ":" in caller:
-                            caller_path = caller.split(":")[1]
-                            if caller_path not in seen_dependents and caller_path not in target_paths:
-                                seen_dependents.add(caller_path)
-                                results.append({
-                                    "from": caller_path,
-                                    "to": path,
-                                    "type": "calls",  # reverse_index doesn't track dep type
-                                })
-
-        # Fallback: also check dependents_map for additional deps
-        for dep in dependents_map.get(path, []):
-            source = dep["source"]
-            if source not in seen_dependents and source not in target_paths:
-                seen_dependents.add(source)
-                results.append({
-                    "from": source,
-                    "to": path,
-                    "type": dep["type"],
-                })
+        results.extend(_dependents_from_reverse_index(path, reverse_index, seen_dependents, target_paths))
+        results.extend(_dependents_from_map(path, dependents_map, seen_dependents, target_paths))
     return results
 
 
