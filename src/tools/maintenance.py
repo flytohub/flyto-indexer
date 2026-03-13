@@ -89,6 +89,91 @@ def _has_same_file_reference(sym_id, sym_name, sym_project, sym_path,
     return False
 
 
+_SHOULD_BE_REFERENCED = {"function", "method", "composable", "component", "class"}
+
+_ENTRY_POINT_PATTERNS = [
+    "main", "index", "app", "App", "Main",
+    "__init__", "setup", "teardown",
+    "test_", "Test", "_test",
+    "register", "init", "configure",
+    "handle", "route", "endpoint",
+    "do_GET", "do_POST", "do_PUT", "do_DELETE",
+    "do_HEAD", "do_OPTIONS", "do_PATCH",
+]
+
+_LIFECYCLE_METHODS = {
+    "created", "mounted", "updated", "destroyed",
+    "beforeCreate", "beforeMount", "beforeUpdate", "beforeDestroy",
+    "onMounted", "onUnmounted", "onUpdated",
+    "componentDidMount", "componentWillUnmount", "render",
+    "setup", "data", "computed", "methods", "watch",
+}
+
+
+def _is_excluded_by_name(sym_type, sym_name, sym_path):
+    """Check if symbol should be excluded from dead code detection by name/type."""
+    if sym_type not in _SHOULD_BE_REFERENCED:
+        return True
+    if any(p in sym_name for p in _ENTRY_POINT_PATTERNS):
+        return True
+    if sym_name in _LIFECYCLE_METHODS:
+        return True
+    if sym_type == "function" and sym_path.endswith(".vue"):
+        return True
+    if sym_name.startswith("_") and not sym_name.startswith("__"):
+        return True
+    return False
+
+
+def _is_referenced_by_context(sym_type, sym_name, sym_path, ref_ctx):
+    """Check if symbol is referenced via names, classes, or file imports."""
+    if sym_name in ref_ctx.names:
+        return True
+
+    if sym_type == "method" and "." in sym_name:
+        method_only = sym_name.split(".")[-1]
+        if method_only in ref_ctx.names:
+            return True
+        class_name = sym_name.split(".")[0]
+        if class_name in ref_ctx.classes or class_name in ref_ctx.names:
+            return True
+
+    if sym_type == "class" and sym_name in ref_ctx.classes:
+        return True
+
+    file_basename = sym_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    if file_basename in ref_ctx.files or sym_path in ref_ctx.files:
+        return True
+
+    return False
+
+
+def _is_imported_component(sym_type, sym_name, sym_path, dependencies):
+    """Check if a composable/class/component is imported via dependency analysis."""
+    file_basename = sym_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+
+    if sym_type == "composable":
+        for dep in dependencies.values():
+            if dep.get("type") != "imports":
+                continue
+            dep_target = dep.get("target", "")
+            dep_basename = dep_target.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+            if dep_basename in (file_basename, sym_name):
+                return True
+            if sym_name in dep.get("metadata", {}).get("names", []):
+                return True
+
+    if sym_type in ("class", "component") and file_basename == sym_name:
+        for dep in dependencies.values():
+            if dep.get("type") != "imports":
+                continue
+            dep_target = dep.get("target", "")
+            if sym_name in dep_target or file_basename in dep_target:
+                return True
+
+    return False
+
+
 def _is_potentially_dead(sym_id, sym, ref_ctx, dependencies, symbols,
                          _same_file_content_cache):
     """Return True if the symbol should be considered dead code."""
@@ -97,65 +182,11 @@ def _is_potentially_dead(sym_id, sym, ref_ctx, dependencies, symbols,
     sym_project = sym_id.split(":")[0] if ":" in sym_id else ""
     sym_path = sym.get("path", "")
 
-    should_be_referenced = {"function", "method", "composable", "component", "class"}
-    entry_point_patterns = [
-        "main", "index", "app", "App", "Main",
-        "__init__", "setup", "teardown",
-        "test_", "Test", "_test",
-        "register", "init", "configure",
-        "handle", "route", "endpoint",
-        "do_GET", "do_POST", "do_PUT", "do_DELETE",
-        "do_HEAD", "do_OPTIONS", "do_PATCH",
-    ]
-    lifecycle_methods = {
-        "created", "mounted", "updated", "destroyed",
-        "beforeCreate", "beforeMount", "beforeUpdate", "beforeDestroy",
-        "onMounted", "onUnmounted", "onUpdated",
-        "componentDidMount", "componentWillUnmount", "render",
-        "setup", "data", "computed", "methods", "watch",
-    }
-
-    if sym_type not in should_be_referenced:
+    if _is_excluded_by_name(sym_type, sym_name, sym_path):
         return False
-    is_entry_point = any(p in sym_name for p in entry_point_patterns)
-    if is_entry_point:
+    if _is_referenced_by_context(sym_type, sym_name, sym_path, ref_ctx):
         return False
-    if sym_name in lifecycle_methods:
-        return False
-    if sym_type == "function" and sym_path.endswith(".vue"):
-        return False
-    if sym_name.startswith("_") and not sym_name.startswith("__"):
-        return False
-    if sym_name in ref_ctx.names:
-        return False
-
-    if sym_type == "method" and "." in sym_name:
-        method_only = sym_name.split(".")[-1]
-        if method_only in ref_ctx.names:
-            return False
-        class_name = sym_name.split(".")[0]
-        if class_name in ref_ctx.classes or class_name in ref_ctx.names:
-            return False
-    if sym_type == "class" and sym_name in ref_ctx.classes:
-        return False
-
-    file_basename = sym_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-    if file_basename in ref_ctx.files or sym_path in ref_ctx.files:
-        return False
-
-    if sym_type == "composable" and any(
-        (dep.get("type") == "imports" and (
-            (dep.get("target", "").rsplit("/", 1)[-1].rsplit(".", 1)[0] in (file_basename, sym_name))
-            or sym_name in dep.get("metadata", {}).get("names", [])
-        ))
-        for dep in dependencies.values()
-    ):
-        return False
-
-    if sym_type in ("class", "component") and file_basename == sym_name and any(
-        dep.get("type") == "imports" and (sym_name in dep.get("target", "") or file_basename in dep.get("target", ""))
-        for dep in dependencies.values()
-    ):
+    if _is_imported_component(sym_type, sym_name, sym_path, dependencies):
         return False
 
     return not _has_same_file_reference(sym_id, sym_name, sym_project, sym_path,

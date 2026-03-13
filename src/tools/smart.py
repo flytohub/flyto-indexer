@@ -514,6 +514,39 @@ def smart_audit(project: str = None, focus: str = None) -> dict:
 # 4. task — plan / gate / validate workflow
 # ---------------------------------------------------------------------------
 
+def _task_plan(description, targets, intent, project):
+    """Handle task action='plan': analyze task and attach co-change suggestions."""
+    task = _task_mod()
+    result = task.analyze_task(
+        description=description,
+        targets=targets or [],
+        intent=intent,
+        project=project,
+    )
+    if isinstance(result, dict) and targets:
+        cochanges = _enrich("suggest_cochanges",
+                            _change_patterns_mod().suggest_cochanges,
+                            target_files=targets, project=project)
+        if isinstance(cochanges, dict) and cochanges.get("suggestions"):
+            result["cochange_suggestions"] = cochanges
+    return result
+
+
+def _task_validate(project, run_tests, test_path):
+    """Handle task action='validate': run validation and attach untested changes on failure."""
+    val = _validation_mod()
+    result = val.validate_changes(
+        project=project,
+        run_tests=run_tests,
+        test_path=test_path,
+    )
+    if isinstance(result, dict) and not result.get("tests_passed", True):
+        r = _enrich("untested_changes", _coverage_mod().untested_changes, project=project, mode="unstaged")
+        if r is not None:
+            result["untested_changes"] = r
+    return result
+
+
 def smart_task(action: str, description: str = "", targets: list = None,
                intent: str = "refactor", task_contract: dict = None,
                next_phase: str = None, current_state: dict = None,
@@ -521,51 +554,19 @@ def smart_task(action: str, description: str = "", targets: list = None,
                test_path: str = None) -> dict:
     """Unified task workflow: plan, gate check, or validate."""
     if action == "plan":
-        task = _task_mod()
-        result = task.analyze_task(
-            description=description,
-            targets=targets or [],
-            intent=intent,
-            project=project,
-        )
+        return _task_plan(description, targets, intent, project)
 
-        # Auto-attach: suggest co-change files based on git history
-        if isinstance(result, dict) and targets:
-            cochanges = _enrich("suggest_cochanges",
-                                _change_patterns_mod().suggest_cochanges,
-                                target_files=targets, project=project)
-            if isinstance(cochanges, dict) and cochanges.get("suggestions"):
-                result["cochange_suggestions"] = cochanges
-
-        return result
-
-    elif action == "gate":
-        task = _task_mod()
-        return task.task_gate_check(
+    if action == "gate":
+        return _task_mod().task_gate_check(
             task_contract=task_contract or {},
             next_phase=next_phase,
             current_state=current_state or {},
         )
 
-    elif action == "validate":
-        val = _validation_mod()
-        result = val.validate_changes(
-            project=project,
-            run_tests=run_tests,
-            test_path=test_path,
-        )
+    if action == "validate":
+        return _task_validate(project, run_tests, test_path)
 
-        # Auto-attach: if tests fail, show untested changes
-        if isinstance(result, dict) and not result.get("tests_passed", True):
-            cov = _coverage_mod()
-            r = _enrich("untested_changes", cov.untested_changes, project=project, mode="unstaged")
-            if r is not None:
-                result["untested_changes"] = r
-
-        return result
-
-    else:
-        return {"error": f"Unknown action: {action}. Use 'plan', 'gate', or 'validate'."}
+    return {"error": f"Unknown action: {action}. Use 'plan', 'gate', or 'validate'."}
 
 
 # ---------------------------------------------------------------------------

@@ -799,6 +799,76 @@ def _collect_dependents(target_paths, reverse_index, dependents_map):
     return results
 
 
+def _build_dependency_maps(dependencies):
+    """Build imports_map and dependents_map from raw dependencies."""
+    imports_map = {}
+    dependents_map = {}
+
+    for dep in dependencies.values():
+        source = dep.get("source", "")
+        parts = source.split(":")
+        source_path = parts[1] if len(parts) > 1 else ""
+        if not source_path:
+            continue
+
+        imports_map.setdefault(source_path, []).append({
+            "target": dep.get("target", ""),
+            "type": dep.get("type", ""),
+            "line": dep.get("line", 0),
+        })
+
+        resolved_target = dep.get("metadata", {}).get("resolved_target", "")
+        if resolved_target:
+            target_path = resolved_target.split(":")[1] if ":" in resolved_target else ""
+            if target_path:
+                dependents_map.setdefault(target_path, []).append({
+                    "source": source_path,
+                    "source_id": source,
+                    "type": dep.get("type", ""),
+                    "line": dep.get("line", 0),
+                })
+
+    return imports_map, dependents_map
+
+
+def _resolve_target_paths(file_path, symbol_id, project, symbols):
+    """Determine target paths based on query parameters."""
+    if file_path:
+        return {file_path}
+    if symbol_id:
+        parts = symbol_id.split(":")
+        if len(parts) > 1:
+            return {parts[1]}
+    if project:
+        return {
+            sym.get("path", "")
+            for sid, sym in symbols.items()
+            if sid.startswith(project + ":")
+        }
+    return set()
+
+
+def _build_dep_summary(imports, dependents, target_paths):
+    """Build summary statistics for a dependency graph."""
+    import_types = {}
+    for imp in imports:
+        t = imp["type"]
+        import_types[t] = import_types.get(t, 0) + 1
+
+    dependent_types = {}
+    for dep in dependents:
+        t = dep["type"]
+        dependent_types[t] = dependent_types.get(t, 0) + 1
+
+    return {
+        "target_files": len(target_paths),
+        "imports_count": len(imports),
+        "dependents_count": len(dependents),
+        "import_types": import_types,
+        "dependent_types": dependent_types,
+    }
+
+
 def dependency_graph(
     file_path: str = None,
     symbol_id: str = None,
@@ -806,110 +876,29 @@ def dependency_graph(
     direction: str = "both",
     max_depth: int = 2
 ) -> dict:
-    """
-    Get dependency graph for a file, symbol, or project.
-
-    Shows what a module depends on (imports) and what depends on it (dependents).
-    """
+    """Get dependency graph for a file, symbol, or project."""
     index = load_index()
     symbols = index.get("symbols", {})
-    dependencies = index.get("dependencies", {})
-
-    # Build dependency maps
-    imports_map = {}  # source -> [targets]
-    dependents_map = {}  # target -> [sources]
-
-    # Also use reverse_index for accurate dependents
     reverse_index = index.get("reverse_index", {})
 
-    for _dep_id, dep in dependencies.items():
-        source = dep.get("source", "")
-        target = dep.get("target", "")
-        dep_type = dep.get("type", "")
-
-        # Extract file paths
-        source_path = source.split(":")[1] if ":" in source and len(source.split(":")) > 1 else ""
-
-        if source_path:
-            if source_path not in imports_map:
-                imports_map[source_path] = []
-            imports_map[source_path].append({
-                "target": target,
-                "type": dep_type,
-                "line": dep.get("line", 0),
-            })
-
-            # Use resolved_target for accurate dependents mapping
-            resolved_target = dep.get("metadata", {}).get("resolved_target", "")
-            if resolved_target:
-                target_path = resolved_target.split(":")[1] if ":" in resolved_target else ""
-                if target_path:
-                    if target_path not in dependents_map:
-                        dependents_map[target_path] = []
-                    dependents_map[target_path].append({
-                        "source": source_path,
-                        "source_id": source,
-                        "type": dep_type,
-                        "line": dep.get("line", 0),
-                    })
-
-    result = {
-        "query": {
-            "file_path": file_path,
-            "symbol_id": symbol_id,
-            "project": project,
-            "direction": direction,
-            "max_depth": max_depth,
-        },
-        "imports": [],
-        "dependents": [],
-        "summary": {},
-    }
-
-    target_paths = set()
-
-    # Determine target paths based on query
-    if file_path:
-        target_paths.add(file_path)
-    elif symbol_id:
-        # Extract path from symbol_id
-        if ":" in symbol_id and len(symbol_id.split(":")) > 1:
-            target_paths.add(symbol_id.split(":")[1])
-    elif project:
-        # Get all paths in project
-        for sid, sym in symbols.items():
-            if sid.startswith(project + ":"):
-                target_paths.add(sym.get("path", ""))
+    imports_map, dependents_map = _build_dependency_maps(index.get("dependencies", {}))
+    target_paths = _resolve_target_paths(file_path, symbol_id, project, symbols)
 
     if not target_paths:
         return {"error": "No valid target specified. Provide file_path, symbol_id, or project."}
 
-    # Collect imports (what target depends on)
-    if direction in ("both", "imports"):
-        result["imports"] = _collect_imports(target_paths, imports_map)
+    imports = _collect_imports(target_paths, imports_map) if direction in ("both", "imports") else []
+    dependents = _collect_dependents(target_paths, reverse_index, dependents_map) if direction in ("both", "dependents") else []
 
-    # Collect dependents (what depends on target) - use reverse_index for accuracy
-    if direction in ("both", "dependents"):
-        result["dependents"] = _collect_dependents(target_paths, reverse_index, dependents_map)
-
-    # Generate summary
-    result["summary"] = {
-        "target_files": len(target_paths),
-        "imports_count": len(result["imports"]),
-        "dependents_count": len(result["dependents"]),
-        "import_types": {},
-        "dependent_types": {},
+    return {
+        "query": {
+            "file_path": file_path, "symbol_id": symbol_id,
+            "project": project, "direction": direction, "max_depth": max_depth,
+        },
+        "imports": imports,
+        "dependents": dependents,
+        "summary": _build_dep_summary(imports, dependents, target_paths),
     }
-
-    for imp in result["imports"]:
-        t = imp["type"]
-        result["summary"]["import_types"][t] = result["summary"]["import_types"].get(t, 0) + 1
-
-    for dep in result["dependents"]:
-        t = dep["type"]
-        result["summary"]["dependent_types"][t] = result["summary"]["dependent_types"].get(t, 0) + 1
-
-    return result
 
 
 def batch_impact_analysis(symbol_ids: list) -> dict:

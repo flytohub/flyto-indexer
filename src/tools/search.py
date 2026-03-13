@@ -256,6 +256,69 @@ def _fuzzy_score(query: str, name: str) -> float:
     return 1.0 - (distance / max_len)
 
 
+def _get_bm25_scores(query, synonym_tokens):
+    """Compute BM25 pre-scores for all symbols, normalized to 0-30."""
+    bm25_scores = {}
+    bm25 = _load_bm25()
+    if not bm25:
+        return bm25_scores
+
+    bm25_query = query
+    if synonym_tokens:
+        bm25_query = query + " " + " ".join(synonym_tokens)
+    raw_results = bm25.search(bm25_query, top_k=200)
+    if raw_results:
+        max_score = raw_results[0][1] if raw_results else 1.0
+        for doc_id, score in raw_results:
+            bm25_scores[doc_id] = (score / max_score) * 30.0 if max_score > 0 else 0
+    return bm25_scores
+
+
+def _build_candidates(all_symbols, bm25_scores, query_lower, query_words, synonym_tokens):
+    """Build candidate set: BM25 hits + name matches, or full scan as fallback."""
+    bm25_covers_symbols = bm25_scores and any(sid in all_symbols for sid in bm25_scores)
+    if not bm25_covers_symbols:
+        return all_symbols
+
+    candidates = {}
+
+    for sid in bm25_scores:
+        if sid in all_symbols:
+            candidates[sid] = all_symbols[sid]
+
+    for symbol_id, symbol in all_symbols.items():
+        if symbol_id in candidates:
+            continue
+        name = symbol.get("name", "").lower()
+        if any(w in name for w in query_words):
+            candidates[symbol_id] = symbol
+        elif synonym_tokens and any(w in name for w in synonym_tokens):
+            candidates[symbol_id] = symbol
+        elif query_lower == name:
+            candidates[symbol_id] = symbol
+
+    return candidates
+
+
+def _dedup_and_group(results, max_results):
+    """Deduplicate results by symbol_id and group by project."""
+    seen = set()
+    unique = []
+    for r in results:
+        if r["symbol_id"] not in seen:
+            seen.add(r["symbol_id"])
+            unique.append(r)
+
+    by_project = {}
+    for r in unique[:max_results]:
+        proj = r["project"]
+        if proj not in by_project:
+            by_project[proj] = []
+        by_project[proj].append(r)
+
+    return unique, by_project
+
+
 def search_by_keyword(
     query: str,
     max_results: int = 20,
@@ -266,13 +329,6 @@ def search_by_keyword(
 ) -> dict:
     """
     Cross-project search with smart ranking.
-
-    Args:
-        query: Search keyword
-        max_results: Maximum number of results to return
-        symbol_type: Filter by type (function/class/composable/component/method/interface/type)
-        project: Filter by project (flyto-core/flyto-cloud/flyto-pro/...)
-        include_content: Whether to include code snippets
 
     Scoring:
         - BM25 base: 0-30 (with synonym-expanded query)
@@ -288,15 +344,12 @@ def search_by_keyword(
         - Session boost: +8
     """
     index = load_index()
-    results = []
     query_lower = query.lower()
     query_words = query_lower.split()
 
-    # Expand query with concept synonyms
     original_tokens, synonym_tokens = expand_query(query)
     all_search_words = list(original_tokens | synonym_tokens)
 
-    # Session boost paths
     boost_paths: set = set()
     if session_id:
         store = _get_session_store()
@@ -305,58 +358,16 @@ def search_by_keyword(
             boost_paths = session.get_boost_paths()
             session.add_query(query)
 
-    # BM25 pre-scoring (if index available)
-    bm25_scores: dict = {}  # symbol_id -> normalized score (0-30)
-    bm25 = _load_bm25()
-    if bm25:
-        # Build expanded BM25 query: original + synonym terms
-        bm25_query = query
-        if synonym_tokens:
-            bm25_query = query + " " + " ".join(synonym_tokens)
-        raw_results = bm25.search(bm25_query, top_k=200)
-        if raw_results:
-            max_score = raw_results[0][1] if raw_results else 1.0
-            for doc_id, score in raw_results:
-                bm25_scores[doc_id] = (score / max_score) * 30.0 if max_score > 0 else 0
-
-    # Build candidate set: BM25 hits + name matches (avoid full linear scan)
+    bm25_scores = _get_bm25_scores(query, synonym_tokens)
     all_symbols = index.get("symbols", {})
+    candidates = _build_candidates(all_symbols, bm25_scores, query_lower, query_words, synonym_tokens)
 
-    # Build candidate set to avoid full linear scan at scale.
-    # Use BM25 hits + name matches as candidates when BM25 covers the symbols.
-    # Fall back to full scan when BM25 is stale/missing/empty.
-    _bm25_covers_symbols = bm25_scores and any(sid in all_symbols for sid in bm25_scores)
-    if _bm25_covers_symbols:
-        candidates: dict = {}
-
-        # BM25 candidates (already pre-scored)
-        for sid in bm25_scores:
-            if sid in all_symbols:
-                candidates[sid] = all_symbols[sid]
-
-        # Name/summary match candidates (scan names only — cheap string ops)
-        for symbol_id, symbol in all_symbols.items():
-            if symbol_id in candidates:
-                continue
-            name = symbol.get("name", "").lower()
-            if any(w in name for w in query_words):
-                candidates[symbol_id] = symbol
-            elif synonym_tokens and any(w in name for w in synonym_tokens):
-                candidates[symbol_id] = symbol
-            elif query_lower == name:
-                candidates[symbol_id] = symbol
-    else:
-        # No BM25 index or BM25 out of sync — fall back to full scan
-        candidates = all_symbols
-
-    # Search candidate symbols
+    results = []
     for symbol_id, symbol in candidates.items():
-        # Project filter
         sym_project = symbol_id.split(":")[0] if ":" in symbol_id else ""
         if project and project.lower() not in sym_project.lower():
             continue
 
-        # Type filter
         sym_type = symbol.get("type", "")
         if symbol_type and symbol_type.lower() != sym_type.lower():
             continue
@@ -383,29 +394,12 @@ def search_by_keyword(
             "match": ", ".join(match_reason),
         }
         if include_content:
-            # Take first 500 characters of code
             full_content = get_symbol_content_text(symbol_id, symbol)
             result["snippet"] = full_content[:500]
         results.append(result)
 
-    # Sort by score
     results.sort(key=lambda x: -x.get("score", 0))
-
-    # Deduplicate
-    seen = set()
-    unique = []
-    for r in results:
-        if r["symbol_id"] not in seen:
-            seen.add(r["symbol_id"])
-            unique.append(r)
-
-    # Group by project
-    by_project = {}
-    for r in unique[:max_results]:
-        proj = r["project"]
-        if proj not in by_project:
-            by_project[proj] = []
-        by_project[proj].append(r)
+    unique, by_project = _dedup_and_group(results, max_results)
 
     return {
         "query": query,

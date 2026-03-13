@@ -480,17 +480,44 @@ def coverage_gaps(project: Optional[str] = None, max_results: int = 20) -> dict:
 # Tool: untested_changes
 # =============================================================================
 
+def _match_coverage_path(file_path: str, coverage: Dict[str, Set[int]]) -> Set[int]:
+    """Find matching coverage data for a file path."""
+    for cov_path_key, cov_lines in coverage.items():
+        if (cov_path_key == file_path
+                or cov_path_key.endswith("/" + file_path)
+                or file_path.endswith("/" + cov_path_key)):
+            return cov_lines
+    return set()
+
+
+def _find_affected_symbols(
+    file_path: str, uncovered_lines: List[int],
+    symbols: dict, project_name: str,
+) -> List[dict]:
+    """Find symbols that contain uncovered changed lines."""
+    affected: List[dict] = []
+    for symbol_id, symbol in symbols.items():
+        sym_project = symbol.get("project", "")
+        if project_name and sym_project != project_name:
+            continue
+        sym_path = symbol.get("path", "")
+        if sym_path != file_path and not file_path.endswith("/" + sym_path) and not sym_path.endswith("/" + file_path):
+            continue
+        start_line = symbol.get("start_line", 0)
+        end_line = symbol.get("end_line", 0)
+        if not start_line or not end_line:
+            continue
+        for line in uncovered_lines:
+            if start_line <= line <= end_line:
+                affected.append({"name": symbol.get("name", ""), "symbol_id": symbol_id})
+                break
+    return affected
+
+
 def untested_changes(project: Optional[str] = None, mode: str = "unstaged") -> dict:
     """Find changed lines that lack test coverage.
 
     Cross-references git diff with coverage data to identify untested changes.
-
-    Args:
-        project: Project name. If omitted, auto-detect.
-        mode: "unstaged" (default), "staged", or "committed" (HEAD~1).
-
-    Returns:
-        Per-file breakdown of uncovered changed lines with affected symbols.
     """
     try:
         project_name, project_root = _get_project_root(project)
@@ -510,23 +537,15 @@ def untested_changes(project: Optional[str] = None, mode: str = "unstaged") -> d
     if not coverage:
         return {"error": "Coverage file found but could not be parsed: {}".format(cov_path)}
 
-    # Get git diff
     diff_text = _run_git_diff(project_root, mode)
     if not diff_text:
         return {
             "mode": mode,
-            "summary": {
-                "total_changed_lines": 0,
-                "uncovered_changed_lines": 0,
-                "change_coverage_pct": 100.0,
-            },
+            "summary": {"total_changed_lines": 0, "uncovered_changed_lines": 0, "change_coverage_pct": 100.0},
             "files": [],
         }
 
-    # Parse diff to get changed lines per file
     file_changes = _parse_diff_lines(diff_text)
-
-    # Cross-reference with coverage
     index = load_index()
     symbols = index.get("symbols", {})
     files_result: List[dict] = []
@@ -537,15 +556,7 @@ def untested_changes(project: Optional[str] = None, mode: str = "unstaged") -> d
         if not changed_lines:
             continue
 
-        # Find matching coverage data
-        covered_lines: Set[int] = set()
-        for cov_path_key, cov_lines in coverage.items():
-            if (cov_path_key == file_path
-                    or cov_path_key.endswith("/" + file_path)
-                    or file_path.endswith("/" + cov_path_key)):
-                covered_lines = cov_lines
-                break
-
+        covered_lines = _match_coverage_path(file_path, coverage)
         uncovered_lines = sorted(set(changed_lines) - covered_lines)
         changed_count = len(changed_lines)
         uncovered_count = len(uncovered_lines)
@@ -554,27 +565,7 @@ def untested_changes(project: Optional[str] = None, mode: str = "unstaged") -> d
         total_changed += changed_count
         total_uncovered += uncovered_count
 
-        # Find affected symbols
-        affected_symbols: List[dict] = []
-        for symbol_id, symbol in symbols.items():
-            sym_project = symbol.get("project", "")
-            if project_name and sym_project != project_name:
-                continue
-            sym_path = symbol.get("path", "")
-            if sym_path != file_path and not file_path.endswith("/" + sym_path) and not sym_path.endswith("/" + file_path):
-                continue
-            start_line = symbol.get("start_line", 0)
-            end_line = symbol.get("end_line", 0)
-            if not start_line or not end_line:
-                continue
-            # Check if any uncovered line falls in this symbol
-            for line in uncovered_lines:
-                if start_line <= line <= end_line:
-                    affected_symbols.append({
-                        "name": symbol.get("name", ""),
-                        "symbol_id": symbol_id,
-                    })
-                    break
+        affected_symbols = _find_affected_symbols(file_path, uncovered_lines, symbols, project_name)
 
         if uncovered_lines or changed_lines:
             files_result.append({
@@ -586,12 +577,7 @@ def untested_changes(project: Optional[str] = None, mode: str = "unstaged") -> d
             })
 
     overall_pct = ((total_changed - total_uncovered) / total_changed * 100.0) if total_changed > 0 else 100.0
-
-    # Sort by worst coverage first
     files_result.sort(key=lambda f: f["change_coverage_pct"])
-
-    # Truncate
-    files_result = files_result[:50]
 
     return {
         "mode": mode,
@@ -600,7 +586,7 @@ def untested_changes(project: Optional[str] = None, mode: str = "unstaged") -> d
             "uncovered_changed_lines": total_uncovered,
             "change_coverage_pct": round(overall_pct, 1),
         },
-        "files": files_result,
+        "files": files_result[:50],
     }
 
 

@@ -128,78 +128,82 @@ class GoScanner(BaseScanner):
         rel_path = str(file_path)
         file_source_id = f"{self.project}:{rel_path}:file:{file_path.stem}"
 
-        # Extract imports
-        imports = self._extract_imports(content)
-        for imp in imports:
-            dep = Dependency(
+        self._scan_imports(content, file_source_id, dependencies)
+        self._scan_structs(content, lines, rel_path, symbols, dependencies)
+        self._scan_interfaces(content, lines, rel_path, symbols, dependencies)
+        method_positions = self._scan_methods(content, lines, rel_path, symbols, dependencies)
+        self._scan_functions(content, lines, rel_path, symbols, method_positions)
+        self._scan_type_aliases(content, lines, rel_path, symbols)
+        self._extract_const_var(content, lines, rel_path, symbols)
+        self._detect_implementations(symbols, dependencies, rel_path)
+
+        for symbol in symbols:
+            symbol.compute_hash()
+
+        return symbols, dependencies
+
+    def _scan_imports(self, content, file_source_id, dependencies):
+        """Extract import statements and add dependency edges."""
+        for imp in self._extract_imports(content):
+            dependencies.append(Dependency(
                 source_id=file_source_id,
                 target_id=imp["module"],
                 dep_type=DependencyType.IMPORTS,
                 source_line=imp["line"],
                 metadata={"alias": imp.get("alias", "")},
-            )
-            dependencies.append(dep)
+            ))
 
-        # Extract structs (with embedding detection)
+    def _scan_structs(self, content, lines, rel_path, symbols, dependencies):
+        """Extract struct definitions with embedding detection."""
         for match in self.STRUCT_PATTERN.finditer(content):
             name = match.group(1)
             start_line = content[:match.start()].count('\n') + 1
             end_line = self._find_block_end(content, match.end(), start_line)
-            block_content = self._extract_block(lines, start_line, end_line)
 
-            symbol = Symbol(
-                project=self.project,
-                path=rel_path,
-                symbol_type=SymbolType.CLASS,  # Use CLASS for struct
-                name=name,
-                start_line=start_line,
-                end_line=end_line,
-                content=block_content,
+            symbols.append(Symbol(
+                project=self.project, path=rel_path,
+                symbol_type=SymbolType.CLASS, name=name,
+                start_line=start_line, end_line=end_line,
+                content=self._extract_block(lines, start_line, end_line),
                 summary=self._extract_doc_comment(lines, start_line - 1),
                 language="go",
                 exports=[name] if name[0].isupper() else [],
-            )
-            symbols.append(symbol)
+            ))
 
-            # Detect embedded types in struct body
             body_text = self._extract_body_text(content, match.end(), start_line, end_line)
-            for embed_match in self.EMBED_PATTERN.finditer(body_text):
-                raw_line = embed_match.group(0).strip()
-                # Skip comment lines
-                if raw_line.startswith("//"):
-                    continue
-                embedded_type = embed_match.group(1).lstrip('*')
-                # Strip package prefix for local types (e.g., pkg.Type -> Type)
-                base_type = embedded_type.split('.')[-1] if '.' in embedded_type else embedded_type
-                # Skip builtin types that are never embedded
-                if base_type.lower() in self._EMBED_BLOCKLIST:
-                    continue
-                embed_line = start_line + body_text[:embed_match.start()].count('\n') + 1
-                dependencies.append(Dependency(
-                    source_id=f"{self.project}:{rel_path}:class:{name}",
-                    target_id=f"{self.project}:{rel_path}:class:{base_type}",
-                    dep_type=DependencyType.EXTENDS,
-                    source_line=embed_line,
-                    metadata={"kind": "embedding", "embedded_type": embedded_type},
-                ))
+            self._scan_struct_embeds(body_text, name, start_line, rel_path, dependencies)
 
-        # Extract interfaces (with method extraction and embedding)
+    def _scan_struct_embeds(self, body_text, struct_name, start_line, rel_path, dependencies):
+        """Detect embedded types in struct body."""
+        for embed_match in self.EMBED_PATTERN.finditer(body_text):
+            raw_line = embed_match.group(0).strip()
+            if raw_line.startswith("//"):
+                continue
+            embedded_type = embed_match.group(1).lstrip('*')
+            base_type = embedded_type.split('.')[-1] if '.' in embedded_type else embedded_type
+            if base_type.lower() in self._EMBED_BLOCKLIST:
+                continue
+            embed_line = start_line + body_text[:embed_match.start()].count('\n') + 1
+            dependencies.append(Dependency(
+                source_id=f"{self.project}:{rel_path}:class:{struct_name}",
+                target_id=f"{self.project}:{rel_path}:class:{base_type}",
+                dep_type=DependencyType.EXTENDS,
+                source_line=embed_line,
+                metadata={"kind": "embedding", "embedded_type": embedded_type},
+            ))
+
+    def _scan_interfaces(self, content, lines, rel_path, symbols, dependencies):
+        """Extract interface definitions with method extraction and embedding."""
         for match in self.INTERFACE_PATTERN.finditer(content):
             name = match.group(1)
             start_line = content[:match.start()].count('\n') + 1
             end_line = self._find_block_end(content, match.end(), start_line)
-            block_content = self._extract_block(lines, start_line, end_line)
 
-            # Extract method signatures from interface body
             body_text = self._extract_body_text(content, match.end(), start_line, end_line)
-            iface_methods = []
-            for method_match in self.INTERFACE_METHOD_PATTERN.finditer(body_text):
-                iface_methods.append(method_match.group(1))
+            iface_methods = [m.group(1) for m in self.INTERFACE_METHOD_PATTERN.finditer(body_text)]
 
-            # Detect embedded interfaces
             for embed_match in self.INTERFACE_EMBED_PATTERN.finditer(body_text):
                 embedded_name = embed_match.group(1)
-                # Skip if it looks like a method (already captured above)
                 if embedded_name in iface_methods:
                     continue
                 embed_line = start_line + body_text[:embed_match.start()].count('\n') + 1
@@ -211,25 +215,21 @@ class GoScanner(BaseScanner):
                     metadata={"kind": "interface_embedding"},
                 ))
 
-            symbol = Symbol(
-                project=self.project,
-                path=rel_path,
-                symbol_type=SymbolType.INTERFACE,
-                name=name,
-                start_line=start_line,
-                end_line=end_line,
-                content=block_content,
+            symbols.append(Symbol(
+                project=self.project, path=rel_path,
+                symbol_type=SymbolType.INTERFACE, name=name,
+                start_line=start_line, end_line=end_line,
+                content=self._extract_block(lines, start_line, end_line),
                 summary=self._extract_doc_comment(lines, start_line - 1),
                 language="go",
                 exports=[name] if name[0].isupper() else [],
-                params=iface_methods,  # Store method names for implementation detection
-            )
-            symbols.append(symbol)
+                params=iface_methods,
+            ))
 
-        # Extract methods (with receiver) - do this before functions
+    def _scan_methods(self, content, lines, rel_path, symbols, dependencies):
+        """Extract methods with receiver. Returns set of method start line positions."""
         method_positions = set()
         for match in self.METHOD_PATTERN.finditer(content):
-            match.group(1)
             receiver_type = match.group(2)
             method_name = match.group(3)
             params = match.group(4) or ""
@@ -238,105 +238,75 @@ class GoScanner(BaseScanner):
             start_line = content[:match.start()].count('\n') + 1
             method_positions.add(start_line)
             end_line = self._find_block_end(content, match.end(), start_line)
-            block_content = self._extract_block(lines, start_line, end_line)
 
-            method_symbol_id = f"{self.project}:{rel_path}:method:{receiver_type}.{method_name}"
-
-            symbol = Symbol(
-                project=self.project,
-                path=rel_path,
+            symbols.append(Symbol(
+                project=self.project, path=rel_path,
                 symbol_type=SymbolType.METHOD,
                 name=f"{receiver_type}.{method_name}",
-                start_line=start_line,
-                end_line=end_line,
-                content=block_content,
+                start_line=start_line, end_line=end_line,
+                content=self._extract_block(lines, start_line, end_line),
                 summary=self._extract_doc_comment(lines, start_line - 1),
                 language="go",
                 params=self._parse_params(params),
                 returns=returns.strip(),
-                imports=[receiver_type],  # Link to receiver type
-            )
-            symbols.append(symbol)
+                imports=[receiver_type],
+            ))
 
-            # Add dependency edge from method to its receiver struct
             dependencies.append(Dependency(
-                source_id=method_symbol_id,
+                source_id=f"{self.project}:{rel_path}:method:{receiver_type}.{method_name}",
                 target_id=f"{self.project}:{rel_path}:class:{receiver_type}",
                 dep_type=DependencyType.EXTENDS,
                 source_line=start_line,
             ))
+        return method_positions
 
-        # Extract top-level functions (excluding methods)
+    def _scan_functions(self, content, lines, rel_path, symbols, method_positions):
+        """Extract top-level functions (excluding methods)."""
         for match in self.FUNC_PATTERN.finditer(content):
             start_line = content[:match.start()].count('\n') + 1
-            # Skip if this position was already captured as a method
             if start_line in method_positions:
                 continue
 
             name = match.group(1)
             params = match.group(2) or ""
             returns = match.group(3) or match.group(4) or ""
-
             end_line = self._find_block_end(content, match.end(), start_line)
-            block_content = self._extract_block(lines, start_line, end_line)
 
-            symbol = Symbol(
-                project=self.project,
-                path=rel_path,
-                symbol_type=SymbolType.FUNCTION,
-                name=name,
-                start_line=start_line,
-                end_line=end_line,
-                content=block_content,
+            symbols.append(Symbol(
+                project=self.project, path=rel_path,
+                symbol_type=SymbolType.FUNCTION, name=name,
+                start_line=start_line, end_line=end_line,
+                content=self._extract_block(lines, start_line, end_line),
                 summary=self._extract_doc_comment(lines, start_line - 1),
                 language="go",
                 exports=[name] if name[0].isupper() else [],
                 params=self._parse_params(params),
                 returns=returns.strip(),
-            )
-            symbols.append(symbol)
+            ))
 
-        # Extract type aliases and named types
+    def _scan_type_aliases(self, content, lines, rel_path, symbols):
+        """Extract type aliases and named types."""
+        captured_lines = {
+            s.start_line for s in symbols
+            if s.symbol_type in (SymbolType.CLASS, SymbolType.INTERFACE)
+        }
         for match in self.TYPE_ALIAS_PATTERN.finditer(content):
             name = match.group(1)
             underlying = match.group(2).strip()
             start_line = content[:match.start()].count('\n') + 1
-
-            # Skip if this line was already captured as struct or interface
-            already_captured = False
-            for s in symbols:
-                if s.start_line == start_line and s.symbol_type in (SymbolType.CLASS, SymbolType.INTERFACE):
-                    already_captured = True
-                    break
-            if already_captured:
+            if start_line in captured_lines:
                 continue
 
-            symbol = Symbol(
-                project=self.project,
-                path=rel_path,
-                symbol_type=SymbolType.TYPE,
-                name=name,
-                start_line=start_line,
-                end_line=start_line,
+            symbols.append(Symbol(
+                project=self.project, path=rel_path,
+                symbol_type=SymbolType.TYPE, name=name,
+                start_line=start_line, end_line=start_line,
                 content=self._extract_block(lines, start_line, start_line),
                 summary=self._extract_doc_comment(lines, start_line - 1),
                 language="go",
                 exports=[name] if name[0].isupper() else [],
-                returns=underlying,  # Store underlying type in returns field
-            )
-            symbols.append(symbol)
-
-        # Extract const/var declarations
-        self._extract_const_var(content, lines, rel_path, symbols)
-
-        # Detect interface implementations (in-file)
-        self._detect_implementations(symbols, dependencies, rel_path)
-
-        # Compute hashes
-        for symbol in symbols:
-            symbol.compute_hash()
-
-        return symbols, dependencies
+                returns=underlying,
+            ))
 
     def _extract_body_text(self, content: str, block_start_pos: int,
                            start_line: int, end_line: int) -> str:
