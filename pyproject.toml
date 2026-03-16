@@ -38,9 +38,10 @@ dev = [
 flyto-index = "flyto_indexer.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/flytohub/flyto-indexer"
-Documentation = "https://github.com/flytohub/flyto-indexer#readme"
+Homepage = "https://flyto2.com"
+Documentation = "https://docs.flyto2.com"
 Repository = "https://github.com/flytohub/flyto-indexer"
+Issues = "https://github.com/flytohub/flyto-indexer/issues"
 
 [tool.hatch.build.targets.sdist]
 include = [

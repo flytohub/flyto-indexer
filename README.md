@@ -13,6 +13,9 @@
     MCP server that gives AI assistants impact analysis, cross-project reference tracking, and code health scoring.<br/>
     Zero dependencies. Pure Python. 100% local.
   </p>
+  <p>
+    <a href="https://flyto2.com"><strong>flyto2.com</strong></a> · <a href="https://docs.flyto2.com">Documentation</a> · <a href="https://www.youtube.com/@Flyto2">YouTube</a>
+  </p>
 </div>
 
 ---
