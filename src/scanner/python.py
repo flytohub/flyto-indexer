@@ -119,6 +119,12 @@ class PythonScanner(BaseScanner):
         dependencies: list[Dependency] = []
 
         class_symbol = self._create_class_symbol(node, rel_path, lines)
+
+        # Extract class fields (annotations and class variables)
+        fields = self._extract_class_fields(node)
+        if fields:
+            class_symbol.metadata = {"fields": fields}
+
         symbols.append(class_symbol)
 
         # Create extends dependencies for base classes
@@ -392,6 +398,43 @@ class PythonScanner(BaseScanner):
                 if methods:
                     return ",".join(methods)
         return None
+
+    def _extract_class_fields(self, node: ast.ClassDef) -> list[dict]:
+        """Extract fields from a class body (annotations and class variables)."""
+        fields = []
+        seen = set()
+
+        for item in node.body:
+            # Annotated assignment: name: str, name: str = ""
+            if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+                name = item.target.id
+                if name.startswith("_") or name in seen:
+                    continue
+                seen.add(name)
+                try:
+                    type_str = ast.unparse(item.annotation)
+                except Exception:
+                    type_str = ""
+                fields.append({"name": name, "type": type_str})
+
+            # Plain assignment: name = Field(...), name = "default"
+            elif isinstance(item, ast.Assign):
+                for target in item.targets:
+                    if isinstance(target, ast.Name):
+                        name = target.id
+                        if name.startswith("_") or name.isupper() or name in seen:
+                            continue
+                        seen.add(name)
+                        # Try to infer type from Field() call or value
+                        type_str = ""
+                        if isinstance(item.value, ast.Call):
+                            try:
+                                type_str = ast.unparse(item.value.func)
+                            except Exception:
+                                pass
+                        fields.append({"name": name, "type": type_str})
+
+        return fields
 
     def _is_top_level(self, node: "ast.FunctionDef | ast.AsyncFunctionDef", tree: ast.Module) -> bool:
         """Check if a function is top-level"""

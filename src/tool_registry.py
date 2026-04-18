@@ -10,6 +10,7 @@ All canonical tool definitions are defined here. MCP schemas, VSCode schemas,
 and dispatch are all derived from this module.
 """
 
+import os
 from typing import Any, Dict, Set
 
 
@@ -902,6 +903,28 @@ MCP_TOOLS: list = [
         },
     },
     {
+        "name": "list_dependencies",
+        "title": "List Dependencies",
+        "annotations": {"readOnlyHint": True, "openWorldHint": True},
+        "description": (
+            "Scan a project directory for all package manifest files and extract external dependencies "
+            "with version constraints and pinned versions from lockfiles. "
+            "Supports npm (package.json), Python (requirements.txt, pyproject.toml, Pipfile), "
+            "Go (go.mod), Rust (Cargo.toml), Java (pom.xml, build.gradle), PHP (composer.json), "
+            "Ruby (Gemfile), and Docker (Dockerfile). "
+            "Returns: dependency inventory with ecosystem, scope, version, pinned version, and source file."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Project root path to scan. Defaults to current working directory.",
+                },
+            },
+        },
+    },
+    {
         "name": "contract_drift",
         "title": "Contract Drift",
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
@@ -1110,9 +1133,11 @@ SMART_TOOLS: list = [
             "- (default/overview): lists all projects with symbol/file counts + index status\n"
             "- apis: all API endpoints + categories + contract drift detection\n"
             "- dependencies: import/dependent graph for a file or symbol\n"
+            "- packages: external package dependencies with versions from manifest files\n"
             "- types: type schemas + cross-project contract drift\n"
             "- conventions: naming styles, patterns, imports, error handling conventions\n"
-            "- change_patterns: files that frequently change together (from git history)\n\n"
+            "- change_patterns: files that frequently change together (from git history)\n"
+            "- profile: full project profile (structure, APIs, models, deps, patterns, git)\n\n"
             "Auto-enriches project-level queries with API counts, categories, and index freshness."
         ),
         "inputSchema": {
@@ -1124,7 +1149,7 @@ SMART_TOOLS: list = [
                 },
                 "focus": {
                     "type": "string",
-                    "enum": ["apis", "dependencies", "types", "conventions", "change_patterns"],
+                    "enum": ["apis", "dependencies", "packages", "types", "conventions", "change_patterns", "profile"],
                     "description": "What to explore (default: project overview)",
                 },
                 "symbol_id": {
@@ -1139,6 +1164,39 @@ SMART_TOOLS: list = [
         },
     },
 ]
+
+SMART_TOOLS.append({
+    "name": "project_profile",
+    "title": "Project Profile",
+    "annotations": {"readOnlyHint": True, "openWorldHint": True},
+    "description": (
+        "Generate a comprehensive project profile — a single structured snapshot of everything "
+        "about a project: file structure, languages, API routes, data models, dependencies, "
+        "symbol counts, module connections, entry points, infrastructure signals, git metadata, "
+        "and detected architectural patterns.\n\n"
+        "Works with or without a pre-built index (index adds API routes, models, symbols, "
+        "and module graph; without it you still get filesystem, deps, git, and patterns).\n\n"
+        "Use this to:\n"
+        "- Onboard to an unfamiliar codebase quickly\n"
+        "- Feed project context to an LLM for feature detection\n"
+        "- Generate war room visualizations (mind maps, relationship diagrams)\n"
+        "- Compare projects structurally"
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Project root path to profile. Defaults to current working directory.",
+            },
+            "compact": {
+                "type": "boolean",
+                "default": False,
+                "description": "If true, return summary only (omit folder structure detail).",
+            },
+        },
+    },
+})
 
 SMART_TOOL_NAMES: Set[str] = {tool["name"] for tool in SMART_TOOLS}
 
@@ -1378,6 +1436,22 @@ def _type_contracts():
     return type_contracts
 
 
+def _dep_scanner():
+    try:
+        from . import dependency_scanner
+    except ImportError:
+        import dependency_scanner
+    return dependency_scanner
+
+
+def _profile():
+    try:
+        from . import project_profile
+    except ImportError:
+        import project_profile
+    return project_profile
+
+
 def _smart():
     try:
         from .tools import smart
@@ -1610,6 +1684,11 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             project=args.get("project"),
         ),
 
+        # Dependency scanner
+        "list_dependencies": lambda args: _dep_scanner().scan_dependencies(
+            args.get("path", os.getcwd()),
+        ).to_dict(),
+
         # Smart tools (consolidated entry points)
         "search": lambda args: _smart().smart_search(
             query=args.get("query", ""),
@@ -1643,6 +1722,12 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             focus=args.get("focus"),
             symbol_id=args.get("symbol_id"),
             path=args.get("path"),
+        ),
+
+        # Project profile
+        "project_profile": lambda args: _profile().build_project_profile(
+            project_path=__import__("pathlib").Path(args.get("path") or os.getcwd()),
+            compact=args.get("compact", False),
         ),
     }
 

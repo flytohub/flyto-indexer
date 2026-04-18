@@ -171,7 +171,7 @@ class TypeScriptScanner(BaseScanner):
             end_line = self._find_block_end(content, match.end(), start_line)
             interface_content = '\n'.join(lines[start_line-1:end_line])
 
-            symbols.append(Symbol(
+            iface_sym = Symbol(
                 project=self.project,
                 path=rel_path,
                 symbol_type=SymbolType.INTERFACE,
@@ -181,7 +181,11 @@ class TypeScriptScanner(BaseScanner):
                 content=interface_content,
                 language="typescript",
                 exports=[name] if 'export' in content[max(0, match.start()-20):match.start()] else [],
-            ))
+            )
+            iface_fields = self._extract_ts_fields(interface_content)
+            if iface_fields:
+                iface_sym.metadata = {"fields": iface_fields}
+            symbols.append(iface_sym)
 
         # Extract type aliases
         for match in re.finditer(
@@ -196,7 +200,7 @@ class TypeScriptScanner(BaseScanner):
             end_line = content[:end_pos].count('\n') + 1
             type_content = '\n'.join(lines[start_line-1:end_line])
 
-            symbols.append(Symbol(
+            type_sym = Symbol(
                 project=self.project,
                 path=rel_path,
                 symbol_type=SymbolType.TYPE,
@@ -206,7 +210,12 @@ class TypeScriptScanner(BaseScanner):
                 content=type_content,
                 language="typescript",
                 exports=[name] if 'export' in content[max(0, match.start()-20):match.start()] else [],
-            ))
+            )
+            # Extract fields from object-shaped type aliases
+            type_fields = self._extract_ts_fields(type_content)
+            if type_fields:
+                type_sym.metadata = {"fields": type_fields}
+            symbols.append(type_sym)
 
         # Extract API calls (fetch/axios/etc.)
         api_calls = self._extract_api_calls(content)

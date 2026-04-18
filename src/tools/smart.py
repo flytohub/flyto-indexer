@@ -12,6 +12,7 @@ structure → project overview (APIs, dependencies, types)
 """
 
 import logging
+import os
 
 logger = logging.getLogger("flyto-indexer.smart")
 
@@ -631,6 +632,36 @@ def smart_structure(project: str = None, focus: str = None,
         _truncate_structure_lists(result)
         return result
 
+    # --- Packages focus (external dependency/version scan) ---
+    if focus == "packages":
+        try:
+            from .. import dependency_scanner
+        except ImportError:
+            import dependency_scanner
+        # Determine scan path from project or fall back to index root
+        scan_path = None
+        if project:
+            try:
+                projects = info.list_projects()
+                for p in (projects.get("projects") or []):
+                    if p.get("name") == project:
+                        scan_path = p.get("root")
+                        break
+            except Exception:
+                pass
+        if not scan_path:
+            # Use the index root directory
+            try:
+                idx = info._load_index()
+                if hasattr(idx, "root_dir"):
+                    scan_path = str(idx.root_dir)
+            except Exception:
+                pass
+        if not scan_path:
+            scan_path = os.getcwd()
+        inventory = dependency_scanner.scan_dependencies(scan_path)
+        return inventory.to_dict()
+
     # --- Dependencies focus ---
     if focus == "dependencies":
         try:
@@ -668,6 +699,34 @@ def smart_structure(project: str = None, focus: str = None,
         if r is not None:
             result["change_clusters"] = r
         return result
+
+    # --- Profile focus (full project profile) ---
+    if focus == "profile":
+        try:
+            from .. import project_profile as _pp
+        except ImportError:
+            import project_profile as _pp
+        scan_path = None
+        if project:
+            try:
+                projects = info.list_projects()
+                for p in (projects.get("projects") or []):
+                    if p.get("name") == project:
+                        scan_path = p.get("root")
+                        break
+            except Exception:
+                pass
+        if not scan_path:
+            try:
+                idx = info._load_index()
+                if hasattr(idx, "root_dir"):
+                    scan_path = str(idx.root_dir)
+            except Exception:
+                pass
+        if not scan_path:
+            scan_path = os.getcwd()
+        from pathlib import Path as _Path
+        return _pp.build_project_profile(_Path(scan_path))
 
     # --- Default: project overview ---
     try:

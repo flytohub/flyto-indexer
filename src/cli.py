@@ -172,6 +172,25 @@ def main():
     setup_claude_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
     setup_claude_parser.add_argument("--remove", action="store_true", help="Remove flyto-indexer section from CLAUDE.md")
 
+    # deps
+    deps_parser = subparsers.add_parser(
+        "deps",
+        help="Scan and list all external package dependencies with versions",
+        description="Walk the project directory, find manifest files (package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml, pom.xml, Gemfile, Dockerfile, etc.), and list all dependencies with version constraints and pinned versions.",
+    )
+    deps_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    deps_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON instead of table")
+
+    # profile
+    profile_parser = subparsers.add_parser(
+        "profile",
+        help="Generate a comprehensive project profile (structure, APIs, models, deps, patterns)",
+        description="Aggregate all project facts into a single structured output. Uses index data if available, plus filesystem analysis, dependency scanning, and git history.",
+    )
+    profile_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    profile_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as raw JSON")
+    profile_parser.add_argument("--compact", action="store_true", help="Summary only (omit folder structure)")
+
     # check
     check_parser = subparsers.add_parser(
         "check",
@@ -216,6 +235,10 @@ def main():
             result = cmd_setup(args)
         elif args.command == "setup-claude":
             result = cmd_setup_claude(args)
+        elif args.command == "deps":
+            result = cmd_deps(args)
+        elif args.command == "profile":
+            result = cmd_profile(args)
         elif args.command == "check":
             result = cmd_check(args)
         else:
@@ -1082,6 +1105,45 @@ def cmd_setup_claude(args):
 
     print(f"Added flyto-indexer instructions to {claude_md}")
     print("AI assistants will now use analyze_task before modifying shared code.")
+    return None
+
+
+def cmd_deps(args):
+    """Scan and list all external package dependencies."""
+    from .dependency_scanner import scan_dependencies, format_dependency_table
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    inventory = scan_dependencies(project_path)
+
+    if hasattr(args, "as_json") and args.as_json:
+        return inventory.to_dict()
+
+    # Human-readable table output
+    print(format_dependency_table(inventory))
+    return None
+
+
+def cmd_profile(args):
+    """Generate a comprehensive project profile."""
+    from .project_profile import build_project_profile, format_profile
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    compact = hasattr(args, "compact") and args.compact
+    profile = build_project_profile(project_path, compact=compact)
+
+    if hasattr(args, "as_json") and args.as_json:
+        return profile
+
+    # Human-readable output
+    print(format_profile(profile))
     return None
 
 

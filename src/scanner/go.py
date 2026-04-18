@@ -136,6 +136,7 @@ class GoScanner(BaseScanner):
         self._scan_type_aliases(content, lines, rel_path, symbols)
         self._extract_const_var(content, lines, rel_path, symbols)
         self._detect_implementations(symbols, dependencies, rel_path)
+        self._scan_http_routes(content, lines, rel_path, symbols)
 
         for symbol in symbols:
             symbol.compute_hash()
@@ -171,6 +172,12 @@ class GoScanner(BaseScanner):
             ))
 
             body_text = self._extract_body_text(content, match.end(), start_line, end_line)
+
+            # Extract struct fields
+            struct_fields = self._extract_struct_fields(body_text)
+            if struct_fields:
+                symbols[-1].metadata = {"fields": struct_fields}
+
             self._scan_struct_embeds(body_text, name, start_line, rel_path, dependencies)
 
     def _scan_struct_embeds(self, body_text, struct_name, start_line, rel_path, dependencies):
@@ -405,6 +412,89 @@ class GoScanner(BaseScanner):
                         dep_type=DependencyType.IMPLEMENTS,
                         source_line=0,
                     ))
+
+    # Struct field pattern: FieldName type (optionally followed by tags)
+    STRUCT_FIELD_PATTERN = re.compile(
+        r'^\s+([A-Z][A-Za-z0-9_]*)\s+(\S+)', re.MULTILINE
+    )
+
+    def _extract_struct_fields(self, body_text: str) -> list[dict]:
+        """Extract fields from a struct body."""
+        fields = []
+        for line in body_text.splitlines():
+            stripped = line.strip()
+            # Skip empty, comments, closing brace, embedded types (no uppercase field name pattern)
+            if not stripped or stripped.startswith("//") or stripped == "}":
+                continue
+            m = re.match(r'^([A-Z][A-Za-z0-9_]*)\s+(\S+)', stripped)
+            if m:
+                field_name = m.group(1)
+                field_type = m.group(2).rstrip(',')
+                # Strip json tags if captured
+                if field_type.startswith('`'):
+                    continue
+                fields.append({"name": field_name, "type": field_type})
+        return fields
+
+    # HTTP route registration patterns
+    STDLIB_ROUTE_PATTERN = re.compile(
+        r'\.HandleFunc\(\s*"((?:GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+)?(/[^"]*)"',
+    )
+    FRAMEWORK_ROUTE_PATTERN = re.compile(
+        r'\.(Get|Post|Put|Patch|Delete|Options|Head)\(\s*"(/[^"]*)"',
+        re.IGNORECASE,
+    )
+
+    def _scan_http_routes(self, content: str, lines: list[str],
+                          rel_path: str, symbols: list[Symbol]) -> None:
+        """Detect HTTP route registrations (stdlib + frameworks)."""
+        # stdlib: mux.HandleFunc("GET /path", handler) or http.HandleFunc("/path", handler)
+        for match in self.STDLIB_ROUTE_PATTERN.finditer(content):
+            method_prefix = match.group(1) or ""
+            path = match.group(2)
+            method = method_prefix.strip() if method_prefix else "GET"
+            start_line = content[:match.start()].count('\n') + 1
+
+            # Try to extract handler name from after the path
+            after = content[match.end():]
+            handler_match = re.match(r'\s*,\s*(\w+(?:\.\w+)*)', after)
+            handler = handler_match.group(1) if handler_match else ""
+
+            api_name = f"{method} {path}"
+            sym = Symbol(
+                project=self.project, path=rel_path,
+                symbol_type=SymbolType.API, name=api_name,
+                start_line=start_line, end_line=start_line,
+                content=self._extract_block(lines, start_line, start_line),
+                summary=f"{method} {path} -> {handler}",
+                language="go",
+            )
+            sym.metadata = {"method": method, "path": path, "handler": handler}
+            sym.compute_hash()
+            symbols.append(sym)
+
+        # Frameworks: r.GET("/path", handler), e.POST("/path", handler), etc.
+        for match in self.FRAMEWORK_ROUTE_PATTERN.finditer(content):
+            method = match.group(1).upper()
+            path = match.group(2)
+            start_line = content[:match.start()].count('\n') + 1
+
+            after = content[match.end():]
+            handler_match = re.match(r'\s*,\s*(\w+(?:\.\w+)*)', after)
+            handler = handler_match.group(1) if handler_match else ""
+
+            api_name = f"{method} {path}"
+            sym = Symbol(
+                project=self.project, path=rel_path,
+                symbol_type=SymbolType.API, name=api_name,
+                start_line=start_line, end_line=start_line,
+                content=self._extract_block(lines, start_line, start_line),
+                summary=f"{method} {path} -> {handler}",
+                language="go",
+            )
+            sym.metadata = {"method": method, "path": path, "handler": handler}
+            sym.compute_hash()
+            symbols.append(sym)
 
     def _extract_imports(self, content: str) -> list[dict]:
         """Extract import statements."""

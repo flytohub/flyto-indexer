@@ -73,6 +73,9 @@ class Symbol:
     params: list[str] = field(default_factory=list)
     returns: str = ""
 
+    # Extensible metadata (fields, props, etc.)
+    metadata: dict = field(default_factory=dict)
+
     # Reference count (used for search ranking)
     reference_count: int = 0
 
@@ -116,6 +119,10 @@ class Symbol:
         # Always include content_hash for change detection
         if self.content_hash:
             result["content_hash"] = self.content_hash
+
+        # Metadata (fields, props, etc.)
+        if self.metadata:
+            result["metadata"] = self.metadata
 
         # Compact mode: skip empty fields
         if compact:
