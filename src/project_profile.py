@@ -884,10 +884,13 @@ def _extract_from_index(project_path: Path) -> dict:
     # --- Complexity summary ---
     result["complexity_summary"] = _compute_complexity_summary(symbols, index_dir)
 
-    # --- Health dimensions ---
-    result["health_dimensions"] = _compute_health_dimensions(
-        symbols, reverse_index, index_dir, result["complexity_summary"]
-    )
+    # Health dimensions computed later in build_project_profile (needs project_type)
+    result["_health_inputs"] = {
+        "symbols": symbols,
+        "reverse_index": reverse_index,
+        "index_dir": index_dir,
+        "complexity_summary": result["complexity_summary"],
+    }
 
     return result
 
@@ -1033,14 +1036,17 @@ def _compute_health_dimensions(
     reverse_index: dict,
     index_dir: "Path",
     complexity_summary: dict,
+    project_type: str = "",
 ) -> dict:
-    """Compute health score dimensions from index data.
+    """Compute health score dimensions based on project type.
 
-    Dimensions (each 0-25, total 0-100):
-    - security: pattern-based security scan
-    - complexity: ratio of complex functions
-    - dead_code: ratio of unreferenced symbols
-    - coverage: test coverage from .coverage file (optional)
+    Dimensions vary by type:
+    - backend: security, complexity, dead_code (+ docs penalty)
+    - frontend: complexity, dead_code (+ docs penalty)
+    - library: dead_code, docs (docs weighted heavier)
+    - static/unknown: docs only
+    - mobile: complexity, dead_code
+    - fullstack: all of the above
 
     Returns dict with per-dimension scores and overall grade.
     """
@@ -1186,18 +1192,57 @@ def _compute_health_dimensions(
     except Exception:
         pass
 
-    # --- Overall ---
-    # Base: 3 dimensions (security, complexity, dead_code) = 75 max
-    # + coverage if available = 100 max
-    # + doc adjustment (-10 to +5)
-    dimensions_with_data = [security_score, complexity_score, dead_score]
-    max_possible = 75
-    if has_coverage:
-        dimensions_with_data.append(coverage_score)
-        max_possible = 100
+    # --- Overall (project-type aware) ---
+    # Select which dimensions matter for this project type
+    active_dims: dict[str, int] = {}
 
-    raw_score = sum(dimensions_with_data)
-    overall_score = round(raw_score / max_possible * 100) + doc_penalty
+    if project_type in ("backend", "fullstack"):
+        active_dims["security"] = security_score
+        active_dims["complexity"] = complexity_score
+        active_dims["dead_code"] = dead_score
+    elif project_type in ("frontend",):
+        active_dims["complexity"] = complexity_score
+        active_dims["dead_code"] = dead_score
+        # Security lighter for frontend
+        active_dims["security"] = min(25, security_score + 10)
+    elif project_type in ("library",):
+        active_dims["dead_code"] = dead_score
+        active_dims["complexity"] = complexity_score
+    elif project_type in ("mobile",):
+        active_dims["complexity"] = complexity_score
+        active_dims["dead_code"] = dead_score
+    elif project_type in ("static", "unknown", ""):
+        # Only docs matter — compute doc score directly
+        doc_score_val = 0
+        try:
+            try:
+                from .doc_scanner import scan_documentation as _scan_doc
+            except ImportError:
+                from doc_scanner import scan_documentation as _scan_doc
+            proj_root = index_dir.parent if index_dir.exists() else None
+            if proj_root and proj_root.exists():
+                _dr = _scan_doc(str(proj_root))
+                doc_score_val = _dr.overall_score
+        except Exception:
+            pass
+        active_dims["documentation"] = min(25, round(doc_score_val / 4))
+    else:
+        active_dims["security"] = security_score
+        active_dims["complexity"] = complexity_score
+        active_dims["dead_code"] = dead_score
+
+    if has_coverage:
+        active_dims["coverage"] = coverage_score
+
+    max_possible = len(active_dims) * 25
+    raw_score = sum(active_dims.values())
+    if max_possible > 0:
+        overall_score = round(raw_score / max_possible * 100)
+    else:
+        overall_score = 50  # no dimensions applicable
+    # Apply doc penalty only for types that have code (not static/unknown)
+    if project_type not in ("static", "unknown", ""):
+        overall_score += doc_penalty
     overall_score = max(0, min(100, overall_score))
 
     if overall_score >= 90:
@@ -1211,15 +1256,20 @@ def _compute_health_dimensions(
     else:
         grade = "F"
 
-    result = {
-        "security": {"score": security_score, "max": 25, "status": security_status, "finding_count": finding_count},
-        "complexity": {"score": complexity_score, "max": 25, "status": complexity_status, "complex_count": complex_count},
-        "dead_code": {"score": dead_score, "max": 25, "status": dead_status, "dead_count": dead_count},
-        "overall": {"score": overall_score, "max": 100, "grade": grade},
-    }
-    # Only include coverage if data exists
-    if has_coverage:
+    # Only include dimensions that are relevant
+    result: dict = {}
+    if "security" in active_dims:
+        result["security"] = {"score": security_score, "max": 25, "status": security_status, "finding_count": finding_count}
+    if "complexity" in active_dims:
+        result["complexity"] = {"score": complexity_score, "max": 25, "status": complexity_status, "complex_count": complex_count}
+    if "dead_code" in active_dims:
+        result["dead_code"] = {"score": dead_score, "max": 25, "status": dead_status, "dead_count": dead_count}
+    if "documentation" in active_dims:
+        result["documentation"] = {"score": active_dims["documentation"], "max": 25, "status": "PASS" if active_dims["documentation"] >= 20 else ("WARN" if active_dims["documentation"] >= 10 else "FAIL")}
+    if has_coverage and "coverage" in active_dims:
         result["coverage"] = {"score": coverage_score, "max": 25, "status": coverage_status, "coverage_pct": coverage_pct}
+
+    result["overall"] = {"score": overall_score, "max": 100, "grade": grade}
 
     return result
 
@@ -1437,6 +1487,21 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         all_files=fs["_all_files"],
     )
 
+    # 8. Health dimensions (needs project_type)
+    health_inputs = idx.get("_health_inputs")
+    if health_inputs:
+        health_dims = _compute_health_dimensions(
+            health_inputs["symbols"],
+            health_inputs["reverse_index"],
+            health_inputs["index_dir"],
+            health_inputs["complexity_summary"],
+            project_type_info["type"],
+        )
+    else:
+        health_dims = {
+            "overall": {"score": 0, "max": 100, "grade": "?"},
+        }
+
     # Build profile
     profile = {
         "name": project_name,
@@ -1479,7 +1544,7 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         "complexity_summary": idx["complexity_summary"],
 
         # Health
-        "health_dimensions": idx.get("health_dimensions", {}),
+        "health_dimensions": health_dims,
 
         # Infrastructure
         "has_docker": fs["has_docker"],
