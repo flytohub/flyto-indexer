@@ -1060,8 +1060,7 @@ def _compute_health_dimensions(
             "security": {"score": 25, "max": 25, "status": "PASS", "finding_count": 0},
             "complexity": {"score": 25, "max": 25, "status": "PASS", "complex_count": 0},
             "dead_code": {"score": 25, "max": 25, "status": "PASS", "dead_count": 0},
-            "coverage": {"score": 0, "max": 25, "status": "FAIL", "coverage_pct": 0},
-            "overall": {"score": 75, "max": 100, "grade": "C"},
+            "overall": {"score": 100, "max": 100, "grade": "A"},
         }
 
     # --- Security (pattern scan from project root) ---
@@ -1163,10 +1162,44 @@ def _compute_health_dimensions(
     except Exception:
         pass
 
-    coverage_status = "PASS" if coverage_score >= 20 else ("WARN" if coverage_score >= 10 else "FAIL")
+    has_coverage = coverage_pct > 0 or coverage_score > 0
+    coverage_status = "PASS" if coverage_score >= 20 else ("WARN" if coverage_score >= 10 else ("FAIL" if has_coverage else "N/A"))
+
+    # --- Documentation dimension (bonus/penalty) ---
+    # Read doc_score from the profile if available
+    doc_penalty = 0
+    try:
+        try:
+            from .doc_scanner import scan_documentation
+        except ImportError:
+            from doc_scanner import scan_documentation
+        project_root = index_dir.parent if index_dir.exists() else None
+        if project_root and project_root.exists():
+            doc_result = scan_documentation(str(project_root))
+            # Doc score 0-100 → penalty: <30 = -10, <50 = -5, <70 = 0, 70+ = +5
+            if doc_result.overall_score < 30:
+                doc_penalty = -10
+            elif doc_result.overall_score < 50:
+                doc_penalty = -5
+            elif doc_result.overall_score >= 70:
+                doc_penalty = 5
+    except Exception:
+        pass
 
     # --- Overall ---
-    overall_score = security_score + complexity_score + dead_score + coverage_score
+    # Base: 3 dimensions (security, complexity, dead_code) = 75 max
+    # + coverage if available = 100 max
+    # + doc adjustment (-10 to +5)
+    dimensions_with_data = [security_score, complexity_score, dead_score]
+    max_possible = 75
+    if has_coverage:
+        dimensions_with_data.append(coverage_score)
+        max_possible = 100
+
+    raw_score = sum(dimensions_with_data)
+    overall_score = round(raw_score / max_possible * 100) + doc_penalty
+    overall_score = max(0, min(100, overall_score))
+
     if overall_score >= 90:
         grade = "A"
     elif overall_score >= 80:
@@ -1178,13 +1211,17 @@ def _compute_health_dimensions(
     else:
         grade = "F"
 
-    return {
+    result = {
         "security": {"score": security_score, "max": 25, "status": security_status, "finding_count": finding_count},
         "complexity": {"score": complexity_score, "max": 25, "status": complexity_status, "complex_count": complex_count},
         "dead_code": {"score": dead_score, "max": 25, "status": dead_status, "dead_count": dead_count},
-        "coverage": {"score": coverage_score, "max": 25, "status": coverage_status, "coverage_pct": coverage_pct},
         "overall": {"score": overall_score, "max": 100, "grade": grade},
     }
+    # Only include coverage if data exists
+    if has_coverage:
+        result["coverage"] = {"score": coverage_score, "max": 25, "status": coverage_status, "coverage_pct": coverage_pct}
+
+    return result
 
 
 # ---------------------------------------------------------------------------
