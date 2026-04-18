@@ -191,6 +191,33 @@ def main():
     profile_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as raw JSON")
     profile_parser.add_argument("--compact", action="store_true", help="Summary only (omit folder structure)")
 
+    # secrets
+    secrets_parser = subparsers.add_parser(
+        "secrets",
+        help="Scan project for hardcoded secrets (API keys, tokens, passwords)",
+        description="Regex-based scan for hardcoded secrets. Reports findings by severity (critical/high/medium).",
+    )
+    secrets_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    secrets_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON instead of human-readable text")
+
+    # license
+    license_parser = subparsers.add_parser(
+        "license",
+        help="Detect project license and dependency licenses",
+        description="Read LICENSE file and manifest files to detect project license. Collect dependency license info where available.",
+    )
+    license_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    license_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON instead of human-readable text")
+
+    # docs
+    docs_parser = subparsers.add_parser(
+        "docs",
+        help="Analyze documentation coverage (README, API docs, inline docs)",
+        description="Check README quality, API docstrings, module documentation, inline docs, and config docs. Score 0-100.",
+    )
+    docs_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    docs_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON instead of human-readable text")
+
     # check
     check_parser = subparsers.add_parser(
         "check",
@@ -239,6 +266,12 @@ def main():
             result = cmd_deps(args)
         elif args.command == "profile":
             result = cmd_profile(args)
+        elif args.command == "secrets":
+            result = cmd_secrets(args)
+        elif args.command == "license":
+            result = cmd_license(args)
+        elif args.command == "docs":
+            result = cmd_docs(args)
         elif args.command == "check":
             result = cmd_check(args)
         else:
@@ -1144,6 +1177,70 @@ def cmd_profile(args):
 
     # Human-readable output
     print(format_profile(profile))
+    return None
+
+
+def cmd_secrets(args):
+    """Scan project for hardcoded secrets."""
+    from .secret_scanner import scan_secrets, format_secret_scan
+    from dataclasses import asdict
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    result = scan_secrets(project_path)
+
+    if hasattr(args, "as_json") and args.as_json:
+        return {
+            "total_files_scanned": result.total_files_scanned,
+            "total_findings": result.total_findings,
+            "critical": result.critical,
+            "high": result.high,
+            "medium": result.medium,
+            "findings": [asdict(f) for f in result.findings],
+        }
+
+    print(format_secret_scan(result))
+    return None
+
+
+def cmd_license(args):
+    """Detect project and dependency licenses."""
+    from .license_scanner import scan_licenses, format_license_scan
+    from dataclasses import asdict
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    result = scan_licenses(project_path)
+
+    if hasattr(args, "as_json") and args.as_json:
+        return asdict(result)
+
+    print(format_license_scan(result))
+    return None
+
+
+def cmd_docs(args):
+    """Analyze documentation coverage."""
+    from .doc_scanner import scan_documentation, format_doc_scan
+    from dataclasses import asdict
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    result = scan_documentation(project_path)
+
+    if hasattr(args, "as_json") and args.as_json:
+        return asdict(result)
+
+    print(format_doc_scan(result))
     return None
 
 

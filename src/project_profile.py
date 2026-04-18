@@ -777,6 +777,65 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
             dep_names.add(d.get("name", ""))
     patterns = _detect_patterns(fs["_all_files"], dep_names, index_data=idx)
 
+    # 5b. Secret scan
+    secrets_data = {}
+    try:
+        try:
+            from .secret_scanner import scan_secrets
+        except ImportError:
+            from secret_scanner import scan_secrets
+        secret_result = scan_secrets(project_path)
+        secrets_data = {
+            "total_files_scanned": secret_result.total_files_scanned,
+            "total_findings": secret_result.total_findings,
+            "critical": secret_result.critical,
+            "high": secret_result.high,
+            "medium": secret_result.medium,
+        }
+    except Exception as e:
+        logger.debug("Secret scan failed: %s", e)
+
+    # 5c. License scan
+    license_data = {}
+    try:
+        try:
+            from .license_scanner import scan_licenses
+        except ImportError:
+            from license_scanner import scan_licenses
+        license_result = scan_licenses(project_path)
+        license_data = {
+            "project_license": license_result.project_license,
+            "project_license_file": license_result.project_license_file,
+            "dependency_licenses": license_result.dependency_licenses,
+            "copyleft_warning": license_result.copyleft_warning,
+            "dependencies_without_license_count": len(license_result.dependencies_without_license),
+        }
+    except Exception as e:
+        logger.debug("License scan failed: %s", e)
+
+    # 5d. Documentation coverage
+    documentation_data = {}
+    try:
+        try:
+            from .doc_scanner import scan_documentation
+        except ImportError:
+            from doc_scanner import scan_documentation
+        doc_result = scan_documentation(project_path)
+        documentation_data = {
+            "overall_score": doc_result.overall_score,
+            "readme_score": doc_result.readme_score,
+            "readme_sections": doc_result.readme_sections,
+            "api_doc_coverage": doc_result.api_doc_coverage,
+            "module_doc_coverage": doc_result.module_doc_coverage,
+            "inline_doc_coverage": doc_result.inline_doc_coverage,
+            "has_env_example": doc_result.has_env_example,
+            "has_changelog": doc_result.has_changelog,
+            "has_contributing": doc_result.has_contributing,
+            "suggestions": doc_result.suggestions,
+        }
+    except Exception as e:
+        logger.debug("Documentation scan failed: %s", e)
+
     # 6. Services detection
     services = _detect_services(deps)
 
@@ -825,6 +884,11 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
 
         # Patterns
         "patterns": patterns,
+
+        # Analysis
+        "secrets": secrets_data,
+        "license": license_data,
+        "documentation": documentation_data,
     }
 
     if not compact:

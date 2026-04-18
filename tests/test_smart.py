@@ -344,8 +344,8 @@ class TestToolRegistryIntegration:
 
     def test_smart_tools_in_registry(self):
         from tool_registry import SMART_TOOLS, SMART_TOOL_NAMES
-        assert len(SMART_TOOLS) == 5
-        assert SMART_TOOL_NAMES == {"search", "impact", "audit", "task", "structure"}
+        assert len(SMART_TOOLS) == 9
+        assert SMART_TOOL_NAMES == {"search", "impact", "audit", "task", "structure", "project_profile", "scan_secrets", "scan_licenses", "scan_documentation"}
 
     def test_smart_tools_in_dispatch(self):
         from tool_registry import execute_tool

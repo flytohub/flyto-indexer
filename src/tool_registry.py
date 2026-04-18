@@ -1166,6 +1166,81 @@ SMART_TOOLS: list = [
 ]
 
 SMART_TOOLS.append({
+    "name": "scan_secrets",
+    "title": "Scan Secrets",
+    "annotations": {"readOnlyHint": True, "openWorldHint": True},
+    "description": (
+        "Scan project source files for hardcoded secrets using regex patterns. "
+        "Detects AWS keys, API tokens, private keys, database URLs, GitHub/GitLab/Slack/Stripe tokens, "
+        "JWTs, Google API keys, Firebase keys, and generic passwords/secrets.\n\n"
+        "Skips test files, lockfiles, node_modules, .git, binary files, and .min.js.\n"
+        "Each finding includes: file path, line number, pattern name, severity (critical/high/medium), "
+        "and a masked value (first 4 chars visible).\n\n"
+        "No external API calls — pure regex-based local analysis."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Project root path to scan. Defaults to current working directory.",
+            },
+        },
+    },
+})
+
+SMART_TOOLS.append({
+    "name": "scan_licenses",
+    "title": "Scan Licenses",
+    "annotations": {"readOnlyHint": True, "openWorldHint": True},
+    "description": (
+        "Detect project license and collect dependency license information.\n\n"
+        "1. Reads LICENSE/LICENCE files in project root and detects type via keyword matching "
+        "(MIT, Apache-2.0, GPL-3.0, BSD, ISC, MPL-2.0, Unlicense, etc.).\n"
+        "2. Reads license field from package.json, pyproject.toml, Cargo.toml, composer.json.\n"
+        "3. Collects dependency license info from node_modules where available.\n"
+        "4. Warns if any copyleft license (GPL/AGPL/LGPL) is detected.\n\n"
+        "No external API calls — reads local files only."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Project root path to scan. Defaults to current working directory.",
+            },
+        },
+    },
+})
+
+SMART_TOOLS.append({
+    "name": "scan_documentation",
+    "title": "Scan Documentation",
+    "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    "description": (
+        "Analyze documentation completeness and quality.\n\n"
+        "Checks:\n"
+        "- README quality (0-100): existence, length, key sections (install, usage, API, contributing)\n"
+        "- API doc coverage: % of API routes with docstrings (from index)\n"
+        "- Module doc coverage: % of top-level dirs with README or __init__.py docstring\n"
+        "- Inline doc coverage: % of functions/classes with docstrings (from index)\n"
+        "- Config docs: .env.example existence and comments\n"
+        "- CHANGELOG and CONTRIBUTING existence\n\n"
+        "Returns overall score (0-100) and actionable suggestions.\n"
+        "No external API calls — reads local files and index only."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Project root path to scan. Defaults to current working directory.",
+            },
+        },
+    },
+})
+
+SMART_TOOLS.append({
     "name": "project_profile",
     "title": "Project Profile",
     "annotations": {"readOnlyHint": True, "openWorldHint": True},
@@ -1452,6 +1527,30 @@ def _profile():
     return project_profile
 
 
+def _secret_scanner():
+    try:
+        from . import secret_scanner
+    except ImportError:
+        import secret_scanner
+    return secret_scanner
+
+
+def _license_scanner():
+    try:
+        from . import license_scanner
+    except ImportError:
+        import license_scanner
+    return license_scanner
+
+
+def _doc_scanner():
+    try:
+        from . import doc_scanner
+    except ImportError:
+        import doc_scanner
+    return doc_scanner
+
+
 def _smart():
     try:
         from .tools import smart
@@ -1723,6 +1822,43 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             symbol_id=args.get("symbol_id"),
             path=args.get("path"),
         ),
+
+        # Analysis scanners
+        "scan_secrets": lambda args: (lambda r: {
+            "total_files_scanned": r.total_files_scanned,
+            "total_findings": r.total_findings,
+            "critical": r.critical,
+            "high": r.high,
+            "medium": r.medium,
+            "findings": [{"file": f.file, "line": f.line, "pattern": f.pattern,
+                          "severity": f.severity, "masked_value": f.masked_value}
+                         for f in r.findings],
+        })(_secret_scanner().scan_secrets(
+            __import__("pathlib").Path(args.get("path") or os.getcwd()),
+        )),
+        "scan_licenses": lambda args: (lambda r: {
+            "project_license": r.project_license,
+            "project_license_file": r.project_license_file,
+            "dependency_licenses": r.dependency_licenses,
+            "copyleft_warning": r.copyleft_warning,
+            "dependencies_without_license": r.dependencies_without_license,
+        })(_license_scanner().scan_licenses(
+            __import__("pathlib").Path(args.get("path") or os.getcwd()),
+        )),
+        "scan_documentation": lambda args: (lambda r: {
+            "overall_score": r.overall_score,
+            "readme_score": r.readme_score,
+            "readme_sections": r.readme_sections,
+            "api_doc_coverage": r.api_doc_coverage,
+            "module_doc_coverage": r.module_doc_coverage,
+            "inline_doc_coverage": r.inline_doc_coverage,
+            "has_env_example": r.has_env_example,
+            "has_changelog": r.has_changelog,
+            "has_contributing": r.has_contributing,
+            "suggestions": r.suggestions,
+        })(_doc_scanner().scan_documentation(
+            __import__("pathlib").Path(args.get("path") or os.getcwd()),
+        )),
 
         # Project profile
         "project_profile": lambda args: _profile().build_project_profile(
