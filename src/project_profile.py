@@ -270,8 +270,9 @@ _PATTERN_SIGNALS = {
 }
 
 
-def _detect_patterns(all_files: list, dep_names: set) -> list:
-    """Detect architectural patterns from file paths and dependency names."""
+def _detect_patterns(all_files: list, dep_names: set,
+                     index_data: dict | None = None) -> list:
+    """Detect architectural patterns from file paths, dependency names, and index symbols."""
     detected = []
 
     # Normalize dep names for matching
@@ -310,17 +311,193 @@ def _detect_patterns(all_files: list, dep_names: set) -> list:
         if found:
             detected.append(pattern_name)
 
-    return sorted(detected)
+    # --- Additional pattern detection ---
+
+    # auth: also check for firebase, jwt, oauth in deps
+    if "auth_middleware" not in detected:
+        auth_deps = {"firebase", "firebase_admin", "jwt", "pyjwt", "jose",
+                     "oauth", "oauth2", "oauthlib", "authlib", "passport",
+                     "jsonwebtoken", "next_auth", "nextauth"}
+        if auth_deps & dep_names_lower:
+            detected.append("auth_middleware")
+
+    # state_management: react-query, redux, vuex, pinia, zustand, etc.
+    state_deps = {"react_query", "@tanstack_react_query", "tanstack_react_query",
+                  "redux", "react_redux", "@reduxjs_toolkit", "reduxjs_toolkit",
+                  "vuex", "pinia", "zustand", "mobx", "recoil", "jotai", "valtio"}
+    if state_deps & dep_names_lower:
+        detected.append("state_management")
+
+    # routing: react-router, vue-router, gorilla/mux, etc.
+    routing_deps = {"react_router", "react_router_dom", "vue_router",
+                    "gorilla_mux", "@angular_router", "angular_router",
+                    "next", "nuxt", "wouter", "reach_router"}
+    if routing_deps & dep_names_lower:
+        detected.append("routing")
+
+    # realtime: socket.io, ws, actioncable, etc.
+    if "websocket" not in detected:
+        realtime_deps = {"socket.io", "socket_io", "socket.io_client", "socket_io_client",
+                         "ws", "actioncable", "action_cable", "pusher", "ably",
+                         "centrifugo", "phoenix"}
+        if realtime_deps & dep_names_lower:
+            detected.append("realtime")
+
+    # api_gateway: if there are many API routes detected from index
+    if index_data:
+        api_routes = index_data.get("api_routes", [])
+        if len(api_routes) >= 5:
+            detected.append("api_gateway")
+
+        # api_server: if index has api-type symbols
+        sym_counts = index_data.get("symbol_counts", {})
+        if sym_counts.get("api", 0) > 0:
+            detected.append("api_server")
+
+    return sorted(set(detected))
 
 
 # ---------------------------------------------------------------------------
 # Index-based data extraction
 # ---------------------------------------------------------------------------
 
+_BACKEND_EXTS = frozenset({".py", ".go", ".java", ".rb", ".php", ".rs", ".cs", ".kt", ".kts"})
+_FRONTEND_EXTS = frozenset({".js", ".ts", ".tsx", ".jsx", ".vue", ".mjs", ".cjs"})
+
+_SERVICE_SDKS = {
+    # Firebase
+    "firebase": "Firebase",
+    "firebase-admin": "Firebase Admin",
+    "@firebase/auth": "Firebase Auth",
+    "@firebase/firestore": "Firebase Firestore",
+    "@firebase/storage": "Firebase Storage",
+    "firebase.google.com/go": "Firebase Admin (Go)",
+    # Supabase
+    "@supabase/supabase-js": "Supabase",
+    "supabase": "Supabase",
+    # AWS
+    "boto3": "AWS SDK",
+    "@aws-sdk/client-s3": "AWS S3",
+    "@aws-sdk/client-dynamodb": "AWS DynamoDB",
+    # GCP
+    "google-cloud-storage": "Google Cloud Storage",
+    "google-cloud-firestore": "Google Cloud Firestore",
+    "cloud.google.com/go/storage": "Google Cloud Storage (Go)",
+    # Payments
+    "stripe": "Stripe",
+    # Email
+    "@sendgrid/mail": "SendGrid",
+    "sendgrid": "SendGrid",
+    # AI
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+    "@anthropic-ai/sdk": "Anthropic SDK",
+    # Database clients
+    "redis": "Redis",
+    "ioredis": "Redis",
+    "mongoose": "MongoDB",
+    "pymongo": "MongoDB",
+    "@prisma/client": "Prisma",
+    "sqlalchemy": "SQLAlchemy",
+    "prisma": "Prisma",
+    # Messaging
+    "twilio": "Twilio",
+    "celery": "Celery",
+    "bull": "Bull Queue",
+    "bullmq": "BullMQ",
+    "amqplib": "RabbitMQ",
+    "pika": "RabbitMQ",
+    # Auth
+    "passport": "Passport.js",
+    "python-jose": "JWT (python-jose)",
+    "pyjwt": "JWT (PyJWT)",
+    "jsonwebtoken": "JWT",
+    # Monitoring
+    "sentry-sdk": "Sentry",
+    "@sentry/node": "Sentry",
+    "newrelic": "New Relic",
+    "datadog": "Datadog",
+    # Search
+    "elasticsearch": "Elasticsearch",
+    "typesense": "Typesense",
+    "qdrant-client": "Qdrant",
+    # Playwright/testing
+    "playwright": "Playwright",
+    "@playwright/test": "Playwright",
+}
+
+
+def _detect_services(deps_inventory: dict) -> list[dict]:
+    """Match dependency names against known SDK map to detect services."""
+    services = []
+    seen_names = set()
+    for dep in deps_inventory.get("dependencies", []):
+        if not isinstance(dep, dict):
+            continue
+        raw_name = dep.get("name", "")
+        ecosystem = dep.get("ecosystem", "")
+        # Normalize for pypi: strip extras like [standard], lowercase
+        norm = re.sub(r"\[.*?\]", "", raw_name).strip().lower()
+
+        # Try exact match first (preserving @ scoped packages)
+        matched_service = _SERVICE_SDKS.get(raw_name)
+        if not matched_service:
+            matched_service = _SERVICE_SDKS.get(norm)
+        if not matched_service:
+            # Try with underscores replaced by hyphens (pypi convention)
+            matched_service = _SERVICE_SDKS.get(norm.replace("_", "-"))
+        if not matched_service and ecosystem == "go":
+            # Go modules: match longest prefix first
+            # e.g. "firebase.google.com/go/v4" -> "firebase.google.com/go" (not "firebase")
+            best_key = ""
+            for sdk_key, sdk_name in _SERVICE_SDKS.items():
+                if norm.startswith(sdk_key) and len(sdk_key) > len(best_key):
+                    best_key = sdk_key
+                    matched_service = sdk_name
+        if matched_service and matched_service not in seen_names:
+            seen_names.add(matched_service)
+            services.append({
+                "name": matched_service,
+                "package": raw_name,
+                "ecosystem": ecosystem,
+            })
+    return services
+
+
+def _classify_api_symbol(sym: dict) -> str:
+    """Classify an API symbol into: api_definition, api_call_internal, api_call_external."""
+    file_path = sym.get("path", "")
+    ext = os.path.splitext(file_path)[1].lower()
+    name = sym.get("name", "")
+    meta = sym.get("metadata", {}) or {}
+
+    # Check if URL contains http:// or https:// -> external
+    url_text = name + " " + meta.get("path", "") + " " + meta.get("url", "")
+    if "http://" in url_text or "https://" in url_text:
+        return "api_call_external"
+
+    # Backend file with method+path -> definition
+    if ext in _BACKEND_EXTS:
+        return "api_definition"
+
+    # Frontend file -> internal call
+    if ext in _FRONTEND_EXTS:
+        return "api_call_internal"
+
+    # Fallback: if it has handler metadata, treat as definition
+    if meta.get("handler"):
+        return "api_definition"
+
+    return "api_definition"
+
+
 def _extract_from_index(project_path: Path) -> dict:
     """Extract data from the flyto-indexer index if available."""
     result = {
-        "api_routes": [],
+        "api_definitions": [],
+        "api_calls_internal": [],
+        "api_calls_external": [],
+        "api_routes": [],  # kept for backward compat (union of all)
         "models": [],
         "symbol_counts": {},
         "entry_points": [],
@@ -361,45 +538,62 @@ def _extract_from_index(project_path: Path) -> dict:
         type_counter[sym_type] += 1
     result["symbol_counts"] = dict(type_counter.most_common())
 
-    # --- API routes ---
+    # --- API routes (classified) ---
+    def _parse_api_entry(sym_or_route: dict, *, is_route: bool = False) -> dict:
+        """Build a normalized API entry dict from a symbol or route record."""
+        if is_route:
+            return {
+                "method": sym_or_route.get("method", "GET"),
+                "path": sym_or_route.get("path", sym_or_route.get("url", "")),
+                "handler": sym_or_route.get("handler", ""),
+                "file": sym_or_route.get("file", sym_or_route.get("defined_in", "")),
+            }
+        meta = sym_or_route.get("metadata", {}) or {}
+        method = meta.get("method", "GET") if meta else "GET"
+        if not meta:
+            summary = sym_or_route.get("summary", "")
+            parts = summary.split(" ", 1)
+            if parts[0] in ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"):
+                method = parts[0]
+        route_path = sym_or_route.get("name", "")
+        for m_prefix in ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"):
+            if route_path.startswith(m_prefix + " "):
+                route_path = route_path[len(m_prefix) + 1:]
+                break
+        return {
+            "method": method,
+            "path": route_path,
+            "handler": meta.get("handler", "") if meta else "",
+            "file": sym_or_route.get("path", ""),
+        }
+
+    _category_keys = {
+        "api_definition": "api_definitions",
+        "api_call_internal": "api_calls_internal",
+        "api_call_external": "api_calls_external",
+    }
+
     for sid, sym in symbols.items():
         if sym.get("type") == "api":
-            meta = sym.get("metadata", {})
-            method = meta.get("method", "GET") if meta else "GET"
-            if not meta:
-                summary = sym.get("summary", "")
-                parts = summary.split(" ", 1)
-                if parts[0] in ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"):
-                    method = parts[0]
-            route_path = sym.get("name", "")
-            # Strip method prefix if present (e.g., "GET /api/v1/me" -> "/api/v1/me")
-            for m in ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"):
-                if route_path.startswith(m + " "):
-                    route_path = route_path[len(m) + 1:]
-                    break
-            result["api_routes"].append({
-                "method": method,
-                "path": route_path,
-                "handler": meta.get("handler", "") if meta else "",
-                "file": sym.get("path", ""),
-            })
+            entry = _parse_api_entry(sym)
+            category = _classify_api_symbol(sym)
+            result[_category_keys[category]].append(entry)
+            result["api_routes"].append(entry)
 
     # Also check routes/api_endpoints from index
     for route in index.get("routes", []):
         if isinstance(route, dict):
-            entry = {
-                "method": route.get("method", "GET"),
-                "path": route.get("path", route.get("url", "")),
-                "handler": route.get("handler", ""),
-                "file": route.get("file", route.get("defined_in", "")),
-            }
+            entry = _parse_api_entry(route, is_route=True)
             # Deduplicate
             if not any(r["path"] == entry["path"] and r["method"] == entry["method"]
                        for r in result["api_routes"]):
+                # Routes from index-level are always backend definitions
+                result["api_definitions"].append(entry)
                 result["api_routes"].append(entry)
 
-    # Sort routes
-    result["api_routes"].sort(key=lambda r: (r["method"], r["path"]))
+    # Sort all lists
+    for key in ("api_definitions", "api_calls_internal", "api_calls_external", "api_routes"):
+        result[key].sort(key=lambda r: (r["method"], r["path"]))
 
     # --- Models (classes with fields) ---
     for sid, sym in symbols.items():
@@ -581,7 +775,10 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
     for d in deps.get("dependencies", []):
         if isinstance(d, dict):
             dep_names.add(d.get("name", ""))
-    patterns = _detect_patterns(fs["_all_files"], dep_names)
+    patterns = _detect_patterns(fs["_all_files"], dep_names, index_data=idx)
+
+    # 6. Services detection
+    services = _detect_services(deps)
 
     # Build profile
     profile = {
@@ -593,8 +790,14 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         "file_count": fs["file_count"],
         "languages": fs["languages"],
 
-        # APIs
-        "api_routes": idx["api_routes"],
+        # APIs (classified)
+        "api_definitions": idx["api_definitions"],
+        "api_calls_internal": idx["api_calls_internal"],
+        "api_calls_external": idx["api_calls_external"],
+        "api_routes": idx["api_routes"],  # backward compat: union of all
+
+        # Services
+        "services": services,
 
         # Models
         "models": idx["models"],
@@ -654,17 +857,33 @@ def format_profile(profile: dict) -> str:
     lines.append(f"  {' | '.join(struct_parts)}")
     lines.append("")
 
-    # APIs
-    api_routes = profile.get("api_routes", [])
-    if api_routes:
-        lines.append(f"APIs ({len(api_routes)} routes)")
-        for route in api_routes[:15]:
-            method = route.get("method", "GET")
-            path = route.get("path", "")
-            lines.append(f"  {method:6s} {path}")
-        if len(api_routes) > 15:
-            lines.append(f"  ... and {len(api_routes) - 15} more")
-        lines.append("")
+    # Services & APIs
+    api_defs = profile.get("api_definitions", [])
+    api_internal = profile.get("api_calls_internal", [])
+    api_external = profile.get("api_calls_external", [])
+    services = profile.get("services", [])
+    has_api_section = api_defs or api_internal or api_external or services
+    if has_api_section:
+        lines.append("Services & APIs")
+        if api_defs:
+            lines.append(f"  Backend routes: {len(api_defs)} defined")
+            for route in api_defs[:15]:
+                method = route.get("method", "GET")
+                path = route.get("path", "")
+                lines.append(f"    {method:6s} {path}")
+            if len(api_defs) > 15:
+                lines.append(f"    ... and {len(api_defs) - 15} more")
+            lines.append("")
+        if services:
+            svc_names = ", ".join(s["name"] for s in services)
+            lines.append(f"  Services: {svc_names}")
+            lines.append("")
+        if api_internal:
+            lines.append(f"  Frontend API calls: {len(api_internal)} internal")
+        if api_external:
+            lines.append(f"  External API calls: {len(api_external)}")
+        if api_internal or api_external:
+            lines.append("")
 
     # Models
     models = profile.get("models", [])

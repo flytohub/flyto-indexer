@@ -217,6 +217,9 @@ class TypeScriptScanner(BaseScanner):
                 type_sym.metadata = {"fields": type_fields}
             symbols.append(type_sym)
 
+        # Extract backend route definitions (Express/Hono/Fastify)
+        self._extract_backend_routes(content, lines, rel_path, symbols)
+
         # Extract API calls (fetch/axios/etc.)
         api_calls = self._extract_api_calls(content)
         for api_call in api_calls:
@@ -238,6 +241,59 @@ class TypeScriptScanner(BaseScanner):
             symbol.compute_hash()
 
         return symbols, dependencies
+
+    # TS field pattern: optional readonly, field name, optional ?, colon, type
+    _TS_FIELD_PATTERN = re.compile(
+        r'^\s+(?:readonly\s+)?(\w+)\??\s*:\s*(.+?)[\s;,]*$', re.MULTILINE
+    )
+
+    def _extract_ts_fields(self, body_content: str) -> list[dict]:
+        """Extract fields from interface/type body content."""
+        fields = []
+        seen = set()
+        for m in self._TS_FIELD_PATTERN.finditer(body_content):
+            name = m.group(1)
+            type_str = m.group(2).strip().rstrip(';,')
+            if name in seen or name in ('export', 'import', 'return', 'const', 'let', 'var', 'function', 'type', 'interface', 'class'):
+                continue
+            seen.add(name)
+            fields.append({"name": name, "type": type_str})
+        return fields
+
+    # Backend route pattern: app.get('/path', ...), router.post('/path', ...), etc.
+    _BACKEND_ROUTE_PATTERN = re.compile(
+        r'(?:app|router|server)\.(get|post|put|patch|delete|options|head|all)\s*\(\s*[\'"]([^\'"]+)[\'"]',
+        re.IGNORECASE,
+    )
+
+    def _extract_backend_routes(self, content: str, lines: list[str],
+                                rel_path: str, symbols: list[Symbol]) -> None:
+        """Detect Express/Hono/Fastify backend route definitions."""
+        for match in self._BACKEND_ROUTE_PATTERN.finditer(content):
+            method = match.group(1).upper()
+            path = match.group(2)
+            start_line = content[:match.start()].count('\n') + 1
+
+            # Try to extract handler name
+            after = content[match.end():]
+            handler_match = re.match(r'\s*,\s*(\w+)', after)
+            handler = handler_match.group(1) if handler_match else ""
+
+            api_name = f"{method} {path}"
+            sym = Symbol(
+                project=self.project,
+                path=rel_path,
+                symbol_type=SymbolType.API,
+                name=api_name,
+                start_line=start_line,
+                end_line=start_line,
+                content='\n'.join(lines[start_line-1:start_line]),
+                summary=f"{method} {path} -> {handler}",
+                language="typescript",
+            )
+            sym.metadata = {"method": method, "path": path, "handler": handler}
+            sym.compute_hash()
+            symbols.append(sym)
 
     def _extract_imports(self, content: str) -> list[dict]:
         """Extract import statements"""
