@@ -1079,28 +1079,34 @@ def _compute_health_dimensions(
             scanner = SecurityScanner(project_root)
             report = scanner.analyze()
             finding_count = len(report.issues)
-            # Penalty: -2 per critical, -1 per high, -0.5 per medium
+            # Gentle penalty — large projects naturally have more findings
+            # Critical: -3, High: -1.5, Medium: -0.5, cap penalty at 25
             penalty = 0
             for issue in report.issues:
                 sev = issue.severity
                 if sev == "critical":
-                    penalty += 2
+                    penalty += 3
                 elif sev == "high":
-                    penalty += 1
+                    penalty += 1.5
                 elif sev == "medium":
                     penalty += 0.5
-            security_score = max(0, 25 - int(penalty))
+            # Logistic curve: gentle start, never fully zeros out
+            # 1 finding → 24, 5 → 22, 20 → 15, 50 → 12, 200 → 5
+            scaled_penalty = int(25 * penalty / (penalty + 50)) if penalty > 0 else 0
+            security_score = max(0, 25 - scaled_penalty)
     except Exception:
         pass  # Security scan optional
 
     security_status = "PASS" if security_score >= 20 else ("WARN" if security_score >= 10 else "FAIL")
 
     # --- Complexity ---
+    # Use ratio but scale gently — 20% complex functions = 15/25, not 5/25
     func_count = complexity_summary.get("total_functions", 0)
     complex_count = complexity_summary.get("complex_functions", 0)
     if func_count > 0:
-        complexity_ratio = complex_count / func_count
-        complexity_score = max(0, 25 - int(complexity_ratio * 100))
+        complexity_pct = complex_count / func_count
+        # Gentle curve: <5% = 25, 10% = 20, 20% = 15, 50% = 5
+        complexity_score = max(0, int(25 * (1 - min(complexity_pct * 2, 1))))
     else:
         complexity_score = 25
 
@@ -1117,16 +1123,15 @@ def _compute_health_dimensions(
     for sym_id, sym in non_test_symbols.items():
         ref_count = sym.get("ref_count", sym.get("reference_count", 0))
         if ref_count == 0:
-            # Check reverse_index directly
             callers = reverse_index.get(sym_id, [])
             if not callers:
-                # Skip private/internal symbols (starting with _)
                 name = sym.get("name", "")
                 if not name.startswith("_"):
                     dead_count += 1
 
-    dead_ratio = dead_count / max(len(non_test_symbols), 1)
-    dead_score = max(0, 25 - int(dead_ratio * 100))
+    # Gentle curve: <5% dead = 25, 10% = 20, 20% = 15, 50% = 5
+    dead_pct = dead_count / max(len(non_test_symbols), 1)
+    dead_score = max(0, int(25 * (1 - min(dead_pct * 2, 1))))
     dead_status = "PASS" if dead_score >= 20 else ("WARN" if dead_score >= 10 else "FAIL")
 
     # --- Coverage ---
