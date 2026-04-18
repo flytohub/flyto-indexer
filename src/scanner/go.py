@@ -1,15 +1,16 @@
 """
-Go scanner using regex-based parsing.
+Go scanner using token-aware regex parsing.
 
 Extracts:
-- functions (top-level)
+- functions (top-level) with params and return types
 - methods (with receiver) + dependency edges to receiver struct
-- structs (with embedded type detection)
+- structs (with field extraction via tokenizer)
 - interfaces (with method extraction and embedding)
 - interface implementation detection (struct method set satisfies interface)
 - type aliases and named types
 - const/var declarations
 - imports
+- HTTP routes (stdlib, chi, gorilla/mux, ServeHTTP)
 """
 
 import re
@@ -18,14 +19,16 @@ from pathlib import Path
 try:
     from ..models import Dependency, DependencyType, Symbol, SymbolType
     from .base import BaseScanner
+    from .tokenizer import extract_block, strip_comments_and_strings
 except ImportError:
     from models import Dependency, DependencyType, Symbol, SymbolType
     from scanner.base import BaseScanner
+    from scanner.tokenizer import extract_block, strip_comments_and_strings
 
 
 class GoScanner(BaseScanner):
     """
-    Go code scanner using regex.
+    Go code scanner using token-aware regex.
 
     Handles:
     - func Name() {}
@@ -38,6 +41,7 @@ class GoScanner(BaseScanner):
     - interface method extraction and embedding
     - interface implementation detection
     - import "pkg" / import ("pkg1" "pkg2")
+    - HTTP routes (stdlib, chi, gorilla/mux, ServeHTTP)
     """
 
     supported_extensions = [".go"]
@@ -128,15 +132,18 @@ class GoScanner(BaseScanner):
         rel_path = str(file_path)
         file_source_id = f"{self.project}:{rel_path}:file:{file_path.stem}"
 
+        # Pre-compute cleaned source for comment/string-aware matching
+        cleaned = strip_comments_and_strings(content, "go")
+
         self._scan_imports(content, file_source_id, dependencies)
-        self._scan_structs(content, lines, rel_path, symbols, dependencies)
-        self._scan_interfaces(content, lines, rel_path, symbols, dependencies)
-        method_positions = self._scan_methods(content, lines, rel_path, symbols, dependencies)
-        self._scan_functions(content, lines, rel_path, symbols, method_positions)
-        self._scan_type_aliases(content, lines, rel_path, symbols)
+        self._scan_structs(content, cleaned, lines, rel_path, symbols, dependencies)
+        self._scan_interfaces(content, cleaned, lines, rel_path, symbols, dependencies)
+        method_positions = self._scan_methods(content, cleaned, lines, rel_path, symbols, dependencies)
+        self._scan_functions(content, cleaned, lines, rel_path, symbols, method_positions)
+        self._scan_type_aliases(content, cleaned, lines, rel_path, symbols)
         self._extract_const_var(content, lines, rel_path, symbols)
         self._detect_implementations(symbols, dependencies, rel_path)
-        self._scan_http_routes(content, lines, rel_path, symbols)
+        self._scan_http_routes(content, cleaned, lines, rel_path, symbols)
 
         for symbol in symbols:
             symbol.compute_hash()
@@ -154,12 +161,18 @@ class GoScanner(BaseScanner):
                 metadata={"alias": imp.get("alias", "")},
             ))
 
-    def _scan_structs(self, content, lines, rel_path, symbols, dependencies):
-        """Extract struct definitions with embedding detection."""
-        for match in self.STRUCT_PATTERN.finditer(content):
+    def _scan_structs(self, content, cleaned, lines, rel_path, symbols, dependencies):
+        """Extract struct definitions with field extraction via tokenizer."""
+        for match in self.STRUCT_PATTERN.finditer(cleaned):
             name = match.group(1)
-            start_line = content[:match.start()].count('\n') + 1
-            end_line = self._find_block_end(content, match.end(), start_line)
+            start_line = cleaned[:match.start()].count('\n') + 1
+
+            # Use tokenizer to find the opening brace and extract the block
+            brace_pos = content.find('{', match.start())
+            if brace_pos == -1:
+                continue
+            body_text, end_brace_pos = extract_block(content, brace_pos)
+            end_line = content[:end_brace_pos + 1].count('\n') + 1
 
             symbols.append(Symbol(
                 project=self.project, path=rel_path,
@@ -171,20 +184,21 @@ class GoScanner(BaseScanner):
                 exports=[name] if name[0].isupper() else [],
             ))
 
-            body_text = self._extract_body_text(content, match.end(), start_line, end_line)
+            # Strip comments/strings from body for field extraction
+            clean_body = strip_comments_and_strings(body_text, "go")
 
-            # Extract struct fields
-            struct_fields = self._extract_struct_fields(body_text)
+            # Extract struct fields from clean body
+            struct_fields = self._extract_struct_fields(clean_body)
             if struct_fields:
                 symbols[-1].metadata = {"fields": struct_fields}
 
-            self._scan_struct_embeds(body_text, name, start_line, rel_path, dependencies)
+            self._scan_struct_embeds(clean_body, name, start_line, rel_path, dependencies)
 
     def _scan_struct_embeds(self, body_text, struct_name, start_line, rel_path, dependencies):
         """Detect embedded types in struct body."""
         for embed_match in self.EMBED_PATTERN.finditer(body_text):
             raw_line = embed_match.group(0).strip()
-            if raw_line.startswith("//"):
+            if not raw_line:
                 continue
             embedded_type = embed_match.group(1).lstrip('*')
             base_type = embedded_type.split('.')[-1] if '.' in embedded_type else embedded_type
@@ -199,21 +213,42 @@ class GoScanner(BaseScanner):
                 metadata={"kind": "embedding", "embedded_type": embedded_type},
             ))
 
-    def _scan_interfaces(self, content, lines, rel_path, symbols, dependencies):
+    def _scan_interfaces(self, content, cleaned, lines, rel_path, symbols, dependencies):
         """Extract interface definitions with method extraction and embedding."""
-        for match in self.INTERFACE_PATTERN.finditer(content):
+        for match in self.INTERFACE_PATTERN.finditer(cleaned):
             name = match.group(1)
-            start_line = content[:match.start()].count('\n') + 1
-            end_line = self._find_block_end(content, match.end(), start_line)
+            start_line = cleaned[:match.start()].count('\n') + 1
 
-            body_text = self._extract_body_text(content, match.end(), start_line, end_line)
-            iface_methods = [m.group(1) for m in self.INTERFACE_METHOD_PATTERN.finditer(body_text)]
+            # Use tokenizer for clean block extraction
+            brace_pos = content.find('{', match.start())
+            if brace_pos == -1:
+                continue
+            body_text, end_brace_pos = extract_block(content, brace_pos)
+            end_line = content[:end_brace_pos + 1].count('\n') + 1
 
-            for embed_match in self.INTERFACE_EMBED_PATTERN.finditer(body_text):
+            # Strip comments/strings from body for method extraction
+            clean_body = strip_comments_and_strings(body_text, "go")
+
+            # Extract method names and full signatures
+            iface_methods = []
+            method_sigs = []
+            for m in self.INTERFACE_METHOD_PATTERN.finditer(clean_body):
+                method_name = m.group(1)
+                iface_methods.append(method_name)
+                # Extract full signature from original body
+                line_start = body_text.rfind('\n', 0, m.start())
+                line_end = body_text.find('\n', m.start())
+                if line_end == -1:
+                    line_end = len(body_text)
+                sig_line = body_text[line_start + 1:line_end].strip()
+                if sig_line:
+                    method_sigs.append(sig_line)
+
+            for embed_match in self.INTERFACE_EMBED_PATTERN.finditer(clean_body):
                 embedded_name = embed_match.group(1)
                 if embedded_name in iface_methods:
                     continue
-                embed_line = start_line + body_text[:embed_match.start()].count('\n') + 1
+                embed_line = start_line + clean_body[:embed_match.start()].count('\n') + 1
                 dependencies.append(Dependency(
                     source_id=f"{self.project}:{rel_path}:interface:{name}",
                     target_id=f"{self.project}:{rel_path}:interface:{embedded_name}",
@@ -222,7 +257,11 @@ class GoScanner(BaseScanner):
                     metadata={"kind": "interface_embedding"},
                 ))
 
-            symbols.append(Symbol(
+            meta = {}
+            if method_sigs:
+                meta["method_signatures"] = method_sigs
+
+            sym = Symbol(
                 project=self.project, path=rel_path,
                 symbol_type=SymbolType.INTERFACE, name=name,
                 start_line=start_line, end_line=end_line,
@@ -231,20 +270,26 @@ class GoScanner(BaseScanner):
                 language="go",
                 exports=[name] if name[0].isupper() else [],
                 params=iface_methods,
-            ))
+            )
+            if meta:
+                sym.metadata = meta
+            symbols.append(sym)
 
-    def _scan_methods(self, content, lines, rel_path, symbols, dependencies):
+    def _scan_methods(self, content, cleaned, lines, rel_path, symbols, dependencies):
         """Extract methods with receiver. Returns set of method start line positions."""
         method_positions = set()
-        for match in self.METHOD_PATTERN.finditer(content):
+        for match in self.METHOD_PATTERN.finditer(cleaned):
             receiver_type = match.group(2)
             method_name = match.group(3)
-            params = match.group(4) or ""
-            returns = match.group(5) or match.group(6) or ""
+            raw_params = match.group(4) or ""
+            raw_returns = match.group(5) or match.group(6) or ""
 
-            start_line = content[:match.start()].count('\n') + 1
+            start_line = cleaned[:match.start()].count('\n') + 1
             method_positions.add(start_line)
             end_line = self._find_block_end(content, match.end(), start_line)
+
+            # Parse params with full types
+            parsed_params = self._parse_params_with_types(raw_params)
 
             symbols.append(Symbol(
                 project=self.project, path=rel_path,
@@ -254,9 +299,10 @@ class GoScanner(BaseScanner):
                 content=self._extract_block(lines, start_line, end_line),
                 summary=self._extract_doc_comment(lines, start_line - 1),
                 language="go",
-                params=self._parse_params(params),
-                returns=returns.strip(),
+                params=[p["name"] for p in parsed_params] if parsed_params else self._parse_params(raw_params),
+                returns=raw_returns.strip(),
                 imports=[receiver_type],
+                metadata={"param_types": parsed_params} if parsed_params else {},
             ))
 
             dependencies.append(Dependency(
@@ -267,17 +313,19 @@ class GoScanner(BaseScanner):
             ))
         return method_positions
 
-    def _scan_functions(self, content, lines, rel_path, symbols, method_positions):
+    def _scan_functions(self, content, cleaned, lines, rel_path, symbols, method_positions):
         """Extract top-level functions (excluding methods)."""
-        for match in self.FUNC_PATTERN.finditer(content):
-            start_line = content[:match.start()].count('\n') + 1
+        for match in self.FUNC_PATTERN.finditer(cleaned):
+            start_line = cleaned[:match.start()].count('\n') + 1
             if start_line in method_positions:
                 continue
 
             name = match.group(1)
-            params = match.group(2) or ""
-            returns = match.group(3) or match.group(4) or ""
+            raw_params = match.group(2) or ""
+            raw_returns = match.group(3) or match.group(4) or ""
             end_line = self._find_block_end(content, match.end(), start_line)
+
+            parsed_params = self._parse_params_with_types(raw_params)
 
             symbols.append(Symbol(
                 project=self.project, path=rel_path,
@@ -287,20 +335,21 @@ class GoScanner(BaseScanner):
                 summary=self._extract_doc_comment(lines, start_line - 1),
                 language="go",
                 exports=[name] if name[0].isupper() else [],
-                params=self._parse_params(params),
-                returns=returns.strip(),
+                params=[p["name"] for p in parsed_params] if parsed_params else self._parse_params(raw_params),
+                returns=raw_returns.strip(),
+                metadata={"param_types": parsed_params} if parsed_params else {},
             ))
 
-    def _scan_type_aliases(self, content, lines, rel_path, symbols):
+    def _scan_type_aliases(self, content, cleaned, lines, rel_path, symbols):
         """Extract type aliases and named types."""
         captured_lines = {
             s.start_line for s in symbols
             if s.symbol_type in (SymbolType.CLASS, SymbolType.INTERFACE)
         }
-        for match in self.TYPE_ALIAS_PATTERN.finditer(content):
+        for match in self.TYPE_ALIAS_PATTERN.finditer(cleaned):
             name = match.group(1)
             underlying = match.group(2).strip()
-            start_line = content[:match.start()].count('\n') + 1
+            start_line = cleaned[:match.start()].count('\n') + 1
             if start_line in captured_lines:
                 continue
 
@@ -318,7 +367,6 @@ class GoScanner(BaseScanner):
     def _extract_body_text(self, content: str, block_start_pos: int,
                            start_line: int, end_line: int) -> str:
         """Extract the body text between opening { and closing } of a block."""
-        # Find the closing brace position
         depth = 1
         pos = block_start_pos
         while pos < len(content) and depth > 0:
@@ -328,16 +376,13 @@ class GoScanner(BaseScanner):
                 depth -= 1
             if depth > 0:
                 pos += 1
-        # content[block_start_pos:pos] is the body (excluding braces)
         return content[block_start_pos:pos]
 
     def _extract_const_var(self, content: str, lines: list[str],
                            rel_path: str, symbols: list[Symbol]) -> None:
         """Extract const and var declarations (single and block forms)."""
-        # Track positions of block const/var to avoid double-matching
         block_ranges = set()
 
-        # Block form: const ( ... ) or var ( ... )
         for match in self.CONST_VAR_BLOCK_PATTERN.finditer(content):
             block_start_line = content[:match.start()].count('\n') + 1
             block_end_line = block_start_line + match.group(0).count('\n')
@@ -347,7 +392,6 @@ class GoScanner(BaseScanner):
             block_body = match.group(1)
             for entry_match in self.CONST_VAR_ENTRY_PATTERN.finditer(block_body):
                 name = entry_match.group(1)
-                # Skip blank/comment-only entries
                 if name in ('_', ''):
                     continue
                 entry_line = block_start_line + block_body[:entry_match.start()].count('\n') + 1
@@ -364,14 +408,13 @@ class GoScanner(BaseScanner):
                 )
                 symbols.append(symbol)
 
-        # Single form: const Name ... or var Name ...
         for match in self.CONST_VAR_SINGLE_PATTERN.finditer(content):
             start_line = content[:match.start()].count('\n') + 1
             if start_line in block_ranges:
                 continue
             name = match.group(1)
             if name == '(':
-                continue  # This is a block opener, skip
+                continue
             symbol = Symbol(
                 project=self.project,
                 path=rel_path,
@@ -389,20 +432,17 @@ class GoScanner(BaseScanner):
                                 dependencies: list[Dependency],
                                 rel_path: str) -> None:
         """Detect when a struct's method set satisfies an interface's method set."""
-        # Build method sets per receiver type
         struct_methods = {}
         for s in symbols:
             if s.symbol_type == SymbolType.METHOD and "." in s.name:
                 receiver, method = s.name.split(".", 1)
                 struct_methods.setdefault(receiver, set()).add(method)
 
-        # Build interface method sets (from params field)
         interfaces = {}
         for s in symbols:
             if s.symbol_type == SymbolType.INTERFACE and s.params:
                 interfaces[s.name] = set(s.params)
 
-        # Match: if struct has all interface methods -> IMPLEMENTS
         for struct_name, methods in struct_methods.items():
             for iface_name, iface_methods in interfaces.items():
                 if iface_methods and iface_methods.issubset(methods):
@@ -413,24 +453,30 @@ class GoScanner(BaseScanner):
                         source_line=0,
                     ))
 
-    # Struct field pattern: FieldName type (optionally followed by tags)
-    STRUCT_FIELD_PATTERN = re.compile(
-        r'^\s+([A-Z][A-Za-z0-9_]*)\s+(\S+)', re.MULTILINE
+    # Struct field pattern: FieldName Type (optionally followed by tags)
+    # Enhanced to handle pointer types, slices, maps, and complex types
+    _STRUCT_FIELD_RE = re.compile(
+        r'^\s*([A-Z][A-Za-z0-9_]*)\s+'
+        r'(\*?(?:map\[[^\]]+\])?(?:\[\])*\*?[\w.]+(?:\[[^\]]*\])?)',
+        re.MULTILINE
     )
 
     def _extract_struct_fields(self, body_text: str) -> list[dict]:
-        """Extract fields from a struct body."""
+        """Extract fields from a cleaned struct body (comments/strings already stripped)."""
         fields = []
         for line in body_text.splitlines():
             stripped = line.strip()
-            # Skip empty, comments, closing brace, embedded types (no uppercase field name pattern)
-            if not stripped or stripped.startswith("//") or stripped == "}":
+            if not stripped or stripped == '}':
                 continue
-            m = re.match(r'^([A-Z][A-Za-z0-9_]*)\s+(\S+)', stripped)
+
+            m = re.match(
+                r'^([A-Z][A-Za-z0-9_]*)\s+'
+                r'(\*?(?:map\[[^\]]+\])?(?:\[\])*\*?[\w.]+(?:\[[^\]]*\])?)',
+                stripped
+            )
             if m:
                 field_name = m.group(1)
                 field_type = m.group(2).rstrip(',')
-                # Strip json tags if captured
                 if field_type.startswith('`'):
                     continue
                 fields.append({"name": field_name, "type": field_type})
@@ -440,67 +486,113 @@ class GoScanner(BaseScanner):
     STDLIB_ROUTE_PATTERN = re.compile(
         r'\.HandleFunc\(\s*"((?:GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+)?(/[^"]*)"',
     )
+    STDLIB_HANDLE_PATTERN = re.compile(
+        r'\.Handle\(\s*"((?:GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+)?(/[^"]*)"',
+    )
     FRAMEWORK_ROUTE_PATTERN = re.compile(
         r'\.(Get|Post|Put|Patch|Delete|Options|Head)\(\s*"(/[^"]*)"',
         re.IGNORECASE,
     )
+    # chi router: r.Route("/prefix", func(r chi.Router) { ... })
+    CHI_ROUTE_PATTERN = re.compile(
+        r'\.Route\(\s*"(/[^"]*)"',
+    )
+    # gorilla/mux: router.HandleFunc("/path", handler).Methods("GET")
+    GORILLA_METHODS_PATTERN = re.compile(
+        r'\.HandleFunc\(\s*"(/[^"]*)"[^)]*\)\s*\.Methods\(\s*"([^"]+)"',
+    )
+    # ServeHTTP method pattern (struct implements http.Handler)
+    SERVE_HTTP_PATTERN = re.compile(
+        r'^func\s+\(\s*\w+\s+\*?(\w+)\s*\)\s+ServeHTTP\s*\(',
+        re.MULTILINE,
+    )
 
-    def _scan_http_routes(self, content: str, lines: list[str],
+    def _scan_http_routes(self, content: str, cleaned: str, lines: list[str],
                           rel_path: str, symbols: list[Symbol]) -> None:
-        """Detect HTTP route registrations (stdlib + frameworks)."""
-        # stdlib: mux.HandleFunc("GET /path", handler) or http.HandleFunc("/path", handler)
-        for match in self.STDLIB_ROUTE_PATTERN.finditer(content):
+        """Detect HTTP route registrations (stdlib + frameworks).
+        Uses cleaned source to avoid matching routes inside comments/strings."""
+        # stdlib: mux.HandleFunc("GET /path", handler)
+        for match in self.STDLIB_ROUTE_PATTERN.finditer(cleaned):
             method_prefix = match.group(1) or ""
             path = match.group(2)
             method = method_prefix.strip() if method_prefix else "GET"
-            start_line = content[:match.start()].count('\n') + 1
+            start_line = cleaned[:match.start()].count('\n') + 1
 
-            # Try to extract handler name from after the path
             after = content[match.end():]
             handler_match = re.match(r'\s*,\s*(\w+(?:\.\w+)*)', after)
             handler = handler_match.group(1) if handler_match else ""
 
-            api_name = f"{method} {path}"
-            sym = Symbol(
-                project=self.project, path=rel_path,
-                symbol_type=SymbolType.API, name=api_name,
-                start_line=start_line, end_line=start_line,
-                content=self._extract_block(lines, start_line, start_line),
-                summary=f"{method} {path} -> {handler}",
-                language="go",
-            )
-            sym.metadata = {"method": method, "path": path, "handler": handler}
-            sym.compute_hash()
-            symbols.append(sym)
+            self._add_route_symbol(method, path, handler, start_line, lines, rel_path, symbols)
 
-        # Frameworks: r.GET("/path", handler), e.POST("/path", handler), etc.
-        for match in self.FRAMEWORK_ROUTE_PATTERN.finditer(content):
+        # stdlib: http.Handle("/path", handler)
+        for match in self.STDLIB_HANDLE_PATTERN.finditer(cleaned):
+            method_prefix = match.group(1) or ""
+            path = match.group(2)
+            method = method_prefix.strip() if method_prefix else "GET"
+            start_line = cleaned[:match.start()].count('\n') + 1
+
+            after = content[match.end():]
+            handler_match = re.match(r'\s*,\s*(\w+(?:\.\w+)*)', after)
+            handler = handler_match.group(1) if handler_match else ""
+
+            self._add_route_symbol(method, path, handler, start_line, lines, rel_path, symbols)
+
+        # gorilla/mux: router.HandleFunc("/path", handler).Methods("GET")
+        for match in self.GORILLA_METHODS_PATTERN.finditer(cleaned):
+            path = match.group(1)
+            method = match.group(2).upper()
+            start_line = cleaned[:match.start()].count('\n') + 1
+            self._add_route_symbol(method, path, "", start_line, lines, rel_path, symbols)
+
+        # Frameworks: r.Get("/path", handler), e.Post("/path", handler), etc.
+        for match in self.FRAMEWORK_ROUTE_PATTERN.finditer(cleaned):
             method = match.group(1).upper()
             path = match.group(2)
-            start_line = content[:match.start()].count('\n') + 1
+            start_line = cleaned[:match.start()].count('\n') + 1
 
             after = content[match.end():]
             handler_match = re.match(r'\s*,\s*(\w+(?:\.\w+)*)', after)
             handler = handler_match.group(1) if handler_match else ""
 
-            api_name = f"{method} {path}"
-            sym = Symbol(
-                project=self.project, path=rel_path,
-                symbol_type=SymbolType.API, name=api_name,
-                start_line=start_line, end_line=start_line,
-                content=self._extract_block(lines, start_line, start_line),
-                summary=f"{method} {path} -> {handler}",
-                language="go",
-            )
-            sym.metadata = {"method": method, "path": path, "handler": handler}
-            sym.compute_hash()
-            symbols.append(sym)
+            self._add_route_symbol(method, path, handler, start_line, lines, rel_path, symbols)
+
+        # chi: r.Route("/prefix", ...)
+        for match in self.CHI_ROUTE_PATTERN.finditer(cleaned):
+            path = match.group(1)
+            start_line = cleaned[:match.start()].count('\n') + 1
+            self._add_route_symbol("GROUP", path, "", start_line, lines, rel_path, symbols)
+
+        # ServeHTTP: func (s *Server) ServeHTTP(w, r) — marks struct as HTTP handler
+        for match in self.SERVE_HTTP_PATTERN.finditer(cleaned):
+            receiver = match.group(1)
+            start_line = cleaned[:match.start()].count('\n') + 1
+            self._add_route_symbol("HANDLER", f"/{receiver}", receiver, start_line, lines, rel_path, symbols)
+
+    def _add_route_symbol(self, method: str, path: str, handler: str,
+                          start_line: int, lines: list[str], rel_path: str,
+                          symbols: list[Symbol]) -> None:
+        """Helper to create and add an API route symbol."""
+        api_name = f"{method} {path}"
+        # Deduplicate by name+line
+        for existing in symbols:
+            if existing.symbol_type == SymbolType.API and existing.name == api_name and existing.start_line == start_line:
+                return
+        sym = Symbol(
+            project=self.project, path=rel_path,
+            symbol_type=SymbolType.API, name=api_name,
+            start_line=start_line, end_line=start_line,
+            content=self._extract_block(lines, start_line, start_line),
+            summary=f"{method} {path} -> {handler}",
+            language="go",
+        )
+        sym.metadata = {"method": method, "path": path, "handler": handler}
+        sym.compute_hash()
+        symbols.append(sym)
 
     def _extract_imports(self, content: str) -> list[dict]:
         """Extract import statements."""
         imports = []
 
-        # Single imports: import "pkg"
         for match in self.IMPORT_SINGLE_PATTERN.finditer(content):
             line = content[:match.start()].count('\n') + 1
             imports.append({
@@ -509,7 +601,6 @@ class GoScanner(BaseScanner):
                 "line": line,
             })
 
-        # Import blocks: import ( "pkg1" "pkg2" )
         for match in self.IMPORT_BLOCK_PATTERN.finditer(content):
             block_start = content[:match.start()].count('\n') + 1
             block_content = match.group(1)
@@ -530,14 +621,55 @@ class GoScanner(BaseScanner):
         return imports
 
     def _find_block_end(self, content: str, start_pos: int, start_line: int) -> int:
-        """Find matching closing brace."""
+        """Find matching closing brace (token-aware)."""
         depth = 1
         pos = start_pos
-        while pos < len(content) and depth > 0:
-            if content[pos] == '{':
+        length = len(content)
+        while pos < length and depth > 0:
+            c = content[pos]
+
+            # Skip line comments
+            if c == '/' and pos + 1 < length and content[pos + 1] == '/':
+                pos += 2
+                while pos < length and content[pos] != '\n':
+                    pos += 1
+                continue
+
+            # Skip block comments
+            if c == '/' and pos + 1 < length and content[pos + 1] == '*':
+                pos += 2
+                while pos < length:
+                    if content[pos] == '*' and pos + 1 < length and content[pos + 1] == '/':
+                        pos += 2
+                        break
+                    pos += 1
+                continue
+
+            # Skip strings
+            if c in ('"', "'", '`'):
+                quote = c
+                pos += 1
+                if quote == '`':
+                    while pos < length and content[pos] != '`':
+                        pos += 1
+                    if pos < length:
+                        pos += 1
+                else:
+                    while pos < length:
+                        if content[pos] == '\\' and pos + 1 < length:
+                            pos += 2
+                            continue
+                        if content[pos] == quote:
+                            pos += 1
+                            break
+                        pos += 1
+                continue
+
+            if c == '{':
                 depth += 1
-            elif content[pos] == '}':
+            elif c == '}':
                 depth -= 1
+
             pos += 1
 
         return start_line + content[start_pos:pos].count('\n')
@@ -567,18 +699,71 @@ class GoScanner(BaseScanner):
         return summary
 
     def _parse_params(self, params_str: str) -> list[str]:
-        """Parse Go function parameters."""
+        """Parse Go function parameters (names only)."""
         if not params_str.strip():
             return []
 
         params = []
-        # Simple split by comma, handling types
         for param in params_str.split(","):
             param = param.strip()
             if param:
-                # Take the param name (first word before type)
                 parts = param.split()
                 if parts:
                     params.append(parts[0])
+
+        return params
+
+    def _parse_params_with_types(self, params_str: str) -> list[dict]:
+        """Parse Go function parameters with full type info.
+
+        Go allows grouped types: (a, b int, c string) meaning a and b are both int.
+        Returns list of {"name": ..., "type": ...} dicts.
+        """
+        if not params_str.strip():
+            return []
+
+        params = []
+        # Split by comma, handling parentheses for func types
+        parts = []
+        depth = 0
+        current = []
+        for ch in params_str:
+            if ch in ('(', '['):
+                depth += 1
+                current.append(ch)
+            elif ch in (')', ']'):
+                depth -= 1
+                current.append(ch)
+            elif ch == ',' and depth == 0:
+                parts.append(''.join(current).strip())
+                current = []
+            else:
+                current.append(ch)
+        if current:
+            parts.append(''.join(current).strip())
+
+        # Process each part
+        pending_names = []
+        for part in parts:
+            tokens = part.split(None, 1)
+            if len(tokens) == 2:
+                name, type_str = tokens[0], tokens[1]
+                # Check if name looks like a type (no actual name given)
+                if name.startswith('*') or name.startswith('[') or name.startswith('map['):
+                    # This is a type-only param
+                    params.append({"name": name, "type": ""})
+                else:
+                    # Assign type to any pending names
+                    for pn in pending_names:
+                        params.append({"name": pn, "type": type_str})
+                    pending_names = []
+                    params.append({"name": name, "type": type_str})
+            elif len(tokens) == 1:
+                # Could be just a name (type comes later) or a type-only param
+                pending_names.append(tokens[0])
+
+        # Any remaining pending names without types
+        for pn in pending_names:
+            params.append({"name": pn, "type": ""})
 
         return params

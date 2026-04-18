@@ -65,4 +65,25 @@ flyto-indexer exposes 5 consolidated tools. Each one auto-enriches results with 
 - **Go**: Struct field extraction + HTTP handler detection (stdlib, gin, echo, fiber)
 - **TypeScript**: Interface/type field extraction + backend route detection (Express, Hono, Fastify)
 - Symbol metadata now includes `fields` key for classes/interfaces/structs
+
+### Secret / License / Documentation scanners
+- `flyto-index secrets .` — 18 regex patterns, false positive filtering for docs/examples/HTML
+- `flyto-index license .` — project + dependency license detection, copyleft warning
+- `flyto-index docs .` — README scoring, API/module/inline doc coverage, suggestions
+- All integrated into `project_profile` output and available as MCP tools
+
+### Design principle
+**Zero external dependencies.** flyto-indexer runs on pure Python stdlib only.
+Features that need external APIs (CVE databases, GitHub API, embedding models)
+belong in flyto-code's engine layer, not here.
+
+### Roadmap (all stdlib, no external deps)
+- [ ] Go/TypeScript token-aware scanning (upgrade from regex) — in progress
+- [ ] Call graph — function-level call chain, not just import/reference
+- [ ] PR risk analysis — git diff → impact score, affected tests, breaking change detection
+- [ ] Cross-repo analysis — shared package version drift, API contract comparison
+- [ ] Data flow / taint-lite — source → variable → sink tracking
+- [ ] Framework-aware analysis — Next.js, Nuxt, FastAPI, Express convention detection
+- [ ] Dead code confidence scoring — definitely/probably/unknown instead of binary
+- [ ] Config analysis — .env, docker-compose, CI workflow structure and risk
 <!-- flyto-indexer end -->
