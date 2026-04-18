@@ -1,5 +1,7 @@
 """
 Vue SFC (Single File Component) scanner.
+
+Uses the tokenizer for script block analysis (token-aware comment/string skipping).
 """
 
 import re
@@ -9,9 +11,41 @@ from typing import Optional
 try:
     from ..models import Dependency, DependencyType, Symbol, SymbolType
     from .base import BaseScanner
+    from .tokenizer import strip_comments_and_strings
 except ImportError:
     from models import Dependency, DependencyType, Symbol, SymbolType
     from scanner.base import BaseScanner
+    from scanner.tokenizer import strip_comments_and_strings
+
+# Standard HTML elements — anything not in this set is a component reference
+_HTML_ELEMENTS = frozenset({
+    "a", "abbr", "address", "area", "article", "aside", "audio", "b", "base",
+    "bdi", "bdo", "blockquote", "body", "br", "button", "canvas", "caption",
+    "cite", "code", "col", "colgroup", "data", "datalist", "dd", "del",
+    "details", "dfn", "dialog", "div", "dl", "dt", "em", "embed", "fieldset",
+    "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5",
+    "h6", "head", "header", "hgroup", "hr", "html", "i", "iframe", "img",
+    "input", "ins", "kbd", "label", "legend", "li", "link", "main", "map",
+    "mark", "menu", "meta", "meter", "nav", "noscript", "object", "ol",
+    "optgroup", "option", "output", "p", "param", "picture", "pre",
+    "progress", "q", "rp", "rt", "ruby", "s", "samp", "script", "search",
+    "section", "select", "slot", "small", "source", "span", "strong",
+    "style", "sub", "summary", "sup", "table", "tbody", "td", "template",
+    "textarea", "tfoot", "th", "thead", "time", "title", "tr", "track",
+    "u", "ul", "var", "video", "wbr",
+    # SVG elements
+    "svg", "path", "circle", "rect", "line", "polyline", "polygon", "ellipse",
+    "g", "defs", "use", "text", "tspan", "image", "clippath", "mask",
+    "pattern", "filter", "lineargradient", "radialgradient", "stop",
+    "feblend", "fecolormatrix", "fecomponenttransfer", "fecomposite",
+    "feconvolvematrix", "fediffuselighting", "fedisplacementmap", "feflood",
+    "fegaussianblur", "feimage", "femerge", "femergenode", "femorphology",
+    "feoffset", "fespecularlighting", "fetile", "feturbulence",
+    "foreignobject", "animate", "animatetransform", "set",
+    # Vue built-in elements
+    "component", "transition", "transition-group", "keep-alive",
+    "teleport", "suspense",
+})
 
 
 class VueScanner(BaseScanner):
@@ -21,12 +55,15 @@ class VueScanner(BaseScanner):
     Extracts:
     - component (entire component)
     - template (template block)
-    - From script setup:
+    - From script setup (token-aware):
       - imports
       - composables (use*)
       - refs/reactive
       - computed
       - functions
+      - props with types (defineProps)
+      - emits (defineEmits)
+    - Template component references (PascalCase and kebab-case)
     """
 
     supported_extensions = [".vue"]
@@ -59,9 +96,18 @@ class VueScanner(BaseScanner):
         comp_symbol.compute_hash()
         symbols.append(comp_symbol)
 
+        # Metadata to accumulate
+        meta_props = []
+        meta_emits = []
+        meta_composables = []
+        meta_template_refs = []
+
         if script:
             script_content = script["content"]
             script_start = script["start_line"]
+
+            # Use tokenizer to strip comments/strings for reliable matching
+            cleaned = strip_comments_and_strings(script_content, "ts")
 
             # Extract imports
             imports = self._extract_imports(script_content)
@@ -86,8 +132,11 @@ class VueScanner(BaseScanner):
                         )
                         dependencies.append(dep2)
 
-            # Extract functions from script
-            funcs = self._extract_functions(script_content, script_start)
+            # Extract composable calls from cleaned source (use* calls)
+            meta_composables = self._extract_composables(cleaned)
+
+            # Extract functions from script (using cleaned source)
+            funcs = self._extract_functions_token_aware(script_content, cleaned, script_start)
             for func in funcs:
                 func_symbol = Symbol(
                     project=self.project,
@@ -102,12 +151,12 @@ class VueScanner(BaseScanner):
                 func_symbol.compute_hash()
                 symbols.append(func_symbol)
 
-            # Extract calls (function invocations)
-            calls = self._extract_calls(script_content, script_start)
+            # Extract calls using cleaned source
+            calls = self._extract_calls_token_aware(cleaned, script_start)
             for call in calls:
                 dep = Dependency(
                     source_id=comp_symbol.id,
-                    target_id=call["name"],  # Raw call name, resolved later
+                    target_id=call["name"],
                     dep_type=DependencyType.CALLS,
                     source_line=call["line"],
                     metadata={"raw_call": True},
@@ -130,17 +179,26 @@ class VueScanner(BaseScanner):
                 )
                 dependencies.append(dep)
 
-            # Extract defineProps/defineEmits
-            props_emits = self._extract_props_emits(script_content)
-            comp_symbol.metadata = {
-                "props": props_emits.get("props", []),
-                "emits": props_emits.get("emits", []),
-            }
+            # Extract defineProps/defineEmits with types
+            props_emits = self._extract_props_emits(script_content, cleaned)
+            meta_props = props_emits.get("props", [])
+            meta_emits = props_emits.get("emits", [])
+
+            # Try to extract component name from defineComponent({name: ...})
+            name_match = re.search(
+                r'defineComponent\s*\(\s*\{[^}]*name\s*:\s*[\'"](\w+)[\'"]',
+                script_content, re.DOTALL,
+            )
+            if name_match:
+                explicit_name = name_match.group(1)
+                comp_symbol.name = explicit_name
+                comp_symbol.exports = [explicit_name]
 
         # Extract component references from template
         if template:
-            template_refs = self._extract_template_component_refs(template["content"])
-            for ref_name, ref_line in template_refs:
+            template_refs_with_lines = self._extract_template_component_refs(template["content"])
+            meta_template_refs = list({name for name, _ in template_refs_with_lines})
+            for ref_name, ref_line in template_refs_with_lines:
                 dep = Dependency(
                     source_id=comp_symbol.id,
                     target_id=ref_name,
@@ -150,18 +208,38 @@ class VueScanner(BaseScanner):
                 )
                 dependencies.append(dep)
 
+        # Store enriched metadata
+        comp_symbol.metadata = {
+            "props": meta_props,
+            "emits": meta_emits,
+            "composables": meta_composables,
+            "template_refs": sorted(meta_template_refs),
+        }
+
         # Generate summary
         comp_symbol.summary = self._generate_summary(
-            component_name, template, script, dependencies
+            comp_symbol.name, template, script, dependencies
         )
 
         return symbols, dependencies
+
+    def _extract_composables(self, cleaned: str) -> list[str]:
+        """Extract composable calls (use*) from cleaned script source."""
+        composables = []
+        seen = set()
+        for match in re.finditer(r'\b(use[A-Z]\w*)\s*\(', cleaned):
+            name = match.group(1)
+            if name not in seen:
+                seen.add(name)
+                composables.append(name)
+        return composables
 
     def _extract_template_component_refs(self, template_content: str) -> list[tuple[str, int]]:
         """
         Extract component references from Vue template.
 
         Detects PascalCase tags like <MyComponent />, <RouterLink>, etc.
+        Also detects kebab-case tags that aren't standard HTML elements.
         Returns list of (component_name, relative_line_number).
         """
         refs = []
@@ -179,8 +257,11 @@ class VueScanner(BaseScanner):
         # Also match kebab-case component tags: <my-component>
         # (Vue auto-resolves PascalCase imports to kebab-case usage)
         for match in re.finditer(r'<([a-z][\w]*(?:-[\w]+)+)', template_content):
-            # Convert kebab-case to PascalCase
             kebab_name = match.group(1)
+            # Skip standard HTML elements
+            if kebab_name.lower() in _HTML_ELEMENTS:
+                continue
+            # Convert kebab-case to PascalCase
             pascal_name = ''.join(word.capitalize() for word in kebab_name.split('-'))
             if pascal_name not in seen:
                 seen.add(pascal_name)
@@ -239,44 +320,39 @@ class VueScanner(BaseScanner):
 
         return imports
 
-    def _extract_functions(self, script: str, offset: int) -> list[dict]:
-        """Extract function definitions"""
+    def _extract_functions_token_aware(self, script: str, cleaned: str, offset: int) -> list[dict]:
+        """Extract function definitions using token-aware cleaned source."""
         functions = []
         lines = script.splitlines()
 
-        # Match function xxx() or const xxx = () =>
-        # Simplified version, only matches single-line definition starts
-        for i, line in enumerate(lines):
-            # function xxx()
-            match = re.match(r"\s*(async\s+)?function\s+(\w+)\s*\(", line)
-            if match:
-                func_name = match.group(2)
-                # Find function end (simplified: find next same-level })
-                end_line = self._find_block_end(lines, i)
-                content = "\n".join(lines[i:end_line + 1])
-                functions.append({
-                    "name": func_name,
-                    "start_line": offset + i + 1,
-                    "end_line": offset + end_line + 1,
-                    "content": content,
-                })
-                continue
+        # function xxx()
+        for match in re.finditer(r'^\s*(async\s+)?function\s+(\w+)\s*\(', cleaned, re.MULTILINE):
+            func_name = match.group(2)
+            start_line_idx = cleaned[:match.start()].count('\n')
+            end_line_idx = self._find_block_end(lines, start_line_idx)
+            content = "\n".join(lines[start_line_idx:end_line_idx + 1])
+            functions.append({
+                "name": func_name,
+                "start_line": offset + start_line_idx + 1,
+                "end_line": offset + end_line_idx + 1,
+                "content": content,
+            })
 
-            # const xxx = () => or const xxx = async () =>
-            match = re.match(
-                r"\s*const\s+(\w+)\s*=\s*(async\s+)?\([^)]*\)\s*=>",
-                line
-            )
-            if match:
-                func_name = match.group(1)
-                end_line = self._find_block_end(lines, i)
-                content = "\n".join(lines[i:end_line + 1])
-                functions.append({
-                    "name": func_name,
-                    "start_line": offset + i + 1,
-                    "end_line": offset + end_line + 1,
-                    "content": content,
-                })
+        # const xxx = () => or const xxx = async () =>
+        for match in re.finditer(
+            r'^\s*const\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::\s*[^=]+)?\s*=>',
+            cleaned, re.MULTILINE,
+        ):
+            func_name = match.group(1)
+            start_line_idx = cleaned[:match.start()].count('\n')
+            end_line_idx = self._find_block_end(lines, start_line_idx)
+            content = "\n".join(lines[start_line_idx:end_line_idx + 1])
+            functions.append({
+                "name": func_name,
+                "start_line": offset + start_line_idx + 1,
+                "end_line": offset + end_line_idx + 1,
+                "content": content,
+            })
 
         return functions
 
@@ -299,70 +375,101 @@ class VueScanner(BaseScanner):
 
         return len(lines) - 1
 
-    def _extract_props_emits(self, script: str) -> dict:
-        """Extract defineProps and defineEmits"""
+    def _extract_props_emits(self, script: str, cleaned: str) -> dict:
+        """Extract defineProps and defineEmits with type information.
+
+        Supports:
+        - defineProps<{ name: Type }>()
+        - defineProps({ name: { type: String, ... } })
+        - defineProps(['prop1', 'prop2'])
+        - defineEmits<{ (e: 'event'): void }>()
+        - defineEmits(['event1', 'event2'])
+        """
         result = {"props": [], "emits": []}
 
-        # defineProps
-        match = re.search(r"defineProps<\{([^}]+)\}>", script, re.DOTALL)
-        if match:
-            # Simplified parsing: extract property names
-            props_str = match.group(1)
-            props = re.findall(r"(\w+)\s*[?:]", props_str)
-            result["props"] = props
+        # --- defineProps ---
 
-        # defineEmits
-        match = re.search(r"defineEmits<\{([^}]+)\}>", script, re.DOTALL)
+        # Type-based: defineProps<{ name: string; count?: number }>()
+        match = re.search(r"defineProps\s*<\s*\{([^}]+)\}\s*>", script, re.DOTALL)
+        if match:
+            props_str = match.group(1)
+            for pm in re.finditer(r"(\w+)\s*(\?)?\s*:\s*([^;\n,]+)", props_str):
+                prop_name = pm.group(1)
+                optional = bool(pm.group(2))
+                prop_type = pm.group(3).strip().rstrip(";,")
+                entry = {"name": prop_name, "type": prop_type}
+                if optional:
+                    entry["optional"] = True
+                result["props"].append(entry)
+        else:
+            # Object syntax: defineProps({ name: { type: String, default: '' } })
+            match = re.search(r"defineProps\s*\(\s*\{(.+?)\}\s*\)", script, re.DOTALL)
+            if match:
+                props_body = match.group(1)
+                # Match prop: { type: X } or prop: X
+                for pm in re.finditer(
+                    r"(\w+)\s*:\s*(?:\{[^}]*type\s*:\s*(\w+)[^}]*\}|(\w+))",
+                    props_body,
+                ):
+                    prop_name = pm.group(1)
+                    prop_type = pm.group(2) or pm.group(3) or "unknown"
+                    result["props"].append({"name": prop_name, "type": prop_type})
+            else:
+                # Array syntax: defineProps(['prop1', 'prop2'])
+                match = re.search(r"defineProps\s*\(\s*\[([^\]]+)\]", script)
+                if match:
+                    for pm in re.finditer(r"['\"](\w+)['\"]", match.group(1)):
+                        result["props"].append({"name": pm.group(1), "type": "any"})
+
+        # --- defineEmits ---
+
+        # Type-based: defineEmits<{ (e: 'update', value: string): void }>()
+        match = re.search(r"defineEmits\s*<\s*\{([^}]+)\}\s*>", script, re.DOTALL)
         if match:
             emits_str = match.group(1)
-            emits = re.findall(r"\(e:\s*['\"](\w+)['\"]", emits_str)
-            result["emits"] = emits
+            for em in re.finditer(r"\(e:\s*['\"](\w+)['\"]", emits_str):
+                result["emits"].append(em.group(1))
+        else:
+            # Array syntax: defineEmits(['event1', 'event2'])
+            match = re.search(r"defineEmits\s*\(\s*\[([^\]]+)\]", script)
+            if match:
+                for em in re.finditer(r"['\"](\w+)['\"]", match.group(1)):
+                    result["emits"].append(em.group(1))
 
         return result
 
-    def _extract_calls(self, script: str, offset: int) -> list[dict]:
+    def _extract_calls_token_aware(self, cleaned: str, offset: int) -> list[dict]:
         """
-        Extract function calls
+        Extract function calls using token-aware cleaned source.
 
-        Args:
-            script: Script content
-            offset: Line offset (script start line)
-
-        Returns:
-            List of dicts with 'name' and 'line' keys
+        Uses cleaned source to avoid false positives from strings/comments.
         """
         calls = []
         seen = set()
 
-        # Keywords to skip
         skip_keywords = {
             'if', 'for', 'while', 'switch', 'catch', 'function', 'return',
             'new', 'typeof', 'instanceof', 'delete', 'void', 'throw',
             'async', 'await', 'import', 'export', 'from', 'class',
             'const', 'let', 'var', 'else', 'try', 'finally',
+            'defineProps', 'defineEmits', 'defineExpose', 'defineOptions',
+            'defineSlots', 'defineModel', 'withDefaults',
         }
 
-        # Skip common built-ins
         skip_builtins = {
             'console', 'Math', 'JSON', 'Object', 'Array', 'String',
             'Number', 'Boolean', 'Date', 'Promise', 'Error',
         }
 
-        # Match function calls
         pattern = r'(\b[a-zA-Z_$][\w$]*(?:\.[a-zA-Z_$][\w$]*)*)\s*\('
 
-        for match in re.finditer(pattern, script):
+        for match in re.finditer(pattern, cleaned):
             name = match.group(1)
-            rel_line = script[:match.start()].count('\n') + 1
+            rel_line = cleaned[:match.start()].count('\n') + 1
             line = offset + rel_line
 
             first_part = name.split('.')[0]
             if first_part in skip_keywords or first_part in skip_builtins:
-                continue
-
-            # Skip if inside string (simple check)
-            before = script[max(0, match.start()-50):match.start()]
-            if before.count('"') % 2 == 1 or before.count("'") % 2 == 1:
                 continue
 
             key = (name, line)
@@ -455,6 +562,7 @@ class VueScanner(BaseScanner):
             d.target_id.split(":")[-1]
             for d in dependencies
             if d.dep_type == DependencyType.USES
+            and not d.metadata.get("template_ref")
         ]
         if composables:
             parts.append(f"Uses: {', '.join(composables)}")

@@ -270,6 +270,142 @@ _PATTERN_SIGNALS = {
 }
 
 
+def _classify_project_type(
+    languages: dict,
+    api_definitions: list,
+    components: int,
+    dep_names: set,
+    patterns: list,
+    entry_points: list,
+    all_files: list,
+) -> dict:
+    """Classify project as frontend, backend, fullstack, library, cli, mobile, static, unknown.
+
+    Returns {"type": "...", "sub_type": "..."}.
+    """
+    dep_names_lower = {d.lower().replace("-", "_").replace("/", "_") for d in dep_names if d}
+
+    # Backend signals
+    # Server entry points: files named server/worker/app at top level (not in tests/examples/src/)
+    _server_basenames = {"server.py", "server.ts", "server.js", "server.go",
+                         "worker.py", "worker.ts", "worker.js", "worker.go",
+                         "app.py", "app.ts", "app.js", "app.go",
+                         "main.go", "main.py"}
+    has_server_entry = any(
+        os.path.basename(ep).lower() in _server_basenames
+        and not any(ep.lower().startswith(skip) for skip in ("test", "example", "benchmark"))
+        for ep in entry_points
+    )
+    # Also check for main_*.py entry points (flyto-cloud pattern)
+    has_server_entry = has_server_entry or any(
+        os.path.basename(ep).lower().startswith("main_") for ep in entry_points
+    )
+    # Web framework deps are a strong backend signal
+    web_framework_deps = {"fastapi", "flask", "django", "express", "koa", "hono", "gin",
+                          "echo", "fiber", "actix_web", "rocket", "spring_boot",
+                          "uvicorn", "gunicorn", "nest", "nestjs"}
+    has_web_framework = bool(web_framework_deps & dep_names_lower)
+
+    # cmd/server/ pattern (Go convention)
+    has_cmd_server = any("cmd/server" in ep.lower() or "cmd/worker" in ep.lower() for ep in entry_points)
+
+    has_backend = (
+        (len(api_definitions) > 0 and (has_server_entry or has_web_framework))
+        or "api_server" in patterns
+        or (has_server_entry and has_web_framework)
+        or has_cmd_server  # Go-style cmd/server/ is a definitive backend signal
+    )
+
+    frontend_deps = {"react", "vue", "angular", "svelte", "next", "nuxt",
+                     "react_dom", "vue_router", "svelte_kit", "solid_js",
+                     "@angular_core", "angular_core"}
+    has_frontend = components > 0 or bool(frontend_deps & dep_names_lower)
+
+    ep_names_lower = [ep.lower() for ep in entry_points]
+    has_cli_entry = any("cli" in ep or "__main__" in ep for ep in ep_names_lower)
+
+    # Check for publishable library markers
+    publishable_files = {"setup.py", "pyproject.toml", "package.json", "Cargo.toml", "go.mod"}
+    has_publishable = any(f in all_files for f in publishable_files)
+
+    # A library is a publishable package whose primary purpose is providing code to others.
+    # Key signals that override "library": Docker deployment, cmd/server/ structure, web framework
+    # as primary dep (not just optional/dev), or main server entry point at project root.
+    has_deployment = "containerization" in patterns or any(
+        f.lower().startswith("dockerfile") or f.lower() == "docker-compose.yml"
+        for f in all_files
+    )
+    is_library = (
+        not has_frontend
+        and has_publishable
+        and not has_cmd_server
+        and not (has_deployment and has_server_entry)
+    )
+
+    # Pure CLI: has cli entry but NOT a library or backend
+    has_cli = has_cli_entry and not has_frontend and not has_backend and not is_library
+
+    is_mobile = "Dart" in languages or "Swift" in languages or "Kotlin" in languages
+    is_static = not has_backend and not has_frontend and "HTML" in languages
+
+    # Primary classification
+    if has_backend and has_frontend:
+        project_type = "fullstack"
+    elif has_backend and not is_library:
+        project_type = "backend"
+    elif has_frontend:
+        project_type = "frontend"
+    elif is_mobile:
+        project_type = "mobile"
+    elif is_library:
+        project_type = "library"
+    elif has_cli:
+        project_type = "cli"
+    elif is_static:
+        project_type = "static"
+    else:
+        project_type = "unknown"
+
+    # Sub-classification
+    sub_type = ""
+    if project_type == "backend":
+        if "api_server" in patterns or "api_gateway" in patterns or has_cmd_server:
+            sub_type = "api_server"
+        elif any("worker" in ep for ep in ep_names_lower):
+            sub_type = "worker"
+        else:
+            sub_type = "microservice"
+    elif project_type == "frontend":
+        ssr_deps = {"next", "nuxt", "svelte_kit", "remix", "gatsby", "astro"}
+        component_lib_signals = (
+            not any(f for f in all_files if f.endswith(("index.html", "app.vue", "App.vue", "App.tsx")))
+            and components > 5
+        )
+        if ssr_deps & dep_names_lower:
+            sub_type = "ssr"
+        elif component_lib_signals:
+            sub_type = "component_library"
+        else:
+            sub_type = "spa"
+    elif project_type == "library":
+        # SDK: has client/interface abstractions, meant to be consumed programmatically
+        has_interfaces = any("interface" in f.lower() or "client" in f.lower()
+                             for f in all_files if not f.startswith(".") and not f.startswith("test"))
+        has_sdk_structure = any("sdk" in f.lower() for f in all_files) or has_interfaces
+        if has_sdk_structure or len(api_definitions) > 0:
+            sub_type = "sdk"
+        else:
+            # Framework: has middleware, plugin, provider patterns
+            framework_signals = {"middleware", "plugin", "hook", "provider", "adapter"}
+            file_basenames = {os.path.basename(f).lower().split(".")[0] for f in all_files}
+            if framework_signals & file_basenames:
+                sub_type = "framework"
+            else:
+                sub_type = "utility"
+
+    return {"type": project_type, "sub_type": sub_type}
+
+
 def _detect_patterns(all_files: list, dep_names: set,
                      index_data: dict | None = None) -> list:
     """Detect architectural patterns from file paths, dependency names, and index symbols."""
@@ -501,7 +637,10 @@ def _extract_from_index(project_path: Path) -> dict:
         "models": [],
         "symbol_counts": {},
         "entry_points": [],
-        "module_graph": [],
+        "module_graph": [],          # top 10 for display
+        "module_graph_full": [],     # ALL connections (JSON output)
+        "module_graph_summary": {},  # summary stats
+        "complexity_summary": {},    # complexity stats
     }
 
     index_dir = project_path / ".flyto-index"
@@ -644,7 +783,7 @@ def _extract_from_index(project_path: Path) -> dict:
             entry_files.add(path)
     result["entry_points"] = sorted(entry_files)
 
-    # --- Module graph (top 50 strongest connections) ---
+    # --- Module graph (full + summary) ---
     # Build file-to-file import counts from dependencies
     file_connections = Counter()
     for dep_key, dep_info in dependencies.items():
@@ -680,12 +819,199 @@ def _extract_from_index(project_path: Path) -> dict:
                 pair = (source_file, target_file)
                 file_connections[pair] += 1
 
-    result["module_graph"] = [
+    # Full graph (all connections) for JSON output
+    all_connections = [
         {"source_file": pair[0], "target_file": pair[1], "import_count": count}
-        for pair, count in file_connections.most_common(50)
+        for pair, count in file_connections.most_common()
     ]
+    result["module_graph_full"] = all_connections
+    # Top 10 for human-readable display
+    result["module_graph"] = all_connections[:10]
+
+    # Module graph summary
+    if file_connections:
+        # Count refs per file (both as source and target)
+        file_ref_counts = Counter()
+        for (src, tgt), count in file_connections.items():
+            file_ref_counts[src] += count
+            file_ref_counts[tgt] += count
+
+        # Find all indexed files
+        all_indexed_files = set()
+        for sym in symbols.values():
+            p = sym.get("path", "")
+            if p:
+                all_indexed_files.add(p)
+
+        # Connected files (appear in at least one connection)
+        connected_files = set()
+        for src, tgt in file_connections:
+            connected_files.add(src)
+            connected_files.add(tgt)
+
+        # Orphan files: indexed files that import nothing and are imported by nothing
+        orphan_files = sorted(all_indexed_files - connected_files)
+
+        most_connected = file_ref_counts.most_common(1)[0][0] if file_ref_counts else ""
+        total_connections = len(file_connections)
+        avg_refs = sum(file_ref_counts.values()) / max(len(file_ref_counts), 1)
+
+        result["module_graph_summary"] = {
+            "total_connections": total_connections,
+            "avg_refs_per_module": round(avg_refs, 1),
+            "most_connected_file": most_connected,
+            "orphan_files": orphan_files,
+            "orphan_count": len(orphan_files),
+        }
+    else:
+        result["module_graph_summary"] = {
+            "total_connections": 0,
+            "avg_refs_per_module": 0,
+            "most_connected_file": "",
+            "orphan_files": [],
+            "orphan_count": 0,
+        }
+
+    # --- Complexity summary ---
+    result["complexity_summary"] = _compute_complexity_summary(symbols, index_dir)
 
     return result
+
+
+def _load_content_file(index_dir: Path) -> dict:
+    """Load content.jsonl from an index directory."""
+    content_map = {}
+    content_file = index_dir / "content.jsonl"
+    if content_file.exists():
+        try:
+            with open(content_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        record = json.loads(line)
+                        content_map[record["id"]] = record["content"]
+        except (json.JSONDecodeError, KeyError, OSError) as e:
+            logger.debug("Failed to load content from %s: %s", content_file, e)
+    return content_map
+
+
+def _compute_complexity_summary(symbols: dict, index_dir: Path) -> dict:
+    """Compute complexity summary from indexed symbols.
+
+    Uses the same scoring formula as quality.find_complex_functions:
+    - lines > threshold: (lines - threshold) // 10
+    - nesting > 3: (depth - 3) * 5
+    - params > 5: (params - 5) * 2
+    - branches > 10: (branches - 10)
+    Complex threshold: score >= 5
+    """
+    try:
+        try:
+            from .analyzer.complexity import _line_threshold_for_file, _is_test_file
+        except ImportError:
+            from analyzer.complexity import _line_threshold_for_file, _is_test_file
+    except ImportError:
+        # Fallback if analyzer not available
+        def _line_threshold_for_file(p):
+            return 100 if any(p.endswith(e) for e in (".vue", ".tsx", ".jsx")) else 80
+        def _is_test_file(p):
+            lower = p.lower()
+            return any(pat in lower for pat in ("test_", "_test.", ".test.", ".spec.", "/test/", "/tests/"))
+
+    # Load content store for symbol bodies
+    content_map = _load_content_file(index_dir) if index_dir.exists() else {}
+
+    total_functions = 0
+    complex_functions = 0
+    all_scores = []
+    most_complex = []
+
+    for sym_id, sym in symbols.items():
+        sym_type = sym.get("type", "")
+        if sym_type not in ("function", "method"):
+            continue
+
+        path = sym.get("path", "")
+        if _is_test_file(path):
+            continue
+
+        total_functions += 1
+
+        # Get content: inline > content.jsonl
+        content = ""
+        if isinstance(sym.get("content"), str) and sym["content"]:
+            content = sym["content"]
+        else:
+            content = content_map.get(sym_id, "")
+
+        if not content:
+            all_scores.append(0)
+            continue
+
+        lines_list = content.split("\n")
+        line_count = len(lines_list)
+        params_list = sym.get("params", [])
+        param_count = len(params_list) if isinstance(params_list, list) else 0
+
+        is_python = path.endswith(".py")
+        indent_unit = 4 if is_python else 2
+
+        max_depth = 0
+        branches = 0
+        base_indent = 0
+        for ln in lines_list:
+            stripped = ln.strip()
+            if stripped:
+                base_indent = len(ln) - len(ln.lstrip())
+                break
+
+        for ln in lines_list:
+            stripped = ln.strip()
+            if not stripped:
+                continue
+            indent = len(ln) - len(ln.lstrip())
+            depth = max(0, (indent - base_indent) // indent_unit)
+            max_depth = max(max_depth, depth)
+            if is_python:
+                branch_kws = ("if ", "elif ", "for ", "while ", "try:", "except ", "with ")
+            else:
+                branch_kws = ("if ", "if(", "else if ", "for ", "for(", "while ", "while(", "switch ", "switch(", "try ", "try{", "catch ", "catch(")
+            for kw in branch_kws:
+                if stripped.startswith(kw):
+                    branches += 1
+                    break
+
+        score = 0
+        line_threshold = _line_threshold_for_file(path)
+        if line_count > line_threshold:
+            score += (line_count - line_threshold) // 10
+        if max_depth > 3:
+            score += (max_depth - 3) * 5
+        if param_count > 5:
+            score += (param_count - 5) * 2
+        if branches > 10:
+            score += (branches - 10)
+
+        all_scores.append(score)
+
+        if score >= 5:
+            complex_functions += 1
+            most_complex.append({
+                "name": sym.get("name", ""),
+                "path": path,
+                "score": score,
+                "line": sym.get("start_line", sym.get("line", 0)),
+            })
+
+    most_complex.sort(key=lambda x: x["score"], reverse=True)
+    avg_complexity = round(sum(all_scores) / max(len(all_scores), 1), 2)
+
+    return {
+        "total_functions": total_functions,
+        "complex_functions": complex_functions,
+        "avg_complexity": avg_complexity,
+        "most_complex": most_complex[:5],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -839,11 +1165,27 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
     # 6. Services detection
     services = _detect_services(deps)
 
+    # 7. Project type classification
+    component_count = idx["symbol_counts"].get("component", 0)
+    project_type_info = _classify_project_type(
+        languages=fs["languages"],
+        api_definitions=idx["api_definitions"],
+        components=component_count,
+        dep_names=dep_names,
+        patterns=patterns,
+        entry_points=idx["entry_points"],
+        all_files=fs["_all_files"],
+    )
+
     # Build profile
     profile = {
         "name": project_name,
         "path": str(project_path),
         "generated_at": now,
+
+        # Classification
+        "project_type": project_type_info["type"],
+        "project_sub_type": project_type_info["sub_type"],
 
         # Structure
         "file_count": fs["file_count"],
@@ -870,6 +1212,11 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
 
         # Connections
         "module_graph": idx["module_graph"],
+        "module_graph_full": idx["module_graph_full"],
+        "module_graph_summary": idx["module_graph_summary"],
+
+        # Complexity
+        "complexity_summary": idx["complexity_summary"],
 
         # Infrastructure
         "has_docker": fs["has_docker"],
@@ -904,7 +1251,16 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
 def format_profile(profile: dict) -> str:
     """Format a project profile as human-readable text."""
     lines = []
-    lines.append(f"Project Profile: {profile['name']}")
+    # Header with project type
+    project_type = profile.get("project_type", "")
+    project_sub_type = profile.get("project_sub_type", "")
+    type_label = project_type
+    if project_sub_type:
+        type_label = f"{project_type} ({project_sub_type})"
+    header = f"Project Profile: {profile['name']}"
+    if type_label:
+        header += f" [{type_label}]"
+    lines.append(header)
     lines.append(f"Generated: {profile['generated_at']}")
     lines.append("")
 
@@ -997,6 +1353,32 @@ def format_profile(profile: dict) -> str:
             lines.append(
                 f"  {edge['source_file']} -> {edge['target_file']} ({edge['import_count']} refs)"
             )
+        graph_summary = profile.get("module_graph_summary", {})
+        if graph_summary:
+            total_conn = graph_summary.get("total_connections", 0)
+            avg_refs = graph_summary.get("avg_refs_per_module", 0)
+            orphan_count = graph_summary.get("orphan_count", 0)
+            most_connected = graph_summary.get("most_connected_file", "")
+            lines.append(f"  --- {total_conn} total connections, avg {avg_refs} refs/module")
+            if most_connected:
+                lines.append(f"  Most connected: {most_connected}")
+            if orphan_count > 0:
+                lines.append(f"  Orphan files (no imports/importers): {orphan_count}")
+        lines.append("")
+
+    # Complexity
+    complexity = profile.get("complexity_summary", {})
+    if complexity and complexity.get("total_functions", 0) > 0:
+        total_fn = complexity["total_functions"]
+        complex_fn = complexity["complex_functions"]
+        avg_cx = complexity["avg_complexity"]
+        lines.append(f"Complexity")
+        lines.append(f"  {total_fn} functions analyzed, {complex_fn} complex (score >= 5), avg score {avg_cx}")
+        most_complex = complexity.get("most_complex", [])
+        if most_complex:
+            lines.append(f"  Top complex functions:")
+            for fn in most_complex[:5]:
+                lines.append(f"    {fn['name']} (score={fn['score']}) -- {fn['path']}:{fn.get('line', 0)}")
         lines.append("")
 
     # Entry points
