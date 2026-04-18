@@ -71,11 +71,17 @@ class PythonScanner(BaseScanner):
                 )
                 dependencies.append(re_dep)
 
-        # Extract calls (function invocations)
+        # Extract calls (function invocations) with function-level caller tracking
+        # Build a map of line ranges to symbol IDs for caller attribution
+        func_ranges = self._build_function_ranges(tree, rel_path)
         calls = self._extract_calls(tree)
         for call in calls:
+            # Determine which function/method this call is inside
+            caller_id = self._find_enclosing_function(
+                call["line"], func_ranges, file_source_id
+            )
             dep = Dependency(
-                source_id=file_source_id,
+                source_id=caller_id,
                 target_id=call["name"],  # Raw call name, resolved later
                 dep_type=DependencyType.CALLS,
                 source_line=call["line"],
@@ -439,6 +445,45 @@ class PythonScanner(BaseScanner):
     def _is_top_level(self, node: "ast.FunctionDef | ast.AsyncFunctionDef", tree: ast.Module) -> bool:
         """Check if a function is top-level"""
         return any(item is node for item in tree.body)
+
+    def _build_function_ranges(
+        self, tree: ast.Module, rel_path: str
+    ) -> list[tuple[int, int, str]]:
+        """Build a list of (start_line, end_line, symbol_id) for all functions/methods.
+
+        Used to attribute calls to their enclosing function.
+        """
+        ranges = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                for item in node.body:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        end = item.end_lineno or item.lineno
+                        sym_id = f"{self.project}:{rel_path}:method:{node.name}.{item.name}"
+                        ranges.append((item.lineno, end, sym_id))
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if self._is_top_level(node, tree):
+                    end = node.end_lineno or node.lineno
+                    sym_id = f"{self.project}:{rel_path}:function:{node.name}"
+                    ranges.append((node.lineno, end, sym_id))
+        # Sort by start line descending so inner functions match first
+        ranges.sort(key=lambda r: (-r[0], r[1]))
+        return ranges
+
+    def _find_enclosing_function(
+        self,
+        line: int,
+        func_ranges: list[tuple[int, int, str]],
+        file_source_id: str,
+    ) -> str:
+        """Find the symbol ID of the function/method enclosing the given line.
+
+        Returns file_source_id if the line is not inside any function.
+        """
+        for start, end, sym_id in func_ranges:
+            if start <= line <= end:
+                return sym_id
+        return file_source_id
 
     def _extract_calls(self, tree: ast.AST) -> list[dict]:
         """

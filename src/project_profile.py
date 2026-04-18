@@ -319,7 +319,16 @@ def _classify_project_type(
     frontend_deps = {"react", "vue", "angular", "svelte", "next", "nuxt",
                      "react_dom", "vue_router", "svelte_kit", "solid_js",
                      "@angular_core", "angular_core"}
-    has_frontend = components > 0 or bool(frontend_deps & dep_names_lower)
+    has_frontend_deps = bool(frontend_deps & dep_names_lower)
+    # Check if frontend deps are from root manifest or a subdirectory.
+    # Subdirectory frontend (admin UI, console-ui) shouldn't classify the whole project.
+    backend_langs = languages.get("Python", 0) + languages.get("Go", 0) + languages.get("Java", 0) + languages.get("Rust", 0)
+    frontend_langs = languages.get("TypeScript", 0) + languages.get("JavaScript", 0) + languages.get("Vue", 0)
+    frontend_is_dominant = frontend_langs > backend_langs
+    # If backend languages dominate, frontend deps in a subdirectory don't count
+    if has_frontend_deps and backend_langs > frontend_langs * 3:
+        has_frontend_deps = False
+    has_frontend = has_frontend_deps or (components > 10 and frontend_is_dominant)
 
     ep_names_lower = [ep.lower() for ep in entry_points]
     has_cli_entry = any("cli" in ep or "__main__" in ep for ep in ep_names_lower)
@@ -875,6 +884,11 @@ def _extract_from_index(project_path: Path) -> dict:
     # --- Complexity summary ---
     result["complexity_summary"] = _compute_complexity_summary(symbols, index_dir)
 
+    # --- Health dimensions ---
+    result["health_dimensions"] = _compute_health_dimensions(
+        symbols, reverse_index, index_dir, result["complexity_summary"]
+    )
+
     return result
 
 
@@ -1011,6 +1025,160 @@ def _compute_complexity_summary(symbols: dict, index_dir: Path) -> dict:
         "complex_functions": complex_functions,
         "avg_complexity": avg_complexity,
         "most_complex": most_complex[:5],
+    }
+
+
+def _compute_health_dimensions(
+    symbols: dict,
+    reverse_index: dict,
+    index_dir: "Path",
+    complexity_summary: dict,
+) -> dict:
+    """Compute health score dimensions from index data.
+
+    Dimensions (each 0-25, total 0-100):
+    - security: pattern-based security scan
+    - complexity: ratio of complex functions
+    - dead_code: ratio of unreferenced symbols
+    - coverage: test coverage from .coverage file (optional)
+
+    Returns dict with per-dimension scores and overall grade.
+    """
+    try:
+        try:
+            from .analyzer.complexity import _is_test_file
+        except ImportError:
+            from analyzer.complexity import _is_test_file
+    except ImportError:
+        def _is_test_file(p):
+            lower = p.lower()
+            return any(pat in lower for pat in ("test_", "_test.", ".test.", ".spec.", "/test/", "/tests/"))
+
+    total_symbols = len(symbols)
+    if total_symbols == 0:
+        return {
+            "security": {"score": 25, "max": 25, "status": "PASS", "finding_count": 0},
+            "complexity": {"score": 25, "max": 25, "status": "PASS", "complex_count": 0},
+            "dead_code": {"score": 25, "max": 25, "status": "PASS", "dead_count": 0},
+            "coverage": {"score": 0, "max": 25, "status": "FAIL", "coverage_pct": 0},
+            "overall": {"score": 75, "max": 100, "grade": "C"},
+        }
+
+    # --- Security (pattern scan from project root) ---
+    security_score = 25
+    finding_count = 0
+    try:
+        try:
+            from .analyzer.security import SecurityScanner
+        except ImportError:
+            from analyzer.security import SecurityScanner
+
+        # Derive project root from index_dir (parent of .flyto-index)
+        project_root = index_dir.parent if index_dir.exists() else None
+        if project_root and project_root.exists():
+            scanner = SecurityScanner(project_root)
+            report = scanner.analyze()
+            finding_count = len(report.issues)
+            # Penalty: -2 per critical, -1 per high, -0.5 per medium
+            penalty = 0
+            for issue in report.issues:
+                sev = issue.severity
+                if sev == "critical":
+                    penalty += 2
+                elif sev == "high":
+                    penalty += 1
+                elif sev == "medium":
+                    penalty += 0.5
+            security_score = max(0, 25 - int(penalty))
+    except Exception:
+        pass  # Security scan optional
+
+    security_status = "PASS" if security_score >= 20 else ("WARN" if security_score >= 10 else "FAIL")
+
+    # --- Complexity ---
+    func_count = complexity_summary.get("total_functions", 0)
+    complex_count = complexity_summary.get("complex_functions", 0)
+    if func_count > 0:
+        complexity_ratio = complex_count / func_count
+        complexity_score = max(0, 25 - int(complexity_ratio * 100))
+    else:
+        complexity_score = 25
+
+    complexity_status = "PASS" if complexity_score >= 20 else ("WARN" if complexity_score >= 10 else "FAIL")
+
+    # --- Dead code ---
+    # Count symbols that have no references in reverse_index and are not test files
+    dead_count = 0
+    non_test_symbols = {
+        k: v for k, v in symbols.items()
+        if not _is_test_file(v.get("path", ""))
+        and v.get("type", "") in ("function", "method", "class", "component", "composable")
+    }
+    for sym_id, sym in non_test_symbols.items():
+        ref_count = sym.get("ref_count", sym.get("reference_count", 0))
+        if ref_count == 0:
+            # Check reverse_index directly
+            callers = reverse_index.get(sym_id, [])
+            if not callers:
+                # Skip private/internal symbols (starting with _)
+                name = sym.get("name", "")
+                if not name.startswith("_"):
+                    dead_count += 1
+
+    dead_ratio = dead_count / max(len(non_test_symbols), 1)
+    dead_score = max(0, 25 - int(dead_ratio * 100))
+    dead_status = "PASS" if dead_score >= 20 else ("WARN" if dead_score >= 10 else "FAIL")
+
+    # --- Coverage ---
+    coverage_pct = 0
+    coverage_score = 0
+    try:
+        # Look for .coverage or coverage.xml in project root
+        project_root = index_dir.parent if index_dir.exists() else None
+        if project_root:
+            coverage_file = project_root / ".coverage"
+            if coverage_file.exists():
+                # Try to parse coverage percentage from coverage report
+                import subprocess as _sp
+                try:
+                    proc = _sp.run(
+                        ["python", "-m", "coverage", "report", "--format=total"],
+                        capture_output=True, text=True, timeout=30,
+                        cwd=str(project_root),
+                    )
+                    if proc.returncode == 0 and proc.stdout.strip():
+                        try:
+                            coverage_pct = int(float(proc.stdout.strip()))
+                        except ValueError:
+                            pass
+                except (FileNotFoundError, _sp.TimeoutExpired):
+                    pass
+            if coverage_pct > 0:
+                coverage_score = min(25, round(coverage_pct / 4))  # 100% -> 25
+    except Exception:
+        pass
+
+    coverage_status = "PASS" if coverage_score >= 20 else ("WARN" if coverage_score >= 10 else "FAIL")
+
+    # --- Overall ---
+    overall_score = security_score + complexity_score + dead_score + coverage_score
+    if overall_score >= 90:
+        grade = "A"
+    elif overall_score >= 80:
+        grade = "B"
+    elif overall_score >= 70:
+        grade = "C"
+    elif overall_score >= 60:
+        grade = "D"
+    else:
+        grade = "F"
+
+    return {
+        "security": {"score": security_score, "max": 25, "status": security_status, "finding_count": finding_count},
+        "complexity": {"score": complexity_score, "max": 25, "status": complexity_status, "complex_count": complex_count},
+        "dead_code": {"score": dead_score, "max": 25, "status": dead_status, "dead_count": dead_count},
+        "coverage": {"score": coverage_score, "max": 25, "status": coverage_status, "coverage_pct": coverage_pct},
+        "overall": {"score": overall_score, "max": 100, "grade": grade},
     }
 
 
@@ -1162,6 +1330,56 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
     except Exception as e:
         logger.debug("Documentation scan failed: %s", e)
 
+    # 5e. Taint / data flow analysis
+    taint_data = {}
+    try:
+        try:
+            from .analyzer.taint import TaintAnalyzer
+        except ImportError:
+            from analyzer.taint import TaintAnalyzer
+
+        # Load raw index for dependency graph (cross-function tracking)
+        raw_index = {}
+        index_dir = project_path / ".flyto-index"
+        if index_dir.exists():
+            try:
+                import gzip as _gzip
+                gz_path = index_dir / "index.json.gz"
+                if gz_path.exists():
+                    with _gzip.open(gz_path, "rt", encoding="utf-8") as _f:
+                        raw_index = json.load(_f)
+                else:
+                    json_path = index_dir / "index.json"
+                    if json_path.exists():
+                        raw_index = json.loads(json_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        analyzer = TaintAnalyzer(project_path, index=raw_index)
+        taint_result = analyzer.analyze_full()
+        unsanitized = [f for f in taint_result.taint_flows if not f.sanitized]
+        taint_data = {
+            "total_sources": taint_result.total_sources,
+            "total_sinks": taint_result.total_sinks,
+            "unsanitized_flows": len(unsanitized),
+            "sanitized_flows": taint_result.sanitized_flows,
+            "high_risk_count": taint_result.high_risk_count,
+        }
+    except Exception as e:
+        logger.debug("Taint analysis failed: %s", e)
+
+    # 5f. Framework detection
+    frameworks_data = []
+    try:
+        try:
+            from .framework_detector import detect_frameworks
+        except ImportError:
+            from framework_detector import detect_frameworks
+        frameworks = detect_frameworks(project_path)
+        frameworks_data = [fw.to_dict() for fw in frameworks]
+    except Exception as e:
+        logger.debug("Framework detection failed: %s", e)
+
     # 6. Services detection
     services = _detect_services(deps)
 
@@ -1218,6 +1436,9 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         # Complexity
         "complexity_summary": idx["complexity_summary"],
 
+        # Health
+        "health_dimensions": idx.get("health_dimensions", {}),
+
         # Infrastructure
         "has_docker": fs["has_docker"],
         "has_ci": fs["has_ci"],
@@ -1232,8 +1453,12 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         # Patterns
         "patterns": patterns,
 
+        # Frameworks
+        "frameworks": frameworks_data,
+
         # Analysis
         "secrets": secrets_data,
+        "taint_flows": taint_data,
         "license": license_data,
         "documentation": documentation_data,
     }
@@ -1381,6 +1606,30 @@ def format_profile(profile: dict) -> str:
                 lines.append(f"    {fn['name']} (score={fn['score']}) -- {fn['path']}:{fn.get('line', 0)}")
         lines.append("")
 
+    # Health Score
+    health = profile.get("health_dimensions", {})
+    if health and health.get("overall"):
+        overall = health["overall"]
+        lines.append(f"Health Score: {overall['grade']} ({overall['score']}/{overall['max']})")
+        for dim_name in ("security", "complexity", "dead_code", "coverage"):
+            dim = health.get(dim_name, {})
+            if dim:
+                label = dim_name.replace("_", " ").title()
+                detail = ""
+                if dim_name == "security" and dim.get("finding_count", 0) > 0:
+                    detail = f"  ({dim['finding_count']} findings)"
+                elif dim_name == "complexity" and dim.get("complex_count", 0) > 0:
+                    detail = f"  ({dim['complex_count']} complex functions)"
+                elif dim_name == "dead_code" and dim.get("dead_count", 0) > 0:
+                    detail = f"  ({dim['dead_count']} unreferenced symbols)"
+                elif dim_name == "coverage":
+                    if dim.get("coverage_pct", 0) > 0:
+                        detail = f"  ({dim['coverage_pct']}% covered)"
+                    else:
+                        detail = "  (no coverage data)"
+                lines.append(f"  {label:12s} {dim['score']:2d}/{dim['max']} {dim['status']}{detail}")
+        lines.append("")
+
     # Entry points
     entry_points = profile.get("entry_points", [])
     if entry_points:
@@ -1389,6 +1638,21 @@ def format_profile(profile: dict) -> str:
             lines.append(f"  {ep}")
         if len(entry_points) > 10:
             lines.append(f"  ... and {len(entry_points) - 10} more")
+        lines.append("")
+
+    # Frameworks
+    frameworks = profile.get("frameworks", [])
+    if frameworks:
+        lines.append(f"Frameworks ({len(frameworks)})")
+        for fw in frameworks:
+            version_str = f" v{fw['version']}" if fw.get("version") else ""
+            lines.append(f"  {fw['name']}{version_str} [{fw['type']}]")
+            if fw.get("conventions"):
+                conv_parts = [f"{k}={v}" for k, v in fw["conventions"].items()]
+                lines.append(f"    Conventions: {', '.join(conv_parts)}")
+            if fw.get("entry_points"):
+                ep_list = fw["entry_points"][:3]
+                lines.append(f"    Entry points: {', '.join(ep_list)}")
         lines.append("")
 
     # Patterns

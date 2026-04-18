@@ -121,12 +121,77 @@ class TestVueScannerPropsEmits:
     def test_props_extracted(self, scanner):
         symbols, _ = scanner.scan_file(Path("MyComp.vue"), SFC_WITH_PROPS)
         comp = [s for s in symbols if s.symbol_type == SymbolType.COMPONENT][0]
-        assert "title" in comp.metadata.get("props", [])
+        props = comp.metadata.get("props", [])
+        prop_names = [p["name"] if isinstance(p, dict) else p for p in props]
+        assert "title" in prop_names
+
+    def test_props_have_types(self, scanner):
+        symbols, _ = scanner.scan_file(Path("MyComp.vue"), SFC_WITH_PROPS)
+        comp = [s for s in symbols if s.symbol_type == SymbolType.COMPONENT][0]
+        props = comp.metadata.get("props", [])
+        title_prop = next((p for p in props if isinstance(p, dict) and p["name"] == "title"), None)
+        assert title_prop is not None
+        assert title_prop["type"] == "string"
+
+    def test_props_optional(self, scanner):
+        symbols, _ = scanner.scan_file(Path("MyComp.vue"), SFC_WITH_PROPS)
+        comp = [s for s in symbols if s.symbol_type == SymbolType.COMPONENT][0]
+        props = comp.metadata.get("props", [])
+        count_prop = next((p for p in props if isinstance(p, dict) and p["name"] == "count"), None)
+        assert count_prop is not None
+        assert count_prop.get("optional") is True
 
     def test_emits_extracted(self, scanner):
         symbols, _ = scanner.scan_file(Path("MyComp.vue"), SFC_WITH_PROPS)
         comp = [s for s in symbols if s.symbol_type == SymbolType.COMPONENT][0]
         assert "update" in comp.metadata.get("emits", [])
+
+    def test_composables_in_metadata(self, scanner):
+        symbols, _ = scanner.scan_file(Path("App.vue"), SFC_WITH_FUNCTION)
+        comp = [s for s in symbols if s.symbol_type == SymbolType.COMPONENT][0]
+        composables = comp.metadata.get("composables", [])
+        assert "useRouter" in composables
+
+    def test_template_refs_in_metadata(self, scanner):
+        sfc = """<template>
+  <MyButton @click="go" />
+  <router-link to="/">Home</router-link>
+</template>
+<script setup lang="ts">
+</script>
+"""
+        symbols, _ = scanner.scan_file(Path("Page.vue"), sfc)
+        comp = [s for s in symbols if s.symbol_type == SymbolType.COMPONENT][0]
+        refs = comp.metadata.get("template_refs", [])
+        assert "MyButton" in refs
+
+    def test_object_props_syntax(self, scanner):
+        sfc = """<template><div/></template>
+<script setup lang="ts">
+defineProps({
+  label: { type: String, required: true },
+  size: Number,
+})
+</script>
+"""
+        symbols, _ = scanner.scan_file(Path("Btn.vue"), sfc)
+        comp = [s for s in symbols if s.symbol_type == SymbolType.COMPONENT][0]
+        props = comp.metadata.get("props", [])
+        prop_names = [p["name"] if isinstance(p, dict) else p for p in props]
+        assert "label" in prop_names
+        assert "size" in prop_names
+
+    def test_array_emits_syntax(self, scanner):
+        sfc = """<template><div/></template>
+<script setup lang="ts">
+defineEmits(['click', 'close'])
+</script>
+"""
+        symbols, _ = scanner.scan_file(Path("Modal.vue"), sfc)
+        comp = [s for s in symbols if s.symbol_type == SymbolType.COMPONENT][0]
+        emits = comp.metadata.get("emits", [])
+        assert "click" in emits
+        assert "close" in emits
 
 
 class TestVueScannerSummary:

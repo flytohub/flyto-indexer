@@ -218,6 +218,17 @@ def main():
     docs_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
     docs_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON instead of human-readable text")
 
+    # taint
+    taint_parser = subparsers.add_parser(
+        "taint",
+        help="Analyze data flow / taint tracking — find unsanitized paths from sources to sinks",
+        description="Trace untrusted data (request.args, sys.argv, etc.) through function calls to dangerous sinks (cursor.execute, eval, os.system, etc.). Shows cross-function flows with sanitizer awareness.",
+    )
+    taint_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    taint_parser.add_argument("--severity", choices=["critical", "high", "medium", "low"], help="Filter by severity level")
+    taint_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON instead of human-readable text")
+    taint_parser.add_argument("--max-results", type=int, default=50, dest="max_results", help="Max flows to show (default 50)")
+
     # check
     check_parser = subparsers.add_parser(
         "check",
@@ -228,6 +239,26 @@ def main():
     check_parser.add_argument("--threshold", choices=["high", "medium", "low"], default="high", help="Fail when risk >= this level (default: high)")
     check_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as structured JSON")
     check_parser.add_argument("--base", help="Git ref to compare against (default: detect from index staleness)")
+
+    # pr-risk
+    pr_risk_parser = subparsers.add_parser(
+        "pr-risk",
+        help="Analyze PR/changeset risk: score, risk factors, affected code, suggested tests",
+        description="Parse git diff, detect risk factors (API, auth, DB, config, breaking changes), cross-reference with index for affected symbols, and suggest tests to run.",
+    )
+    pr_risk_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    pr_risk_parser.add_argument("--base", default="", help="Git ref to compare against (e.g., main, HEAD~3). Default: uncommitted changes")
+    pr_risk_parser.add_argument("--staged", action="store_true", help="Only analyze staged changes")
+    pr_risk_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
+
+    # framework
+    framework_parser = subparsers.add_parser(
+        "framework",
+        help="Detect project frameworks (FastAPI, Next.js, Vue, etc.) with conventions",
+        description="Analyze project dependencies and file patterns to detect frameworks, their versions, conventions (ORM, auth, state management), and entry points.",
+    )
+    framework_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    framework_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
 
     args = parser.parse_args()
 
@@ -272,8 +303,14 @@ def main():
             result = cmd_license(args)
         elif args.command == "docs":
             result = cmd_docs(args)
+        elif args.command == "taint":
+            result = cmd_taint(args)
         elif args.command == "check":
             result = cmd_check(args)
+        elif args.command == "pr-risk":
+            result = cmd_pr_risk(args)
+        elif args.command == "framework":
+            result = cmd_framework(args)
         else:
             parser.print_help()
             return
@@ -1244,6 +1281,46 @@ def cmd_docs(args):
     return None
 
 
+def cmd_pr_risk(args):
+    """Analyze PR/changeset risk."""
+    from .pr_analyzer import analyze_pr_risk, format_pr_risk
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    result = analyze_pr_risk(
+        project_path=str(project_path),
+        base=args.base,
+        staged=args.staged,
+    )
+
+    if hasattr(args, "as_json") and args.as_json:
+        return result.to_dict()
+
+    print(format_pr_risk(result))
+    return None
+
+
+def cmd_framework(args):
+    """Detect project frameworks."""
+    from .framework_detector import detect_frameworks, format_frameworks
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    frameworks = detect_frameworks(project_path)
+
+    if hasattr(args, "as_json") and args.as_json:
+        return [fw.to_dict() for fw in frameworks]
+
+    print(format_frameworks(frameworks))
+    return None
+
+
 def _detect_changed_files(args, engine, project_path):
     """Detect changed files via git diff (if --base given) or index staleness."""
     if args.base:
@@ -1342,6 +1419,82 @@ def _format_check_output(output, symbol_details, args):
         print(f"PASS: risk {output['risk']} < threshold {output['threshold']}")
     else:
         print(f"FAIL: risk {output['risk']} >= threshold {output['threshold']}")
+
+
+def cmd_taint(args):
+    """Analyze data flow / taint tracking."""
+    from .analyzer.taint import TaintAnalyzer
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    # Try to load index for cross-function analysis
+    index = {}
+    index_path = project_path / ".flyto-index" / "index.json"
+    if index_path.exists():
+        try:
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    t0 = time.monotonic()
+    analyzer = TaintAnalyzer(project_path, index=index)
+    result = analyzer.analyze_full()
+    elapsed = time.monotonic() - t0
+
+    # Filter by severity if requested
+    flows = [f for f in result.taint_flows if not f.sanitized]
+    if hasattr(args, "severity") and args.severity:
+        flows = [f for f in flows if f.severity == args.severity]
+
+    if hasattr(args, "as_json") and args.as_json:
+        output = result.to_dict()
+        if args.severity:
+            output["taint_flows"] = [f.to_dict() for f in flows]
+        output["elapsed_seconds"] = round(elapsed, 2)
+        return output
+
+    # Human-readable output
+    max_results = getattr(args, "max_results", 50)
+    print(f"Taint Analysis: {project_path.name}")
+    print(f"  Scanned in {elapsed:.1f}s")
+    print(f"  Sources found: {result.total_sources}")
+    print(f"  Sinks found:   {result.total_sinks}")
+    print(f"  Unsanitized flows: {len(flows)}")
+    print(f"  Sanitized flows:   {result.sanitized_flows}")
+    print()
+
+    if not flows:
+        print("  No unsanitized data flows found.")
+        return None
+
+    # Group by severity
+    severity_order = ["critical", "high", "medium", "low"]
+    by_sev = {}
+    for f in flows:
+        by_sev.setdefault(f.severity, []).append(f)
+
+    for sev in severity_order:
+        sev_flows = by_sev.get(sev, [])
+        if not sev_flows:
+            continue
+        label = sev.upper()
+        print(f"  [{label}] {len(sev_flows)} flow(s)")
+        for flow in sev_flows[:max_results]:
+            src_display = flow.source_expr[:60]
+            sink_display = flow.sink_expr[:60]
+            print(f"    {flow.category}: {src_display}")
+            print(f"      -> {sink_display}")
+            print(f"      at {flow.file_path}:{flow.line}")
+            if flow.path:
+                print(f"      path: {' -> '.join(flow.path[:5])}")
+            if flow.recommendation:
+                print(f"      fix: {flow.recommendation}")
+            print()
+
+    return None
 
 
 def cmd_check(args):

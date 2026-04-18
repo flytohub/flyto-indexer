@@ -19,7 +19,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-EXPECTED_TOOL_COUNT = 9
+EXPECTED_TOOL_COUNT = 11
 EXPECTED_TOOL_NAMES = sorted([
     "search",
     "impact",
@@ -30,6 +30,8 @@ EXPECTED_TOOL_NAMES = sorted([
     "scan_secrets",
     "scan_licenses",
     "scan_documentation",
+    "analyze_pr_risk",
+    "detect_frameworks",
 ])
 
 # Test project name used in synthetic index

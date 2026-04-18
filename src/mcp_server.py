@@ -519,6 +519,7 @@ try:
     from .quality import (
         find_complex_functions, find_duplicates, security_scan,
         find_stale_files, code_health_score, suggest_refactoring,
+        analyze_data_flow,
     )
     from .diff_impact import impact_from_diff
 except ImportError:
@@ -547,6 +548,7 @@ except ImportError:
     from quality import (
         find_complex_functions, find_duplicates, security_scan,
         find_stale_files, code_health_score, suggest_refactoring,
+        analyze_data_flow,
     )
     from diff_impact import impact_from_diff
 

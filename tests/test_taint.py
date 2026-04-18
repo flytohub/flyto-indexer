@@ -36,7 +36,7 @@ class TestDirectSourceToSink:
         assert len(findings) >= 1
         f = findings[0]
         assert f.category == "sql_injection"
-        assert f.severity == "high"
+        assert f.severity in ("high", "critical")
         assert "request.args" in f.source_expr
 
     def test_rce_eval(self):

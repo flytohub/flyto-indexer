@@ -279,6 +279,99 @@ def security_scan(
     }
 
 
+def analyze_data_flow(
+    project: str = None,
+    severity: str = None,
+    max_results: int = 50,
+) -> dict:
+    """Run taint / data flow analysis and return structured results.
+
+    Traces data from untrusted sources (request.args, sys.argv, etc.) to
+    dangerous sinks (cursor.execute, eval, os.system, etc.) with cross-function
+    flow tracking and sanitizer awareness.
+
+    Returns:
+        DataFlowResult as dict with taint_flows, counts, and severity breakdown.
+    """
+    try:
+        from .analyzer.taint import TaintAnalyzer
+    except ImportError:
+        from analyzer.taint import TaintAnalyzer
+
+    index = load_index()
+    project_roots = index.get("project_roots", {})
+    projects = index.get("projects", [])
+
+    if project:
+        projects = [p for p in projects if project.lower() in p.lower()]
+
+    all_flows = []
+    total_sources = 0
+    total_sinks = 0
+    sanitized_count = 0
+
+    for proj in projects:
+        root = project_roots.get(proj)
+        if not root or not Path(root).exists():
+            continue
+
+        try:
+            analyzer = TaintAnalyzer(Path(root), index=index)
+            result = analyzer.analyze_full()
+
+            total_sources += result.total_sources
+            total_sinks += result.total_sinks
+            sanitized_count += result.sanitized_flows
+
+            for flow in result.taint_flows:
+                if severity and flow.severity != severity:
+                    continue
+                if flow.sanitized:
+                    continue
+                all_flows.append({
+                    "project": proj,
+                    "source": flow.source_expr,
+                    "source_file": flow.source_file or flow.file_path,
+                    "source_line": flow.source_line or flow.line,
+                    "sink": flow.sink_expr,
+                    "sink_file": flow.sink_file or flow.file_path,
+                    "sink_line": flow.line,
+                    "path": flow.path or flow.flow_chain,
+                    "sanitized": flow.sanitized,
+                    "severity": flow.severity,
+                    "category": flow.category,
+                    "recommendation": flow.recommendation,
+                })
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).debug("Taint analysis failed for %s: %s", proj, e)
+
+    # Sort by severity
+    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    all_flows.sort(key=lambda x: severity_order.get(x["severity"], 4))
+
+    by_category = {}
+    by_severity = {}
+    for flow in all_flows:
+        cat = flow["category"]
+        sev = flow["severity"]
+        by_category[cat] = by_category.get(cat, 0) + 1
+        by_severity[sev] = by_severity.get(sev, 0) + 1
+
+    high_risk = sum(1 for f in all_flows if f["severity"] in ("critical", "high"))
+
+    return {
+        "total_sources": total_sources,
+        "total_sinks": total_sinks,
+        "unsanitized_flows": len(all_flows),
+        "sanitized_flows": sanitized_count,
+        "high_risk_count": high_risk,
+        "by_category": by_category,
+        "by_severity": by_severity,
+        "taint_flows": all_flows[:max_results],
+    }
+
+
 def rules_check(project: str = None) -> dict:
     """Check project compliance against .flyto-rules.yaml."""
     try:

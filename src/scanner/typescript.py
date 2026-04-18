@@ -79,17 +79,13 @@ class TypeScriptScanner(BaseScanner):
                 )
                 dependencies.append(re_dep)
 
-        # Extract calls
+        # Extract calls with function-level caller attribution
         calls = self._extract_calls(content, cleaned)
-        for call in calls:
-            dep = Dependency(
-                source_id=file_source_id,
-                target_id=call["name"],
-                dep_type=DependencyType.CALLS,
-                source_line=call["line"],
-                metadata={"raw_call": True},
-            )
-            dependencies.append(dep)
+        # We'll build func_ranges after symbol extraction (below) but calls are
+        # extracted from cleaned source which matches line numbers.  To avoid
+        # a two-pass approach, collect calls now and attribute after symbols
+        # are known.  Store for post-processing.
+        _pending_calls = calls
 
         # Track what we've already processed to avoid duplicates
         processed_lines = set()
@@ -348,6 +344,21 @@ class TypeScriptScanner(BaseScanner):
                     "url": api_call["url"],
                     "raw_url": api_call["raw_url"],
                 },
+            )
+            dependencies.append(dep)
+
+        # Attribute pending calls to enclosing functions
+        func_ranges = self._build_function_ranges(symbols, rel_path)
+        for call in _pending_calls:
+            caller_id = self._find_enclosing_function(
+                call["line"], func_ranges, file_source_id
+            )
+            dep = Dependency(
+                source_id=caller_id,
+                target_id=call["name"],
+                dep_type=DependencyType.CALLS,
+                source_line=call["line"],
+                metadata={"raw_call": True},
             )
             dependencies.append(dep)
 
@@ -775,6 +786,33 @@ class TypeScriptScanner(BaseScanner):
                 })
 
         return results
+
+    def _build_function_ranges(
+        self, symbols: list, rel_path: str
+    ) -> list[tuple[int, int, str]]:
+        """Build (start_line, end_line, symbol_id) list from extracted symbols."""
+        ranges = []
+        func_types = {SymbolType.FUNCTION, SymbolType.METHOD, SymbolType.COMPOSABLE,
+                      SymbolType.COMPONENT}
+        for sym in symbols:
+            if sym.symbol_type in func_types:
+                sym_id = f"{self.project}:{rel_path}:{sym.symbol_type.value}:{sym.name}"
+                ranges.append((sym.start_line, sym.end_line, sym_id))
+        # Sort by start line descending so inner functions match first
+        ranges.sort(key=lambda r: (-r[0], r[1]))
+        return ranges
+
+    def _find_enclosing_function(
+        self,
+        line: int,
+        func_ranges: list[tuple[int, int, str]],
+        file_source_id: str,
+    ) -> str:
+        """Find symbol ID of the function enclosing the given line."""
+        for start, end, sym_id in func_ranges:
+            if start <= line <= end:
+                return sym_id
+        return file_source_id
 
     def _extract_calls(self, content: str, cleaned: str) -> list[dict]:
         """Extract function calls using cleaned source to avoid false positives

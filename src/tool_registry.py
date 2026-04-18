@@ -303,6 +303,27 @@ MCP_TOOLS: list = [
         },
     },
     {
+        "name": "analyze_data_flow",
+        "title": "Data Flow / Taint Analysis",
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+        "description": (
+            "Trace untrusted data from sources (request.args, sys.argv, os.environ, FastAPI Query/Body, "
+            "Express req.body/query, Go r.FormValue) through function calls to dangerous sinks "
+            "(cursor.execute, eval, os.system, subprocess, open, pickle.loads, innerHTML). "
+            "Cross-function tracking: follows data through A->B->C call chains using the index dependency graph. "
+            "Sanitizer-aware: recognizes int(), html.escape(), shlex.quote(), parameterized queries, etc. "
+            "Returns: unsanitized flows with source/sink locations, call path, severity, and fix recommendations."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Filter to a specific project"},
+                "severity": {"type": "string", "enum": ["critical", "high", "medium", "low"], "description": "Filter by severity level"},
+                "max_results": {"type": "integer", "default": 50, "description": "Max flows to return (default 50)"},
+            },
+        },
+    },
+    {
         "name": "find_stale_files",
         "title": "Find Stale Files",
         "annotations": {"readOnlyHint": True, "openWorldHint": True},
@@ -1273,6 +1294,72 @@ SMART_TOOLS.append({
     },
 })
 
+SMART_TOOLS.append({
+    "name": "analyze_pr_risk",
+    "title": "Analyze PR Risk",
+    "annotations": {"readOnlyHint": True, "openWorldHint": True},
+    "description": (
+        "Analyze a PR or changeset for risk. Parses git diff, detects risk factors "
+        "(API routes, auth/security, database/migrations, config changes, breaking changes), "
+        "cross-references with the code index to find affected files and symbols, "
+        "and suggests test files to run.\n\n"
+        "Risk score 0-100 with level: low (<20), medium (20-44), high (45-69), critical (70+).\n\n"
+        "Modes:\n"
+        "- No base, no staged: analyze uncommitted changes\n"
+        "- base='main': analyze changes vs main branch\n"
+        "- staged=true: only staged changes\n\n"
+        "Returns: risk score/level, risk factors, affected files/symbols, suggested tests, "
+        "and per-file change details with risk contribution."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Project root path. Defaults to current working directory.",
+            },
+            "base": {
+                "type": "string",
+                "description": "Git ref to compare against (e.g., 'main', 'HEAD~3'). Default: uncommitted changes.",
+                "default": "",
+            },
+            "staged": {
+                "type": "boolean",
+                "description": "If true, only analyze staged changes.",
+                "default": False,
+            },
+        },
+    },
+})
+
+SMART_TOOLS.append({
+    "name": "detect_frameworks",
+    "title": "Detect Frameworks",
+    "annotations": {"readOnlyHint": True, "openWorldHint": True},
+    "description": (
+        "Detect which frameworks a project uses and extract framework-specific conventions.\n\n"
+        "Supported frameworks:\n"
+        "- Python: FastAPI, Django, Flask\n"
+        "- JS/TS: Next.js, Nuxt, React, Vue, Express, NestJS\n"
+        "- Go: Gin, Echo, Fiber, Chi\n"
+        "- Rust: Actix, Axum\n"
+        "- Mobile: Flutter, React Native\n"
+        "- Desktop: Tauri, Electron\n\n"
+        "For each detected framework, returns: name, version, type (api/spa/ssr/mobile/desktop), "
+        "conventions (ORM, auth, state management, routing), and entry points.\n\n"
+        "No external API calls — reads local manifest files and scans file patterns."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Project root path to scan. Defaults to current working directory.",
+            },
+        },
+    },
+})
+
 SMART_TOOL_NAMES: Set[str] = {tool["name"] for tool in SMART_TOOLS}
 
 
@@ -1551,6 +1638,22 @@ def _doc_scanner():
     return doc_scanner
 
 
+def _pr_analyzer():
+    try:
+        from . import pr_analyzer
+    except ImportError:
+        import pr_analyzer
+    return pr_analyzer
+
+
+def _framework_detector():
+    try:
+        from . import framework_detector
+    except ImportError:
+        import framework_detector
+    return framework_detector
+
+
 def _smart():
     try:
         from .tools import smart
@@ -1691,6 +1794,11 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             max_results=args.get("max_results", 20),
         ),
         "security_scan": lambda args: _quality().security_scan(
+            project=args.get("project"),
+            severity=args.get("severity"),
+            max_results=args.get("max_results", 50),
+        ),
+        "analyze_data_flow": lambda args: _quality().analyze_data_flow(
             project=args.get("project"),
             severity=args.get("severity"),
             max_results=args.get("max_results", 50),
@@ -1865,6 +1973,20 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             project_path=__import__("pathlib").Path(args.get("path") or os.getcwd()),
             compact=args.get("compact", False),
         ),
+
+        # PR risk analysis
+        "analyze_pr_risk": lambda args: _pr_analyzer().analyze_pr_risk(
+            project_path=args.get("path") or os.getcwd(),
+            base=args.get("base", ""),
+            staged=args.get("staged", False),
+        ).to_dict(),
+
+        # Framework detection
+        "detect_frameworks": lambda args: [
+            fw.to_dict() for fw in _framework_detector().detect_frameworks(
+                __import__("pathlib").Path(args.get("path") or os.getcwd()),
+            )
+        ],
     }
 
     handler = _DISPATCH.get(name)

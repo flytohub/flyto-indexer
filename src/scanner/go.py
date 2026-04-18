@@ -144,6 +144,7 @@ class GoScanner(BaseScanner):
         self._extract_const_var(content, lines, rel_path, symbols)
         self._detect_implementations(symbols, dependencies, rel_path)
         self._scan_http_routes(content, cleaned, lines, rel_path, symbols)
+        self._scan_calls(content, cleaned, lines, rel_path, file_source_id, symbols, dependencies)
 
         for symbol in symbols:
             symbol.compute_hash()
@@ -588,6 +589,64 @@ class GoScanner(BaseScanner):
         sym.metadata = {"method": method, "path": path, "handler": handler}
         sym.compute_hash()
         symbols.append(sym)
+
+    # Pattern to match function/method calls in Go: identifier( or pkg.Func(
+    CALL_PATTERN = re.compile(
+        r'\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(', re.MULTILINE
+    )
+
+    # Go keywords that look like function calls but aren't
+    _GO_KEYWORDS = frozenset({
+        'if', 'for', 'switch', 'select', 'go', 'defer', 'return',
+        'func', 'range', 'type', 'var', 'const', 'map', 'chan',
+        'make', 'new', 'len', 'cap', 'append', 'copy', 'delete',
+        'close', 'panic', 'recover', 'print', 'println',
+    })
+
+    def _scan_calls(self, content: str, cleaned: str, lines: list[str],
+                    rel_path: str, file_source_id: str,
+                    symbols: list, dependencies: list) -> None:
+        """Extract function calls with function-level caller attribution."""
+        # Build function/method line ranges for caller attribution
+        func_ranges = []
+        for sym in symbols:
+            if sym.symbol_type in (SymbolType.FUNCTION, SymbolType.METHOD):
+                sym_id = f"{self.project}:{rel_path}:{sym.symbol_type.value}:{sym.name}"
+                func_ranges.append((sym.start_line, sym.end_line, sym_id))
+        # Sort by start line descending so inner functions match first
+        func_ranges.sort(key=lambda r: (-r[0], r[1]))
+
+        seen = set()
+        for match in self.CALL_PATTERN.finditer(cleaned):
+            name = match.group(1)
+            # Skip keywords and builtins
+            first_part = name.split('.')[0]
+            if first_part in self._GO_KEYWORDS:
+                continue
+            # Skip single lowercase identifiers that are likely variables
+            if '.' not in name and name[0].islower() and len(name) <= 3:
+                continue
+
+            line = cleaned[:match.start()].count('\n') + 1
+            key = (name, line)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            # Find enclosing function
+            caller_id = file_source_id
+            for start, end, sym_id in func_ranges:
+                if start <= line <= end:
+                    caller_id = sym_id
+                    break
+
+            dependencies.append(Dependency(
+                source_id=caller_id,
+                target_id=name,
+                dep_type=DependencyType.CALLS,
+                source_line=line,
+                metadata={"raw_call": True},
+            ))
 
     def _extract_imports(self, content: str) -> list[dict]:
         """Extract import statements."""
