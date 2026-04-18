@@ -37,4 +37,32 @@ flyto-indexer exposes 5 consolidated tools. Each one auto-enriches results with 
 - **Execution Guard**: Server-side enforcement prevents skipping execution plan gates. If blocked, the response includes a `recovery_plan` with exact next steps.
 - **Atomic writes**: Index files written via temp+rename to prevent corruption on crash.
 - **Smart auto-reindex**: Detects file changes every 10s (fast mtime check). Incremental updates proportional to change set.
+
+### Dependency Scanner
+- `flyto-index deps .` — scans all package manifests
+- Supports 8 ecosystems: npm, pypi, Go, Rust, Maven/Gradle, PHP, Ruby, Docker
+- Reads lockfiles for pinned versions
+- Detects version conflicts across monorepo
+- Available as MCP tool: `list_dependencies`
+- Available in smart tool: `structure(focus="packages")`
+
+### Project Profile
+- `flyto-index profile .` — comprehensive project fact sheet
+- `flyto-index profile . --json` — JSON output for LLM consumption
+- `flyto-index profile . --compact` — summary only
+- Collects: structure, APIs (classified as definition/call/service), models with fields, dependencies, module connections, patterns, infrastructure, git info
+- API classification:
+  - `api_definitions` — backend routes
+  - `api_calls_internal` — frontend-to-backend calls
+  - `api_calls_external` — 3rd party API calls
+  - `services` — SDK integrations (Firebase, Stripe, OpenAI, etc.)
+- 15+ pattern detection: auth, websocket, queue, cron, orm, migration, i18n, caching, etc.
+- Available as MCP tool: `project_profile`
+- Available in smart tool: `structure(focus="profile")`
+
+### Scanner improvements
+- **Python**: Class field extraction (Pydantic, dataclass, annotations)
+- **Go**: Struct field extraction + HTTP handler detection (stdlib, gin, echo, fiber)
+- **TypeScript**: Interface/type field extraction + backend route detection (Express, Hono, Fastify)
+- Symbol metadata now includes `fields` key for classes/interfaces/structs
 <!-- flyto-indexer end -->
