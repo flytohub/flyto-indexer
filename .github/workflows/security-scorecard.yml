@@ -1,0 +1,34 @@
+name: Security scorecard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  scorecard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Fails the job on any critical finding (hardcoded secrets, missing CI).
+      # Warn-level findings (no lint, no tests, no security-focused tests) are
+      # reported but do not gate the build yet — tighten by switching to
+      # `--fail-on warn` once the repo clears those.
+      - name: Run scorecard
+        run: bash scripts/security_scorecard.sh --fail-on critical
+
+      - name: Publish JSON report
+        if: always()
+        run: bash scripts/security_scorecard.sh --json > scorecard.json || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-scorecard
+          path: scorecard.json
+          retention-days: 14

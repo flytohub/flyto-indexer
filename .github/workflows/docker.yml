@@ -1,0 +1,38 @@
+name: Docker image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image (reproducibility check)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: flyto-indexer:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify bundled scanner binaries
+        run: |
+          docker run --rm --entrypoint semgrep  flyto-indexer:${{ github.sha }} --version
+          docker run --rm --entrypoint checkov  flyto-indexer:${{ github.sha }} --version
+          docker run --rm --entrypoint cat      flyto-indexer:${{ github.sha }} /app/NOTICE | head -n 5
