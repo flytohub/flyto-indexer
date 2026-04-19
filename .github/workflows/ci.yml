@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install --upgrade pip
-      - run: pip install -e ".[dev]"
+      - run: pip install ".[dev]"
       - run: ruff check src/ tests/
       - run: mypy src/
 
@@ -35,7 +35,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip
-      - run: pip install -e ".[dev]"
+      - run: pip install ".[dev]"
       - run: pytest tests/ -v
 
   build:
