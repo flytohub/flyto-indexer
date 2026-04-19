@@ -4,10 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "flyto-indexer"
-version = "2.7.3"
+version = "2.7.4"
 description = "Code intelligence MCP server for AI-assisted development — impact analysis, semantic search, and dependency graphs"
 readme = "README.md"
-license = "MIT"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.10"
 authors = [
     { name = "Flyto Team", email = "dev@flyto2.net" }
@@ -16,7 +17,7 @@ keywords = ["code-indexing", "ast", "ai", "development-tools"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
