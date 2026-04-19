@@ -288,6 +288,289 @@ def scan_secrets(project_path: str | Path) -> SecretScanResult:
     )
 
 
+# ---------------------------------------------------------------------------
+# Code Vulnerability Scanner (SAST rules)
+# ---------------------------------------------------------------------------
+
+# Directories and files to skip for vulnerability scanning
+_VULN_SKIP_DIRS = _SKIP_DIRS  # reuse same set
+
+_VULN_SCANNABLE_EXTENSIONS = frozenset({
+    ".py", ".go", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs",
+    ".php", ".rb", ".java", ".vue", ".html", ".htm",
+    ".yaml", ".yml", ".toml", ".cfg", ".ini", ".conf",
+})
+
+@dataclass
+class VulnerabilityRule:
+    id: str
+    title: str
+    description: str
+    severity: str          # CRITICAL, HIGH, MEDIUM
+    pattern: "re.Pattern"
+    languages: list        # file extensions like [".py", ".go"]
+    cwe: str               # CWE ID like "CWE-89"
+
+
+@dataclass
+class VulnerabilityFinding:
+    rule_id: str
+    title: str
+    severity: str
+    file: str
+    line: int
+    snippet: str
+    cwe: str
+
+
+# 15 SAST vulnerability rules
+VULNERABILITY_RULES: list[VulnerabilityRule] = [
+    # --- SQL Injection (4 rules) ---
+    VulnerabilityRule(
+        id="SQLI-PY", title="SQL Injection (Python)",
+        description="String interpolation or concatenation in SQL query execution",
+        severity="CRITICAL",
+        pattern=re.compile(r"""(?:f["']SELECT\s.*\{|["']SELECT\s.*["']\s*\+|\.execute\(f["']|\.execute\(["'][^"']*%s["']\s*%)"""),
+        languages=[".py"],
+        cwe="CWE-89",
+    ),
+    VulnerabilityRule(
+        id="SQLI-GO", title="SQL Injection (Go)",
+        description="String formatting or concatenation in SQL queries",
+        severity="CRITICAL",
+        pattern=re.compile(r"""(?:fmt\.Sprintf\(["']SELECT\s.*%s|db\.Query\(["']SELECT\s.*["']\s*\+)"""),
+        languages=[".go"],
+        cwe="CWE-89",
+    ),
+    VulnerabilityRule(
+        id="SQLI-JS", title="SQL Injection (JavaScript/TypeScript)",
+        description="Template literal or concatenation in SQL queries",
+        severity="CRITICAL",
+        pattern=re.compile(r"""(?:`SELECT\s.*\$\{|\.query\(["']SELECT\s.*["']\s*\+)"""),
+        languages=[".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"],
+        cwe="CWE-89",
+    ),
+    VulnerabilityRule(
+        id="SQLI-PHP", title="SQL Injection (PHP)",
+        description="Variable interpolation in SQL queries",
+        severity="CRITICAL",
+        pattern=re.compile(r"""(?:mysql_query\(["']SELECT\s.*\$|mysqli_query\(\$.*,\s*["']SELECT\s.*\$)"""),
+        languages=[".php"],
+        cwe="CWE-89",
+    ),
+
+    # --- XSS (3 rules) ---
+    VulnerabilityRule(
+        id="XSS-JINJA", title="XSS via unsafe template rendering (Python/Jinja)",
+        description="Using |safe filter or Markup() bypasses HTML escaping",
+        severity="HIGH",
+        pattern=re.compile(r"""(?:\|\s*safe\b|Markup\()"""),
+        languages=[".py", ".html", ".htm"],
+        cwe="CWE-79",
+    ),
+    VulnerabilityRule(
+        id="XSS-JS", title="XSS via unsafe DOM manipulation (JavaScript)",
+        description="dangerouslySetInnerHTML, document.write, or innerHTML assignment",
+        severity="HIGH",
+        pattern=re.compile(r"""(?:dangerouslySetInnerHTML|document\.write\(|\.innerHTML\s*=)"""),
+        languages=[".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue"],
+        cwe="CWE-79",
+    ),
+    VulnerabilityRule(
+        id="XSS-GO", title="XSS via template.HTML (Go)",
+        description="template.HTML() bypasses Go template escaping",
+        severity="HIGH",
+        pattern=re.compile(r"""template\.HTML\("""),
+        languages=[".go"],
+        cwe="CWE-79",
+    ),
+
+    # --- Path Traversal (2 rules) ---
+    VulnerabilityRule(
+        id="PATH-PY", title="Path Traversal (Python)",
+        description="Opening files or joining paths with user-controlled input",
+        severity="HIGH",
+        pattern=re.compile(r"""(?:open\(request\.|os\.path\.join\(request\.)"""),
+        languages=[".py"],
+        cwe="CWE-22",
+    ),
+    VulnerabilityRule(
+        id="PATH-JS-GO", title="Path Traversal (Go/JavaScript)",
+        description="Joining paths with user-controlled request parameters",
+        severity="HIGH",
+        pattern=re.compile(r"""(?:filepath\.Join\(r\.URL|path\.join\(req\.params|fs\.readFile\(req\.)"""),
+        languages=[".go", ".js", ".ts", ".mjs", ".cjs"],
+        cwe="CWE-22",
+    ),
+
+    # --- Command Injection (2 rules) ---
+    VulnerabilityRule(
+        id="CMDI-PY", title="Command Injection (Python)",
+        description="os.system() or subprocess with shell=True can execute arbitrary commands",
+        severity="CRITICAL",
+        pattern=re.compile(r"""(?:os\.system\(|subprocess\.call\(.*shell\s*=\s*True)"""),
+        languages=[".py"],
+        cwe="CWE-78",
+    ),
+    VulnerabilityRule(
+        id="CMDI-GO", title="Command Injection (Go)",
+        description="exec.Command with concatenated user input",
+        severity="HIGH",
+        pattern=re.compile(r"""exec\.Command\([^)]*\+"""),
+        languages=[".go"],
+        cwe="CWE-78",
+    ),
+
+    # --- Hardcoded Credentials (2 rules) ---
+    VulnerabilityRule(
+        id="CRED-PASS", title="Hardcoded Password",
+        description="Password assigned as a string literal (not empty or placeholder)",
+        severity="HIGH",
+        pattern=re.compile(r"""(?i)password\s*=\s*["'][^"']{8,}["']"""),
+        languages=[".py", ".go", ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".php", ".rb", ".java"],
+        cwe="CWE-798",
+    ),
+    VulnerabilityRule(
+        id="CRED-SECRET", title="Hardcoded Secret Key",
+        description="Secret key assigned as a string literal",
+        severity="HIGH",
+        pattern=re.compile(r"""(?i)secret_key\s*=\s*["'][^"']{8,}["']"""),
+        languages=[".py", ".go", ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".php", ".rb", ".java"],
+        cwe="CWE-798",
+    ),
+
+    # --- Insecure Config (2 rules) ---
+    VulnerabilityRule(
+        id="CFG-DEBUG", title="Debug Mode Enabled",
+        description="DEBUG=True or debug:true in non-test files",
+        severity="MEDIUM",
+        pattern=re.compile(r"""(?i)(?:DEBUG\s*=\s*True|debug:\s*true)"""),
+        languages=[".py", ".yaml", ".yml", ".toml", ".cfg", ".ini", ".conf", ".js", ".ts"],
+        cwe="CWE-489",
+    ),
+    VulnerabilityRule(
+        id="CFG-NOVERIFY", title="SSL Verification Disabled",
+        description="Disabling SSL/TLS certificate verification",
+        severity="HIGH",
+        pattern=re.compile(r"""(?:verify\s*=\s*False|InsecureSkipVerify:\s*true)"""),
+        languages=[".py", ".go", ".js", ".ts", ".yaml", ".yml"],
+        cwe="CWE-295",
+    ),
+]
+
+
+def scan_code_vulnerabilities(project_path: str | Path) -> dict:
+    """
+    Scan source files for dangerous code patterns (SAST rules).
+
+    Args:
+        project_path: Root directory to scan.
+
+    Returns:
+        Dict with total_findings and list of findings.
+    """
+    project_path = Path(project_path).resolve()
+    findings: list[VulnerabilityFinding] = []
+
+    for dirpath, dirnames, filenames in os.walk(project_path):
+        dirnames[:] = [d for d in dirnames if d not in _VULN_SKIP_DIRS]
+
+        for fname in filenames:
+            file_path = Path(dirpath) / fname
+            try:
+                rel_path = str(file_path.relative_to(project_path))
+            except ValueError:
+                rel_path = str(file_path)
+
+            # Skip test files
+            if _is_test_file(rel_path):
+                continue
+
+            # Check extension
+            _, ext = os.path.splitext(fname)
+            ext_lower = ext.lower()
+            if ext_lower not in _VULN_SCANNABLE_EXTENSIONS:
+                continue
+
+            # Read file
+            try:
+                content = file_path.read_text(encoding="utf-8", errors="ignore")
+            except (OSError, UnicodeDecodeError):
+                continue
+
+            # Skip large files
+            if len(content) > 1_048_576:
+                continue
+
+            # Find applicable rules for this file extension
+            applicable_rules = [r for r in VULNERABILITY_RULES if ext_lower in r.languages]
+            if not applicable_rules:
+                continue
+
+            for line_num, line in enumerate(content.splitlines(), start=1):
+                stripped = line.strip()
+                # Skip empty lines
+                if not stripped:
+                    continue
+
+                for rule in applicable_rules:
+                    match = rule.pattern.search(line)
+                    if match:
+                        # Skip lines with example/placeholder indicators
+                        if _EXAMPLE_INDICATORS.search(line):
+                            continue
+
+                        # For hardcoded creds, skip common false positives
+                        if rule.id in ("CRED-PASS", "CRED-SECRET"):
+                            lower_line = line.lower()
+                            if any(fp in lower_line for fp in (
+                                'type="password"', "type='password'",
+                                "password_field", "password_input",
+                                "v-model", "formdata", "/auth", "/login",
+                                "os.environ", "os.getenv", "process.env",
+                                "config.", "settings.",
+                            )):
+                                continue
+
+                        # For debug mode, skip if it looks like a test/dev config check
+                        if rule.id == "CFG-DEBUG":
+                            lower_line = line.lower()
+                            if any(fp in lower_line for fp in (
+                                "if ", "assert", "# ", "// ", "not debug",
+                                "!debug", "debug ==", "debug !=",
+                            )):
+                                continue
+
+                        # Truncate snippet to 120 chars
+                        snippet = stripped[:120]
+
+                        findings.append(VulnerabilityFinding(
+                            rule_id=rule.id,
+                            title=rule.title,
+                            severity=rule.severity,
+                            file=rel_path,
+                            line=line_num,
+                            snippet=snippet,
+                            cwe=rule.cwe,
+                        ))
+
+    return {
+        "total_findings": len(findings),
+        "findings": [
+            {
+                "rule_id": f.rule_id,
+                "title": f.title,
+                "severity": f.severity,
+                "file": f.file,
+                "line": f.line,
+                "snippet": f.snippet,
+                "cwe": f.cwe,
+            }
+            for f in findings
+        ],
+    }
+
+
 def format_secret_scan(result: SecretScanResult) -> str:
     """Format secret scan results as human-readable text."""
     lines = []

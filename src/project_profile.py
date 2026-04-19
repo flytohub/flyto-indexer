@@ -1269,7 +1269,7 @@ def _compute_health_dimensions(
     if has_coverage and "coverage" in active_dims:
         result["coverage"] = {"score": coverage_score, "max": 25, "status": coverage_status, "coverage_pct": coverage_pct}
 
-    result["overall"] = {"score": overall_score, "max": 100, "grade": grade}
+    result["overall"] = {"score": int(overall_score), "max": 100, "grade": grade}
 
     return result
 
@@ -1380,6 +1380,39 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         }
     except Exception as e:
         logger.debug("Secret scan failed: %s", e)
+
+    # 5b2. Code vulnerability scan (SAST)
+    code_vulns_data = {}
+    try:
+        try:
+            from .secret_scanner import scan_code_vulnerabilities
+        except ImportError:
+            from secret_scanner import scan_code_vulnerabilities
+        code_vulns_data = scan_code_vulnerabilities(project_path)
+    except Exception as e:
+        logger.debug("Code vulnerability scan failed: %s", e)
+
+    # 5b3. Git history secret scan
+    git_leaked_data = {}
+    try:
+        try:
+            from .git_secret_scanner import scan_git_history
+        except ImportError:
+            from git_secret_scanner import scan_git_history
+        git_leaked_data = scan_git_history(project_path)
+    except Exception as e:
+        logger.debug("Git history secret scan failed: %s", e)
+
+    # 5b4. Dockerfile / IaC scan
+    dockerfile_data = {}
+    try:
+        try:
+            from .dockerfile_scanner import scan_dockerfiles
+        except ImportError:
+            from dockerfile_scanner import scan_dockerfiles
+        dockerfile_data = scan_dockerfiles(project_path)
+    except Exception as e:
+        logger.debug("Dockerfile scan failed: %s", e)
 
     # 5c. License scan
     license_data = {}
@@ -1565,6 +1598,9 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
 
         # Analysis
         "secrets": secrets_data,
+        "code_vulnerabilities": code_vulns_data,
+        "git_leaked_secrets": git_leaked_data,
+        "dockerfile_issues": dockerfile_data,
         "taint_flows": taint_data,
         "license": license_data,
         "documentation": documentation_data,

@@ -251,6 +251,17 @@ def main():
     pr_risk_parser.add_argument("--staged", action="store_true", help="Only analyze staged changes")
     pr_risk_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
 
+    # sbom
+    sbom_parser = subparsers.add_parser(
+        "sbom",
+        help="Export Software Bill of Materials (SBOM) in CycloneDX 1.4 JSON format",
+        description="Scan project dependencies and export as CycloneDX 1.4 JSON SBOM. Supports npm, pypi, Go, Rust, Maven, PHP, Ruby, and Docker ecosystems.",
+    )
+    sbom_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    sbom_parser.add_argument("--format", choices=["cyclonedx"], default="cyclonedx", dest="sbom_format", help="SBOM format (default: cyclonedx)")
+    sbom_parser.add_argument("--name", help="Project name (default: directory name)")
+    sbom_parser.add_argument("--output", "-o", help="Output file path (default: stdout)")
+
     # framework
     framework_parser = subparsers.add_parser(
         "framework",
@@ -309,6 +320,8 @@ def main():
             result = cmd_check(args)
         elif args.command == "pr-risk":
             result = cmd_pr_risk(args)
+        elif args.command == "sbom":
+            result = cmd_sbom(args)
         elif args.command == "framework":
             result = cmd_framework(args)
         else:
@@ -1301,6 +1314,28 @@ def cmd_pr_risk(args):
 
     print(format_pr_risk(result))
     return None
+
+
+def cmd_sbom(args):
+    """Export SBOM in CycloneDX format."""
+    from .sbom_export import export_sbom_cyclonedx, format_sbom_json
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    project_name = args.name or project_path.name
+    sbom = export_sbom_cyclonedx(project_path, project_name)
+    output_str = format_sbom_json(sbom)
+
+    if hasattr(args, "output") and args.output:
+        output_path = Path(args.output)
+        output_path.write_text(output_str + "\n", encoding="utf-8")
+        print(f"SBOM written to {output_path} ({len(sbom.get('components', []))} components)")
+        return None
+
+    return sbom
 
 
 def cmd_framework(args):
