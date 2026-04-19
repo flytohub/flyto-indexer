@@ -1027,7 +1027,7 @@ def _compute_complexity_summary(symbols: dict, index_dir: Path) -> dict:
         "total_functions": total_functions,
         "complex_functions": complex_functions,
         "avg_complexity": avg_complexity,
-        "most_complex": most_complex[:5],
+        "most_complex": most_complex[:50],
     }
 
 
@@ -1120,6 +1120,7 @@ def _compute_health_dimensions(
     # --- Dead code ---
     # Count symbols that have no references in reverse_index and are not test files
     dead_count = 0
+    dead_symbols_list = []
     non_test_symbols = {
         k: v for k, v in symbols.items()
         if not _is_test_file(v.get("path", ""))
@@ -1133,6 +1134,12 @@ def _compute_health_dimensions(
                 name = sym.get("name", "")
                 if not name.startswith("_"):
                     dead_count += 1
+                    dead_symbols_list.append({
+                        "name": name,
+                        "path": sym.get("path", ""),
+                        "line": sym.get("line", 0),
+                        "type": sym.get("type", ""),
+                    })
 
     # Gentle curve: <5% dead = 25, 10% = 20, 20% = 15, 50% = 5
     dead_pct = dead_count / max(len(non_test_symbols), 1)
@@ -1263,7 +1270,7 @@ def _compute_health_dimensions(
     if "complexity" in active_dims:
         result["complexity"] = {"score": complexity_score, "max": 25, "status": complexity_status, "complex_count": complex_count}
     if "dead_code" in active_dims:
-        result["dead_code"] = {"score": dead_score, "max": 25, "status": dead_status, "dead_count": dead_count}
+        result["dead_code"] = {"score": dead_score, "max": 25, "status": dead_status, "dead_count": dead_count, "dead_symbols": dead_symbols_list[:50]}
     if "documentation" in active_dims:
         result["documentation"] = {"score": active_dims["documentation"], "max": 25, "status": "PASS" if active_dims["documentation"] >= 20 else ("WARN" if active_dims["documentation"] >= 10 else "FAIL")}
     if has_coverage and "coverage" in active_dims:
