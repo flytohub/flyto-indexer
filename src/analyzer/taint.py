@@ -136,20 +136,38 @@ FLAT_SINKS = _flatten_sinks()
 # ── YAML rule loading ──────────────────────────────────────────────────────
 
 def _load_yaml_rules(project_root: Path) -> dict | None:
-    """Load optional taint_rules.yaml and return parsed dict, or None."""
-    candidates = [
+    """Load taint rules from .flyto-rules.yaml (taint: block) or taint_rules.yaml.
+
+    Lookup order (first hit wins):
+      1. .flyto-rules.yaml `taint:` block  — preferred, unified with other rules
+      2. .flyto-index/taint_rules.yaml     — legacy location
+      3. taint_rules.yaml at project root  — legacy location
+    """
+    try:
+        import yaml  # optional dependency
+    except ImportError:
+        logger.debug("PyYAML not installed; skipping taint yaml rules")
+        return None
+
+    unified = project_root / ".flyto-rules.yaml"
+    if unified.is_file():
+        try:
+            with open(unified) as f:
+                data = yaml.safe_load(f) or {}
+            taint_block = data.get("taint")
+            if isinstance(taint_block, dict) and taint_block:
+                return taint_block
+        except Exception as e:
+            logger.debug("Failed to load %s: %s", unified, e)
+
+    for path in (
         project_root / ".flyto-index" / "taint_rules.yaml",
         project_root / "taint_rules.yaml",
-    ]
-    for path in candidates:
+    ):
         if path.is_file():
             try:
-                import yaml  # optional dependency
                 with open(path) as f:
                     return yaml.safe_load(f)
-            except ImportError:
-                logger.debug("PyYAML not installed; skipping taint_rules.yaml")
-                return None
             except Exception as e:
                 logger.debug("Failed to load %s: %s", path, e)
                 return None
@@ -237,6 +255,12 @@ class TaintAnalyzer:
         self._ast_cache: dict[str, ast.Module] = {}
         self._content_cache: dict[str, str] = {}
 
+        # Current file context (set during scan) — enables LSP type-aware filtering
+        self._current_file: str | None = None
+
+        # Type-aware FP suppression: counts how many sources LSP filtered out
+        self._type_filtered: int = 0
+
     # ── Public API ──────────────────────────────────────────────────────────
 
     def analyze(self) -> list[TaintFlow]:
@@ -294,6 +318,7 @@ class TaintAnalyzer:
             # Cache for cross-function use
             self._ast_cache[rel] = tree
             self._content_cache[rel] = content
+            self._current_file = rel
 
             # Count sources and sinks in this file
             self._count_sources_sinks(content, "python")
@@ -620,14 +645,39 @@ class TaintAnalyzer:
         return False, "", []
 
     def _is_source(self, node: ast.AST) -> str | None:
-        """Check if node is a taint source. Returns source string or None."""
+        """Check if node is a taint source. Returns source string or None.
+
+        When an LSP server is available for the current file, post-filters
+        the match by querying the type at the node's position — sources that
+        resolve to int / bool / datetime / etc. (non-string types) are dropped
+        because string-injection sinks cannot be exploited with them.
+        """
         text = _safe_unparse(node)
         if not text:
             return None
+        matched = None
         for source in self._sources.get("python", []):
             if source in text:
-                return text
-        return None
+                matched = text
+                break
+        if matched is None:
+            return None
+
+        # Type-aware filter (LSP) — only suppresses, never adds
+        if self._current_file and hasattr(node, "lineno") and hasattr(node, "col_offset"):
+            try:
+                from .type_filter import source_is_taintable
+                source_path = self.project_root / self._current_file
+                if not source_is_taintable(
+                    self.project_root, source_path,
+                    node.lineno - 1, node.col_offset,
+                ):
+                    self._type_filtered += 1
+                    return None
+            except Exception as e:
+                logger.debug("type_filter skipped: %s", e)
+
+        return matched
 
     def _is_sanitizer_expr(self, node: ast.AST) -> bool:
         """Check if node is a sanitizer call."""

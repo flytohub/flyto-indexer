@@ -271,6 +271,67 @@ def main():
     framework_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
     framework_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
 
+    # layers — architecture layer rule check
+    layers_parser = subparsers.add_parser(
+        "layers",
+        help="Check architecture layer rules from .flyto-rules.yaml (import graph compliance)",
+        description="Walk the import graph and flag any edge that violates layer declarations (can_import / cannot_import) or cross_imports_deny rules.",
+    )
+    layers_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    layers_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
+    layers_parser.add_argument("--fail-on-violation", action="store_true", dest="fail_on_violation", help="Exit non-zero if any violation is found (CI mode)")
+
+    # add-layer — write a new layer into .flyto-rules.yaml
+    add_layer_parser = subparsers.add_parser(
+        "add-layer",
+        help="Add an architecture layer to .flyto-rules.yaml",
+        description="Declare a named layer by path glob, optionally constraining which other layers it may import.",
+    )
+    add_layer_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    add_layer_parser.add_argument("--name", required=True, help="Layer name (e.g., ui, lib, db)")
+    add_layer_parser.add_argument("--paths", required=True, help="Comma-separated path globs (e.g., 'src/components/**,src/pages/**')")
+    add_layer_parser.add_argument("--can-import", dest="can_import", default="", help="Comma-separated layer names this layer may import")
+    add_layer_parser.add_argument("--cannot-import", dest="cannot_import", default="", help="Comma-separated layer names this layer must not import")
+    add_layer_parser.add_argument("--reason", default="", help="Why this constraint exists (shown in audit output)")
+
+    # add-taint-source / add-taint-sink / add-taint-sanitizer — Taint DSL writers
+    add_ts_parser = subparsers.add_parser(
+        "add-taint-source",
+        help="Add a taint source pattern to .flyto-rules.yaml",
+        description="Declare where untrusted data enters this project (e.g., request.json, custom SDK getters).",
+    )
+    add_ts_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    add_ts_parser.add_argument("--pattern", required=True, help="Match pattern (e.g., 'ctx.body', 'request.custom_header')")
+    add_ts_parser.add_argument("--language", choices=["python", "javascript", "go"], default="python", help="Language (default: python)")
+    add_ts_parser.add_argument("--taint-type", dest="taint_type", default="", help="Optional label (e.g., user_input, config)")
+
+    add_tsk_parser = subparsers.add_parser(
+        "add-taint-sink",
+        help="Add a taint sink pattern to .flyto-rules.yaml",
+        description="Declare a dangerous function that should not receive tainted data.",
+    )
+    add_tsk_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    add_tsk_parser.add_argument("--pattern", required=True, help="Match pattern (e.g., 'dangerous_exec(', 'runShell(')")
+    add_tsk_parser.add_argument("--vuln-type", dest="vuln_type", default="custom", help="Category (rce, xss, sql_injection, path_traversal, ...)")
+    add_tsk_parser.add_argument("--severity", choices=["critical", "high", "medium", "low"], default="high", help="Severity (default: high)")
+    add_tsk_parser.add_argument("--recommendation", default="", help="What to do instead (shown in taint report)")
+
+    add_tsan_parser = subparsers.add_parser(
+        "add-taint-sanitizer",
+        help="Add a taint sanitizer pattern to .flyto-rules.yaml",
+        description="Declare a function that cleanses tainted data (e.g., shlex.quote, escape_html).",
+    )
+    add_tsan_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    add_tsan_parser.add_argument("--pattern", required=True, help="Match pattern (e.g., 'mysql.escape(', 'html.escape(')")
+    add_tsan_parser.add_argument("--cleanses", default="*", help="Comma-separated vuln types this sanitizer clears, or '*' for all (default: *)")
+
+    list_taint_parser = subparsers.add_parser(
+        "list-taint-rules",
+        help="Show the taint rules declared in .flyto-rules.yaml (project-specific only)",
+        description="List every project-declared source / sink / sanitizer. Built-in defaults are NOT included.",
+    )
+    list_taint_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -324,6 +385,18 @@ def main():
             result = cmd_sbom(args)
         elif args.command == "framework":
             result = cmd_framework(args)
+        elif args.command == "layers":
+            result = cmd_layers(args)
+        elif args.command == "add-layer":
+            result = cmd_add_layer(args)
+        elif args.command == "add-taint-source":
+            result = cmd_add_taint_source(args)
+        elif args.command == "add-taint-sink":
+            result = cmd_add_taint_sink(args)
+        elif args.command == "add-taint-sanitizer":
+            result = cmd_add_taint_sanitizer(args)
+        elif args.command == "list-taint-rules":
+            result = cmd_list_taint_rules(args)
         else:
             parser.print_help()
             return
@@ -1354,6 +1427,142 @@ def cmd_framework(args):
 
     print(format_frameworks(frameworks))
     return None
+
+
+def cmd_layers(args):
+    """Check architecture layer rules (import graph)."""
+    from .analyzer.layers import check_layers_dict
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    result = check_layers_dict(project_path)
+
+    if hasattr(args, "as_json") and args.as_json:
+        if args.fail_on_violation and result["total_violations"] > 0:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            sys.exit(2)
+        return result
+
+    if not result["layers"]:
+        print("No layers declared in .flyto-rules.yaml")
+        print("Run: flyto-index add-layer --name <name> --paths '<glob>'")
+        return None
+
+    print(f"Layers: {len(result['layers'])}")
+    for layer in result["layers"]:
+        constraints = []
+        if layer["can_import"]:
+            constraints.append(f"can_import={layer['can_import']}")
+        if layer["cannot_import"]:
+            constraints.append(f"cannot_import={layer['cannot_import']}")
+        suffix = f" [{', '.join(constraints)}]" if constraints else ""
+        print(f"  - {layer['name']}: {layer['paths']}{suffix}")
+
+    print()
+    print(f"Files checked: {result['files_checked']}")
+    print(f"Edges checked: {result['edges_checked']} (skipped: {result['edges_skipped']})")
+    print(f"Violations: {result['total_violations']}")
+
+    for v in result["violations"][:20]:
+        print()
+        print(f"  {v['severity'].upper()}  {v['from_layer']} → {v['to_layer']}  ({v['kind']})")
+        print(f"    {v['from_file']}:{v['line']}")
+        print(f"    imports {v['to_file']}")
+        if v["reason"]:
+            print(f"    reason: {v['reason']}")
+
+    if args.fail_on_violation and result["total_violations"] > 0:
+        sys.exit(2)
+    return None
+
+
+def cmd_add_layer(args):
+    """Write a layer definition into .flyto-rules.yaml."""
+    from .analyzer.layers import add_layer
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    paths = [p.strip() for p in args.paths.split(",") if p.strip()]
+    can_import = [p.strip() for p in args.can_import.split(",") if p.strip()] if args.can_import else None
+    cannot_import = [p.strip() for p in args.cannot_import.split(",") if p.strip()] if args.cannot_import else None
+
+    return add_layer(
+        project_path,
+        name=args.name,
+        paths=paths,
+        can_import=can_import,
+        cannot_import=cannot_import,
+        reason=args.reason or None,
+    )
+
+
+def cmd_add_taint_source(args):
+    from .analyzer.taint_dsl import add_taint_source
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    return add_taint_source(
+        project_path,
+        pattern=args.pattern,
+        language=args.language,
+        taint_type=args.taint_type or None,
+    )
+
+
+def cmd_add_taint_sink(args):
+    from .analyzer.taint_dsl import add_taint_sink
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    return add_taint_sink(
+        project_path,
+        pattern=args.pattern,
+        vuln_type=args.vuln_type,
+        severity=args.severity,
+        recommendation=args.recommendation,
+    )
+
+
+def cmd_add_taint_sanitizer(args):
+    from .analyzer.taint_dsl import add_taint_sanitizer
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    cleanses = None
+    if args.cleanses and args.cleanses != "*":
+        cleanses = [p.strip() for p in args.cleanses.split(",") if p.strip()]
+
+    return add_taint_sanitizer(
+        project_path,
+        pattern=args.pattern,
+        cleanses=cleanses,
+    )
+
+
+def cmd_list_taint_rules(args):
+    from .analyzer.taint_dsl import list_taint_rules
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    return list_taint_rules(project_path)
 
 
 def _detect_changed_files(args, engine, project_path):

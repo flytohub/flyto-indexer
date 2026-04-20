@@ -1360,6 +1360,195 @@ SMART_TOOLS.append({
     },
 })
 
+SMART_TOOLS.append({
+    "name": "call_hierarchy",
+    "title": "Call Hierarchy (LSP)",
+    "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    "description": (
+        "Walk the LSP-resolved incoming-call graph for a symbol, up to a bounded depth. "
+        "Unlike `impact_analysis` (which uses the regex-built reverse_index), this traversal "
+        "is type-aware — same-named functions in different modules do not collide.\n\n"
+        "Requires an LSP server for the file's language (pyright / typescript-language-server / gopls / "
+        "rust-analyzer). Returns empty results and does not raise when LSP is unavailable — in that case, "
+        "fall back to `impact_analysis`.\n\n"
+        "Use for: high-stakes refactors where the regex reverse_index might under-count callers; "
+        "cross-module breaking-change analysis; verifying dead code is genuinely dead."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "File containing the symbol (absolute or project-relative)."},
+            "line": {"type": "integer", "description": "1-based line number of the symbol definition."},
+            "column": {"type": "integer", "description": "0-based column of the symbol name on that line.", "default": 0},
+            "direction": {
+                "type": "string",
+                "enum": ["incoming", "outgoing"],
+                "default": "incoming",
+                "description": "'incoming' = who calls this, 'outgoing' = what this calls.",
+            },
+            "max_depth": {"type": "integer", "default": 2, "description": "How many call-hops to follow. Capped at 5."},
+            "project": {"type": "string", "description": "Project root (defaults to cwd)."},
+        },
+        "required": ["path", "line"],
+    },
+})
+
+SMART_TOOLS.append({
+    "name": "check_layers",
+    "title": "Check Architecture Layers",
+    "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    "description": (
+        "Walk the project's import graph and flag edges that violate the layer rules "
+        "declared in .flyto-rules.yaml (layers + cross_imports_deny).\n\n"
+        "Use this before a refactor to catch architecture drift, or after generating code to "
+        "verify the AI did not cross a forbidden layer. The 'audit' tool already includes this "
+        "check — call check_layers directly only when you need a focused layer report.\n\n"
+        "Supported languages: Python (.py), TypeScript/JavaScript (.ts .tsx .js .jsx .mjs .cjs), "
+        "Vue (.vue), Go (.go — resolved via go.mod).\n\n"
+        "Returns: layer list, files/edges checked, and every violation with from/to layers, "
+        "source file:line, imported target, and the declared reason."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Project root path. Defaults to current working directory.",
+            },
+        },
+    },
+})
+
+SMART_TOOLS.append({
+    "name": "add_taint_source",
+    "title": "Add Taint Source",
+    "annotations": {"readOnlyHint": False, "openWorldHint": False},
+    "description": (
+        "Declare a project-specific taint source in .flyto-rules.yaml (taint.sources).\n\n"
+        "Use this when the project has custom request/input channels that the default rules don't cover "
+        "— e.g., a custom SDK wrapper, a message bus payload accessor, or a framework-specific getter.\n\n"
+        "The next taint analysis run picks it up automatically. Built-in defaults (Flask/FastAPI/Express/Gin) "
+        "keep working; your rule is merged on top."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "Project root path. Defaults to current working directory."},
+            "pattern": {"type": "string", "description": "Match pattern (e.g., 'ctx.body', 'message.payload['"},
+            "language": {"type": "string", "enum": ["python", "javascript", "go"], "default": "python"},
+            "taint_type": {"type": "string", "description": "Optional free-form label (e.g., 'user_input', 'config', 'external_api')."},
+        },
+        "required": ["pattern"],
+    },
+})
+
+SMART_TOOLS.append({
+    "name": "add_taint_sink",
+    "title": "Add Taint Sink",
+    "annotations": {"readOnlyHint": False, "openWorldHint": False},
+    "description": (
+        "Declare a project-specific taint sink in .flyto-rules.yaml (taint.sinks).\n\n"
+        "Use this to mark dangerous functions that must not receive untrusted data — e.g., a custom "
+        "shell-out helper, a template renderer without auto-escape, or a deserializer. The taint engine "
+        "flags any flow from a source to this sink (unless a sanitizer intervenes)."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "Project root path. Defaults to current working directory."},
+            "pattern": {"type": "string", "description": "Match pattern (e.g., 'dangerousEval(', 'runShell(')"},
+            "vuln_type": {"type": "string", "description": "Category (rce, xss, sql_injection, path_traversal, ssrf, ...). Default: 'custom'."},
+            "severity": {"type": "string", "enum": ["critical", "high", "medium", "low"], "default": "high"},
+            "recommendation": {"type": "string", "description": "What to do instead — shown in the taint finding output."},
+        },
+        "required": ["pattern"],
+    },
+})
+
+SMART_TOOLS.append({
+    "name": "add_taint_sanitizer",
+    "title": "Add Taint Sanitizer",
+    "annotations": {"readOnlyHint": False, "openWorldHint": False},
+    "description": (
+        "Declare a project-specific sanitizer in .flyto-rules.yaml (taint.sanitizers).\n\n"
+        "Use this when the project wraps or renames a sanitizer (e.g., custom escape helper, in-house "
+        "`safe_html()`) so the taint engine stops reporting false positives on flows that go through it.\n\n"
+        "`cleanses` lets you target specific vulnerability types (e.g., ['rce']) or use ['*'] to cleanse all."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "Project root path. Defaults to current working directory."},
+            "pattern": {"type": "string", "description": "Match pattern (e.g., 'safe_html(', 'escape_sql(')"},
+            "cleanses": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Vulnerability types this sanitizer clears. Use ['*'] to cleanse all.",
+            },
+        },
+        "required": ["pattern"],
+    },
+})
+
+SMART_TOOLS.append({
+    "name": "list_taint_rules",
+    "title": "List Project Taint Rules",
+    "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    "description": (
+        "Show every source / sink / sanitizer declared in .flyto-rules.yaml (taint:). "
+        "Built-in defaults are NOT included — this is the delta the project has added.\n\n"
+        "Use before editing taint rules to see what's already in place, or to audit which custom "
+        "sources/sinks the project has accumulated over time."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "Project root path. Defaults to current working directory."},
+        },
+    },
+})
+
+SMART_TOOLS.append({
+    "name": "add_layer",
+    "title": "Add Architecture Layer",
+    "annotations": {"readOnlyHint": False, "openWorldHint": False},
+    "description": (
+        "Write a new layer definition into .flyto-rules.yaml.\n\n"
+        "Use this to persist an architectural constraint the user just corrected — for example, "
+        "when the user says 'ui must not import db directly', encode it here so every future agent "
+        "and CI run enforces it automatically.\n\n"
+        "Prefer either can_import (whitelist of allowed peer layers) or cannot_import (blacklist). "
+        "Paths are glob patterns; first-matching layer wins for each file."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "Project root path. Defaults to current working directory."},
+            "name": {"type": "string", "description": "Layer name (e.g., 'ui', 'lib', 'db')."},
+            "paths": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Glob patterns for files in this layer (e.g., ['src/components/**', 'src/pages/**']).",
+            },
+            "can_import": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Whitelist of layer names this layer may import from. Omit to allow all.",
+            },
+            "cannot_import": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Blacklist of layer names this layer must NOT import from.",
+            },
+            "reason": {
+                "type": "string",
+                "description": "Human-readable reason shown in audit output when violated.",
+            },
+        },
+        "required": ["name", "paths"],
+    },
+})
+
 SMART_TOOL_NAMES: Set[str] = {tool["name"] for tool in SMART_TOOLS}
 
 
@@ -1660,6 +1849,59 @@ def _smart():
     except ImportError:
         from tools import smart
     return smart
+
+
+def _layers_mod():
+    try:
+        from .analyzer import layers
+    except ImportError:
+        from analyzer import layers
+    return layers
+
+
+def _taint_dsl_mod():
+    try:
+        from .analyzer import taint_dsl
+    except ImportError:
+        from analyzer import taint_dsl
+    return taint_dsl
+
+
+def _call_hierarchy_dispatch(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Dispatch call_hierarchy tool — resolves file/line/col → LSP edges."""
+    from pathlib import Path as _P
+    try:
+        from .lsp.call_graph import incoming_calls, outgoing_calls
+    except ImportError:
+        from lsp.call_graph import incoming_calls, outgoing_calls
+
+    project_root = _P(args.get("project") or os.getcwd())
+    path = args.get("path", "")
+    source_file = _P(path)
+    if not source_file.is_absolute():
+        source_file = project_root / source_file
+    line = int(args.get("line", 1)) - 1  # 1-based → 0-based
+    col = int(args.get("column", 0))
+    direction = args.get("direction", "incoming")
+    max_depth = min(int(args.get("max_depth", 2)), 5)
+
+    fn = incoming_calls if direction == "incoming" else outgoing_calls
+    edges = fn(project_root, source_file, line, col, max_depth=max_depth)
+    return {
+        "direction": direction,
+        "max_depth": max_depth,
+        "source_file": str(source_file),
+        "source_line": line + 1,
+        "edge_count": len(edges),
+        "edges": [
+            {
+                "from_file": e.from_file, "from_name": e.from_name, "from_line": e.from_line,
+                "to_file": e.to_file, "to_name": e.to_name, "to_line": e.to_line,
+                "depth": e.depth,
+            }
+            for e in edges
+        ],
+    }
 
 
 # =============================================================================
@@ -1987,6 +2229,45 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
                 __import__("pathlib").Path(args.get("path") or os.getcwd()),
             )
         ],
+
+        # Architecture layer rules
+        "check_layers": lambda args: _layers_mod().check_layers_dict(
+            __import__("pathlib").Path(args.get("path") or os.getcwd()),
+        ),
+
+        # LSP call hierarchy (Phase 3) — type-aware blast radius
+        "call_hierarchy": lambda args: _call_hierarchy_dispatch(args),
+        "add_layer": lambda args: _layers_mod().add_layer(
+            project_root=__import__("pathlib").Path(args.get("path") or os.getcwd()),
+            name=args.get("name", ""),
+            paths=args.get("paths", []),
+            can_import=args.get("can_import"),
+            cannot_import=args.get("cannot_import"),
+            reason=args.get("reason"),
+        ),
+
+        # Taint DSL (yaml CRUD; analysis runs via analyze_data_flow / smart audit)
+        "add_taint_source": lambda args: _taint_dsl_mod().add_taint_source(
+            project_root=__import__("pathlib").Path(args.get("path") or os.getcwd()),
+            pattern=args.get("pattern", ""),
+            language=args.get("language", "python"),
+            taint_type=args.get("taint_type"),
+        ),
+        "add_taint_sink": lambda args: _taint_dsl_mod().add_taint_sink(
+            project_root=__import__("pathlib").Path(args.get("path") or os.getcwd()),
+            pattern=args.get("pattern", ""),
+            vuln_type=args.get("vuln_type", "custom"),
+            severity=args.get("severity", "high"),
+            recommendation=args.get("recommendation", ""),
+        ),
+        "add_taint_sanitizer": lambda args: _taint_dsl_mod().add_taint_sanitizer(
+            project_root=__import__("pathlib").Path(args.get("path") or os.getcwd()),
+            pattern=args.get("pattern", ""),
+            cleanses=args.get("cleanses"),
+        ),
+        "list_taint_rules": lambda args: _taint_dsl_mod().list_taint_rules(
+            project_root=__import__("pathlib").Path(args.get("path") or os.getcwd()),
+        ),
     }
 
     handler = _DISPATCH.get(name)

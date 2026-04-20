@@ -212,7 +212,30 @@ AST-based engine that tracks how untrusted data flows from sources to dangerous 
 - **Cross-function**: Detects when tainted data is passed as an argument to a function with a dangerous sink
 - **JS/TS/Go**: Regex-based fallback for common taint patterns
 - **Sanitizer-aware**: `int()`, `html.escape()`, `shlex.quote()`, parameterized queries all break the taint chain
-- **Custom rules**: Add project-specific sources/sinks/sanitizers via `taint_rules.yaml`
+- **Project DSL**: Declare custom sources / sinks / sanitizers in `.flyto-rules.yaml` under `taint:` (merged on top of built-in defaults; `taint_rules.yaml` is also still honored for backward compat)
+
+```yaml
+# .flyto-rules.yaml
+taint:
+  sources:
+    - pattern: "ctx.payload"
+      language: python
+      taint_type: user_input
+  sinks:
+    - pattern: "dangerousEval("
+      vuln_type: rce
+      severity: critical
+      recommendation: "Use sandbox runner"
+  sanitizers:
+    - pattern: "safe_html("
+      cleanses: ["xss"]
+```
+
+```bash
+flyto-index add-taint-source . --pattern "ctx.payload" --taint-type user_input
+flyto-index add-taint-sink   . --pattern "dangerousEval(" --vuln-type rce --severity critical
+flyto-index list-taint-rules .
+```
 
 ### Project Rules — AI learns from your corrections
 
@@ -242,6 +265,45 @@ User corrects AI → add_rule() writes .flyto-rules.yaml → audit checks compli
 - `grep_deny` — forbidden code patterns in specific file types
 - `conventions` — text-only guidance (no automated check)
 - Rules accumulate over time — no upfront config needed
+
+### Architecture Layers — declare who may import whom
+
+Declarative layer membership + import constraints. The indexer walks the import
+graph (Python / TS / JS / Vue / Go) and flags every edge that crosses a forbidden
+boundary. No plugin, no runtime — just `.flyto-rules.yaml` and `audit`.
+
+```yaml
+layers:
+  - name: ui
+    paths: ["src/pages/**", "src/components/**"]
+    can_import: [lib, hooks, types]
+    reason: "UI is the top layer"
+
+  - name: lib
+    paths: ["src/lib/**"]
+    cannot_import: [ui]
+    reason: "lib must be UI-agnostic"
+
+  - name: db
+    paths: ["src/db/**"]
+    can_import: [types]
+
+cross_imports_deny:
+  - from: "src/features/a/**"
+    to:   "src/features/b/**"
+    reason: "features must not cross-import — use shared/"
+```
+
+```bash
+flyto-index layers .                      # human-readable report
+flyto-index layers . --json --fail-on-violation   # CI gate (exits non-zero)
+flyto-index add-layer --name ui --paths "src/ui/**" --cannot-import db
+```
+
+- `can_import` — whitelist (only these layers + self allowed)
+- `cannot_import` — blacklist (overrides the whitelist)
+- Path aliases from `tsconfig.json paths` and Go module paths from `go.mod` are resolved automatically
+- `audit` picks up layer violations with no extra flag
 
 ### Task Analysis — plan before you code
 

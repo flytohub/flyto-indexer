@@ -2,6 +2,7 @@
 
 import logging
 import re
+from pathlib import Path
 
 try:
     from ..index_store import load_index, get_symbol_content_text
@@ -309,6 +310,88 @@ def find_references(symbol_id: str) -> dict:
     }
 
 
+def _enrich_impact_with_call_hierarchy(
+    resolved_id: str,
+    symbols: dict,
+    seen_paths: set,
+    project_root: str | None = None,
+    max_depth: int = 2,
+) -> list:
+    """Add indirect callers via LSP call-hierarchy traversal.
+
+    Gives real blast radius: when A calls B calls C, modifying C surfaces both
+    A and B as affected. The regex reverse_index only reports direct callers.
+
+    Returns a list of affected-dicts (matches impact_analysis output shape).
+    Empty list when LSP is unavailable or fails — never raises.
+    """
+    try:
+        from ..lsp.call_graph import incoming_calls
+        from ..lsp.manager import LSPManager
+        from ..lsp.mapper import symbol_to_lsp_position
+    except ImportError:
+        try:
+            from lsp.call_graph import incoming_calls
+            from lsp.manager import LSPManager
+            from lsp.mapper import symbol_to_lsp_position
+        except ImportError:
+            return []
+
+    manager = LSPManager.get_instance()
+    if not manager._enabled:
+        return []
+
+    target_symbol = symbols.get(resolved_id, {})
+    target_path = target_symbol.get("path", "")
+    if not target_path:
+        return []
+
+    if project_root is None:
+        import os
+        from pathlib import Path as _P
+        project_root = os.environ.get("FLYTO_PROJECT_ROOT") or os.getcwd()
+    project_root_path = Path(project_root)
+
+    pos = symbol_to_lsp_position(target_symbol, str(project_root_path))
+    if pos is None:
+        return []
+    _uri, line, col = pos
+
+    abs_target = project_root_path / target_path
+    if not abs_target.is_file():
+        abs_target = Path(target_path)
+        if not abs_target.is_file():
+            return []
+
+    try:
+        edges = incoming_calls(
+            project_root_path, abs_target,
+            line_0based=line, col_0based=col,
+            max_depth=max_depth,
+        )
+    except Exception as e:
+        logger.debug("call hierarchy enrichment failed: %s", e)
+        return []
+
+    out: list = []
+    for edge in edges:
+        key = (edge.from_file, edge.from_line)
+        if key in seen_paths:
+            continue
+        seen_paths.add(key)
+        reason = f"Indirect call (depth {edge.depth})" if edge.depth > 1 else "Direct call (lsp)"
+        out.append({
+            "id": f"{edge.from_file}:{edge.from_name}",
+            "path": edge.from_file,
+            "name": edge.from_name,
+            "type": "function",
+            "line": edge.from_line,
+            "reason": reason,
+            "source": "lsp-call-hierarchy",
+        })
+    return out
+
+
 def _enrich_with_lsp(resolved_id: str, target_symbol: dict, index: dict) -> list:
     """Attempt to get type-aware references via LSP.
 
@@ -444,6 +527,14 @@ def impact_analysis(symbol_id: str) -> dict:
                 "type": dep.get("type", ""),
                 "reason": f"Via {dep.get('type', 'unknown')} dependency",
             })
+
+    # Method 3: LSP call-hierarchy enrichment (depth-2 incoming calls)
+    # Gives real blast radius — reverse_index is regex-built and can miss
+    # cross-module callers that hit the same-named function through rebinding.
+    lsp_depth_hits = _enrich_impact_with_call_hierarchy(
+        resolved_id, symbols, seen_paths, project_root=None,
+    )
+    affected.extend(lsp_depth_hits)
 
     warning = ""
     if len(affected) == 0:

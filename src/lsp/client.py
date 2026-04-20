@@ -78,7 +78,17 @@ class LSPClient:
                 "textDocument": {
                     "references": {"dynamicRegistration": False},
                     "definition": {"dynamicRegistration": False},
-                }
+                    "typeDefinition": {"dynamicRegistration": False},
+                    "implementation": {"dynamicRegistration": False},
+                    "hover": {
+                        "dynamicRegistration": False,
+                        "contentFormat": ["markdown", "plaintext"],
+                    },
+                    "callHierarchy": {"dynamicRegistration": False},
+                },
+                "workspace": {
+                    "symbol": {"dynamicRegistration": False},
+                },
             },
         })
         if init_result is None:
@@ -210,6 +220,107 @@ class LSPClient:
                 "text": text,
             }
         })
+
+    def text_document_hover(
+        self, uri: str, line: int, col: int
+    ) -> Optional[str]:
+        """textDocument/hover — return markdown/plaintext content, or None."""
+        params = {
+            "textDocument": {"uri": uri},
+            "position": {"line": line, "character": col},
+        }
+        result = self._send_request("textDocument/hover", params)
+        if not result or not isinstance(result, dict):
+            return None
+        contents = result.get("contents")
+        if contents is None:
+            return None
+        # LSP hover returns MarkupContent | MarkedString | MarkedString[]
+        if isinstance(contents, str):
+            return contents
+        if isinstance(contents, dict):
+            return contents.get("value", "")
+        if isinstance(contents, list):
+            parts: List[str] = []
+            for item in contents:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    parts.append(item.get("value", ""))
+            return "\n".join(p for p in parts if p)
+        return None
+
+    def text_document_type_definition(
+        self, uri: str, line: int, col: int
+    ) -> List[Location]:
+        """textDocument/typeDefinition — locate the type's definition."""
+        params = {
+            "textDocument": {"uri": uri},
+            "position": {"line": line, "character": col},
+        }
+        result = self._send_request("textDocument/typeDefinition", params)
+        if not result:
+            return []
+        if isinstance(result, dict):
+            result = [result]
+        if not isinstance(result, list):
+            return []
+        return self._parse_locations(result)
+
+    def text_document_implementation(
+        self, uri: str, line: int, col: int
+    ) -> List[Location]:
+        """textDocument/implementation — find interface implementations."""
+        params = {
+            "textDocument": {"uri": uri},
+            "position": {"line": line, "character": col},
+        }
+        result = self._send_request("textDocument/implementation", params)
+        if not result:
+            return []
+        if isinstance(result, dict):
+            result = [result]
+        if not isinstance(result, list):
+            return []
+        return self._parse_locations(result)
+
+    def workspace_symbol(self, query: str) -> List[dict]:
+        """workspace/symbol — project-wide symbol search.
+
+        Returns raw LSP SymbolInformation dicts (name, kind, location) since
+        different servers include different extra fields; callers narrow as needed.
+        """
+        result = self._send_request("workspace/symbol", {"query": query})
+        if not isinstance(result, list):
+            return []
+        return [item for item in result if isinstance(item, dict)]
+
+    def text_document_prepare_call_hierarchy(
+        self, uri: str, line: int, col: int
+    ) -> List[dict]:
+        """textDocument/prepareCallHierarchy — resolve a position to CallHierarchyItem(s)."""
+        params = {
+            "textDocument": {"uri": uri},
+            "position": {"line": line, "character": col},
+        }
+        result = self._send_request("textDocument/prepareCallHierarchy", params)
+        if not isinstance(result, list):
+            return []
+        return [item for item in result if isinstance(item, dict)]
+
+    def call_hierarchy_incoming_calls(self, item: dict) -> List[dict]:
+        """callHierarchy/incomingCalls — who calls this symbol."""
+        result = self._send_request("callHierarchy/incomingCalls", {"item": item})
+        if not isinstance(result, list):
+            return []
+        return [c for c in result if isinstance(c, dict)]
+
+    def call_hierarchy_outgoing_calls(self, item: dict) -> List[dict]:
+        """callHierarchy/outgoingCalls — what this symbol calls."""
+        result = self._send_request("callHierarchy/outgoingCalls", {"item": item})
+        if not isinstance(result, list):
+            return []
+        return [c for c in result if isinstance(c, dict)]
 
     def _parse_locations(self, items: list) -> List[Location]:
         """Parse a list of LSP Location dicts into Location dataclasses."""

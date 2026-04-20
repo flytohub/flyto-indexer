@@ -1,5 +1,56 @@
 # Changelog
 
+## [2.9.0] — 2026-04-20
+
+### LSP deepening — precision layer on top of the regex scanners
+
+All changes are strictly additive: when no LSP server is available for the
+language, every feature falls back to the existing stdlib path. Set
+`FLYTO_LSP_ENABLED=0` to skip LSP globally.
+
+#### Phase 1 — Import resolution (layers + cross-function taint)
+- New `src/lsp/resolver.py` — wraps `textDocument/definition` with an open-file memo
+- `analyzer/layers.py::resolve_import` now takes optional `line_content` / `line_num_0based` and asks the language server when the static chain (relative → alias → go.mod) comes back empty. Picks up complex tsconfig paths, Python namespace packages, and gopls vendor directories that the heuristic missed
+
+#### Phase 2 — Type-aware taint filter
+- New `src/analyzer/type_filter.py` — queries `textDocument/hover` on a source expression and parses the type out of the hover payload (pyright / tsserver / gopls formats all supported)
+- `TaintAnalyzer._is_source` post-filters matches: `int`, `bool`, `float`, `datetime`, `UUID`, TS `number` / `boolean` etc. are dropped because string-injection sinks cannot be exploited with non-string values. `TaintAnalyzer._type_filtered` surfaces the FP-suppression count for telemetry
+
+#### Phase 3 — Workspace symbol + call hierarchy
+- New `src/lsp/call_graph.py` — walks `textDocument/prepareCallHierarchy` + `callHierarchy/incomingCalls` / `outgoingCalls` up to a bounded depth. Result is the real, type-resolved call graph — same-named functions in different modules no longer collide
+- New `src/lsp/workspace_symbols.py` — `workspace/symbol` candidate search across every running language server with dedup
+- `tools/references.py::impact_analysis` now merges LSP-resolved indirect callers (depth 2) into its affected list — real blast radius for high-stakes refactors
+- New MCP tool `call_hierarchy` — explicit depth-N incoming / outgoing call query
+
+#### Common infrastructure
+- New `src/lsp/cache.py` — mtime-keyed in-memory response cache for definition / hover / call-hierarchy results. Bounded at 4096 entries, cleared by `LSPManager.reset_instance()`
+- `lsp/client.py` — initialize capabilities now advertise `hover`, `typeDefinition`, `implementation`, `callHierarchy`, `workspace.symbol`
+- New client methods: `text_document_hover`, `text_document_type_definition`, `text_document_implementation`, `workspace_symbol`, `text_document_prepare_call_hierarchy`, `call_hierarchy_incoming_calls`, `call_hierarchy_outgoing_calls`
+
+### Environment
+- `FLYTO_LSP_ENABLED` — `0` to disable LSP globally (default: on)
+- `FLYTO_LSP_TIMEOUT` — per-request timeout in seconds (default: 10)
+
+## [2.8.0] — 2026-04-20
+
+### Added
+- **Taint DSL** — unified `taint:` block inside `.flyto-rules.yaml` for project-specific sources / sinks / sanitizers
+  - Engine (`TaintAnalyzer`) now reads from `.flyto-rules.yaml → taint:` first, then falls back to the legacy `taint_rules.yaml` / `.flyto-index/taint_rules.yaml`
+  - Custom rules are merged on top of built-in defaults — project-declared patterns never replace the framework-aware library
+  - CLI writers: `add-taint-source`, `add-taint-sink`, `add-taint-sanitizer`, `list-taint-rules`
+  - MCP tools: `add_taint_source`, `add_taint_sink`, `add_taint_sanitizer`, `list_taint_rules`
+  - New `analyzer/taint_dsl.py` module (YAML CRUD only; analysis stays in `analyzer/taint.py`)
+- **Architecture Layer Rules** — declarative layer membership and import graph enforcement via `.flyto-rules.yaml`
+  - New `layers:` schema: `name`, `paths` (glob), `can_import` (whitelist), `cannot_import` (blacklist), `reason`
+  - New `cross_imports_deny:` schema for point-to-point forbidden edges
+  - Import graph walker supports Python, TypeScript/JavaScript, Vue, Go (via `go.mod` module path)
+  - `tsconfig.json paths` auto-resolved as aliases
+  - CLI: `flyto-index layers <path>` (human report) and `--json --fail-on-violation` (CI gate, exits non-zero)
+  - CLI: `flyto-index add-layer` — writes a layer definition into `.flyto-rules.yaml`
+  - MCP tools: `check_layers`, `add_layer`
+  - Violations automatically flow through the `audit` smart tool — no change on consumer side
+- `analyzer/layers.py` module (stdlib-only core, PyYAML used only for write-back)
+
 ## [1.4.0] — 2026-03-11
 
 ### Added

@@ -413,12 +413,12 @@ def remove_rule(project_root: Path, category: str, rule_text: str) -> dict:
 
 
 def check_rules(project_root: Path) -> dict:
-    """Convenience function: check rules and return dict summary."""
+    """Convenience function: check rules (glob/grep deny + layer graph) and return dict summary."""
     checker = RulesChecker(project_root)
     report = checker.check()
 
     violations_list = []
-    for v in report.violations[:50]:
+    for v in report.violations:
         violations_list.append({
             "rule": v.rule,
             "category": v.category,
@@ -428,11 +428,56 @@ def check_rules(project_root: Path) -> dict:
             "severity": v.severity,
         })
 
-    return {
-        "total_rules": report.total_rules,
-        "rules_checked": report.rules_checked,
+    # Layer graph check — architecture moat
+    try:
+        from .layers import check_layers as _check_layers
+        layer_report = _check_layers(project_root)
+    except Exception as e:
+        logger.debug("layer check skipped: %s", e)
+        layer_report = None
+
+    layer_rules_checked = 0
+    layer_summary: dict | None = None
+    if layer_report is not None and (layer_report.layers or layer_report.violations):
+        layer_rules_checked = len(layer_report.layers)
+        for v in layer_report.violations:
+            violations_list.append({
+                "rule": f"layer: {v.from_layer} → {v.to_layer}",
+                "category": "layers",
+                "file": v.from_file,
+                "line": v.line,
+                "detail": f"{v.kind}: imports {v.to_file} — {v.reason}",
+                "severity": v.severity,
+            })
+        layer_summary = {
+            "layer_count": len(layer_report.layers),
+            "files_checked": layer_report.files_checked,
+            "edges_checked": layer_report.edges_checked,
+            "edges_skipped": layer_report.edges_skipped,
+            "violations": len(layer_report.violations),
+        }
+
+    total_rules = report.total_rules + layer_rules_checked
+    rules_checked = report.rules_checked + layer_rules_checked
+    if rules_checked == 0:
+        pass_rate = 1.0
+    else:
+        rule_violations = len({v.rule for v in report.violations})
+        layer_violated = 0
+        if layer_report is not None:
+            layer_violated = len({
+                (v.from_layer, v.to_layer, v.kind) for v in layer_report.violations
+            })
+        pass_rate = max(0.0, 1.0 - (rule_violations + layer_violated) / rules_checked)
+
+    result = {
+        "total_rules": total_rules,
+        "rules_checked": rules_checked,
         "skipped_rules": report.skipped_rules,
-        "total_violations": report.violation_count,
-        "pass_rate": round(report.pass_rate, 2),
-        "violations": violations_list,
+        "total_violations": len(violations_list),
+        "pass_rate": round(pass_rate, 2),
+        "violations": violations_list[:50],
     }
+    if layer_summary is not None:
+        result["layers"] = layer_summary
+    return result
