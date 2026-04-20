@@ -511,13 +511,14 @@ class GoScanner(BaseScanner):
     def _scan_http_routes(self, content: str, cleaned: str, lines: list[str],
                           rel_path: str, symbols: list[Symbol]) -> None:
         """Detect HTTP route registrations (stdlib + frameworks).
-        Uses cleaned source to avoid matching routes inside comments/strings."""
+        Uses ORIGINAL content because route paths live inside string literals
+        which are stripped by the comment/string cleaner."""
         # stdlib: mux.HandleFunc("GET /path", handler)
-        for match in self.STDLIB_ROUTE_PATTERN.finditer(cleaned):
+        for match in self.STDLIB_ROUTE_PATTERN.finditer(content):
             method_prefix = match.group(1) or ""
             path = match.group(2)
             method = method_prefix.strip() if method_prefix else "GET"
-            start_line = cleaned[:match.start()].count('\n') + 1
+            start_line = content[:match.start()].count('\n') + 1
 
             after = content[match.end():]
             handler_match = re.match(r'\s*,\s*(\w+(?:\.\w+)*)', after)
@@ -526,11 +527,11 @@ class GoScanner(BaseScanner):
             self._add_route_symbol(method, path, handler, start_line, lines, rel_path, symbols)
 
         # stdlib: http.Handle("/path", handler)
-        for match in self.STDLIB_HANDLE_PATTERN.finditer(cleaned):
+        for match in self.STDLIB_HANDLE_PATTERN.finditer(content):
             method_prefix = match.group(1) or ""
             path = match.group(2)
             method = method_prefix.strip() if method_prefix else "GET"
-            start_line = cleaned[:match.start()].count('\n') + 1
+            start_line = content[:match.start()].count('\n') + 1
 
             after = content[match.end():]
             handler_match = re.match(r'\s*,\s*(\w+(?:\.\w+)*)', after)
@@ -539,17 +540,17 @@ class GoScanner(BaseScanner):
             self._add_route_symbol(method, path, handler, start_line, lines, rel_path, symbols)
 
         # gorilla/mux: router.HandleFunc("/path", handler).Methods("GET")
-        for match in self.GORILLA_METHODS_PATTERN.finditer(cleaned):
+        for match in self.GORILLA_METHODS_PATTERN.finditer(content):
             path = match.group(1)
             method = match.group(2).upper()
-            start_line = cleaned[:match.start()].count('\n') + 1
+            start_line = content[:match.start()].count('\n') + 1
             self._add_route_symbol(method, path, "", start_line, lines, rel_path, symbols)
 
         # Frameworks: r.Get("/path", handler), e.Post("/path", handler), etc.
-        for match in self.FRAMEWORK_ROUTE_PATTERN.finditer(cleaned):
+        for match in self.FRAMEWORK_ROUTE_PATTERN.finditer(content):
             method = match.group(1).upper()
             path = match.group(2)
-            start_line = cleaned[:match.start()].count('\n') + 1
+            start_line = content[:match.start()].count('\n') + 1
 
             after = content[match.end():]
             handler_match = re.match(r'\s*,\s*(\w+(?:\.\w+)*)', after)
@@ -558,15 +559,15 @@ class GoScanner(BaseScanner):
             self._add_route_symbol(method, path, handler, start_line, lines, rel_path, symbols)
 
         # chi: r.Route("/prefix", ...)
-        for match in self.CHI_ROUTE_PATTERN.finditer(cleaned):
+        for match in self.CHI_ROUTE_PATTERN.finditer(content):
             path = match.group(1)
-            start_line = cleaned[:match.start()].count('\n') + 1
+            start_line = content[:match.start()].count('\n') + 1
             self._add_route_symbol("GROUP", path, "", start_line, lines, rel_path, symbols)
 
         # ServeHTTP: func (s *Server) ServeHTTP(w, r) — marks struct as HTTP handler
-        for match in self.SERVE_HTTP_PATTERN.finditer(cleaned):
+        for match in self.SERVE_HTTP_PATTERN.finditer(content):
             receiver = match.group(1)
-            start_line = cleaned[:match.start()].count('\n') + 1
+            start_line = content[:match.start()].count('\n') + 1
             self._add_route_symbol("HANDLER", f"/{receiver}", receiver, start_line, lines, rel_path, symbols)
 
     def _add_route_symbol(self, method: str, path: str, handler: str,

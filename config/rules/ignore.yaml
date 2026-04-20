@@ -1,0 +1,41 @@
+# Unified ignore patterns for all scanners
+# Directories, files, and size limits that apply globally.
+
+# Directories to skip during scanning
+directories:
+  - node_modules
+  - __pycache__
+  - .git
+  - dist
+  - build
+  - .venv
+  - venv
+  - .pytest_cache
+  - .flyto-index
+  - .flyto
+  - .tox
+  - .mypy_cache
+  - .ruff_cache
+  - target
+  - out
+  - .next
+  - .nuxt
+  - .output
+  - coverage
+  - .cache
+  - .parcel-cache
+  - bower_components
+  - .eggs
+  - vendor
+  - go/pkg/mod
+
+# File patterns to skip (glob syntax)
+files:
+  - "*.min.js"
+  - "*.min.css"
+  - "*.pyc"
+  - "*.map"
+  - "*.lock"
+
+# Large file size limit in bytes (1 MiB)
+max_file_size: 1048576

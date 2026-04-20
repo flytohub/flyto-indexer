@@ -14,6 +14,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+# Load complexity thresholds from YAML (with hardcoded fallback)
+try:
+    from ..rule_loader import get_complexity_thresholds
+except ImportError:
+    try:
+        from rule_loader import get_complexity_thresholds
+    except ImportError:
+        get_complexity_thresholds = None
+
+_thresholds = get_complexity_thresholds() if get_complexity_thresholds else None
+
 
 # File-type-aware line thresholds
 _COMPONENT_EXTENSIONS = frozenset((".vue", ".tsx", ".jsx"))
@@ -109,10 +120,10 @@ class ComplexityAnalyzer:
         extensions: list[str] = None,
         ignore_patterns: list[str] = None,
         # Thresholds
-        max_lines: int = 80,
-        max_depth: int = 4,
-        max_params: int = 5,
-        max_branches: int = 10,
+        max_lines: int = None,
+        max_depth: int = None,
+        max_params: int = None,
+        max_branches: int = None,
     ):
         self.project_root = project_root
         self.extensions = extensions or [".py", ".ts", ".tsx", ".js", ".jsx", ".vue", ".java", ".go"]
@@ -121,10 +132,15 @@ class ComplexityAnalyzer:
             ".venv", "venv", ".pytest_cache", ".nuxt", ".output",
             "test", "tests", "__tests__",
         ]
-        self.max_lines = max_lines
-        self.max_depth = max_depth
-        self.max_params = max_params
-        self.max_branches = max_branches
+        # Use YAML thresholds if available, then explicit args, then hardcoded defaults
+        _default_max_lines = _thresholds["max_lines"]["default"] if _thresholds else 80
+        _default_max_depth = _thresholds["max_depth"] if _thresholds else 4
+        _default_max_params = _thresholds["max_params"] if _thresholds else 5
+        _default_max_branches = _thresholds["max_branches"] if _thresholds else 10
+        self.max_lines = max_lines if max_lines is not None else _default_max_lines
+        self.max_depth = max_depth if max_depth is not None else _default_max_depth
+        self.max_params = max_params if max_params is not None else _default_max_params
+        self.max_branches = max_branches if max_branches is not None else _default_max_branches
 
     def _should_skip(self, path: str) -> bool:
         return any(pattern in path for pattern in self.ignore_patterns)

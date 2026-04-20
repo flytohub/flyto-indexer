@@ -1,0 +1,75 @@
+# License detection and policy
+# Extracted from analyzer/license.py
+
+# Regex patterns matched against LICENSE / COPYING file contents
+detection_patterns:
+  - pattern: "MIT License"
+    id: MIT
+
+  - pattern: "Apache License,?\\s*Version\\s*2\\.0"
+    id: Apache-2.0
+
+  - pattern: "GNU GENERAL PUBLIC LICENSE.*Version\\s*3"
+    id: GPL-3.0
+
+  - pattern: "GNU GENERAL PUBLIC LICENSE.*Version\\s*2"
+    id: GPL-2.0
+
+  - pattern: "GNU LESSER GENERAL"
+    id: LGPL
+
+  - pattern: "GNU AFFERO GENERAL"
+    id: AGPL-3.0
+
+  - pattern: "BSD\\s+3[- ]Clause"
+    id: BSD-3-Clause
+
+  - pattern: "BSD\\s+2[- ]Clause"
+    id: BSD-2-Clause
+
+  - pattern: "ISC License"
+    id: ISC
+
+  - pattern: "Mozilla Public License.*2\\.0"
+    id: MPL-2.0
+
+  - pattern: "The Unlicense"
+    id: Unlicense
+
+  - pattern: "Boost Software License"
+    id: BSL-1.0
+
+  - pattern: "Eclipse Public License"
+    id: EPL
+
+  # Catch-all MIT (matches the grant text itself)
+  - pattern: "Permission is hereby granted.*without restriction"
+    id: MIT
+
+# License policy — controls which licenses are acceptable
+policies:
+  # These licenses cause a hard failure
+  deny:
+    - AGPL-3.0
+    - SSPL-1.0
+
+  # These licenses produce a warning (review required)
+  warn:
+    - GPL-2.0
+    - GPL-3.0
+    - LGPL
+    - LGPL-2.1
+    - LGPL-3.0
+    - MPL-2.0
+
+  # Whether repos with no detected license are allowed
+  allow_unlicensed: false
+
+# Copyleft license list (used for dependency risk assessment)
+copyleft:
+  - GPL-2.0
+  - GPL-3.0
+  - AGPL-3.0
+  - LGPL
+  - LGPL-2.1
+  - LGPL-3.0

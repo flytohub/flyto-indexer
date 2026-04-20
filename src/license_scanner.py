@@ -16,6 +16,15 @@ from typing import Optional
 
 logger = logging.getLogger("flyto-indexer.license-scanner")
 
+# Load license policies from YAML (with hardcoded fallback)
+try:
+    from .rule_loader import get_license_policies
+except ImportError:
+    try:
+        from rule_loader import get_license_policies
+    except ImportError:
+        get_license_policies = None
+
 # License detection patterns (applied to LICENSE file content)
 _LICENSE_PATTERNS = [
     (re.compile(r"MIT License", re.IGNORECASE), "MIT"),
@@ -36,8 +45,9 @@ _LICENSE_PATTERNS = [
     (re.compile(r"Permission is hereby granted.*without restriction", re.IGNORECASE | re.DOTALL), "MIT"),
 ]
 
-# Copyleft licenses that may impose restrictions
-_COPYLEFT_LICENSES = frozenset({
+# Copyleft licenses that may impose restrictions (YAML override or hardcoded fallback)
+_policies = get_license_policies() if get_license_policies else None
+_COPYLEFT_LICENSES = frozenset(_policies["copyleft"]) if _policies else frozenset({
     "GPL-2.0", "GPL-3.0", "AGPL-3.0", "LGPL",
     "GPL", "AGPL", "LGPL-2.1", "LGPL-3.0",
 })
@@ -203,16 +213,83 @@ def _collect_dependency_licenses(project_path: Path) -> tuple[dict, list]:
         except (json.JSONDecodeError, OSError):
             pass
 
-    # For pypi, check installed packages metadata (site-packages)
-    # This is a best-effort approach
+    # For non-npm ecosystems: Go, Rust, Java manage licenses at module level
+    # (not in manifest). Only flag pypi/php/ruby deps as unlicensed since
+    # those ecosystems typically include license metadata in their manifests.
+    _SKIP_LICENSE_ECOSYSTEMS = {"go", "rust", "maven", "gradle"}
     for dep in inventory.dependencies:
-        if dep.ecosystem != "npm":
-            # For non-npm, we don't have easy access to license info
-            # Mark them as unknown unless already processed
+        if dep.ecosystem not in ("npm",) and dep.ecosystem not in _SKIP_LICENSE_ECOSYSTEMS:
             if dep.name not in no_license:
                 no_license.append(dep.name)
 
     return license_counts, no_license
+
+
+def check_license_policy(dep_licenses: dict) -> list[dict]:
+    """Check dependency licenses against YAML-defined policies.
+
+    Args:
+        dep_licenses: Dict mapping package name to license identifier,
+                      e.g. {"express": "MIT", "some-lib": "GPL-3.0"}.
+
+    Returns:
+        List of policy issues found, each a dict with keys:
+        package, license, risk_level, reason.
+    """
+    policies = get_license_policies() if get_license_policies else None
+    if not policies:
+        # No policies loaded — only flag known copyleft as a basic check
+        issues = []
+        for pkg, lic in dep_licenses.items():
+            if lic in _COPYLEFT_LICENSES:
+                issues.append({
+                    "package": pkg,
+                    "license": lic,
+                    "risk_level": "high",
+                    "reason": f"Copyleft license '{lic}' may impose restrictions on your project",
+                })
+        return issues
+
+    deny_set = policies.get("deny", set())
+    warn_set = policies.get("warn", set())
+    copyleft_set = policies.get("copyleft", set())
+    allow_unlicensed = policies.get("allow_unlicensed", False)
+
+    issues = []
+    for pkg, lic in dep_licenses.items():
+        if not lic or lic == "UNKNOWN":
+            if not allow_unlicensed:
+                issues.append({
+                    "package": pkg,
+                    "license": lic or "UNKNOWN",
+                    "risk_level": "medium",
+                    "reason": "No license detected — cannot determine usage rights",
+                })
+            continue
+
+        if lic in deny_set:
+            issues.append({
+                "package": pkg,
+                "license": lic,
+                "risk_level": "critical",
+                "reason": f"License '{lic}' is denied by policy",
+            })
+        elif lic in warn_set:
+            issues.append({
+                "package": pkg,
+                "license": lic,
+                "risk_level": "high",
+                "reason": f"License '{lic}' requires review per policy",
+            })
+        elif lic in copyleft_set:
+            issues.append({
+                "package": pkg,
+                "license": lic,
+                "risk_level": "high",
+                "reason": f"Copyleft license '{lic}' may impose restrictions on your project",
+            })
+
+    return issues
 
 
 def scan_licenses(project_path: str | Path) -> LicenseScanResult:

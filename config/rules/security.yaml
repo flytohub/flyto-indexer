@@ -1,0 +1,86 @@
+# SAST (Static Application Security Testing) rules
+# Extracted from analyzer/security.py
+
+# SQL injection patterns
+sql_injection:
+  - id: SQL_PYTHON_FSTRING
+    pattern: "f[\"'].*(?:SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|WHERE).*\\{.*\\}"
+    severity: HIGH
+    languages: [python]
+    message: "SQL injection via f-string"
+
+  - id: SQL_PYTHON_FORMAT
+    pattern: "(?:SELECT|INSERT|UPDATE|DELETE).*%s.*%\\s*\\("
+    severity: HIGH
+    languages: [python]
+    message: "SQL injection via % formatting"
+
+  - id: SQL_PYTHON_CONCAT
+    pattern: "(?:SELECT|INSERT|UPDATE|DELETE).*\\+\\s*(?:request|user|input|params|args)"
+    severity: HIGH
+    languages: [python, javascript, typescript]
+    message: "SQL injection via string concatenation"
+
+  - id: SQL_JS_TEMPLATE
+    pattern: "`.*(?:SELECT|INSERT|UPDATE|DELETE).*\\$\\{.*\\}`"
+    severity: HIGH
+    languages: [javascript, typescript]
+    message: "SQL injection via template literal"
+
+# Unsafe function calls
+unsafe_functions:
+  - id: UNSAFE_EVAL
+    pattern: "\\beval\\s*\\("
+    severity: HIGH
+    languages: [python, javascript, typescript]
+    message: "eval() can execute arbitrary code"
+
+  - id: UNSAFE_EXEC
+    pattern: "\\bexec\\s*\\("
+    severity: HIGH
+    languages: [python]
+    message: "exec() can execute arbitrary code"
+
+  - id: UNSAFE_PICKLE
+    pattern: "pickle\\.loads?\\s*\\("
+    severity: HIGH
+    languages: [python]
+    message: "pickle deserialization can execute arbitrary code"
+
+  - id: UNSAFE_YAML_LOAD
+    pattern: "yaml\\.load\\s*\\([^)]*(?!Loader)"
+    severity: MEDIUM
+    languages: [python]
+    message: "yaml.load without safe Loader"
+
+  - id: UNSAFE_SUBPROCESS_SHELL
+    pattern: "subprocess\\.\\w+\\([^)]*shell\\s*=\\s*True"
+    severity: HIGH
+    languages: [python]
+    message: "subprocess with shell=True enables command injection"
+
+  - id: UNSAFE_INNERHTML
+    pattern: "\\.innerHTML\\s*="
+    severity: MEDIUM
+    languages: [javascript, typescript]
+    message: "innerHTML assignment enables XSS"
+
+  - id: UNSAFE_DANGEROUSLY_SET
+    pattern: "dangerouslySetInnerHTML"
+    severity: MEDIUM
+    languages: [javascript, typescript]
+    message: "dangerouslySetInnerHTML enables XSS"
+
+  - id: UNSAFE_V_HTML
+    pattern: "v-html\\s*="
+    severity: MEDIUM
+    languages: [vue]
+    message: "v-html enables XSS"
+
+# Information leak patterns
+info_leaks:
+  - id: LOG_SENSITIVE
+    pattern: "(?:console\\.log|print|logger?\\.\\w+)\\s*\\(.*(?:password|secret|token|key|credential)"
+    severity: MEDIUM
+    languages: ["*"]
+    message: "Logging potentially sensitive data"

@@ -12,6 +12,17 @@ from pathlib import Path
 
 logger = logging.getLogger("flyto-indexer.dockerfile-scanner")
 
+# Load Docker rules from YAML (with hardcoded fallback)
+try:
+    from .rule_loader import get_docker_rules
+except ImportError:
+    try:
+        from rule_loader import get_docker_rules
+    except ImportError:
+        get_docker_rules = None
+
+_docker_rules = get_docker_rules() if get_docker_rules else None
+
 # Directories to skip
 _SKIP_DIRS = frozenset({
     "node_modules", ".git", "vendor", "__pycache__", "dist", "build",
@@ -20,8 +31,8 @@ _SKIP_DIRS = frozenset({
     ".nuxt", ".output", "coverage", ".cache",
 })
 
-# Sensitive ports that should not be exposed
-_SENSITIVE_PORTS = frozenset({"22", "3306", "5432", "6379", "27017", "1433"})
+# Sensitive ports that should not be exposed (YAML override or hardcoded fallback)
+_SENSITIVE_PORTS = frozenset(_docker_rules["sensitive_ports"]) if _docker_rules else frozenset({"22", "3306", "5432", "6379", "27017", "1433"})
 
 
 def scan_dockerfiles(project_path: str | Path) -> dict:

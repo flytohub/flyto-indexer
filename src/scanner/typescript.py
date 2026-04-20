@@ -739,12 +739,20 @@ class TypeScriptScanner(BaseScanner):
 
         return ""
 
-    # Patterns for detecting frontend HTTP API calls (must contain /api/)
+    # Patterns for detecting frontend HTTP API calls
     _API_CALL_PATTERNS = [
         re.compile(r'''(?:fetch|useFetch|useAsyncData|\$fetch)\s*\(\s*[`"']([^`"']*?/api/[^`"']*?)[`"']'''),
         re.compile(r'''axios\s*\.\s*(get|post|put|delete|patch)\s*\(\s*[`"']([^`"']*?)[`"']''', re.I),
         re.compile(r'''(?:\$?api|http|\$http|request)\s*\.\s*(get|post|put|delete|patch)\s*\(\s*[`"']([^`"']*?)[`"']''', re.I),
         re.compile(r'''[`"']([^`"']*?/api/[^`"']*?)[`"']\s*[,)]'''),
+        # Pattern: request<T>(method, path) or request(method, path) — custom wrappers
+        re.compile(r'''request(?:<[^>]*>)?\s*\(\s*[`"'](GET|POST|PUT|DELETE|PATCH)[`"']\s*,\s*[`"']([^`"']*?)[`"']''', re.I),
+        # Pattern: fetch with template literal containing path variable
+        re.compile(r'''fetch\s*\(\s*`\$\{[^}]+\}\$\{([^}]+)\}`'''),
+        # Pattern: URL string literal containing /api/vN/ (broader catch-all)
+        re.compile(r'''[`"']((?:https?://[^`"']*)?/api/v\d+/[^`"']*)[`"']'''),
+        # Pattern: External API URL (https://api.*)
+        re.compile(r'''[`"'](https://api\.[a-z]+\.[a-z]+/[^`"']*)[`"']'''),
     ]
 
     _TEMPLATE_VAR_RE = re.compile(r'\$\{[^}]*\}')

@@ -1,0 +1,68 @@
+# Health score configuration
+# Total: 100 points across active dimensions
+# Extracted from scorer/health.py
+
+dimensions:
+  security:
+    max_score: 25
+    weight: 0.40
+    penalty_formula: "logistic"  # scaled = 25 * penalty / (penalty + 50)
+    severity_weights:
+      critical: 3.0
+      high: 1.5
+      medium: 0.5
+
+  complexity:
+    max_score: 25
+    weight: 0.25
+    formula: "25 * (1 - min(complex_pct * 2, 1))"
+
+  dead_code:
+    max_score: 25
+    weight: 0.15
+    formula: "25 * (1 - min(dead_pct * 2, 1))"
+
+  documentation:
+    max_score: 25
+    weight: 0.20
+    formula: "min(25, round(doc_score / 4))"
+
+# Letter grade thresholds (score >= threshold)
+grades:
+  A: 90
+  B: 80
+  C: 70
+  D: 60
+  # Below 60 = F
+
+# Which dimensions are active per project type
+project_types:
+  backend:
+    active: [security, complexity, dead_code]
+  frontend:
+    active: [complexity, dead_code, security]
+    security_cap: 10  # security capped for frontend projects
+  fullstack:
+    active: [security, complexity, dead_code]
+  library:
+    active: [dead_code, complexity]
+  mobile:
+    active: [complexity, dead_code]
+  static:
+    active: [documentation]
+  unknown:
+    active: [documentation]
+
+# Secrets penalty applied to the security dimension
+secrets_penalty:
+  critical: 3.0
+  high: 1.5
+  medium: 0.5
+
+# CVE penalty (applied by flyto-engine, not indexer)
+cve_penalty:
+  formula: "25 * penalty / (penalty + 50)"
+  weights:
+    critical: 10
+    high: 5
+    moderate: 2

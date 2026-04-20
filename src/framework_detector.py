@@ -140,6 +140,44 @@ FRAMEWORKS: dict[str, dict] = {
         "indicator_files": [],
         "type": "desktop",
     },
+
+    # UI / CSS Libraries
+    "mantine": {
+        "indicator_deps": ["@mantine/core"],
+        "indicator_files": [],
+        "type": "ui",
+    },
+    "tailwindcss": {
+        "indicator_deps": ["tailwindcss"],
+        "indicator_files": ["tailwind.config.js", "tailwind.config.ts"],
+        "type": "ui",
+    },
+
+    # Data fetching / State
+    "tanstack_query": {
+        "indicator_deps": ["@tanstack/react-query"],
+        "indicator_files": [],
+        "type": "data",
+    },
+    "openapi_fetch": {
+        "indicator_deps": ["openapi-fetch"],
+        "indicator_files": [],
+        "type": "data",
+    },
+
+    # Routing
+    "react_router": {
+        "indicator_deps": ["react-router-dom"],
+        "indicator_files": [],
+        "type": "routing",
+    },
+
+    # Icons
+    "lucide": {
+        "indicator_deps": ["lucide-react"],
+        "indicator_files": [],
+        "type": "ui",
+    },
 }
 
 
@@ -722,7 +760,7 @@ def detect_frameworks(project_path: Path) -> list[FrameworkInfo]:
             detected = [fw for fw in detected if fw.name not in generals]
 
     # Sort by type priority
-    _TYPE_ORDER = {"api": 0, "ssr": 1, "spa": 2, "mobile": 3, "desktop": 4}
+    _TYPE_ORDER = {"api": 0, "ssr": 1, "spa": 2, "mobile": 3, "desktop": 4, "data": 5, "routing": 6, "ui": 7}
     detected.sort(key=lambda fw: (_TYPE_ORDER.get(fw.type, 9), fw.name))
 
     return detected

@@ -188,6 +188,20 @@ def scan_secrets(project_path: str | Path) -> SecretScanResult:
     Returns:
         SecretScanResult with all findings.
     """
+    # Load patterns from YAML (with hardcoded fallback)
+    try:
+        from .rule_loader import get_secret_patterns
+    except ImportError:
+        from rule_loader import get_secret_patterns
+
+    yaml_patterns = get_secret_patterns()
+    if yaml_patterns:
+        # Use YAML patterns instead of hardcoded
+        patterns_to_use = [(pid, regex, sev) for pid, regex, sev in yaml_patterns]
+    else:
+        # Fallback to hardcoded SECRET_PATTERNS + _SEVERITY_MAP
+        patterns_to_use = [(pid, regex, _SEVERITY_MAP.get(pid, "medium")) for pid, regex in SECRET_PATTERNS]
+
     project_path = Path(project_path).resolve()
     findings: list[SecretFinding] = []
     files_scanned = 0
@@ -228,7 +242,7 @@ def scan_secrets(project_path: str | Path) -> SecretScanResult:
                     # but skip generic patterns like password/database_url in comments
                     pass
 
-                for pattern_name, pattern_re in SECRET_PATTERNS:
+                for pattern_name, pattern_re, pattern_severity in patterns_to_use:
                     # Skip generic patterns in doc files — they're examples
                     if is_doc and pattern_name in ("database_url", "password", "secret", "api_key", "api_token"):
                         continue
@@ -264,7 +278,7 @@ def scan_secrets(project_path: str | Path) -> SecretScanResult:
                             )):
                                 continue
 
-                        severity = _SEVERITY_MAP.get(pattern_name, "medium")
+                        severity = pattern_severity
                         findings.append(SecretFinding(
                             file=rel_path,
                             line=line_num,

@@ -26,6 +26,8 @@ _SKIP_DIRS = frozenset({
     ".tox", ".mypy_cache", ".ruff_cache", "target", "out", ".next",
     ".nuxt", ".output", "coverage", ".cache", ".parcel-cache",
     "bower_components", ".eggs", "egg-info",
+    # Go module cache and vendor
+    "pkg", "testdata",
 })
 
 # Extension-to-language mapping
@@ -357,6 +359,13 @@ def _classify_project_type(
     is_mobile = "Dart" in languages or "Swift" in languages or "Kotlin" in languages
     is_static = not has_backend and not has_frontend and "HTML" in languages
 
+    # Go/Rust/Java projects: if dominant language + go.mod/Cargo.toml exists → backend
+    go_dominant = languages.get("Go", 0) > max(frontend_langs, 1)
+    go_mod_exists = "go.mod" in all_files
+    has_go_cmd = any("cmd/" in f for f in all_files if f.endswith(".go"))
+    if go_dominant and (go_mod_exists or has_go_cmd) and not has_frontend:
+        has_backend = True
+
     # Primary classification
     if has_backend and has_frontend:
         project_type = "fullstack"
@@ -569,6 +578,15 @@ _SERVICE_SDKS = {
     # Playwright/testing
     "playwright": "Playwright",
     "@playwright/test": "Playwright",
+    # GitHub API
+    "octokit": "GitHub API",
+    "@octokit/core": "GitHub API",
+    "@octokit/rest": "GitHub API",
+    "@octokit/graphql": "GitHub API",
+    # GitLab API
+    "@gitbeaker/core": "GitLab API",
+    "@gitbeaker/rest": "GitLab API",
+    "@gitbeaker/node": "GitLab API",
 }
 
 
@@ -727,6 +745,31 @@ def _extract_from_index(project_path: Path) -> dict:
             category = _classify_api_symbol(sym)
             result[_category_keys[category]].append(entry)
             result["api_routes"].append(entry)
+
+    # Also check dependency edges for API calls (fetch/axios/request wrappers)
+    # Index stores deps as dict-of-dicts: {edge_id: {source, target, type, metadata}}
+    raw_deps = index.get("dependencies", {})
+    dep_values = raw_deps.values() if isinstance(raw_deps, dict) else raw_deps
+    for dep_edge in dep_values:
+        if not isinstance(dep_edge, dict):
+            continue
+        dep_type = dep_edge.get("type", dep_edge.get("dep_type", ""))
+        if dep_type not in ("api_calls", "API_CALLS"):
+            continue
+        meta = dep_edge.get("metadata", {}) or {}
+        url = meta.get("url", dep_edge.get("target", ""))
+        method = meta.get("method", "GET")
+        # Extract file path from source (format: project:path:file:name)
+        source = dep_edge.get("source", "")
+        parts = source.split(":")
+        source_file = parts[1] if len(parts) >= 2 else ""
+        entry = {"method": method, "path": url, "handler": "", "file": source_file}
+        if url.startswith("http://") or url.startswith("https://") or url.startswith("*/"):
+            if entry not in result["api_calls_external"]:
+                result["api_calls_external"].append(entry)
+        elif url:
+            if entry not in result["api_calls_internal"]:
+                result["api_calls_internal"].append(entry)
 
     # Also check routes/api_endpoints from index
     for route in index.get("routes", []):
@@ -892,6 +935,10 @@ def _extract_from_index(project_path: Path) -> dict:
         "complexity_summary": result["complexity_summary"],
     }
 
+    # Raw data for reachability analysis
+    result["_raw_dependencies"] = index.get("dependencies", [])
+    result["_raw_symbols"] = symbols
+
     return result
 
 
@@ -1031,6 +1078,120 @@ def _compute_complexity_summary(symbols: dict, index_dir: Path) -> dict:
     }
 
 
+def _compute_reachability(deps: dict, idx: dict) -> dict:
+    """Compute basic reachability: which dependencies are actually imported.
+
+    Uses the dependency graph's import edges to check if a package name
+    appears in any import statement across the codebase. Deps that are
+    never imported are considered "unreachable" — their CVEs can be
+    deprioritized.
+
+    This is a conservative analysis: if ANY file imports the package,
+    the entire package is considered reachable.
+    """
+    dep_list = deps.get("dependencies", [])
+    if isinstance(dep_list, dict):
+        dep_list = dep_list.get("dependencies", [])
+    if not dep_list:
+        return {"total_deps": 0, "reachable": 0, "unreachable": 0, "unreachable_pct": 0, "details": []}
+
+    # Collect all import targets from dependency graph edges
+    all_imports = set()
+    raw_deps = idx.get("_raw_dependencies", [])
+    if isinstance(raw_deps, dict):
+        raw_deps = raw_deps.get("dependencies", [])
+    for dep_edge in raw_deps:
+        if isinstance(dep_edge, dict):
+            dep_type = dep_edge.get("dep_type", dep_edge.get("type", ""))
+            if dep_type == "imports":
+                target = dep_edge.get("target_id", dep_edge.get("target", ""))
+                if target:
+                    all_imports.add(target.lower())
+
+    # Also scan module_graph for actual file-level imports
+    for conn in idx.get("module_graph_full", idx.get("module_graph", [])):
+        if isinstance(conn, dict):
+            target = conn.get("target_file", "")
+            if target:
+                all_imports.add(target.lower())
+
+    # For Go projects: scan .go files for import statements directly
+    # This catches `import "github.com/jackc/pgx/v5"` etc.
+    health_inputs = idx.get("_health_inputs", {})
+    index_dir = health_inputs.get("index_dir")
+    if index_dir:
+        project_root = index_dir.parent if hasattr(index_dir, 'parent') else None
+        if project_root and project_root.exists():
+            import_re = re.compile(r'"([^"]+)"')
+            for go_file in project_root.rglob("*.go"):
+                # Skip vendor/test dirs
+                rel = str(go_file.relative_to(project_root))
+                if any(skip in rel for skip in ("vendor/", "testdata/", "pkg/mod/")):
+                    continue
+                try:
+                    src = go_file.read_text(encoding="utf-8", errors="replace")
+                    # Find import blocks
+                    in_import = False
+                    for line in src.splitlines()[:200]:  # Only check top of file
+                        stripped = line.strip()
+                        if stripped.startswith("import ("):
+                            in_import = True
+                            continue
+                        if in_import and stripped == ")":
+                            in_import = False
+                            continue
+                        if in_import or stripped.startswith("import "):
+                            for m in import_re.finditer(stripped):
+                                all_imports.add(m.group(1).lower())
+                except Exception:
+                    pass
+
+    # Build a set of package root names from imports
+    import_packages = set()
+    for imp in all_imports:
+        imp_norm = imp.replace("\\", "/")
+        parts = imp_norm.split("/")
+        if parts:
+            # npm scoped: @scope/package
+            if parts[0].startswith("@") and len(parts) > 1:
+                import_packages.add(f"{parts[0]}/{parts[1]}")
+            else:
+                import_packages.add(parts[0])
+            import_packages.add(imp_norm)
+
+    # Check each dependency
+    total = 0
+    reachable = 0
+    unreachable = 0
+    details = []
+    for dep in dep_list:
+        if isinstance(dep, dict):
+            name = dep.get("name", "")
+        else:
+            name = str(dep)
+        if not name:
+            continue
+        total += 1
+        name_lower = name.lower()
+        # Check if any import path contains this package name
+        is_reachable = any(name_lower in imp for imp in import_packages) or any(name_lower in imp for imp in all_imports)
+        if is_reachable:
+            reachable += 1
+        else:
+            unreachable += 1
+            details.append({"package": name, "reachable": False})
+
+    unreachable_pct = round(unreachable / max(total, 1) * 100) if total > 0 else 0
+
+    return {
+        "total_deps": total,
+        "reachable": reachable,
+        "unreachable": unreachable,
+        "unreachable_pct": unreachable_pct,
+        "unreachable_packages": [d["package"] for d in details],
+    }
+
+
 def _compute_health_dimensions(
     symbols: dict,
     reverse_index: dict,
@@ -1132,14 +1293,20 @@ def _compute_health_dimensions(
             callers = reverse_index.get(sym_id, [])
             if not callers:
                 name = sym.get("name", "")
-                if not name.startswith("_"):
-                    dead_count += 1
-                    dead_symbols_list.append({
-                        "name": name,
-                        "path": sym.get("path", ""),
-                        "line": sym.get("line", 0),
-                        "type": sym.get("type", ""),
-                    })
+                path = sym.get("path", "")
+                if name.startswith("_"):
+                    continue
+                # Go exported names (capitalized) in .go files are public API —
+                # skip them because cross-package refs aren't tracked by regex scanner.
+                if path.endswith(".go") and name and name[0].isupper():
+                    continue
+                dead_count += 1
+                dead_symbols_list.append({
+                    "name": name,
+                    "path": path,
+                    "line": sym.get("line", 0),
+                    "type": sym.get("type", ""),
+                })
 
     # Gentle curve: <5% dead = 25, 10% = 20, 20% = 15, 50% = 5
     dead_pct = dead_count / max(len(non_test_symbols), 1)
@@ -1500,7 +1667,49 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
     except Exception as e:
         logger.debug("Taint analysis failed: %s", e)
 
-    # 5f. Framework detection
+    # 5f. IaC scanning
+    iac_data = {"total_findings": 0, "critical": 0, "high": 0, "medium": 0, "low": 0, "findings": [], "frameworks_detected": []}
+    try:
+        try:
+            from .iac_scanner import scan_iac_to_dict
+        except ImportError:
+            from iac_scanner import scan_iac_to_dict
+        iac_data = scan_iac_to_dict(project_path)
+    except Exception as e:
+        logger.debug("IaC scan failed: %s", e)
+
+    # 5g. License policy check
+    license_policy_issues = []
+    try:
+        try:
+            from .rule_loader import get_license_policies
+        except ImportError:
+            from rule_loader import get_license_policies
+        policies = get_license_policies()
+        dep_licenses = license_data.get("dependency_licenses", {})
+        # Check each dependency license against policy
+        for lic_id, count in dep_licenses.items():
+            if lic_id in policies.get("deny", set()):
+                license_policy_issues.append({
+                    "license": lic_id, "risk_level": "critical",
+                    "reason": f"License {lic_id} is in deny list", "count": count,
+                })
+            elif lic_id in policies.get("warn", set()):
+                license_policy_issues.append({
+                    "license": lic_id, "risk_level": "high",
+                    "reason": f"Copyleft license {lic_id} may force open-source derivatives", "count": count,
+                })
+        if not policies.get("allow_unlicensed", False):
+            unlicensed_count = license_data.get("dependencies_without_license_count", 0)
+            if unlicensed_count > 0:
+                license_policy_issues.append({
+                    "license": "UNLICENSED", "risk_level": "medium",
+                    "reason": f"{unlicensed_count} dependencies have no detectable license", "count": unlicensed_count,
+                })
+    except Exception as e:
+        logger.debug("License policy check failed: %s", e)
+
+    # 5h. Framework detection
     frameworks_data = []
     try:
         try:
@@ -1541,6 +1750,50 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         health_dims = {
             "overall": {"score": 0, "max": 100, "grade": "?"},
         }
+
+    # 8b. Apply secrets + taint penalty to overall health score
+    #     The security dimension only counts SAST findings from SecurityScanner,
+    #     but secret_scanner and taint analysis are separate passes.
+    overall = health_dims.get("overall", {})
+    adj_score = overall.get("score", 0)
+
+    # Secrets penalty: critical=-5, high=-3, medium=-1 per finding
+    sec_critical = secrets_data.get("critical", 0)
+    sec_high = secrets_data.get("high", 0) if isinstance(secrets_data, dict) else 0
+    sec_medium = secrets_data.get("medium", 0) if isinstance(secrets_data, dict) else 0
+    secret_raw_penalty = sec_critical * 5 + sec_high * 3 + sec_medium * 1
+    if secret_raw_penalty > 0:
+        # Logistic cap at 20 points max
+        adj_score -= int(20 * secret_raw_penalty / (secret_raw_penalty + 30))
+
+    # Taint flow penalty: -3 per unsanitized high-risk flow
+    taint_high = taint_data.get("high_risk_count", 0) if isinstance(taint_data, dict) else 0
+    if taint_high > 0:
+        adj_score -= min(taint_high * 3, 15)  # cap at 15
+
+    # IaC penalty: critical=-5, high=-3, medium=-1
+    iac_crit = iac_data.get("critical", 0) if isinstance(iac_data, dict) else 0
+    iac_high_count = iac_data.get("high", 0) if isinstance(iac_data, dict) else 0
+    iac_raw_penalty = iac_crit * 5 + iac_high_count * 3
+    if iac_raw_penalty > 0:
+        adj_score -= int(15 * iac_raw_penalty / (iac_raw_penalty + 30))  # cap at 15
+
+    # License policy penalty: each denied license = -5, warned = -2
+    for issue in license_policy_issues:
+        if issue.get("risk_level") == "critical":
+            adj_score -= 5
+        elif issue.get("risk_level") == "high":
+            adj_score -= 2
+
+    # Documentation penalty/bonus (already applied inside _compute_health_dimensions for code projects,
+    # but for unknown/static it might be the only dimension)
+    doc_overall = documentation_data.get("overall_score", 0) if isinstance(documentation_data, dict) else 0
+    if project_type_info["type"] not in ("static", "unknown", "") and doc_overall < 30:
+        adj_score -= 5  # extra penalty for very poor docs
+
+    adj_score = max(0, min(100, adj_score))
+    adj_grade = "A" if adj_score >= 90 else "B" if adj_score >= 80 else "C" if adj_score >= 70 else "D" if adj_score >= 60 else "F"
+    health_dims["overall"] = {"score": adj_score, "max": 100, "grade": adj_grade}
 
     # Build profile
     profile = {
@@ -1583,7 +1836,20 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         # Complexity
         "complexity_summary": idx["complexity_summary"],
 
-        # Health
+        # Counts — for flyto-engine compat
+        "api_definition_count": len(idx["api_definitions"]),
+        "model_count": len(idx["models"]),
+        "dependency_count": deps.get("total_count", 0),
+        "secret_count": secrets_data.get("total_findings", 0),
+        "taint_flow_count": taint_data.get("unsanitized_flows", 0),
+        "complex_functions": idx["complexity_summary"].get("complex_functions", 0),
+        "avg_complexity": idx["complexity_summary"].get("avg_complexity", 0),
+        "dead_code_count": health_dims.get("dead_code", {}).get("dead_count", 0),
+        "connection_count": idx["module_graph_summary"].get("total_connections", 0),
+
+        # Health — top-level for flyto-engine compat
+        "health_score": health_dims.get("overall", {}).get("score", 0),
+        "health_grade": health_dims.get("overall", {}).get("grade", "?"),
         "health_dimensions": health_dims,
 
         # Infrastructure
@@ -1610,6 +1876,19 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         "dockerfile_issues": dockerfile_data,
         "taint_flows": taint_data,
         "license": license_data,
+        "license_policy_issues": license_policy_issues,
+        "iac_findings": iac_data,
+        # Container findings: derive from dockerfile_scanner in a standard format
+        # Reachability: check which dependencies are actually imported
+        "reachability": _compute_reachability(deps, idx),
+        "container_findings": {
+            "total_findings": dockerfile_data.get("total_issues", 0),
+            "critical": sum(1 for i in dockerfile_data.get("issues", []) if i.get("severity") == "CRITICAL"),
+            "high": sum(1 for i in dockerfile_data.get("issues", []) if i.get("severity") == "HIGH"),
+            "medium": sum(1 for i in dockerfile_data.get("issues", []) if i.get("severity") == "MEDIUM"),
+            "low": sum(1 for i in dockerfile_data.get("issues", []) if i.get("severity") == "LOW"),
+            "findings": dockerfile_data.get("issues", []),
+        },
         "documentation": documentation_data,
     }
 

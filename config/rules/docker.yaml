@@ -1,0 +1,57 @@
+# Dockerfile lint rules
+# Extracted from analyzer/docker.py
+
+# Ports that should trigger a warning when exposed
+sensitive_ports:
+  - port: 22
+    service: SSH
+  - port: 3306
+    service: MySQL
+  - port: 5432
+    service: PostgreSQL
+  - port: 6379
+    service: Redis
+  - port: 27017
+    service: MongoDB
+  - port: 1433
+    service: MSSQL
+
+# Dockerfile checks
+checks:
+  - id: FROM_LATEST
+    severity: MEDIUM
+    message: "Use specific image tag instead of :latest"
+
+  - id: NO_USER
+    severity: HIGH
+    message: "Add USER instruction — container runs as root by default"
+
+  - id: EXPOSE_SENSITIVE_PORT
+    severity: MEDIUM
+    message: "Sensitive port exposed"
+
+  - id: ADD_INSTEAD_OF_COPY
+    severity: LOW
+    message: "Use COPY instead of ADD unless extracting archives"
+
+  - id: APT_NO_RECOMMENDS
+    severity: LOW
+    message: "Use --no-install-recommends with apt-get"
+
+  - id: ENV_SECRET
+    severity: HIGH
+    message: "Do not hardcode secrets in ENV"
+    env_keywords:
+      - PASSWORD
+      - SECRET
+      - API_KEY
+      - TOKEN
+      - PRIVATE_KEY
+
+  - id: PIPE_TO_SHELL
+    severity: CRITICAL
+    message: "Piping curl/wget to shell is dangerous"
+
+  - id: PRIVILEGED
+    severity: CRITICAL
+    message: "Container should not run in privileged mode"

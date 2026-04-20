@@ -1,0 +1,48 @@
+# Complexity analysis thresholds
+# Extracted from analyzer/complexity.py
+
+thresholds:
+  # Maximum lines per function / method
+  max_lines:
+    default: 80
+    components: 100
+
+  # Maximum nesting depth (if/for/while/try/with)
+  max_depth: 4
+
+  # Maximum function parameters
+  max_params: 5
+
+  # Maximum branches (if/elif/else/case) in a single function
+  max_branches: 10
+
+  # Cyclomatic-like score above which a function is "complex"
+  complex_score_threshold: 5
+
+# Extensions treated as UI components (use components max_lines)
+component_extensions:
+  - ".vue"
+  - ".tsx"
+  - ".jsx"
+
+# Patterns that identify test files (excluded from complexity scoring)
+test_patterns:
+  - "test_"
+  - "_test."
+  - ".test."
+  - ".spec."
+  - "/test/"
+  - "/tests/"
+  - "/__tests__/"
+
+# Only scan files with these extensions for complexity
+scanned_extensions:
+  - ".py"
+  - ".ts"
+  - ".tsx"
+  - ".js"
+  - ".jsx"
+  - ".vue"
+  - ".java"
+  - ".go"
+  - ".rs"
