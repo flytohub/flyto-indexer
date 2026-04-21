@@ -254,13 +254,14 @@ def main():
     # sbom
     sbom_parser = subparsers.add_parser(
         "sbom",
-        help="Export Software Bill of Materials (SBOM) in CycloneDX 1.4 JSON format",
-        description="Scan project dependencies and export as CycloneDX 1.4 JSON SBOM. Supports npm, pypi, Go, Rust, Maven, PHP, Ruby, and Docker ecosystems.",
+        help="Export Software Bill of Materials (SBOM) in CycloneDX 1.5 JSON format",
+        description="Scan project dependencies and export as CycloneDX 1.5 JSON SBOM. Includes licenses, integrity hashes, dependency graph, and external references. Supports npm, pypi, Go, Rust, Maven, PHP, Ruby, and Docker ecosystems.",
     )
     sbom_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
     sbom_parser.add_argument("--format", choices=["cyclonedx"], default="cyclonedx", dest="sbom_format", help="SBOM format (default: cyclonedx)")
     sbom_parser.add_argument("--name", help="Project name (default: directory name)")
     sbom_parser.add_argument("--output", "-o", help="Output file path (default: stdout)")
+    sbom_parser.add_argument("--summary", action="store_true", help="Print human-readable summary instead of full JSON")
 
     # framework
     framework_parser = subparsers.add_parser(
@@ -1390,8 +1391,8 @@ def cmd_pr_risk(args):
 
 
 def cmd_sbom(args):
-    """Export SBOM in CycloneDX format."""
-    from .sbom_export import export_sbom_cyclonedx, format_sbom_json
+    """Export SBOM in CycloneDX 1.5 format."""
+    from .sbom_export import export_sbom_cyclonedx, format_sbom_json, format_sbom_summary
 
     project_path = Path(args.path).resolve()
     if not project_path.exists():
@@ -1400,6 +1401,11 @@ def cmd_sbom(args):
 
     project_name = args.name or project_path.name
     sbom = export_sbom_cyclonedx(project_path, project_name)
+
+    if hasattr(args, "summary") and args.summary:
+        print(format_sbom_summary(sbom))
+        return None
+
     output_str = format_sbom_json(sbom)
 
     if hasattr(args, "output") and args.output:
