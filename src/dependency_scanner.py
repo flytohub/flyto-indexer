@@ -758,16 +758,33 @@ def _parse_dockerfile(file_path: Path, project_path: Path) -> list[PackageDepend
 # ---------------------------------------------------------------------------
 
 def _parse_cargo_lock(file_path: Path) -> dict[str, str]:
-    """Parse Cargo.lock for pinned versions. Returns {name: version}."""
+    """Parse Cargo.lock for pinned versions. Returns {name: version}.
+
+    Only reads name/version pairs that live inside a ``[[package]]`` block;
+    ``[metadata]`` and ``[patch.*]`` tables can contain ``name =`` keys too
+    and were bleeding into the pinned map in earlier revisions.
+    """
     pinned: dict[str, str] = {}
     try:
         text = file_path.read_text(encoding="utf-8")
     except OSError:
         return pinned
-    # [[package]] blocks with name = "..." and version = "..."
+
+    in_package = False
     current_name = ""
-    for line in text.splitlines():
-        line = line.strip()
+    for raw in text.splitlines():
+        line = raw.strip()
+        # Section headers close the previous block.
+        if line.startswith("[["):
+            in_package = line == "[[package]]"
+            current_name = ""
+            continue
+        if line.startswith("[") and not line.startswith("[["):
+            in_package = False
+            current_name = ""
+            continue
+        if not in_package:
+            continue
         if line.startswith("name = "):
             current_name = line.split('"')[1] if '"' in line else ""
         elif line.startswith("version = ") and current_name:

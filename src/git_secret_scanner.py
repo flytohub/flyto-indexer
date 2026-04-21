@@ -176,8 +176,22 @@ def scan_git_history(project_path: str | Path, max_commits: int = 100) -> dict:
 
         i += 1
 
+    # Signal truncation so callers can warn about incomplete coverage instead
+    # of treating a clean result as proof of no historical leaks.
+    try:
+        total = int(subprocess.run(
+            ["git", "-C", str(project_path), "rev-list", "--count", "HEAD"],
+            capture_output=True, text=True, timeout=15,
+        ).stdout.strip() or "0")
+    except (subprocess.TimeoutExpired, ValueError):
+        total = 0
+
+    truncated = total > len(commits_scanned)
     return {
         "total_leaked": len(leaked_secrets),
         "commits_scanned": len(commits_scanned),
         "leaked_secrets": leaked_secrets,
+        "scan_limit": max_commits,
+        "total_commits": total,
+        "truncated": truncated,
     }
