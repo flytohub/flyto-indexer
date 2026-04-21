@@ -32,11 +32,15 @@ _MANIFEST_FILES = frozenset({
     "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
     "requirements.txt", "pyproject.toml", "Pipfile", "poetry.lock",
     "go.mod",
-    "Cargo.toml",
+    "Cargo.toml", "Cargo.lock",
     "pom.xml", "build.gradle", "build.gradle.kts",
-    "composer.json",
+    "composer.json", "composer.lock",
     "Gemfile", "Gemfile.lock",
     "Dockerfile",
+    "pubspec.yaml", "pubspec.lock",
+    "Package.resolved",
+    "packages.lock.json",
+    "mix.exs", "mix.lock",
 })
 
 
@@ -101,6 +105,9 @@ def _find_manifest_files(project_path: Path) -> list[Path]:
                 found.append(Path(dirpath) / fname)
             # Also match Dockerfile.* variants
             elif fname.startswith("Dockerfile"):
+                found.append(Path(dirpath) / fname)
+            # .NET *.csproj files (variable names)
+            elif fname.endswith(".csproj"):
                 found.append(Path(dirpath) / fname)
     return sorted(found)
 
@@ -747,6 +754,234 @@ def _parse_dockerfile(file_path: Path, project_path: Path) -> list[PackageDepend
 
 
 # ---------------------------------------------------------------------------
+# Rust lockfile (Cargo.lock)
+# ---------------------------------------------------------------------------
+
+def _parse_cargo_lock(file_path: Path) -> dict[str, str]:
+    """Parse Cargo.lock for pinned versions. Returns {name: version}."""
+    pinned: dict[str, str] = {}
+    try:
+        text = file_path.read_text(encoding="utf-8")
+    except OSError:
+        return pinned
+    # [[package]] blocks with name = "..." and version = "..."
+    current_name = ""
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("name = "):
+            current_name = line.split('"')[1] if '"' in line else ""
+        elif line.startswith("version = ") and current_name:
+            ver = line.split('"')[1] if '"' in line else ""
+            if ver:
+                pinned[current_name] = ver
+            current_name = ""
+    return pinned
+
+
+# ---------------------------------------------------------------------------
+# PHP lockfile (composer.lock)
+# ---------------------------------------------------------------------------
+
+def _parse_composer_lock(file_path: Path) -> dict[str, str]:
+    """Parse composer.lock for pinned versions. Returns {name: version}."""
+    pinned: dict[str, str] = {}
+    try:
+        data = json.loads(file_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return pinned
+    for pkg in data.get("packages", []) + data.get("packages-dev", []):
+        name = pkg.get("name", "")
+        ver = pkg.get("version", "").lstrip("v")
+        if name and ver:
+            pinned[name] = ver
+    return pinned
+
+
+# ---------------------------------------------------------------------------
+# Dart / Flutter (pubspec.yaml + pubspec.lock)
+# ---------------------------------------------------------------------------
+
+_YAML_KV_RE = re.compile(r"^\s{2,4}(\S+):\s*(.*)$")
+
+def _parse_pubspec_yaml(file_path: Path, project_path: Path) -> list[PackageDependency]:
+    """Parse pubspec.yaml for dependencies and dev_dependencies."""
+    deps = []
+    source = _rel_path(file_path, project_path)
+    try:
+        text = file_path.read_text(encoding="utf-8")
+    except OSError:
+        return deps
+
+    current_section = ""
+    for line in text.splitlines():
+        stripped = line.rstrip()
+        # Top-level section detection
+        if not stripped.startswith(" ") and stripped.endswith(":"):
+            current_section = stripped.rstrip(":")
+            continue
+
+        if current_section in ("dependencies", "dev_dependencies"):
+            m = _YAML_KV_RE.match(stripped)
+            if m:
+                name = m.group(1)
+                ver_raw = m.group(2).strip()
+                # Skip SDK, path, git deps
+                if name in ("flutter", "flutter_test", "flutter_localizations"):
+                    continue
+                ver = ver_raw.strip("'^~>=< ") if ver_raw and not ver_raw.startswith("{") else ""
+                scope = "dev" if current_section == "dev_dependencies" else "production"
+                deps.append(PackageDependency(
+                    name=name, version=ver, pinned_version="",
+                    ecosystem="pub", scope=scope, source_file=source,
+                ))
+    return deps
+
+
+def _parse_pubspec_lock(file_path: Path) -> dict[str, str]:
+    """Parse pubspec.lock for pinned versions. Returns {name: version}."""
+    pinned: dict[str, str] = {}
+    try:
+        text = file_path.read_text(encoding="utf-8")
+    except OSError:
+        return pinned
+    current_name = ""
+    for line in text.splitlines():
+        stripped = line.rstrip()
+        # Package names are at 2-space indent, not 4
+        if len(stripped) > 0 and not stripped.startswith("  ") and stripped.endswith(":") and stripped != "packages:":
+            continue
+        if stripped.startswith("  ") and not stripped.startswith("    ") and stripped.endswith(":"):
+            current_name = stripped.strip().rstrip(":")
+        elif '    version: ' in stripped and current_name:
+            ver = stripped.split("version:")[1].strip().strip('"')
+            if ver:
+                pinned[current_name] = ver
+    return pinned
+
+
+# ---------------------------------------------------------------------------
+# Swift (Package.resolved v2)
+# ---------------------------------------------------------------------------
+
+def _parse_package_resolved(file_path: Path, project_path: Path) -> list[PackageDependency]:
+    """Parse Swift Package.resolved (v1 and v2) for dependencies."""
+    deps = []
+    source = _rel_path(file_path, project_path)
+    try:
+        data = json.loads(file_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return deps
+
+    # v2 format
+    pins = data.get("pins", [])
+    # v1 format
+    if not pins:
+        obj = data.get("object", {})
+        pins = obj.get("pins", [])
+
+    for pin in pins:
+        # v2: identity, location, state.version
+        name = pin.get("identity", pin.get("package", ""))
+        state = pin.get("state", {})
+        ver = state.get("version", state.get("revision", ""))
+        if not name:
+            continue
+        deps.append(PackageDependency(
+            name=name, version=ver, pinned_version=ver,
+            ecosystem="swift", scope="production", source_file=source,
+        ))
+    return deps
+
+
+# ---------------------------------------------------------------------------
+# .NET (*.csproj + packages.lock.json)
+# ---------------------------------------------------------------------------
+
+def _parse_csproj(file_path: Path, project_path: Path) -> list[PackageDependency]:
+    """Parse *.csproj for PackageReference elements."""
+    deps = []
+    source = _rel_path(file_path, project_path)
+    try:
+        text = file_path.read_text(encoding="utf-8")
+    except OSError:
+        return deps
+
+    # Use regex instead of xml.etree to handle malformed XML and namespaces
+    pkg_ref_re = re.compile(
+        r'<PackageReference\s+Include="([^"]+)"(?:\s+Version="([^"]*)")?',
+        re.IGNORECASE,
+    )
+    for m in pkg_ref_re.finditer(text):
+        name = m.group(1)
+        ver = m.group(2) or ""
+        deps.append(PackageDependency(
+            name=name, version=ver, pinned_version="",
+            ecosystem="nuget", scope="production", source_file=source,
+        ))
+    return deps
+
+
+def _parse_packages_lock_json(file_path: Path) -> dict[str, str]:
+    """Parse .NET packages.lock.json for pinned versions."""
+    pinned: dict[str, str] = {}
+    try:
+        data = json.loads(file_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return pinned
+    for _framework, pkgs in (data.get("dependencies") or {}).items():
+        if isinstance(pkgs, dict):
+            for name, info in pkgs.items():
+                if isinstance(info, dict):
+                    ver = info.get("resolved", "")
+                    if ver:
+                        pinned[name] = ver
+    return pinned
+
+
+# ---------------------------------------------------------------------------
+# Elixir (mix.exs + mix.lock)
+# ---------------------------------------------------------------------------
+
+_MIX_DEP_RE = re.compile(
+    r"""\{:(\w+),\s*"([~><=!]*\s*[\d.]+)"(?:,\s*only:\s*:(\w+))?""",
+)
+
+def _parse_mix_exs(file_path: Path, project_path: Path) -> list[PackageDependency]:
+    """Parse mix.exs for {:name, "version"} dependency tuples."""
+    deps = []
+    source = _rel_path(file_path, project_path)
+    try:
+        text = file_path.read_text(encoding="utf-8")
+    except OSError:
+        return deps
+
+    for m in _MIX_DEP_RE.finditer(text):
+        name = m.group(1)
+        ver = m.group(2).strip()
+        only = m.group(3) or ""
+        scope = "dev" if only in ("dev", "test") else "production"
+        deps.append(PackageDependency(
+            name=name, version=ver, pinned_version="",
+            ecosystem="hex", scope=scope, source_file=source,
+        ))
+    return deps
+
+
+def _parse_mix_lock(file_path: Path) -> dict[str, str]:
+    """Parse mix.lock for pinned versions. Returns {name: version}."""
+    pinned: dict[str, str] = {}
+    try:
+        text = file_path.read_text(encoding="utf-8")
+    except OSError:
+        return pinned
+    # Format: "name": {:hex, :name, "version", ...}
+    lock_re = re.compile(r'"(\w+)":\s*\{:hex,\s*:\w+,\s*"([^"]+)"')
+    for m in lock_re.finditer(text):
+        pinned[m.group(1)] = m.group(2)
+    return pinned
+
+
+# ---------------------------------------------------------------------------
 # Main scanner
 # ---------------------------------------------------------------------------
 
@@ -797,6 +1032,26 @@ def scan_dependencies(project_path: str | Path) -> DependencyInventory:
             has_lockfile = True
             found_manifests.append(rel)
             pinned_versions.setdefault(parent_dir, {})["gem"] = _parse_gemfile_lock(fpath)
+        elif fname == "Cargo.lock":
+            has_lockfile = True
+            found_manifests.append(rel)
+            pinned_versions.setdefault(parent_dir, {})["cargo"] = _parse_cargo_lock(fpath)
+        elif fname == "composer.lock":
+            has_lockfile = True
+            found_manifests.append(rel)
+            pinned_versions.setdefault(parent_dir, {})["composer"] = _parse_composer_lock(fpath)
+        elif fname == "pubspec.lock":
+            has_lockfile = True
+            found_manifests.append(rel)
+            pinned_versions.setdefault(parent_dir, {})["pub"] = _parse_pubspec_lock(fpath)
+        elif fname == "packages.lock.json":
+            has_lockfile = True
+            found_manifests.append(rel)
+            pinned_versions.setdefault(parent_dir, {})["nuget"] = _parse_packages_lock_json(fpath)
+        elif fname == "mix.lock":
+            has_lockfile = True
+            found_manifests.append(rel)
+            pinned_versions.setdefault(parent_dir, {})["hex"] = _parse_mix_lock(fpath)
 
     # Second pass: parse manifest files
     for fpath in manifest_files:
@@ -804,7 +1059,9 @@ def scan_dependencies(project_path: str | Path) -> DependencyInventory:
         fname = fpath.name
 
         # Skip lockfiles (already processed)
-        if fname in ("package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock", "Gemfile.lock"):
+        if fname in ("package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock",
+                      "Gemfile.lock", "Cargo.lock", "composer.lock", "pubspec.lock",
+                      "packages.lock.json", "mix.lock"):
             continue
 
         parsed = []
@@ -830,6 +1087,14 @@ def scan_dependencies(project_path: str | Path) -> DependencyInventory:
             parsed = _parse_gemfile(fpath, project_path)
         elif fname.startswith("Dockerfile"):
             parsed = _parse_dockerfile(fpath, project_path)
+        elif fname == "pubspec.yaml":
+            parsed = _parse_pubspec_yaml(fpath, project_path)
+        elif fname == "Package.resolved":
+            parsed = _parse_package_resolved(fpath, project_path)
+        elif fname.endswith(".csproj"):
+            parsed = _parse_csproj(fpath, project_path)
+        elif fname == "mix.exs":
+            parsed = _parse_mix_exs(fpath, project_path)
         else:
             continue
 
