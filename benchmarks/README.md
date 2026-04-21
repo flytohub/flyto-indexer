@@ -49,7 +49,7 @@ Meets FLY-39 acceptance (≥300 rows across four languages). The JS+TS bucket is
 
 ### Licensing note (flag for legal + CTO)
 
-Rules in `semgrep/semgrep-rules` ship under the **Semgrep Rules License v1.0**, not LGPL as stated in the [FLY-11 plan](/FLY/issues/FLY-11#document-plan) §5 risk 5. The license permits internal business use of rule YAML files but restricts redistribution and "as-a-service" provisioning. Implications:
+Rules in `semgrep/semgrep-rules` ship under the **Semgrep Rules License v1.0**, not LGPL as stated in the FLY-11 plan (§5 risk 5). The license permits internal business use of rule YAML files but restricts redistribution and "as-a-service" provisioning. Implications:
 
 - Using these rule IDs in the Flyto indexer to scan customer code is allowed (internal business purpose of the Flyto organisation running the scanner).
 - Shipping the raw rule YAML bodies inside Flyto's binaries for offline scanning on a customer host **is** redistribution — needs legal review before GA.

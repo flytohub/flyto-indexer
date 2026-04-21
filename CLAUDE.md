@@ -9,7 +9,7 @@ If `.flyto-index/` does not exist in the project root, run this before using any
 flyto-index scan .
 ```
 
-### 5 Smart Tools (v2.3.0+)
+### 5 Smart Tools (v2.3.0+, current v2.9.0)
 
 flyto-indexer exposes 5 consolidated tools. Each one auto-enriches results with related data — no need to pick between dozens of granular tools.
 
@@ -40,7 +40,9 @@ flyto-indexer exposes 5 consolidated tools. Each one auto-enriches results with 
 
 ### Dependency Scanner
 - `flyto-index deps .` — scans all package manifests
-- Supports 8 ecosystems: npm, pypi, Go, Rust, Maven/Gradle, PHP, Ruby, Docker
+- Supports 8+ ecosystems: npm, pypi, Go, Rust (Cargo.toml + Cargo.lock),
+  Maven/Gradle, PHP (composer.json + composer.lock), Ruby (Gemfile.lock),
+  Docker, Dart (pubspec), Swift, .NET, Elixir
 - Reads lockfiles for pinned versions
 - Detects version conflicts across monorepo
 - Available as MCP tool: `list_dependencies`
@@ -78,12 +80,15 @@ Features that need external APIs (CVE databases, GitHub API, embedding models)
 belong in flyto-code's engine layer, not here.
 
 ### Roadmap (all stdlib, no external deps)
-- [ ] Go/TypeScript token-aware scanning (upgrade from regex) — in progress
-- [ ] Call graph — function-level call chain, not just import/reference
-- [ ] PR risk analysis — git diff → impact score, affected tests, breaking change detection
+- [x] Go/TypeScript token-aware scanning (upgrade from regex) — shipped v2.7
+- [x] Call graph — function-level call chain — shipped v2.7
+- [x] PR risk analysis — git diff → impact score, affected tests — shipped v2.7
+- [x] Data flow / taint-lite — source → variable → sink tracking — shipped v2.7
+- [x] Framework-aware analysis — Next.js, Vue, FastAPI, Express — shipped v2.7
+- [x] Architecture layers + taint DSL — shipped v2.9
+- [x] LSP deepening (pyright/tsserver/gopls/rust-analyzer) — shipped v2.9
+- [x] Composite complexity scoring (multi-dimensional) — shipped v2.7.3
 - [ ] Cross-repo analysis — shared package version drift, API contract comparison
-- [ ] Data flow / taint-lite — source → variable → sink tracking
-- [ ] Framework-aware analysis — Next.js, Nuxt, FastAPI, Express convention detection
 - [ ] Dead code confidence scoring — definitely/probably/unknown instead of binary
 - [ ] Config analysis — .env, docker-compose, CI workflow structure and risk
 <!-- flyto-indexer end -->
