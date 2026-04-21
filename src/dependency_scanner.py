@@ -635,8 +635,8 @@ def _parse_composer_json(file_path: Path, project_path: Path) -> list[PackageDep
 
     for section, scope in [("require", "production"), ("require-dev", "dev")]:
         for name, ver in (data.get(section) or {}).items():
-            # Skip PHP platform requirements
-            if name.startswith("php") or name.startswith("ext-") or name == "composer-plugin-api":
+            # Skip PHP platform requirements (php, php-64bit, ext-*, etc.)
+            if name in ("php", "php-64bit", "php-ipv6", "hhvm", "composer-plugin-api") or name.startswith("ext-"):
                 continue
             deps.append(PackageDependency(
                 name=name, version=ver if isinstance(ver, str) else "",
