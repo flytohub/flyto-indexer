@@ -40,7 +40,7 @@ def expected_ids_in_file(path: Path) -> list[tuple[int, str]]:
 def _scan_dir(directory: Path) -> dict[Path, list]:
     scanner = SecurityScanner(directory)
     result: dict[Path, list] = {}
-    for ext in (".py", ".js", ".ts"):
+    for ext in (".py", ".js", ".jsx", ".ts", ".tsx", ".vue", ".go", ".php", ".rb"):
         for f in directory.rglob(f"*{ext}"):
             content = f.read_text()
             issues = scanner.scan_file(str(f.relative_to(directory)), content)
@@ -112,15 +112,23 @@ def main() -> int:
     print("=" * 70)
     print("TAINT — categories that fire on vuln/sinks.py")
     print("=" * 70)
+    expected_taint_cats = {
+        "ssrf", "open_redirect", "nosql_injection", "crlf_injection",
+        "redos", "prototype_pollution", "sql_injection", "xxe",
+    }
+    taint_miss: list[str] = []
     try:
         analyzer = TaintAnalyzer(vuln_dir, index={})
         res = analyzer.analyze_full()
         flows = getattr(res, "taint_flows", []) or []
         unsanitized = [f for f in flows if not getattr(f, "sanitized", False)]
-        cats = {getattr(f, "vuln_type", None) for f in unsanitized}
+        cats = {getattr(f, "category", None) for f in unsanitized}
         cats.discard(None)
         print(f"  flows (unsanitized / total): {len(unsanitized)} / {len(flows)}")
-        print(f"  unique taint categories: {sorted(cats)}")
+        print(f"  categories fired: {sorted(cats)}")
+        taint_miss = sorted(expected_taint_cats - cats)
+        if taint_miss:
+            print(f"  categories expected but missing: {taint_miss}")
     except Exception as e:
         print(f"  (taint analyze skipped: {type(e).__name__}: {e})")
 
@@ -131,6 +139,7 @@ def main() -> int:
     print("=" * 70)
     print(f"  Positive hit rate: {total_hits}/{total_expected} ({100*total_hits//max(1,total_expected)}%)")
     print(f"  False positives on safe/: {len(fp)}")
+    print(f"  Taint categories missing: {len(taint_miss)}/{len(expected_taint_cats)}")
     if missing:
         print("  Missing (false negative):")
         for fn, rid, ln in missing:
@@ -141,7 +150,7 @@ def main() -> int:
             print(f"    - {fn}:{issue.line} {issue.recommendation}")
     print()
 
-    return 0 if not missing and not fp else 1
+    return 0 if not missing and not fp and not taint_miss else 1
 
 
 if __name__ == "__main__":

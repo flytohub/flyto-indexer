@@ -367,30 +367,50 @@ JS_TAINT_PATTERNS = [
     # req.cookies → response (session fixation)
     (r'(?:req|request)\.cookies\b.*?(?:query|execute)\s*\(',
      "sql_injection", "high", "Never use raw cookie values in SQL"),
-    # --- batch 1 ---------------------------------------------------------
-    # SSRF — req.* → axios/fetch/got with absolute URL
+    # --- batch 1: bidirectional — JS regularly writes `sink(req.body)`
+    # (sink-first) AND `const u = req.query.u; sink(u)` (source-first).
+    # Single-direction patterns caught none of the former.
+
+    # SSRF — both directions
     (r'(?:req|request)\.(?:body|query|params)\b.*?(?:axios|fetch|got|node-fetch|superagent)\s*[.(]',
      "ssrf", "high", "Validate URL against allow-list; block private IPs"),
-    # Open redirect — req → res.redirect
+    (r'(?:axios|fetch|got|node-fetch|superagent)\s*[.(][^)]*(?:req|request)\.(?:body|query|params)\b',
+     "ssrf", "high", "Validate URL against allow-list; block private IPs"),
+
+    # Open redirect
     (r'(?:req|request)\.(?:body|query|params)\b.*?res(?:ponse)?\.redirect\s*\(',
      "open_redirect", "medium", "Validate redirect target is internal or allow-listed"),
-    # NoSQL injection — req → Model.find(query)
+    (r'res(?:ponse)?\.redirect\s*\([^)]*(?:req|request)\.(?:body|query|params)\b',
+     "open_redirect", "medium", "Validate redirect target is internal or allow-listed"),
+
+    # NoSQL injection — source first OR sink first
     (r'(?:req|request)\.(?:body|query|params)\b.*?\.(?:find|findOne|updateOne|deleteMany|aggregate)\s*\(',
      "nosql_injection", "high", "Cast query to schema; reject $-prefixed keys"),
-    # CRLF / header injection
+    (r'\.(?:find|findOne|updateOne|deleteMany|aggregate)\s*\([^)]*(?:req|request)\.(?:body|query|params)\b',
+     "nosql_injection", "high", "Cast query to schema; reject $-prefixed keys"),
+
+    # CRLF / header injection — both directions
     (r'(?:req|request)\.(?:body|query|params|headers)\b.*?(?:setHeader|writeHead)\s*\(',
      "crlf_injection", "medium", "Strip CR/LF from header values"),
-    # ReDoS — user input to RegExp constructor
+    (r'(?:setHeader|writeHead)\s*\([^)]*(?:req|request)\.(?:body|query|params|headers)\b',
+     "crlf_injection", "medium", "Strip CR/LF from header values"),
+
+    # ReDoS — user input to RegExp constructor (dominant form is new RegExp(req.x))
     (r'new\s+RegExp\s*\(\s*(?:req|request)\.',
      "redos", "medium", "Never construct RegExp from user input"),
-    # Prototype pollution — user body merged into object
-    (r'(?:Object\.assign|_\.merge|_\.defaultsDeep)\s*\([^,]+,\s*(?:req|request)\.',
+
+    # Prototype pollution — merge target, req.*
+    (r'(?:Object\.assign|_\.merge|_\.defaultsDeep|hoek\.merge)\s*\([^,]+,\s*(?:req|request)\.',
      "prototype_pollution", "high", "Never merge user input into shared objects"),
 ]
 
 GO_TAINT_PATTERNS = [
-    # r.FormValue/URL.Query → db.Query/Exec
+    # r.FormValue/URL.Query → db.Query/Exec (source first)
     (r'(?:FormValue|URL\.Query)\b.*?(?:db\.(?:Query|Exec|QueryRow)|\.Query|\.Exec)\s*\(',
+     "sql_injection", "high", "Use parameterized queries with $1 placeholders"),
+    # Same but sink first — real Go code often writes
+    # `db.Query("SELECT ... " + c.Query("x"))`.
+    (r'(?:db\.(?:Query|Exec|QueryRow)|\.Query|\.Exec)\s*\([^)]*(?:FormValue|URL\.Query|c\.(?:Query|Param|PostForm|BindJSON|FormValue))\b',
      "sql_injection", "high", "Use parameterized queries with $1 placeholders"),
     # Gin/Echo/Fiber sources → db.Query/Exec (common framework surface)
     (r'(?:c\.(?:Query|Param|PostForm|BindJSON|ShouldBindJSON|Bind|FormValue|GetHeader))\b.*?(?:db\.(?:Query|Exec|QueryRow)|\.Query|\.Exec)\s*\(',
@@ -405,20 +425,26 @@ GO_TAINT_PATTERNS = [
      "path_traversal", "high", "Validate and sanitize file paths"),
     (r'(?:c\.(?:Query|Param|PostForm|FormValue))\b.*?(?:os\.Open|filepath\.Join)\s*\(',
      "path_traversal", "high", "Validate and sanitize file paths"),
-    # --- batch 1 ---------------------------------------------------------
-    # SSRF — user input to http.Get / client.Do
+    # --- batch 1: bidirectional for new categories ----------------------
+    # SSRF
     (r'(?:FormValue|URL\.Query|c\.(?:Query|Param|PostForm|FormValue))\b.*?(?:http\.(?:Get|Post)|client\.Do|http\.NewRequest)\s*\(',
+     "ssrf", "high", "Validate URL; reject private/loopback ranges"),
+    (r'(?:http\.(?:Get|Post)|client\.Do|http\.NewRequest)\s*\([^)]*(?:FormValue|URL\.Query|c\.(?:Query|Param|PostForm|FormValue))\b',
      "ssrf", "high", "Validate URL; reject private/loopback ranges"),
     # Open redirect
     (r'(?:FormValue|URL\.Query|c\.(?:Query|Param|FormValue))\b.*?http\.Redirect\s*\(',
      "open_redirect", "medium", "Validate target host is allow-listed"),
-    # CRLF in headers
+    (r'http\.Redirect\s*\([^)]*(?:FormValue|URL\.Query|c\.(?:Query|Param|FormValue))\b',
+     "open_redirect", "medium", "Validate target host is allow-listed"),
+    # CRLF in headers — both directions (Set/Add called with source)
     (r'(?:FormValue|URL\.Query|c\.(?:Query|Param|FormValue|GetHeader))\b.*?\.Header\(\)\.(?:Set|Add)\s*\(',
      "crlf_injection", "medium", "Strip CR/LF from header values"),
-    # ReDoS — user input to regexp.Compile
+    (r'\.Header\(\)\.(?:Set|Add)\s*\([^)]*(?:FormValue|URL\.Query|c\.(?:Query|Param|FormValue|GetHeader))\b',
+     "crlf_injection", "medium", "Strip CR/LF from header values"),
+    # ReDoS
     (r'regexp\.(?:Compile|MustCompile)\s*\([^)]*\b(?:FormValue|URL\.Query|c\.(?:Query|Param|FormValue))\b',
      "redos", "medium", "Never compile regex from user input"),
-    # XML XXE — user input to xml.NewDecoder
+    # XML XXE
     (r'xml\.NewDecoder\s*\([^)]*\b(?:r\.Body|c\.Request\.Body)\b',
      "xxe", "high", "Disable external entities; use encoding/xml with care"),
 ]

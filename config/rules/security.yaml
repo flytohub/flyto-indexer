@@ -22,7 +22,9 @@ sql_injection:
     message: "SQL injection via string concatenation"
 
   - id: SQL_JS_TEMPLATE
-    pattern: "`.*(?:SELECT|INSERT|UPDATE|DELETE).*\\$\\{.*\\}`"
+    # `.* ... ${…} …`  — allow arbitrary trailing template segments,
+    # not just `${…}` immediately before the closing backtick.
+    pattern: "`.*(?:SELECT|INSERT|UPDATE|DELETE)\\b.*\\$\\{[^}]*\\}.*`"
     severity: HIGH
     languages: [javascript, typescript]
     message: "SQL injection via template literal"
@@ -160,23 +162,25 @@ tls:
     languages: [go]
     message: "InsecureSkipVerify:true disables TLS verification"
 
-# Cookie / session configuration
+# Cookie / session configuration. We flag positive indicators of bad
+# config (SameSite=None, httpOnly:false, secure:false) rather than
+# absence — regex negative lookahead over unbounded content was
+# producing silent-misses because `.*(?!X).*` doesn't mean "lacks X".
 cookies:
-  - id: COOKIE_NO_HTTPONLY_EXPRESS
-    pattern: "(?:cookie|session)\\s*\\(\\s*\\{[^}]*(?!httpOnly\\s*:\\s*true)[^}]*\\}\\s*\\)"
+  - id: COOKIE_HTTPONLY_FALSE
+    pattern: "httpOnly\\s*:\\s*false\\b"
     severity: MEDIUM
     languages: [javascript, typescript]
-    message: "Session cookie missing httpOnly; XSS can steal it"
-    # This pattern is heuristic — real check should inspect kwargs.
+    message: "Cookie httpOnly:false lets XSS read the cookie"
 
-  - id: COOKIE_NO_SECURE_FLASK
-    pattern: "set_cookie\\s*\\([^)]*(?!secure\\s*=\\s*True)"
-    severity: LOW
-    languages: [python]
-    message: "Cookie secure flag not set; consider secure=True for HTTPS-only"
+  - id: COOKIE_SECURE_FALSE
+    pattern: "secure\\s*:\\s*false\\b"
+    severity: MEDIUM
+    languages: [javascript, typescript]
+    message: "Cookie secure:false sends the cookie over HTTP"
 
   - id: COOKIE_SAMESITE_NONE
-    pattern: "(?:SameSite\\s*:\\s*['\"]None['\"]|samesite\\s*=\\s*['\"]None['\"])"
+    pattern: "(?:SameSite|samesite|sameSite)\\s*[:=]\\s*['\"]None['\"]"
     severity: LOW
     languages: ["*"]
     message: "SameSite=None weakens CSRF protection unless Secure is also set"
