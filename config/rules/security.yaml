@@ -84,3 +84,182 @@ info_leaks:
     severity: MEDIUM
     languages: ["*"]
     message: "Logging potentially sensitive data"
+
+# Weak or broken cryptography — pattern-matchable primitives and common
+# misuse patterns. Taint analysis can't reason about these; the offense
+# is purely in the call itself.
+weak_crypto:
+  - id: WEAK_HASH_MD5
+    pattern: "(?:hashlib\\.md5|crypto\\.createHash\\s*\\(\\s*['\"]md5['\"]|md5\\.New\\s*\\(\\)|MessageDigest\\.getInstance\\s*\\(\\s*\"MD5\")"
+    severity: HIGH
+    languages: ["*"]
+    message: "MD5 is broken for cryptographic use; use SHA-256 or stronger"
+
+  - id: WEAK_HASH_SHA1
+    pattern: "(?:hashlib\\.sha1|crypto\\.createHash\\s*\\(\\s*['\"]sha1['\"]|sha1\\.New\\s*\\(\\)|MessageDigest\\.getInstance\\s*\\(\\s*\"SHA-?1\")"
+    severity: HIGH
+    languages: ["*"]
+    message: "SHA-1 is broken for cryptographic use; use SHA-256 or stronger"
+
+  - id: INSECURE_RANDOM_MATHS
+    pattern: "Math\\.random\\s*\\(\\)"
+    severity: MEDIUM
+    languages: [javascript, typescript]
+    message: "Math.random() is not cryptographically secure; use crypto.randomBytes"
+
+  - id: INSECURE_RANDOM_PY
+    pattern: "\\brandom\\.(?:random|randint|choice|shuffle|sample)\\s*\\("
+    severity: LOW
+    languages: [python]
+    message: "random module is not cryptographically secure; use secrets module for tokens"
+
+  - id: WEAK_AES_ECB
+    pattern: "(?:AES\\.new\\s*\\([^,]+,\\s*AES\\.MODE_ECB|createCipheriv\\s*\\(\\s*['\"]aes-\\d+-ecb)"
+    severity: HIGH
+    languages: [python, javascript, typescript]
+    message: "AES-ECB leaks patterns; use AES-GCM or AES-CBC with HMAC"
+
+  - id: HARDCODED_IV_ZERO
+    pattern: "(?:iv\\s*=\\s*(?:b?'\\\\x00'|b?'[\\s\\S]{0,3}'|bytes\\s*\\(\\s*16\\s*\\))|IV\\s*=\\s*new\\s+byte\\s*\\[\\s*\\d+\\s*\\])"
+    severity: HIGH
+    languages: [python, java]
+    message: "Hardcoded zero IV breaks AES-CBC confidentiality; use os.urandom(16)"
+
+  - id: WEAK_KDF_MD5
+    pattern: "pbkdf2\\s*\\([^,]+,\\s*[^,]+,\\s*\\d+\\s*,\\s*\\d+\\s*,\\s*['\"]md5"
+    severity: HIGH
+    languages: [python, javascript]
+    message: "PBKDF2 with MD5 is weak; use SHA-256 and ≥ 100k iterations"
+
+  - id: BCRYPT_LOW_ROUNDS
+    pattern: "bcrypt(?:\\.hash|\\.hashSync|\\.genSalt)\\s*\\([^)]*,\\s*(?:[1-9]|10)\\s*\\)"
+    severity: MEDIUM
+    languages: [python, javascript, typescript]
+    message: "bcrypt cost factor < 11 is too low for modern hardware; use 12+"
+
+# TLS / SSL misconfiguration
+tls:
+  - id: TLS_VERIFY_DISABLED_PY
+    pattern: "(?:verify\\s*=\\s*False|CERT_NONE|ssl\\._create_unverified_context)"
+    severity: HIGH
+    languages: [python]
+    message: "TLS verification disabled; MITM possible"
+
+  - id: TLS_VERIFY_DISABLED_JS
+    pattern: "rejectUnauthorized\\s*:\\s*false"
+    severity: HIGH
+    languages: [javascript, typescript]
+    message: "rejectUnauthorized:false disables TLS verification"
+
+  - id: TLS_VERIFY_DISABLED_GO
+    pattern: "InsecureSkipVerify\\s*:\\s*true"
+    severity: HIGH
+    languages: [go]
+    message: "InsecureSkipVerify:true disables TLS verification"
+
+# Cookie / session configuration
+cookies:
+  - id: COOKIE_NO_HTTPONLY_EXPRESS
+    pattern: "(?:cookie|session)\\s*\\(\\s*\\{[^}]*(?!httpOnly\\s*:\\s*true)[^}]*\\}\\s*\\)"
+    severity: MEDIUM
+    languages: [javascript, typescript]
+    message: "Session cookie missing httpOnly; XSS can steal it"
+    # This pattern is heuristic — real check should inspect kwargs.
+
+  - id: COOKIE_NO_SECURE_FLASK
+    pattern: "set_cookie\\s*\\([^)]*(?!secure\\s*=\\s*True)"
+    severity: LOW
+    languages: [python]
+    message: "Cookie secure flag not set; consider secure=True for HTTPS-only"
+
+  - id: COOKIE_SAMESITE_NONE
+    pattern: "(?:SameSite\\s*:\\s*['\"]None['\"]|samesite\\s*=\\s*['\"]None['\"])"
+    severity: LOW
+    languages: ["*"]
+    message: "SameSite=None weakens CSRF protection unless Secure is also set"
+
+# CORS — wildcard origin combined with credentials is always wrong
+cors:
+  - id: CORS_WILDCARD_CREDENTIALS_JS
+    pattern: "cors\\s*\\(\\s*\\{[^}]*origin\\s*:\\s*['\"]?\\*['\"]?[^}]*credentials\\s*:\\s*true"
+    severity: HIGH
+    languages: [javascript, typescript]
+    message: "Wildcard origin with credentials:true is insecure and spec-violating"
+
+  - id: CORS_ORIGIN_ANY_FLASK
+    pattern: "CORS\\s*\\([^)]*origins\\s*=\\s*['\"]?\\*['\"]?"
+    severity: MEDIUM
+    languages: [python]
+    message: "CORS origins=* exposes API to any site; use explicit allow-list"
+
+# JWT — algorithm 'none' + weak secret patterns
+jwt:
+  - id: JWT_ALG_NONE
+    pattern: "(?:algorithm\\s*=\\s*['\"]none['\"]|algorithms\\s*=\\s*\\[[^]]*['\"]none['\"])"
+    severity: CRITICAL
+    languages: ["*"]
+    message: "JWT alg 'none' accepts unsigned tokens; never enable"
+
+  - id: JWT_HARDCODED_SECRET
+    pattern: "(?:jwt\\.sign|jwt\\.encode)\\s*\\([^,]+,\\s*['\"][a-zA-Z0-9]{1,8}['\"]"
+    severity: HIGH
+    languages: ["*"]
+    message: "JWT secret appears hardcoded and short; use env-sourced ≥32-char secret"
+
+  - id: JWT_VERIFY_FALSE
+    pattern: "jwt\\.decode\\s*\\([^)]*verify\\s*=\\s*False"
+    severity: CRITICAL
+    languages: [python]
+    message: "JWT verify=False skips signature check"
+
+# Debug / verbose exposure in production
+debug:
+  - id: DEBUG_ENABLED_DJANGO
+    pattern: "DEBUG\\s*=\\s*True"
+    severity: MEDIUM
+    languages: [python]
+    message: "DEBUG=True exposes stack traces and settings in production"
+
+  - id: DEBUG_ENABLED_FLASK
+    pattern: "app\\.run\\s*\\([^)]*debug\\s*=\\s*True"
+    severity: MEDIUM
+    languages: [python]
+    message: "Flask debug=True enables arbitrary code exec via debugger PIN"
+
+  - id: EXPRESS_ERROR_HANDLER_MISSING
+    pattern: "res\\.send\\s*\\(\\s*err\\s*(?:\\.stack|\\.message)?\\s*\\)"
+    severity: MEDIUM
+    languages: [javascript, typescript]
+    message: "Sending raw error objects leaks stack traces and internals"
+
+# SSRF / redirect / cookie-from-input patterns not covered by taint DSL
+misc:
+  - id: OPEN_REDIRECT_UNVALIDATED_JS
+    pattern: "res\\.redirect\\s*\\(\\s*req\\.(?:query|body|params)"
+    severity: MEDIUM
+    languages: [javascript, typescript]
+    message: "Open redirect: redirecting to user input without validation"
+
+  - id: MASS_ASSIGN_UPDATE
+    pattern: "(?:findOneAndUpdate|update|updateOne)\\s*\\(\\s*[^,]+,\\s*req\\.body\\s*\\)"
+    severity: HIGH
+    languages: [javascript, typescript]
+    message: "Mass assignment: req.body passed directly to update; filter allowed fields"
+
+  - id: PY_SUBPROCESS_SHELL_EXPANSION
+    pattern: "os\\.system\\s*\\(\\s*['\"][^'\"]*\\$\\{?[A-Z_]+\\}?"
+    severity: HIGH
+    languages: [python]
+    message: "Shell-expanding env vars in os.system() invites injection"
+
+  - id: RUBY_SEND_METHOD
+    pattern: "\\.send\\s*\\(\\s*params\\["
+    severity: HIGH
+    languages: [ruby]
+    message: "obj.send(params[...]) enables arbitrary method invocation"
+
+  - id: PHP_UNSERIALIZE_USER
+    pattern: "unserialize\\s*\\(\\s*\\$_(?:GET|POST|REQUEST|COOKIE)"
+    severity: CRITICAL
+    languages: [php]
+    message: "unserialize() on user input enables object injection"

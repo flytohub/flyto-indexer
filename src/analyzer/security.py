@@ -140,6 +140,34 @@ class SecurityScanner:
             ".venv", "venv", ".nuxt", ".output",
             "test", "tests", "__tests__", "mock", "fixture",
         ]
+        # Pre-compile the YAML-defined rules (weak crypto, TLS, cookies,
+        # CORS, JWT, debug, misc SAST) once at construction so the hot
+        # per-line loop stays cheap. Each entry is (compiled_regex, rule)
+        # where `rule` carries id / severity / category / message so the
+        # scanner can report structured findings.
+        try:
+            from ..rule_loader import get_security_rules
+        except ImportError:
+            from rule_loader import get_security_rules  # type: ignore
+        self._yaml_rules: list[tuple[re.Pattern, dict]] = []
+        for rule in get_security_rules():
+            try:
+                compiled = re.compile(rule["pattern"])
+            except re.error:
+                # Skip malformed regex rather than crash the whole scan.
+                continue
+            self._yaml_rules.append((compiled, rule))
+        # Map language → file extensions so rule.languages filters cheaply.
+        self._ext_to_lang = {
+            ".py": "python",
+            ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
+            ".ts": "typescript", ".tsx": "typescript",
+            ".vue": "vue",
+            ".go": "go",
+            ".java": "java",
+            ".php": "php",
+            ".rb": "ruby",
+        }
 
     def _should_skip(self, path: str) -> bool:
         return any(pattern in path for pattern in self.ignore_patterns)
@@ -257,6 +285,27 @@ class SecurityScanner:
                         recommendation="Remove sensitive data from logs",
                     ))
                     break
+
+            # 5. YAML-defined rules (weak crypto, TLS, cookies, CORS, JWT,
+            #    debug, misc). Each rule can scope to specific languages
+            #    via `languages: [python, javascript, ...]` or `["*"]`.
+            if self._yaml_rules:
+                ext = rel_path[rel_path.rfind("."):] if "." in rel_path else ""
+                lang = self._ext_to_lang.get(ext)
+                for pat, rule in self._yaml_rules:
+                    langs = rule.get("languages") or ["*"]
+                    if "*" not in langs and (lang is None or lang not in langs):
+                        continue
+                    if pat.search(line):
+                        issues.append(SecurityIssue(
+                            file_path=rel_path,
+                            line=line_num,
+                            severity=rule["severity"].lower(),
+                            category=rule.get("category", "rule"),
+                            description=rule.get("message", rule.get("id", "")),
+                            code=line.strip()[:80],
+                            recommendation=rule.get("id", ""),
+                        ))
 
         return issues
 

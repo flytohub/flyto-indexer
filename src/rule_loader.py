@@ -154,9 +154,41 @@ def _parse_scalar(s: str) -> Any:
     s = s.strip()
     if not s:
         return ""
-    # Remove quotes
-    if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
-        return s[1:-1]
+    # Double-quoted strings support backslash escapes per the YAML 1.2 spec.
+    # Our previous impl stripped quotes but left "\\" literal, which broke
+    # every regex in security.yaml (e.g. "\\bexec\\(" arrived at re.compile
+    # as `\\bexec\\(` — unterminated subpattern).
+    if s.startswith('"') and s.endswith('"') and len(s) >= 2:
+        inner = s[1:-1]
+        # Minimal but spec-correct escape handling — we only need the
+        # sequences that regex patterns actually use.
+        out = []
+        i = 0
+        while i < len(inner):
+            c = inner[i]
+            if c == "\\" and i + 1 < len(inner):
+                nxt = inner[i + 1]
+                if nxt == "\\":
+                    out.append("\\")
+                elif nxt == '"':
+                    out.append('"')
+                elif nxt == "n":
+                    out.append("\n")
+                elif nxt == "t":
+                    out.append("\t")
+                elif nxt == "r":
+                    out.append("\r")
+                else:
+                    # Unknown escape — preserve as-is (most regex meta).
+                    out.append(c + nxt)
+                i += 2
+                continue
+            out.append(c)
+            i += 1
+        return "".join(out)
+    if s.startswith("'") and s.endswith("'") and len(s) >= 2:
+        # Single-quoted YAML: only '' means a literal single-quote.
+        return s[1:-1].replace("''", "'")
     # Booleans
     if s.lower() in ("true", "yes", "on"):
         return True
@@ -260,6 +292,38 @@ def get_complexity_thresholds() -> dict:
         "max_branches": t.get("max_branches", defaults["max_branches"]),
         "complex_score_threshold": t.get("complex_score_threshold", defaults["complex_score_threshold"]),
     }
+
+
+def get_security_rules() -> list[dict]:
+    """Flatten `config/rules/security.yaml` into a single list of rule
+    dicts keyed by id/pattern/severity/languages/message. Every top-level
+    category (sql_injection, weak_crypto, cors, jwt, …) contributes its
+    entries with a `category` field stamped on each rule so callers can
+    group by class without re-reading the YAML.
+
+    Returns [] if the file is missing — callers fall back to their own
+    hardcoded patterns.
+    """
+    rules = load_rules("security")
+    if not rules:
+        return []
+    out: list[dict] = []
+    for category, items in rules.items():
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict) or "pattern" not in item:
+                continue
+            entry = {
+                "id": item.get("id", ""),
+                "pattern": item.get("pattern", ""),
+                "severity": str(item.get("severity", "MEDIUM")).upper(),
+                "languages": item.get("languages", ["*"]),
+                "message": item.get("message", ""),
+                "category": category,
+            }
+            out.append(entry)
+    return out
 
 
 def get_docker_rules() -> dict:
