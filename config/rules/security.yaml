@@ -126,7 +126,7 @@ weak_crypto:
     message: "Hardcoded zero IV breaks AES-CBC confidentiality; use os.urandom(16)"
 
   - id: WEAK_KDF_MD5
-    pattern: "pbkdf2\\s*\\([^,]+,\\s*[^,]+,\\s*\\d+\\s*,\\s*\\d+\\s*,\\s*['\"]md5"
+    pattern: "(?i)pbkdf2\\s*\\([^,]+,\\s*[^,]+,\\s*\\d+\\s*,\\s*\\d+\\s*,\\s*['\"]md5"
     severity: HIGH
     languages: [python, javascript]
     message: "PBKDF2 with MD5 is weak; use SHA-256 and ≥ 100k iterations"
@@ -140,10 +140,13 @@ weak_crypto:
 # TLS / SSL misconfiguration
 tls:
   - id: TLS_VERIFY_DISABLED_PY
-    pattern: "(?:verify\\s*=\\s*False|CERT_NONE|ssl\\._create_unverified_context)"
+    # Scope to HTTP-client contexts so we don't collide with jwt.decode(verify=False)
+    # — that's handled by JWT_VERIFY_FALSE, and a blanket `verify=False` match
+    # was double-firing on every JWT non-verification.
+    pattern: "(?:(?:requests|httpx|urllib3)\\.[A-Za-z_]+\\([^)]*verify\\s*=\\s*False|Session\\(\\).*verify\\s*=\\s*False|CERT_NONE|ssl\\._create_unverified_context)"
     severity: HIGH
     languages: [python]
-    message: "TLS verification disabled; MITM possible"
+    message: "TLS verification disabled on HTTP client; MITM possible"
 
   - id: TLS_VERIFY_DISABLED_JS
     pattern: "rejectUnauthorized\\s*:\\s*false"
@@ -195,7 +198,8 @@ cors:
 # JWT — algorithm 'none' + weak secret patterns
 jwt:
   - id: JWT_ALG_NONE
-    pattern: "(?:algorithm\\s*=\\s*['\"]none['\"]|algorithms\\s*=\\s*\\[[^]]*['\"]none['\"])"
+    # Handle both Python kwarg syntax (= 'none') and JS object literal (: 'none')
+    pattern: "(?:algorithm\\s*[:=]\\s*['\"]none['\"]|algorithms\\s*[:=]\\s*\\[[^]]*['\"]none['\"])"
     severity: CRITICAL
     languages: ["*"]
     message: "JWT alg 'none' accepts unsigned tokens; never enable"
