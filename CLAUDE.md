@@ -79,6 +79,18 @@ flyto-indexer exposes 5 consolidated tools. Each one auto-enriches results with 
 Features that need external APIs (CVE databases, GitHub API, embedding models)
 belong in flyto-code's engine layer, not here.
 
+### flyto-engine Upload (v2.10+)
+
+`flyto-index export` bundles scan results for upload to flyto-engine:
+
+```bash
+flyto-index export .                    # basic: profile + taint
+flyto-index export . --full             # full: + symbol graph (function-level verify)
+flyto-index export . --full --commit X  # CI mode: + commit/branch metadata
+```
+
+See `integrations/flyto-engine.md` for full docs, CI examples, and security model.
+
 ### Roadmap (all stdlib, no external deps)
 - [x] Go/TypeScript token-aware scanning (upgrade from regex) — shipped v2.7
 - [x] Call graph — function-level call chain — shipped v2.7
@@ -88,6 +100,7 @@ belong in flyto-code's engine layer, not here.
 - [x] Architecture layers + taint DSL — shipped v2.9
 - [x] LSP deepening (pyright/tsserver/gopls/rust-analyzer) — shipped v2.9
 - [x] Composite complexity scoring (multi-dimensional) — shipped v2.7.3
+- [x] Export command for flyto-engine upload — shipped v2.10
 - [ ] Cross-repo analysis — shared package version drift, API contract comparison
 - [ ] Dead code confidence scoring — definitely/probably/unknown instead of binary
 - [ ] Config analysis — .env, docker-compose, CI workflow structure and risk

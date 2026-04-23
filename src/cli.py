@@ -191,6 +191,24 @@ def main():
     profile_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as raw JSON")
     profile_parser.add_argument("--compact", action="store_true", help="Summary only (omit folder structure)")
 
+    # export — bundle profile + taint for flyto-engine upload
+    export_parser = subparsers.add_parser(
+        "export",
+        help="Export scan results as a single JSON bundle for flyto-engine upload",
+        description=(
+            "Runs profile + taint analysis and outputs a single JSON document "
+            "that can be POSTed to flyto-engine's /scan-upload endpoint. "
+            "Usage: flyto-index export . | curl -X POST -H 'Authorization: Bearer TOKEN' "
+            "-H 'Content-Type: application/json' -d @- https://engine.flyto2.com/api/v1/code/repos/REPO_ID/scan-upload"
+        ),
+    )
+    export_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    export_parser.add_argument("--full", action="store_true", help="Include symbol graph (index.json) for function-level verify")
+    export_parser.add_argument("--no-content", action="store_true", dest="no_content", help="Exclude source code snippets from --full export (default: always excluded)")
+    export_parser.add_argument("--commit", help="Commit SHA to associate with this scan")
+    export_parser.add_argument("--branch", help="Branch name to associate with this scan")
+    export_parser.add_argument("--exclude", action="append", default=[], help="Glob patterns to exclude (can be used multiple times)")
+
     # secrets
     secrets_parser = subparsers.add_parser(
         "secrets",
@@ -370,6 +388,8 @@ def main():
             result = cmd_deps(args)
         elif args.command == "profile":
             result = cmd_profile(args)
+        elif args.command == "export":
+            result = cmd_export(args)
         elif args.command == "secrets":
             result = cmd_secrets(args)
         elif args.command == "license":
@@ -1302,6 +1322,127 @@ def cmd_profile(args):
     # Human-readable output
     print(format_profile(profile))
     return None
+
+
+def cmd_export(args):
+    """Export scan results as a single JSON bundle for flyto-engine upload.
+
+    Combines profile + taint into the format expected by
+    POST /api/v1/code/repos/{id}/scan-upload.
+    """
+    from .project_profile import build_project_profile
+    from .analyzer.taint import TaintAnalyzer
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    # 1. Build full profile (same as `profile --json`)
+    t0 = time.monotonic()
+    profile = build_project_profile(project_path)
+
+    # 2. Run taint analysis
+    index = {}
+    index_path = project_path / ".flyto-index" / "index.json"
+    if index_path.exists():
+        try:
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    analyzer = TaintAnalyzer(project_path, index=index)
+    taint_result = analyzer.analyze_full()
+    elapsed = time.monotonic() - t0
+
+    # 3. Inject taint summary into the profile (matches what
+    # flyto-engine scanner.ScanResult expects)
+    taint_dict = taint_result.to_dict()
+    unsanitized = [f for f in taint_result.taint_flows if not f.sanitized]
+    file_hits = set()
+    categories = set()
+    for f in unsanitized:
+        if hasattr(f, "source_file") and f.source_file:
+            file_hits.add(f.source_file)
+        if hasattr(f, "sink_file") and f.sink_file:
+            file_hits.add(f.sink_file)
+        if hasattr(f, "category") and f.category:
+            categories.add(f.category)
+
+    profile["taint_flow_count"] = len(unsanitized)
+    profile["taint_summary"] = {
+        "total_sources": taint_dict.get("total_sources", 0),
+        "total_sinks": taint_dict.get("total_sinks", 0),
+        "unsanitized_flows": len(unsanitized),
+        "sanitized_flows": taint_dict.get("sanitized_flows", 0),
+        "high_risk_count": sum(1 for f in unsanitized if getattr(f, "severity", "") == "high"),
+        "file_hits": sorted(file_hits),
+        "categories": sorted(categories),
+    }
+
+    # 4. Build the upload bundle
+    bundle = {"profile": profile}
+    if hasattr(args, "commit") and args.commit:
+        bundle["commit_sha"] = args.commit
+    if hasattr(args, "branch") and args.branch:
+        bundle["branch"] = args.branch
+
+    # 5. --full: include symbol graph from index.json
+    if getattr(args, "full", False) and index:
+        import fnmatch
+        exclude_patterns = getattr(args, "exclude", []) or []
+
+        def _should_exclude(path: str) -> bool:
+            for pat in exclude_patterns:
+                if fnmatch.fnmatch(path, pat):
+                    return True
+            return False
+
+        # Filter symbols and dependencies by exclude patterns
+        filtered_symbols = {}
+        excluded_ids = set()
+        for sym_id, sym in index.get("symbols", {}).items():
+            sym_path = sym.get("path", "")
+            if _should_exclude(sym_path):
+                excluded_ids.add(sym_id)
+                continue
+            # Never include content (source code) in the export
+            sym_copy = {k: v for k, v in sym.items() if k != "content"}
+            filtered_symbols[sym_id] = sym_copy
+
+        filtered_deps = {}
+        for dep_id, dep in index.get("dependencies", {}).items():
+            if dep.get("source") in excluded_ids or dep.get("target") in excluded_ids:
+                continue
+            filtered_deps[dep_id] = dep
+
+        # Rebuild reverse_index from filtered deps
+        filtered_reverse = {}
+        for dep in filtered_deps.values():
+            target = dep.get("target", "")
+            source = dep.get("source", "")
+            if target and source:
+                filtered_reverse.setdefault(target, []).append(source)
+
+        bundle["index"] = {
+            "project": index.get("project", ""),
+            "symbols": filtered_symbols,
+            "dependencies": filtered_deps,
+            "reverse_index": filtered_reverse,
+            "entry_points": index.get("entry_points", []),
+            "routes": index.get("routes", {}),
+            "api_endpoints": index.get("api_endpoints", []),
+        }
+
+        sym_count = len(filtered_symbols)
+        dep_count = len(filtered_deps)
+        print(f"  --full: {sym_count} symbols, {dep_count} dependencies"
+              + (f" ({len(excluded_ids)} excluded)" if excluded_ids else ""),
+              file=sys.stderr)
+
+    print(f"Export complete in {elapsed:.1f}s — {profile.get('file_count', 0)} files, "
+          f"{len(unsanitized)} taint flows", file=sys.stderr)
+
+    return bundle
 
 
 def cmd_secrets(args):
