@@ -475,7 +475,8 @@ def _extract_project_metadata(project_path: Path) -> dict:
             for line in content.splitlines():
                 if line.startswith("module "):
                     module_path = line.split()[1]
-                    if "github.com" in module_path or "gitlab.com" in module_path:
+                    host = module_path.split("/", 1)[0].lower()
+                    if host in ("github.com", "gitlab.com"):
                         meta["vcs"] = f"https://{module_path}"
                     break
         except OSError:

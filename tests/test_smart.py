@@ -344,8 +344,15 @@ class TestToolRegistryIntegration:
 
     def test_smart_tools_in_registry(self):
         from tool_registry import SMART_TOOLS, SMART_TOOL_NAMES
-        assert len(SMART_TOOLS) == 11
-        assert SMART_TOOL_NAMES == {"search", "impact", "audit", "task", "structure", "project_profile", "scan_secrets", "scan_licenses", "scan_documentation", "analyze_pr_risk", "detect_frameworks"}
+        assert len(SMART_TOOLS) == 18
+        assert SMART_TOOL_NAMES == {
+            "search", "impact", "audit", "task", "structure",
+            "project_profile", "scan_secrets", "scan_licenses",
+            "scan_documentation", "analyze_pr_risk", "detect_frameworks",
+            "call_hierarchy", "check_layers",
+            "add_layer", "add_taint_source", "add_taint_sink",
+            "add_taint_sanitizer", "list_taint_rules",
+        }
 
     def test_smart_tools_in_dispatch(self):
         from tool_registry import execute_tool
