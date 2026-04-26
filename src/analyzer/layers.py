@@ -104,7 +104,7 @@ _GO_IMPORT_SINGLE = re.compile(r'^\s*import\s+"([^"]+)"', re.MULTILINE)
 _GO_IMPORT_BLOCK = re.compile(r'import\s*\(\s*(.*?)\)', re.DOTALL)
 _GO_BLOCK_LINE = re.compile(r'"([^"]+)"')
 
-_VUE_SCRIPT_BLOCK = re.compile(r"<script[^>]*>(.*?)</script>", re.DOTALL | re.IGNORECASE)
+_VUE_SCRIPT_BLOCK = re.compile(r"<script\b[^>]*>(.*?)</script\s*>", re.DOTALL | re.IGNORECASE)
 
 PY_EXTS = {".py"}
 TS_EXTS = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
