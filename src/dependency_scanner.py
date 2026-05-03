@@ -52,6 +52,11 @@ class PackageDependency:
     ecosystem: str         # "npm", "pypi", "go", "cargo", "maven", "composer", "gem", "docker"
     scope: str             # "production", "dev", "peer", "optional", "build"
     source_file: str       # which manifest file it came from
+    license: str = ""      # SPDX-style license string when the manifest declares it
+                           # (package.json, pyproject.toml, Cargo.toml, composer.json).
+                           # Empty when the ecosystem doesn't ship license metadata
+                           # in the manifest (requirements.txt, go.mod, etc.) — those
+                           # would need a registry lookup which we don't do.
 
 
 @dataclass

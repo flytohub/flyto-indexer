@@ -247,6 +247,23 @@ def main():
     taint_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON instead of human-readable text")
     taint_parser.add_argument("--max-results", type=int, default=50, dest="max_results", help="Max flows to show (default 50)")
 
+    # call-sites
+    callsites_parser = subparsers.add_parser(
+        "call-sites",
+        help="Emit per-package call-site map for Layer-3 reachability (LSP-resolved when available, regex fallback)",
+        description=(
+            "Produce a JSON map of per-package fully-qualified call sites the "
+            "user code references, plus a per-function call graph for "
+            "transitive reachability analysis. Consumed by flyto-engine's "
+            "verify path to compute Layer-3 verdicts (cve.vuln_functions ∩ "
+            "user_calls). Uses LSP (pyright/tsserver/gopls) when configured "
+            "for type-aware FQN resolution; falls back to regex extraction "
+            "from the indexer's existing scanner output."
+        ),
+    )
+    callsites_parser.add_argument("path", nargs="?", default=".", help="Project root path")
+    callsites_parser.add_argument("--no-lsp", action="store_true", help="Skip LSP, use regex-only extraction")
+
     # check
     check_parser = subparsers.add_parser(
         "check",
@@ -398,6 +415,8 @@ def main():
             result = cmd_docs(args)
         elif args.command == "taint":
             result = cmd_taint(args)
+        elif args.command == "call-sites":
+            result = cmd_call_sites(args)
         elif args.command == "check":
             result = cmd_check(args)
         elif args.command == "pr-risk":
@@ -1810,6 +1829,80 @@ def _format_check_output(output, symbol_details, args):
         print(f"PASS: risk {output['risk']} < threshold {output['threshold']}")
     else:
         print(f"FAIL: risk {output['risk']} >= threshold {output['threshold']}")
+
+
+def cmd_call_sites(args):
+    """Emit per-package call sites + local call graph as JSON.
+
+    Output schema (consumed by flyto-engine's scanner via subprocess):
+        {
+          "function_calls":  {<pkg>: [<fqn>, ...], ...},
+          "local_call_graph": {<user_fqn>: [<callee>, ...], ...},
+          "reflection_files": [<path>, ...],
+          "source": "lsp" | "regex" | "lsp+regex",
+          "stats": {<lang>: {"functions": N, "edges": M}, ...}
+        }
+
+    Strategy:
+      1. Always run the regex pass — fast, zero deps, works on every file.
+      2. If LSP is reachable AND --no-lsp not set, run a second pass
+         that walks every function symbol and asks the language server
+         for `callHierarchy/outgoingCalls`. Type-aware results take
+         precedence over regex matches at the same FQN.
+
+    The merge is union, not replacement — regex catches simple chains
+    LSP misses (because LSP needs a function symbol on the line) and
+    LSP catches aliased imports / re-exports regex misses.
+    """
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    use_lsp = not args.no_lsp
+    out: dict = {
+        "function_calls": {},
+        "local_call_graph": {},
+        "reflection_files": [],
+        "source": "regex",
+        "stats": {},
+    }
+
+    # ── Regex pass — always runs ─────────────────────────────────
+    try:
+        from .analyzer.call_sites_regex import scan_project_call_sites
+    except ImportError:
+        from analyzer.call_sites_regex import scan_project_call_sites
+    regex_result = scan_project_call_sites(project_path)
+    out["function_calls"] = regex_result.get("function_calls", {})
+    out["local_call_graph"] = regex_result.get("local_call_graph", {})
+    out["reflection_files"] = regex_result.get("reflection_files", [])
+    out["stats"]["regex"] = regex_result.get("stats", {})
+
+    # ── LSP pass — opt-in upgrade ───────────────────────────────
+    if use_lsp:
+        try:
+            try:
+                from .lsp.manager import LSPManager
+            except ImportError:
+                from lsp.manager import LSPManager
+            try:
+                from .analyzer.call_sites_lsp import enrich_with_lsp
+            except ImportError:
+                from analyzer.call_sites_lsp import enrich_with_lsp
+
+            mgr = LSPManager.get_instance()
+            if mgr._enabled:
+                lsp_result = enrich_with_lsp(project_path, out)
+                if lsp_result.get("edges_added", 0) > 0:
+                    out["source"] = "lsp+regex"
+                    out["stats"]["lsp"] = lsp_result
+        except Exception as e:
+            # LSP must never block the regex result. Log to stats so
+            # callers can see why the upgrade didn't happen.
+            out["stats"]["lsp_error"] = str(e)
+
+    return json.dumps(out, indent=2 if not args.path else None)
 
 
 def cmd_taint(args):

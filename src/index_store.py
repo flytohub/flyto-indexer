@@ -282,16 +282,20 @@ def load_index() -> dict:
     """
     global _index_cache
 
-    # Fast path (no lock): return cached if still valid
-    if _index_cache is not None:
+    # Fast path (no lock): return cached if still valid. Snapshot the
+    # global into a local so a concurrent invalidate_caches() can't turn
+    # the value into None between the truthiness check and the return.
+    cached = _index_cache
+    if cached is not None:
         if not _check_generation():
-            return _index_cache
+            return cached
 
     with _load_lock:
         # Double-check after acquiring lock — another thread may have loaded already
-        if _index_cache is not None:
+        cached = _index_cache
+        if cached is not None:
             if not _check_generation():
-                return _index_cache
+                return cached
             # Use unlocked variant to avoid deadlock with _reindex_lock
             _invalidate_caches_unlocked()
 
@@ -324,7 +328,9 @@ def load_index() -> dict:
         _index_cache = merged
         # Record the latest generation mtime so subsequent checks are relative
         _update_cache_generation()
-        return _index_cache
+        # Return the local — `_index_cache` may be cleared by a concurrent
+        # invalidate_caches() between this assignment and the return.
+        return merged
 
 
 def load_project_map() -> dict:

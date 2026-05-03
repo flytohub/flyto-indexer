@@ -1,0 +1,16 @@
+taint:
+  sinks:
+  - pattern: ''
+    vuln_type: custom
+    severity: high
+  sources:
+  - pattern: ''
+    language: python
+  sanitizers:
+  - pattern: ''
+    cleanses:
+    - '*'
+version: 1
+layers:
+- name: ''
+  paths: []

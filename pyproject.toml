@@ -58,6 +58,14 @@ packages = ["src"]
 [tool.hatch.build.targets.wheel.sources]
 "src" = "flyto_indexer"
 
+# Ship the rule corpus INSIDE the wheel so installed copies (engine
+# container, pip-installed CLI) see the same YAML files as the dev
+# tree. Without this only the .py scanner code reaches site-packages
+# and rule_loader returns an empty corpus → IaC / secret / security
+# scanners silently report 0 findings on known-bad fixtures.
+[tool.hatch.build.targets.wheel.force-include]
+"config/rules" = "flyto_indexer/config/rules"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

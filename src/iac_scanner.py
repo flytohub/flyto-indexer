@@ -84,17 +84,110 @@ class IaCScanResult:
 # ---------------------------------------------------------------------------
 
 def _load_iac_rules() -> dict:
-    """Try to load IaC rules from YAML via rule_loader, fall back to empty."""
-    try:
-        from rule_loader import load_rules_with_defaults
-        return load_rules_with_defaults("iac", {})
-    except Exception:
-        pass
-    try:
-        from src.rule_loader import load_rules_with_defaults
-        return load_rules_with_defaults("iac", {})
-    except Exception:
-        return {}
+    """Try to load IaC rules from YAML via rule_loader, fall back to empty.
+
+    Three import paths tried in order so the same code works under:
+      - dev tree (src/ on sys.path → `rule_loader`)
+      - editable install (src.* prefix → `src.rule_loader`)
+      - wheel install in site-packages (renamed package → `flyto_indexer.rule_loader`)
+
+    Without the third path the engine container — which pip-installs the
+    wheel — silently loaded 0 rules and every IaC scan reported zero
+    findings even on known-bad fixtures. Cost: one production rebuild
+    + a confused user before the bug surfaced.
+    """
+    for module_path in ("rule_loader", "src.rule_loader", "flyto_indexer.rule_loader"):
+        try:
+            mod = __import__(module_path, fromlist=["load_rules_with_defaults"])
+            return mod.load_rules_with_defaults("iac", {})
+        except Exception:
+            continue
+    return {}
+
+
+# Module-level cache so we don't re-parse YAML for every file scanned.
+_YAML_RULES_BY_FRAMEWORK: Optional[dict] = None
+
+
+def _yaml_rules(framework: str) -> list:
+    """Return compiled YAML rules for the given framework. Cached."""
+    global _YAML_RULES_BY_FRAMEWORK
+    if _YAML_RULES_BY_FRAMEWORK is None:
+        _YAML_RULES_BY_FRAMEWORK = {}
+        raw = _load_iac_rules()
+        for r in raw.get("rules", []) or []:
+            if not isinstance(r, dict):
+                continue
+            fw = r.get("framework", "")
+            if not fw:
+                continue
+            try:
+                pat = re.compile(r["pattern"], re.IGNORECASE | re.MULTILINE)
+            except re.error as e:
+                logger.warning("iac yaml rule %s has invalid regex: %s", r.get("id"), e)
+                continue
+            entry = {
+                "id": r.get("id", ""),
+                "framework": fw,
+                "severity": str(r.get("severity", "MEDIUM")).upper(),
+                "resource": r.get("resource", ""),
+                "pattern": pat,
+                "title": r.get("title", r.get("id", "")),
+                "guideline": r.get("guideline", ""),
+            }
+            _YAML_RULES_BY_FRAMEWORK.setdefault(fw, []).append(entry)
+    return _YAML_RULES_BY_FRAMEWORK.get(framework, [])
+
+
+def _yaml_rules_for_tf_block(
+    file_path: str, res_type: str, block_text: str, block_line: int,
+) -> list:
+    """Run all terraform YAML rules whose `resource` matches res_type
+    against the block body. Findings positioned at the matching line
+    inside the block."""
+    out: list[IaCFinding] = []
+    for rule in _yaml_rules("terraform"):
+        if rule["resource"] and rule["resource"] != res_type:
+            continue
+        m = rule["pattern"].search(block_text)
+        if not m:
+            continue
+        offset_line = block_text[:m.start()].count("\n") if m.start() > 0 else 0
+        out.append(IaCFinding(
+            file_path=file_path,
+            resource_type=res_type,
+            check_id=rule["id"],
+            check_name=rule["title"],
+            severity=rule["severity"],
+            line=block_line + offset_line,
+            guideline=rule["guideline"],
+            framework="terraform",
+        ))
+    return out
+
+
+def _yaml_rules_for_file(
+    file_path: str, framework: str, resource_label: str, content: str,
+) -> list:
+    """Run all YAML rules for a non-terraform framework against the full
+    file content. Used for kubernetes / docker_compose / dockerfile."""
+    out: list[IaCFinding] = []
+    for rule in _yaml_rules(framework):
+        m = rule["pattern"].search(content)
+        if not m:
+            continue
+        line = _line_number_at(content, m.start())
+        out.append(IaCFinding(
+            file_path=file_path,
+            resource_type=resource_label,
+            check_id=rule["id"],
+            check_name=rule["title"],
+            severity=rule["severity"],
+            line=line,
+            guideline=rule["guideline"],
+            framework=framework,
+        ))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -266,6 +359,18 @@ def _check_terraform(file_path: str, content: str) -> list[IaCFinding]:
                     guideline="Remove default value; pass secrets via environment or vault.",
                     framework="terraform",
                 ))
+
+    # YAML-driven rules — evaluated against every resource block discovered
+    # above, so we re-walk for the dispatch. Runs after hardcoded checks so
+    # YAML rules cannot overshadow the legacy (already-tested) ones.
+    for match in _TF_RESOURCE_RE.finditer(content):
+        res_type = match.group(1)
+        block_start = match.start()
+        block_text, _ = _extract_tf_block(content, match.end() - 1)
+        block_line = _line_number_at(content, block_start)
+        findings.extend(
+            _yaml_rules_for_tf_block(rel_path, res_type, block_text, block_line)
+        )
 
     return findings
 
@@ -458,6 +563,9 @@ def _check_kubernetes(file_path: str, content: str) -> list[IaCFinding]:
                     framework="kubernetes",
                 ))
 
+    # YAML-driven kubernetes rules — line-based regex against full file.
+    findings.extend(_yaml_rules_for_file(rel_path, "kubernetes", "manifest", content))
+
     return findings
 
 
@@ -601,7 +709,16 @@ def _check_docker_compose(file_path: str, content: str) -> list[IaCFinding]:
                 framework="docker_compose",
             ))
 
+    # YAML-driven docker_compose rules
+    findings.extend(_yaml_rules_for_file(rel_path, "docker_compose", "docker-compose", content))
+
     return findings
+
+
+def _check_dockerfile(file_path: str, content: str) -> list:
+    """Run Dockerfile security checks (YAML-driven only — no hardcoded
+    dockerfile checks predate this corpus)."""
+    return _yaml_rules_for_file(file_path, "dockerfile", "Dockerfile", content)
 
 
 # ---------------------------------------------------------------------------
@@ -627,6 +744,24 @@ def _is_k8s_yaml(file_path: Path, content: str) -> bool:
 def _is_docker_compose(file_name: str) -> bool:
     """Check if filename matches docker-compose pattern."""
     return bool(re.match(r'^docker-compose[.\-\w]*\.ya?ml$', file_name, re.IGNORECASE))
+
+
+def _is_github_workflow(file_path: Path) -> bool:
+    """True for .github/workflows/*.yml — GitHub Actions workflow files."""
+    parts = [p.lower() for p in file_path.parts]
+    if ".github" not in parts:
+        return False
+    # Must have ".github/workflows/" anywhere in the path
+    try:
+        idx = parts.index(".github")
+        return idx + 1 < len(parts) and parts[idx + 1] == "workflows"
+    except ValueError:
+        return False
+
+
+def _check_github_actions(file_path: str, content: str) -> list:
+    """Run GitHub Actions security checks. Pure YAML-rule driven."""
+    return _yaml_rules_for_file(file_path, "github_actions", "workflow", content)
 
 
 # ---------------------------------------------------------------------------
@@ -686,6 +821,26 @@ def scan_iac(project_path: str) -> IaCScanResult:
                     if dc_findings:
                         frameworks.add("docker_compose")
                         result.findings.extend(dc_findings)
+                    continue
+
+                # --- GitHub Actions workflows (.github/workflows/*.yml) ---
+                if fname.endswith((".yaml", ".yml")) and _is_github_workflow(file_path):
+                    content = file_path.read_text(encoding="utf-8", errors="ignore")
+                    result.total_files_scanned += 1
+                    gha_findings = _check_github_actions(rel_path, content)
+                    if gha_findings:
+                        frameworks.add("github_actions")
+                        result.findings.extend(gha_findings)
+                    continue
+
+                # --- Dockerfile (Dockerfile, *.Dockerfile) ---
+                if fname == "Dockerfile" or fname.endswith(".Dockerfile") or fname.endswith(".dockerfile"):
+                    content = file_path.read_text(encoding="utf-8", errors="ignore")
+                    result.total_files_scanned += 1
+                    df_findings = _check_dockerfile(rel_path, content)
+                    if df_findings:
+                        frameworks.add("dockerfile")
+                        result.findings.extend(df_findings)
                     continue
 
                 # --- Kubernetes YAML ---

@@ -654,100 +654,94 @@ def _classify_api_symbol(sym: dict) -> str:
     return "api_definition"
 
 
-def _extract_from_index(project_path: Path) -> dict:
-    """Extract data from the flyto-indexer index if available."""
-    result = {
+_HTTP_METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
+
+_ENTRY_FILE_PATTERN = re.compile(
+    r"(main|index|app|server|cli|__main__|entrypoint|bootstrap)\.(py|ts|js|go|rs|java)$",
+    re.IGNORECASE,
+)
+
+_ENTRY_NAMES = {"main", "run", "start", "bootstrap", "cli"}
+
+_API_CATEGORY_KEYS = {
+    "api_definition": "api_definitions",
+    "api_call_internal": "api_calls_internal",
+    "api_call_external": "api_calls_external",
+}
+
+
+def _empty_extract_result() -> dict:
+    return {
         "api_definitions": [],
         "api_calls_internal": [],
         "api_calls_external": [],
-        "api_routes": [],  # kept for backward compat (union of all)
+        "api_routes": [],
         "models": [],
         "symbol_counts": {},
         "entry_points": [],
-        "module_graph": [],          # top 10 for display
-        "module_graph_full": [],     # ALL connections (JSON output)
-        "module_graph_summary": {},  # summary stats
-        "complexity_summary": {},    # complexity stats
+        "module_graph": [],
+        "module_graph_full": [],
+        "module_graph_summary": {},
+        "complexity_summary": {},
     }
 
-    index_dir = project_path / ".flyto-index"
-    if not index_dir.exists():
-        return result
 
-    # Load index.json
-    index = {}
+def _load_index_file(index_dir: Path) -> dict:
+    """Load index.json (or .gz). Returns {} on missing or corrupt."""
     try:
         import gzip
         gz_path = index_dir / "index.json.gz"
         if gz_path.exists():
             with gzip.open(gz_path, "rt", encoding="utf-8") as f:
-                index = json.load(f)
-        else:
-            json_path = index_dir / "index.json"
-            if json_path.exists():
-                index = json.loads(json_path.read_text(encoding="utf-8"))
+                return json.load(f)
+        json_path = index_dir / "index.json"
+        if json_path.exists():
+            return json.loads(json_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as e:
         logger.warning("Failed to load index: %s", e)
-        return result
+    return {}
 
-    if not index:
-        return result
 
-    symbols = index.get("symbols", {})
-    dependencies = index.get("dependencies", {})
-    reverse_index = index.get("reverse_index", {})
-
-    # --- Symbol counts ---
-    type_counter = Counter()
-    for sym in symbols.values():
-        sym_type = sym.get("type", "unknown")
-        type_counter[sym_type] += 1
-    result["symbol_counts"] = dict(type_counter.most_common())
-
-    # --- API routes (classified) ---
-    def _parse_api_entry(sym_or_route: dict, *, is_route: bool = False) -> dict:
-        """Build a normalized API entry dict from a symbol or route record."""
-        if is_route:
-            return {
-                "method": sym_or_route.get("method", "GET"),
-                "path": sym_or_route.get("path", sym_or_route.get("url", "")),
-                "handler": sym_or_route.get("handler", ""),
-                "file": sym_or_route.get("file", sym_or_route.get("defined_in", "")),
-            }
-        meta = sym_or_route.get("metadata", {}) or {}
-        method = meta.get("method", "GET") if meta else "GET"
-        if not meta:
-            summary = sym_or_route.get("summary", "")
-            parts = summary.split(" ", 1)
-            if parts[0] in ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"):
-                method = parts[0]
-        route_path = sym_or_route.get("name", "")
-        for m_prefix in ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"):
-            if route_path.startswith(m_prefix + " "):
-                route_path = route_path[len(m_prefix) + 1:]
-                break
+def _parse_api_entry(sym_or_route: dict, *, is_route: bool = False) -> dict:
+    """Build a normalized API entry dict from a symbol or route record."""
+    if is_route:
         return {
-            "method": method,
-            "path": route_path,
-            "handler": meta.get("handler", "") if meta else "",
-            "file": sym_or_route.get("path", ""),
+            "method": sym_or_route.get("method", "GET"),
+            "path": sym_or_route.get("path", sym_or_route.get("url", "")),
+            "handler": sym_or_route.get("handler", ""),
+            "file": sym_or_route.get("file", sym_or_route.get("defined_in", "")),
         }
-
-    _category_keys = {
-        "api_definition": "api_definitions",
-        "api_call_internal": "api_calls_internal",
-        "api_call_external": "api_calls_external",
+    meta = sym_or_route.get("metadata", {}) or {}
+    method = meta.get("method", "GET") if meta else "GET"
+    if not meta:
+        summary = sym_or_route.get("summary", "")
+        first = summary.split(" ", 1)[0]
+        if first in _HTTP_METHODS:
+            method = first
+    route_path = sym_or_route.get("name", "")
+    for m_prefix in _HTTP_METHODS:
+        if route_path.startswith(m_prefix + " "):
+            route_path = route_path[len(m_prefix) + 1:]
+            break
+    return {
+        "method": method,
+        "path": route_path,
+        "handler": meta.get("handler", "") if meta else "",
+        "file": sym_or_route.get("path", ""),
     }
 
-    for sid, sym in symbols.items():
-        if sym.get("type") == "api":
-            entry = _parse_api_entry(sym)
-            category = _classify_api_symbol(sym)
-            result[_category_keys[category]].append(entry)
-            result["api_routes"].append(entry)
 
-    # Also check dependency edges for API calls (fetch/axios/request wrappers)
-    # Index stores deps as dict-of-dicts: {edge_id: {source, target, type, metadata}}
+def _collect_api_from_symbols(symbols: dict, result: dict) -> None:
+    for _sid, sym in symbols.items():
+        if sym.get("type") != "api":
+            continue
+        entry = _parse_api_entry(sym)
+        category = _classify_api_symbol(sym)
+        result[_API_CATEGORY_KEYS[category]].append(entry)
+        result["api_routes"].append(entry)
+
+
+def _collect_api_from_dep_edges(index: dict, result: dict) -> None:
     raw_deps = index.get("dependencies", {})
     dep_values = raw_deps.values() if isinstance(raw_deps, dict) else raw_deps
     for dep_edge in dep_values:
@@ -759,7 +753,6 @@ def _extract_from_index(project_path: Path) -> dict:
         meta = dep_edge.get("metadata", {}) or {}
         url = meta.get("url", dep_edge.get("target", ""))
         method = meta.get("method", "GET")
-        # Extract file path from source (format: project:path:file:name)
         source = dep_edge.get("source", "")
         parts = source.split(":")
         source_file = parts[1] if len(parts) >= 2 else ""
@@ -771,90 +764,88 @@ def _extract_from_index(project_path: Path) -> dict:
             if entry not in result["api_calls_internal"]:
                 result["api_calls_internal"].append(entry)
 
-    # Also check routes/api_endpoints from index
+
+def _collect_api_from_routes(index: dict, result: dict) -> None:
     for route in index.get("routes", []):
-        if isinstance(route, dict):
-            entry = _parse_api_entry(route, is_route=True)
-            # Deduplicate
-            if not any(r["path"] == entry["path"] and r["method"] == entry["method"]
-                       for r in result["api_routes"]):
-                # Routes from index-level are always backend definitions
-                result["api_definitions"].append(entry)
-                result["api_routes"].append(entry)
+        if not isinstance(route, dict):
+            continue
+        entry = _parse_api_entry(route, is_route=True)
+        if any(r["path"] == entry["path"] and r["method"] == entry["method"]
+               for r in result["api_routes"]):
+            continue
+        result["api_definitions"].append(entry)
+        result["api_routes"].append(entry)
 
-    # Sort all lists
-    for key in ("api_definitions", "api_calls_internal", "api_calls_external", "api_routes"):
-        result[key].sort(key=lambda r: (r["method"], r["path"]))
 
-    # --- Models (classes with fields) ---
-    for sid, sym in symbols.items():
+def _is_model_symbol(sym: dict, sym_type: str, field_count: int) -> bool:
+    name = sym.get("name", "")
+    summary = sym.get("summary", "").lower()
+    return (
+        field_count > 0
+        or "model" in summary or "schema" in summary or "entity" in summary
+        or "dataclass" in summary or "struct" in name.lower()
+        or sym_type in ("interface", "struct")
+    )
+
+
+def _collect_models(symbols: dict) -> list[dict]:
+    models = []
+    for _sid, sym in symbols.items():
         sym_type = sym.get("type", "")
         if sym_type not in ("class", "interface", "type", "struct"):
             continue
-        name = sym.get("name", "")
-        path = sym.get("path", "")
-        line = sym.get("start_line", 0)
-
-        # Count fields from metadata or children
         meta = sym.get("metadata", {}) or {}
         field_count = len(meta.get("fields", []))
+        if not _is_model_symbol(sym, sym_type, field_count):
+            continue
+        models.append({
+            "name": sym.get("name", ""),
+            "type": sym_type,
+            "fields": field_count,
+            "file": sym.get("path", ""),
+            "line": sym.get("start_line", 0),
+        })
+    models.sort(key=lambda m: m["name"])
+    return models
 
-        # Try to detect model classes: Pydantic, dataclass, struct, interface with fields
-        summary = sym.get("summary", "").lower()
-        is_model = (
-            field_count > 0
-            or "model" in summary or "schema" in summary or "entity" in summary
-            or "dataclass" in summary or "struct" in name.lower()
-            or sym_type in ("interface", "struct")
-        )
-        if is_model:
-            result["models"].append({
-                "name": name,
-                "type": sym_type,
-                "fields": field_count,
-                "file": path,
-                "line": line,
-            })
 
-    # Sort models by name
-    result["models"].sort(key=lambda m: m["name"])
-
-    # --- Entry points ---
-    _ENTRY_PATTERNS = re.compile(
-        r"(main|index|app|server|cli|__main__|entrypoint|bootstrap)\.(py|ts|js|go|rs|java)$",
-        re.IGNORECASE,
-    )
+def _collect_entry_points(symbols: dict) -> list[str]:
     entry_files = set()
     for sym in symbols.values():
         path = sym.get("path", "")
-        if path and _ENTRY_PATTERNS.search(path):
+        if path and _ENTRY_FILE_PATTERN.search(path):
             entry_files.add(path)
-        # Also detect main functions
-        name = sym.get("name", "").lower()
-        if name in ("main", "run", "start", "bootstrap", "cli"):
-            entry_files.add(path)
-    result["entry_points"] = sorted(entry_files)
+        if sym.get("name", "").lower() in _ENTRY_NAMES:
+            if path:
+                entry_files.add(path)
+    return sorted(entry_files)
 
-    # --- Module graph (full + summary) ---
-    # Build file-to-file import counts from dependencies
-    file_connections = Counter()
-    for dep_key, dep_info in dependencies.items():
+
+def _file_pair_from_dep(dep_info: dict, symbols: dict) -> Optional[tuple]:
+    source_file = dep_info.get("source_path", "")
+    target = dep_info.get("target", "")
+    if not (source_file and target):
+        return None
+    target_file = ""
+    for sid, sym in symbols.items():
+        if target in sid and sym.get("path"):
+            target_file = sym["path"]
+            break
+    if not target_file or source_file == target_file:
+        return None
+    return (source_file, target_file)
+
+
+def _build_file_connections(symbols: dict, dependencies: dict, reverse_index: dict) -> Counter:
+    connections: Counter = Counter()
+
+    for _key, dep_info in dependencies.items():
         if not isinstance(dep_info, dict):
             continue
-        source_file = dep_info.get("source_path", "")
-        target = dep_info.get("target", "")
-        if source_file and target:
-            # Try to resolve target to a file
-            target_file = ""
-            for sid, sym in symbols.items():
-                if target in sid and sym.get("path"):
-                    target_file = sym["path"]
-                    break
-            if target_file and source_file != target_file:
-                pair = (source_file, target_file)
-                file_connections[pair] += 1
+        pair = _file_pair_from_dep(dep_info, symbols)
+        if pair is not None:
+            connections[pair] += 1
 
-    # Also build from reverse_index
     for sym_id, callers in reverse_index.items():
         if ":" not in sym_id:
             continue
@@ -868,65 +859,87 @@ def _extract_from_index(project_path: Path) -> dict:
             caller_parts = caller_id.split(":")
             source_file = caller_parts[1] if len(caller_parts) >= 2 else ""
             if source_file and source_file != target_file:
-                pair = (source_file, target_file)
-                file_connections[pair] += 1
+                connections[(source_file, target_file)] += 1
+    return connections
 
-    # Full graph (all connections) for JSON output
+
+def _empty_graph_summary() -> dict:
+    return {
+        "total_connections": 0,
+        "avg_refs_per_module": 0,
+        "most_connected_file": "",
+        "orphan_files": [],
+        "orphan_count": 0,
+    }
+
+
+def _compute_graph_summary(symbols: dict, file_connections: Counter) -> dict:
+    if not file_connections:
+        return _empty_graph_summary()
+
+    file_ref_counts: Counter = Counter()
+    for (src, tgt), count in file_connections.items():
+        file_ref_counts[src] += count
+        file_ref_counts[tgt] += count
+
+    all_indexed_files = {sym.get("path", "") for sym in symbols.values() if sym.get("path")}
+    connected_files = set()
+    for src, tgt in file_connections:
+        connected_files.add(src)
+        connected_files.add(tgt)
+    orphan_files = sorted(all_indexed_files - connected_files)
+
+    most_connected = file_ref_counts.most_common(1)[0][0] if file_ref_counts else ""
+    avg_refs = sum(file_ref_counts.values()) / max(len(file_ref_counts), 1)
+
+    return {
+        "total_connections": len(file_connections),
+        "avg_refs_per_module": round(avg_refs, 1),
+        "most_connected_file": most_connected,
+        "orphan_files": orphan_files,
+        "orphan_count": len(orphan_files),
+    }
+
+
+def _extract_from_index(project_path: Path) -> dict:
+    """Extract data from the flyto-indexer index if available."""
+    result = _empty_extract_result()
+
+    index_dir = project_path / ".flyto-index"
+    if not index_dir.exists():
+        return result
+
+    index = _load_index_file(index_dir)
+    if not index:
+        return result
+
+    symbols = index.get("symbols", {})
+    dependencies = index.get("dependencies", {})
+    reverse_index = index.get("reverse_index", {})
+
+    result["symbol_counts"] = dict(Counter(
+        sym.get("type", "unknown") for sym in symbols.values()
+    ).most_common())
+
+    _collect_api_from_symbols(symbols, result)
+    _collect_api_from_dep_edges(index, result)
+    _collect_api_from_routes(index, result)
+    for key in ("api_definitions", "api_calls_internal", "api_calls_external", "api_routes"):
+        result[key].sort(key=lambda r: (r["method"], r["path"]))
+
+    result["models"] = _collect_models(symbols)
+    result["entry_points"] = _collect_entry_points(symbols)
+
+    file_connections = _build_file_connections(symbols, dependencies, reverse_index)
     all_connections = [
         {"source_file": pair[0], "target_file": pair[1], "import_count": count}
         for pair, count in file_connections.most_common()
     ]
     result["module_graph_full"] = all_connections
-    # Top 10 for human-readable display
     result["module_graph"] = all_connections[:10]
+    result["module_graph_summary"] = _compute_graph_summary(symbols, file_connections)
 
-    # Module graph summary
-    if file_connections:
-        # Count refs per file (both as source and target)
-        file_ref_counts = Counter()
-        for (src, tgt), count in file_connections.items():
-            file_ref_counts[src] += count
-            file_ref_counts[tgt] += count
-
-        # Find all indexed files
-        all_indexed_files = set()
-        for sym in symbols.values():
-            p = sym.get("path", "")
-            if p:
-                all_indexed_files.add(p)
-
-        # Connected files (appear in at least one connection)
-        connected_files = set()
-        for src, tgt in file_connections:
-            connected_files.add(src)
-            connected_files.add(tgt)
-
-        # Orphan files: indexed files that import nothing and are imported by nothing
-        orphan_files = sorted(all_indexed_files - connected_files)
-
-        most_connected = file_ref_counts.most_common(1)[0][0] if file_ref_counts else ""
-        total_connections = len(file_connections)
-        avg_refs = sum(file_ref_counts.values()) / max(len(file_ref_counts), 1)
-
-        result["module_graph_summary"] = {
-            "total_connections": total_connections,
-            "avg_refs_per_module": round(avg_refs, 1),
-            "most_connected_file": most_connected,
-            "orphan_files": orphan_files,
-            "orphan_count": len(orphan_files),
-        }
-    else:
-        result["module_graph_summary"] = {
-            "total_connections": 0,
-            "avg_refs_per_module": 0,
-            "most_connected_file": "",
-            "orphan_files": [],
-            "orphan_count": 0,
-        }
-
-    # --- Complexity summary ---
     result["complexity_summary"] = _compute_complexity_summary(symbols, index_dir)
-
     # Health dimensions computed later in build_project_profile (needs project_type)
     result["_health_inputs"] = {
         "symbols": symbols,
@@ -934,8 +947,6 @@ def _extract_from_index(project_path: Path) -> dict:
         "index_dir": index_dir,
         "complexity_summary": result["complexity_summary"],
     }
-
-    # Raw data for reachability analysis
     result["_raw_dependencies"] = index.get("dependencies", [])
     result["_raw_symbols"] = symbols
 
@@ -1192,6 +1203,203 @@ def _compute_reachability(deps: dict, idx: dict) -> dict:
     }
 
 
+def _is_test_file_fallback(path: str) -> bool:
+    try:
+        try:
+            from .analyzer.complexity import _is_test_file
+        except ImportError:
+            from analyzer.complexity import _is_test_file
+        return _is_test_file(path)
+    except ImportError:
+        lower = path.lower()
+        return any(pat in lower for pat in ("test_", "_test.", ".test.", ".spec.", "/test/", "/tests/"))
+
+
+def _project_root_from_index_dir(index_dir: "Path") -> Optional["Path"]:
+    if index_dir.exists():
+        return index_dir.parent
+    return None
+
+
+def _status_from_score(score: int) -> str:
+    if score >= 20:
+        return "PASS"
+    if score >= 10:
+        return "WARN"
+    return "FAIL"
+
+
+def _security_dim(index_dir: "Path") -> tuple[int, int]:
+    """Return (security_score, finding_count)."""
+    try:
+        try:
+            from .analyzer.security import SecurityScanner
+        except ImportError:
+            from analyzer.security import SecurityScanner
+
+        project_root = _project_root_from_index_dir(index_dir)
+        if not (project_root and project_root.exists()):
+            return 25, 0
+
+        scanner = SecurityScanner(project_root)
+        report = scanner.analyze()
+        finding_count = len(report.issues)
+        penalty = 0.0
+        sev_weights = {"critical": 3, "high": 1.5, "medium": 0.5}
+        for issue in report.issues:
+            penalty += sev_weights.get(issue.severity, 0)
+        # Logistic curve: 1 finding → 24, 5 → 22, 20 → 15, 50 → 12, 200 → 5
+        scaled = int(25 * penalty / (penalty + 50)) if penalty > 0 else 0
+        return max(0, 25 - scaled), finding_count
+    except Exception:
+        return 25, 0
+
+
+def _complexity_dim(complexity_summary: dict) -> tuple[int, int]:
+    """Return (complexity_score, complex_count)."""
+    func_count = complexity_summary.get("total_functions", 0)
+    complex_count = complexity_summary.get("complex_functions", 0)
+    if func_count <= 0:
+        return 25, complex_count
+    pct = complex_count / func_count
+    score = max(0, int(25 * (1 - min(pct * 2, 1))))
+    return score, complex_count
+
+
+def _is_dead_symbol(sym: dict, sym_id: str, reverse_index: dict) -> bool:
+    if sym.get("ref_count", sym.get("reference_count", 0)) != 0:
+        return False
+    if reverse_index.get(sym_id, []):
+        return False
+    name = sym.get("name", "")
+    path = sym.get("path", "")
+    if name.startswith("_"):
+        return False
+    # Go exported names are public API — regex scanner can't see cross-package refs
+    if path.endswith(".go") and name and name[0].isupper():
+        return False
+    return True
+
+
+def _dead_code_dim(symbols: dict, reverse_index: dict) -> tuple[int, int, list]:
+    """Return (dead_score, dead_count, dead_symbols_list)."""
+    non_test_symbols = {
+        k: v for k, v in symbols.items()
+        if not _is_test_file_fallback(v.get("path", ""))
+        and v.get("type", "") in ("function", "method", "class", "component", "composable")
+    }
+    dead_list = []
+    for sym_id, sym in non_test_symbols.items():
+        if _is_dead_symbol(sym, sym_id, reverse_index):
+            dead_list.append({
+                "name": sym.get("name", ""),
+                "path": sym.get("path", ""),
+                "line": sym.get("line", 0),
+                "type": sym.get("type", ""),
+            })
+    dead_count = len(dead_list)
+    dead_pct = dead_count / max(len(non_test_symbols), 1)
+    score = max(0, int(25 * (1 - min(dead_pct * 2, 1))))
+    return score, dead_count, dead_list
+
+
+def _coverage_dim(index_dir: "Path") -> tuple[int, int]:
+    """Return (coverage_score, coverage_pct)."""
+    try:
+        project_root = _project_root_from_index_dir(index_dir)
+        if not project_root:
+            return 0, 0
+        if not (project_root / ".coverage").exists():
+            return 0, 0
+        try:
+            proc = subprocess.run(
+                ["python", "-m", "coverage", "report", "--format=total"],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(project_root),
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return 0, 0
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return 0, 0
+        try:
+            pct = int(float(proc.stdout.strip()))
+        except ValueError:
+            return 0, 0
+        return min(25, round(pct / 4)), pct
+    except Exception:
+        return 0, 0
+
+
+def _doc_score(index_dir: "Path") -> int:
+    try:
+        try:
+            from .doc_scanner import scan_documentation
+        except ImportError:
+            from doc_scanner import scan_documentation
+        project_root = _project_root_from_index_dir(index_dir)
+        if not (project_root and project_root.exists()):
+            return 0
+        return scan_documentation(str(project_root)).overall_score
+    except Exception:
+        return 0
+
+
+def _doc_penalty_for_score(doc_score: int) -> int:
+    if doc_score < 30:
+        return -10
+    if doc_score < 50:
+        return -5
+    if doc_score >= 70:
+        return 5
+    return 0
+
+
+def _select_active_dims(
+    project_type: str,
+    security_score: int,
+    complexity_score: int,
+    dead_score: int,
+    doc_score_val: int,
+) -> dict:
+    """Pick which dimensions count for the overall score for this project type."""
+    if project_type in ("backend", "fullstack"):
+        return {"security": security_score, "complexity": complexity_score, "dead_code": dead_score}
+    if project_type == "frontend":
+        return {
+            "complexity": complexity_score,
+            "dead_code": dead_score,
+            "security": min(25, security_score + 10),
+        }
+    if project_type == "library":
+        return {"dead_code": dead_score, "complexity": complexity_score}
+    if project_type == "mobile":
+        return {"complexity": complexity_score, "dead_code": dead_score}
+    if project_type in ("static", "unknown", ""):
+        return {"documentation": min(25, round(doc_score_val / 4))}
+    return {"security": security_score, "complexity": complexity_score, "dead_code": dead_score}
+
+
+def _grade_for_score(score: int) -> str:
+    if score >= 90:
+        return "A"
+    if score >= 80:
+        return "B"
+    if score >= 70:
+        return "C"
+    if score >= 60:
+        return "D"
+    return "F"
+
+
+def _empty_health_dimensions() -> dict:
+    return {
+        "security": {"score": 25, "max": 25, "status": "PASS", "finding_count": 0},
+        "complexity": {"score": 25, "max": 25, "status": "PASS", "complex_count": 0},
+        "dead_code": {"score": 25, "max": 25, "status": "PASS", "dead_count": 0},
+        "overall": {"score": 100, "max": 100, "grade": "A"},
+    }
+
+
 def _compute_health_dimensions(
     symbols: dict,
     reverse_index: dict,
@@ -1202,249 +1410,72 @@ def _compute_health_dimensions(
     """Compute health score dimensions based on project type.
 
     Dimensions vary by type:
-    - backend: security, complexity, dead_code (+ docs penalty)
-    - frontend: complexity, dead_code (+ docs penalty)
-    - library: dead_code, docs (docs weighted heavier)
-    - static/unknown: docs only
-    - mobile: complexity, dead_code
-    - fullstack: all of the above
+    - backend / fullstack: security, complexity, dead_code (+ docs penalty)
+    - frontend: complexity, dead_code, lighter security
+    - library / mobile: dead_code, complexity
+    - static / unknown: docs only
 
     Returns dict with per-dimension scores and overall grade.
     """
-    try:
-        try:
-            from .analyzer.complexity import _is_test_file
-        except ImportError:
-            from analyzer.complexity import _is_test_file
-    except ImportError:
-        def _is_test_file(p):
-            lower = p.lower()
-            return any(pat in lower for pat in ("test_", "_test.", ".test.", ".spec.", "/test/", "/tests/"))
+    if not symbols:
+        return _empty_health_dimensions()
 
-    total_symbols = len(symbols)
-    if total_symbols == 0:
-        return {
-            "security": {"score": 25, "max": 25, "status": "PASS", "finding_count": 0},
-            "complexity": {"score": 25, "max": 25, "status": "PASS", "complex_count": 0},
-            "dead_code": {"score": 25, "max": 25, "status": "PASS", "dead_count": 0},
-            "overall": {"score": 100, "max": 100, "grade": "A"},
-        }
-
-    # --- Security (pattern scan from project root) ---
-    security_score = 25
-    finding_count = 0
-    try:
-        try:
-            from .analyzer.security import SecurityScanner
-        except ImportError:
-            from analyzer.security import SecurityScanner
-
-        # Derive project root from index_dir (parent of .flyto-index)
-        project_root = index_dir.parent if index_dir.exists() else None
-        if project_root and project_root.exists():
-            scanner = SecurityScanner(project_root)
-            report = scanner.analyze()
-            finding_count = len(report.issues)
-            # Gentle penalty — large projects naturally have more findings
-            # Critical: -3, High: -1.5, Medium: -0.5, cap penalty at 25
-            penalty = 0
-            for issue in report.issues:
-                sev = issue.severity
-                if sev == "critical":
-                    penalty += 3
-                elif sev == "high":
-                    penalty += 1.5
-                elif sev == "medium":
-                    penalty += 0.5
-            # Logistic curve: gentle start, never fully zeros out
-            # 1 finding → 24, 5 → 22, 20 → 15, 50 → 12, 200 → 5
-            scaled_penalty = int(25 * penalty / (penalty + 50)) if penalty > 0 else 0
-            security_score = max(0, 25 - scaled_penalty)
-    except Exception:
-        pass  # Security scan optional
-
-    security_status = "PASS" if security_score >= 20 else ("WARN" if security_score >= 10 else "FAIL")
-
-    # --- Complexity ---
-    # Use ratio but scale gently — 20% complex functions = 15/25, not 5/25
-    func_count = complexity_summary.get("total_functions", 0)
-    complex_count = complexity_summary.get("complex_functions", 0)
-    if func_count > 0:
-        complexity_pct = complex_count / func_count
-        # Gentle curve: <5% = 25, 10% = 20, 20% = 15, 50% = 5
-        complexity_score = max(0, int(25 * (1 - min(complexity_pct * 2, 1))))
-    else:
-        complexity_score = 25
-
-    complexity_status = "PASS" if complexity_score >= 20 else ("WARN" if complexity_score >= 10 else "FAIL")
-
-    # --- Dead code ---
-    # Count symbols that have no references in reverse_index and are not test files
-    dead_count = 0
-    dead_symbols_list = []
-    non_test_symbols = {
-        k: v for k, v in symbols.items()
-        if not _is_test_file(v.get("path", ""))
-        and v.get("type", "") in ("function", "method", "class", "component", "composable")
-    }
-    for sym_id, sym in non_test_symbols.items():
-        ref_count = sym.get("ref_count", sym.get("reference_count", 0))
-        if ref_count == 0:
-            callers = reverse_index.get(sym_id, [])
-            if not callers:
-                name = sym.get("name", "")
-                path = sym.get("path", "")
-                if name.startswith("_"):
-                    continue
-                # Go exported names (capitalized) in .go files are public API —
-                # skip them because cross-package refs aren't tracked by regex scanner.
-                if path.endswith(".go") and name and name[0].isupper():
-                    continue
-                dead_count += 1
-                dead_symbols_list.append({
-                    "name": name,
-                    "path": path,
-                    "line": sym.get("line", 0),
-                    "type": sym.get("type", ""),
-                })
-
-    # Gentle curve: <5% dead = 25, 10% = 20, 20% = 15, 50% = 5
-    dead_pct = dead_count / max(len(non_test_symbols), 1)
-    dead_score = max(0, int(25 * (1 - min(dead_pct * 2, 1))))
-    dead_status = "PASS" if dead_score >= 20 else ("WARN" if dead_score >= 10 else "FAIL")
-
-    # --- Coverage ---
-    coverage_pct = 0
-    coverage_score = 0
-    try:
-        # Look for .coverage or coverage.xml in project root
-        project_root = index_dir.parent if index_dir.exists() else None
-        if project_root:
-            coverage_file = project_root / ".coverage"
-            if coverage_file.exists():
-                # Try to parse coverage percentage from coverage report
-                import subprocess as _sp
-                try:
-                    proc = _sp.run(
-                        ["python", "-m", "coverage", "report", "--format=total"],
-                        capture_output=True, text=True, timeout=30,
-                        cwd=str(project_root),
-                    )
-                    if proc.returncode == 0 and proc.stdout.strip():
-                        try:
-                            coverage_pct = int(float(proc.stdout.strip()))
-                        except ValueError:
-                            pass
-                except (FileNotFoundError, _sp.TimeoutExpired):
-                    pass
-            if coverage_pct > 0:
-                coverage_score = min(25, round(coverage_pct / 4))  # 100% -> 25
-    except Exception:
-        pass
+    security_score, finding_count = _security_dim(index_dir)
+    complexity_score, complex_count = _complexity_dim(complexity_summary)
+    dead_score, dead_count, dead_list = _dead_code_dim(symbols, reverse_index)
+    coverage_score, coverage_pct = _coverage_dim(index_dir)
+    doc_score_val = _doc_score(index_dir)
+    doc_penalty = _doc_penalty_for_score(doc_score_val)
 
     has_coverage = coverage_pct > 0 or coverage_score > 0
-    coverage_status = "PASS" if coverage_score >= 20 else ("WARN" if coverage_score >= 10 else ("FAIL" if has_coverage else "N/A"))
-
-    # --- Documentation dimension (bonus/penalty) ---
-    # Read doc_score from the profile if available
-    doc_penalty = 0
-    try:
-        try:
-            from .doc_scanner import scan_documentation
-        except ImportError:
-            from doc_scanner import scan_documentation
-        project_root = index_dir.parent if index_dir.exists() else None
-        if project_root and project_root.exists():
-            doc_result = scan_documentation(str(project_root))
-            # Doc score 0-100 → penalty: <30 = -10, <50 = -5, <70 = 0, 70+ = +5
-            if doc_result.overall_score < 30:
-                doc_penalty = -10
-            elif doc_result.overall_score < 50:
-                doc_penalty = -5
-            elif doc_result.overall_score >= 70:
-                doc_penalty = 5
-    except Exception:
-        pass
-
-    # --- Overall (project-type aware) ---
-    # Select which dimensions matter for this project type
-    active_dims: dict[str, int] = {}
-
-    if project_type in ("backend", "fullstack"):
-        active_dims["security"] = security_score
-        active_dims["complexity"] = complexity_score
-        active_dims["dead_code"] = dead_score
-    elif project_type in ("frontend",):
-        active_dims["complexity"] = complexity_score
-        active_dims["dead_code"] = dead_score
-        # Security lighter for frontend
-        active_dims["security"] = min(25, security_score + 10)
-    elif project_type in ("library",):
-        active_dims["dead_code"] = dead_score
-        active_dims["complexity"] = complexity_score
-    elif project_type in ("mobile",):
-        active_dims["complexity"] = complexity_score
-        active_dims["dead_code"] = dead_score
-    elif project_type in ("static", "unknown", ""):
-        # Only docs matter — compute doc score directly
-        doc_score_val = 0
-        try:
-            try:
-                from .doc_scanner import scan_documentation as _scan_doc
-            except ImportError:
-                from doc_scanner import scan_documentation as _scan_doc
-            proj_root = index_dir.parent if index_dir.exists() else None
-            if proj_root and proj_root.exists():
-                _dr = _scan_doc(str(proj_root))
-                doc_score_val = _dr.overall_score
-        except Exception:
-            pass
-        active_dims["documentation"] = min(25, round(doc_score_val / 4))
-    else:
-        active_dims["security"] = security_score
-        active_dims["complexity"] = complexity_score
-        active_dims["dead_code"] = dead_score
-
+    active_dims = _select_active_dims(
+        project_type, security_score, complexity_score, dead_score, doc_score_val,
+    )
     if has_coverage:
         active_dims["coverage"] = coverage_score
 
     max_possible = len(active_dims) * 25
     raw_score = sum(active_dims.values())
-    if max_possible > 0:
-        overall_score = round(raw_score / max_possible * 100)
-    else:
-        overall_score = 50  # no dimensions applicable
-    # Apply doc penalty only for types that have code (not static/unknown)
+    overall_score = round(raw_score / max_possible * 100) if max_possible > 0 else 50
     if project_type not in ("static", "unknown", ""):
         overall_score += doc_penalty
     overall_score = max(0, min(100, overall_score))
 
-    if overall_score >= 90:
-        grade = "A"
-    elif overall_score >= 80:
-        grade = "B"
-    elif overall_score >= 70:
-        grade = "C"
-    elif overall_score >= 60:
-        grade = "D"
-    else:
-        grade = "F"
-
-    # Only include dimensions that are relevant
     result: dict = {}
     if "security" in active_dims:
-        result["security"] = {"score": security_score, "max": 25, "status": security_status, "finding_count": finding_count}
+        result["security"] = {
+            "score": security_score, "max": 25,
+            "status": _status_from_score(security_score),
+            "finding_count": finding_count,
+        }
     if "complexity" in active_dims:
-        result["complexity"] = {"score": complexity_score, "max": 25, "status": complexity_status, "complex_count": complex_count}
+        result["complexity"] = {
+            "score": complexity_score, "max": 25,
+            "status": _status_from_score(complexity_score),
+            "complex_count": complex_count,
+        }
     if "dead_code" in active_dims:
-        result["dead_code"] = {"score": dead_score, "max": 25, "status": dead_status, "dead_count": dead_count, "dead_symbols": dead_symbols_list[:50]}
+        result["dead_code"] = {
+            "score": dead_score, "max": 25,
+            "status": _status_from_score(dead_score),
+            "dead_count": dead_count,
+            "dead_symbols": dead_list[:50],
+        }
     if "documentation" in active_dims:
-        result["documentation"] = {"score": active_dims["documentation"], "max": 25, "status": "PASS" if active_dims["documentation"] >= 20 else ("WARN" if active_dims["documentation"] >= 10 else "FAIL")}
+        doc_score_dim = active_dims["documentation"]
+        result["documentation"] = {
+            "score": doc_score_dim, "max": 25,
+            "status": _status_from_score(doc_score_dim),
+        }
     if has_coverage and "coverage" in active_dims:
-        result["coverage"] = {"score": coverage_score, "max": 25, "status": coverage_status, "coverage_pct": coverage_pct}
+        coverage_status = _status_from_score(coverage_score) if has_coverage else "N/A"
+        result["coverage"] = {
+            "score": coverage_score, "max": 25,
+            "status": coverage_status,
+            "coverage_pct": coverage_pct,
+        }
 
-    result["overall"] = {"score": int(overall_score), "max": 100, "grade": grade}
-
+    result["overall"] = {"score": int(overall_score), "max": 100, "grade": _grade_for_score(overall_score)}
     return result
 
 
@@ -1500,6 +1531,252 @@ def _scan_deps(project_path: Path) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Scanner helpers (each returns a dict, swallowing failures to keep profile robust)
+# ---------------------------------------------------------------------------
+
+def _scan_secrets(project_path: Path) -> dict:
+    try:
+        try:
+            from .secret_scanner import scan_secrets
+        except ImportError:
+            from secret_scanner import scan_secrets
+        r = scan_secrets(project_path)
+        return {
+            "total_files_scanned": r.total_files_scanned,
+            "total_findings": r.total_findings,
+            "critical": r.critical, "high": r.high, "medium": r.medium,
+        }
+    except Exception as e:
+        logger.debug("Secret scan failed: %s", e)
+        return {}
+
+
+def _scan_code_vulnerabilities(project_path: Path) -> dict:
+    try:
+        try:
+            from .secret_scanner import scan_code_vulnerabilities
+        except ImportError:
+            from secret_scanner import scan_code_vulnerabilities
+        return scan_code_vulnerabilities(project_path)
+    except Exception as e:
+        logger.debug("Code vulnerability scan failed: %s", e)
+        return {}
+
+
+def _scan_git_history(project_path: Path) -> dict:
+    try:
+        try:
+            from .git_secret_scanner import scan_git_history
+        except ImportError:
+            from git_secret_scanner import scan_git_history
+        return scan_git_history(project_path)
+    except Exception as e:
+        logger.debug("Git history secret scan failed: %s", e)
+        return {}
+
+
+def _scan_dockerfile(project_path: Path) -> dict:
+    try:
+        try:
+            from .dockerfile_scanner import scan_dockerfiles
+        except ImportError:
+            from dockerfile_scanner import scan_dockerfiles
+        return scan_dockerfiles(project_path)
+    except Exception as e:
+        logger.debug("Dockerfile scan failed: %s", e)
+        return {}
+
+
+def _scan_license(project_path: Path) -> dict:
+    try:
+        try:
+            from .license_scanner import scan_licenses
+        except ImportError:
+            from license_scanner import scan_licenses
+        r = scan_licenses(project_path)
+        return {
+            "project_license": r.project_license,
+            "project_license_file": r.project_license_file,
+            "dependency_licenses": r.dependency_licenses,
+            "copyleft_warning": r.copyleft_warning,
+            "dependencies_without_license_count": len(r.dependencies_without_license),
+        }
+    except Exception as e:
+        logger.debug("License scan failed: %s", e)
+        return {}
+
+
+def _scan_documentation(project_path: Path) -> dict:
+    try:
+        try:
+            from .doc_scanner import scan_documentation
+        except ImportError:
+            from doc_scanner import scan_documentation
+        r = scan_documentation(project_path)
+        return {
+            "overall_score": r.overall_score,
+            "readme_score": r.readme_score,
+            "readme_sections": r.readme_sections,
+            "api_doc_coverage": r.api_doc_coverage,
+            "module_doc_coverage": r.module_doc_coverage,
+            "inline_doc_coverage": r.inline_doc_coverage,
+            "has_env_example": r.has_env_example,
+            "has_changelog": r.has_changelog,
+            "has_contributing": r.has_contributing,
+            "suggestions": r.suggestions,
+        }
+    except Exception as e:
+        logger.debug("Documentation scan failed: %s", e)
+        return {}
+
+
+def _scan_taint(project_path: Path) -> dict:
+    try:
+        try:
+            from .analyzer.taint import TaintAnalyzer
+        except ImportError:
+            from analyzer.taint import TaintAnalyzer
+
+        index_dir = project_path / ".flyto-index"
+        raw_index = _load_index_file(index_dir) if index_dir.exists() else {}
+
+        analyzer = TaintAnalyzer(project_path, index=raw_index)
+        r = analyzer.analyze_full()
+        unsanitized = [f for f in r.taint_flows if not f.sanitized]
+        return {
+            "total_sources": r.total_sources,
+            "total_sinks": r.total_sinks,
+            "unsanitized_flows": len(unsanitized),
+            "sanitized_flows": r.sanitized_flows,
+            "high_risk_count": r.high_risk_count,
+        }
+    except Exception as e:
+        logger.debug("Taint analysis failed: %s", e)
+        return {}
+
+
+def _scan_iac(project_path: Path) -> dict:
+    default = {
+        "total_findings": 0, "critical": 0, "high": 0, "medium": 0, "low": 0,
+        "findings": [], "frameworks_detected": [],
+    }
+    try:
+        try:
+            from .iac_scanner import scan_iac_to_dict
+        except ImportError:
+            from iac_scanner import scan_iac_to_dict
+        return scan_iac_to_dict(project_path)
+    except Exception as e:
+        logger.debug("IaC scan failed: %s", e)
+        return default
+
+
+def _scan_frameworks(project_path: Path) -> list:
+    try:
+        try:
+            from .framework_detector import detect_frameworks
+        except ImportError:
+            from framework_detector import detect_frameworks
+        return [fw.to_dict() for fw in detect_frameworks(project_path)]
+    except Exception as e:
+        logger.debug("Framework detection failed: %s", e)
+        return []
+
+
+def _check_license_policy(license_data: dict) -> list[dict]:
+    issues: list[dict] = []
+    try:
+        try:
+            from .rule_loader import get_license_policies
+        except ImportError:
+            from rule_loader import get_license_policies
+        policies = get_license_policies()
+        dep_licenses = license_data.get("dependency_licenses", {})
+        for lic_id, count in dep_licenses.items():
+            if lic_id in policies.get("deny", set()):
+                issues.append({
+                    "license": lic_id, "risk_level": "critical",
+                    "reason": f"License {lic_id} is in deny list", "count": count,
+                })
+            elif lic_id in policies.get("warn", set()):
+                issues.append({
+                    "license": lic_id, "risk_level": "high",
+                    "reason": f"Copyleft license {lic_id} may force open-source derivatives",
+                    "count": count,
+                })
+        if not policies.get("allow_unlicensed", False):
+            unlicensed_count = license_data.get("dependencies_without_license_count", 0)
+            if unlicensed_count > 0:
+                issues.append({
+                    "license": "UNLICENSED", "risk_level": "medium",
+                    "reason": f"{unlicensed_count} dependencies have no detectable license",
+                    "count": unlicensed_count,
+                })
+    except Exception as e:
+        logger.debug("License policy check failed: %s", e)
+    return issues
+
+
+def _build_health_dims(idx: dict, project_type: str) -> dict:
+    health_inputs = idx.get("_health_inputs")
+    if not health_inputs:
+        return {"overall": {"score": 0, "max": 100, "grade": "?"}}
+    return _compute_health_dimensions(
+        health_inputs["symbols"],
+        health_inputs["reverse_index"],
+        health_inputs["index_dir"],
+        health_inputs["complexity_summary"],
+        project_type,
+    )
+
+
+def _adjust_overall_health(
+    overall: dict,
+    secrets_data: dict, taint_data: dict, iac_data: dict,
+    license_policy_issues: list, documentation_data: dict,
+    project_type: str,
+) -> dict:
+    """Apply secret/taint/IaC/license/doc penalties on top of dimension-derived score."""
+    score = overall.get("score", 0)
+
+    # Secrets penalty: critical=-5, high=-3, medium=-1; logistic cap 20
+    if isinstance(secrets_data, dict):
+        raw = (secrets_data.get("critical", 0) * 5 +
+               secrets_data.get("high", 0) * 3 +
+               secrets_data.get("medium", 0))
+        if raw > 0:
+            score -= int(20 * raw / (raw + 30))
+
+    # Taint penalty: -3 per unsanitized high-risk, cap 15
+    if isinstance(taint_data, dict):
+        high = taint_data.get("high_risk_count", 0)
+        if high > 0:
+            score -= min(high * 3, 15)
+
+    # IaC penalty: critical=-5, high=-3; logistic cap 15
+    if isinstance(iac_data, dict):
+        raw = iac_data.get("critical", 0) * 5 + iac_data.get("high", 0) * 3
+        if raw > 0:
+            score -= int(15 * raw / (raw + 30))
+
+    # License policy penalty
+    for issue in license_policy_issues:
+        risk = issue.get("risk_level")
+        if risk == "critical":
+            score -= 5
+        elif risk == "high":
+            score -= 2
+
+    # Extra docs penalty for very poor docs (only on code projects)
+    if project_type not in ("static", "unknown", "") and isinstance(documentation_data, dict):
+        if documentation_data.get("overall_score", 0) < 30:
+            score -= 5
+
+    score = max(0, min(100, score))
+    return {"score": score, "max": 100, "grade": _grade_for_score(score)}
+
+
+# ---------------------------------------------------------------------------
 # Main profile builder
 # ---------------------------------------------------------------------------
 
@@ -1518,284 +1795,42 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
     project_name = project_path.name
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # 1. Filesystem analysis (always available)
     fs = _scan_filesystem(project_path)
-
-    # 2. Index-based data (may be empty)
     idx = _extract_from_index(project_path)
-
-    # 3. Dependencies
     deps = _scan_deps(project_path)
-
-    # 4. Git info
     git = _git_info(project_path)
-
-    # 5. Pattern detection
-    dep_names = set()
-    for d in deps.get("dependencies", []):
-        if isinstance(d, dict):
-            dep_names.add(d.get("name", ""))
+    dep_names = {d.get("name", "") for d in deps.get("dependencies", []) if isinstance(d, dict)}
     patterns = _detect_patterns(fs["_all_files"], dep_names, index_data=idx)
 
-    # 5b. Secret scan
-    secrets_data = {}
-    try:
-        try:
-            from .secret_scanner import scan_secrets
-        except ImportError:
-            from secret_scanner import scan_secrets
-        secret_result = scan_secrets(project_path)
-        secrets_data = {
-            "total_files_scanned": secret_result.total_files_scanned,
-            "total_findings": secret_result.total_findings,
-            "critical": secret_result.critical,
-            "high": secret_result.high,
-            "medium": secret_result.medium,
-        }
-    except Exception as e:
-        logger.debug("Secret scan failed: %s", e)
+    secrets_data = _scan_secrets(project_path)
+    code_vulns_data = _scan_code_vulnerabilities(project_path)
+    git_leaked_data = _scan_git_history(project_path)
+    dockerfile_data = _scan_dockerfile(project_path)
+    license_data = _scan_license(project_path)
+    documentation_data = _scan_documentation(project_path)
+    taint_data = _scan_taint(project_path)
+    iac_data = _scan_iac(project_path)
+    license_policy_issues = _check_license_policy(license_data)
+    frameworks_data = _scan_frameworks(project_path)
 
-    # 5b2. Code vulnerability scan (SAST)
-    code_vulns_data = {}
-    try:
-        try:
-            from .secret_scanner import scan_code_vulnerabilities
-        except ImportError:
-            from secret_scanner import scan_code_vulnerabilities
-        code_vulns_data = scan_code_vulnerabilities(project_path)
-    except Exception as e:
-        logger.debug("Code vulnerability scan failed: %s", e)
-
-    # 5b3. Git history secret scan
-    git_leaked_data = {}
-    try:
-        try:
-            from .git_secret_scanner import scan_git_history
-        except ImportError:
-            from git_secret_scanner import scan_git_history
-        git_leaked_data = scan_git_history(project_path)
-    except Exception as e:
-        logger.debug("Git history secret scan failed: %s", e)
-
-    # 5b4. Dockerfile / IaC scan
-    dockerfile_data = {}
-    try:
-        try:
-            from .dockerfile_scanner import scan_dockerfiles
-        except ImportError:
-            from dockerfile_scanner import scan_dockerfiles
-        dockerfile_data = scan_dockerfiles(project_path)
-    except Exception as e:
-        logger.debug("Dockerfile scan failed: %s", e)
-
-    # 5c. License scan
-    license_data = {}
-    try:
-        try:
-            from .license_scanner import scan_licenses
-        except ImportError:
-            from license_scanner import scan_licenses
-        license_result = scan_licenses(project_path)
-        license_data = {
-            "project_license": license_result.project_license,
-            "project_license_file": license_result.project_license_file,
-            "dependency_licenses": license_result.dependency_licenses,
-            "copyleft_warning": license_result.copyleft_warning,
-            "dependencies_without_license_count": len(license_result.dependencies_without_license),
-        }
-    except Exception as e:
-        logger.debug("License scan failed: %s", e)
-
-    # 5d. Documentation coverage
-    documentation_data = {}
-    try:
-        try:
-            from .doc_scanner import scan_documentation
-        except ImportError:
-            from doc_scanner import scan_documentation
-        doc_result = scan_documentation(project_path)
-        documentation_data = {
-            "overall_score": doc_result.overall_score,
-            "readme_score": doc_result.readme_score,
-            "readme_sections": doc_result.readme_sections,
-            "api_doc_coverage": doc_result.api_doc_coverage,
-            "module_doc_coverage": doc_result.module_doc_coverage,
-            "inline_doc_coverage": doc_result.inline_doc_coverage,
-            "has_env_example": doc_result.has_env_example,
-            "has_changelog": doc_result.has_changelog,
-            "has_contributing": doc_result.has_contributing,
-            "suggestions": doc_result.suggestions,
-        }
-    except Exception as e:
-        logger.debug("Documentation scan failed: %s", e)
-
-    # 5e. Taint / data flow analysis
-    taint_data = {}
-    try:
-        try:
-            from .analyzer.taint import TaintAnalyzer
-        except ImportError:
-            from analyzer.taint import TaintAnalyzer
-
-        # Load raw index for dependency graph (cross-function tracking)
-        raw_index = {}
-        index_dir = project_path / ".flyto-index"
-        if index_dir.exists():
-            try:
-                import gzip as _gzip
-                gz_path = index_dir / "index.json.gz"
-                if gz_path.exists():
-                    with _gzip.open(gz_path, "rt", encoding="utf-8") as _f:
-                        raw_index = json.load(_f)
-                else:
-                    json_path = index_dir / "index.json"
-                    if json_path.exists():
-                        raw_index = json.loads(json_path.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-
-        analyzer = TaintAnalyzer(project_path, index=raw_index)
-        taint_result = analyzer.analyze_full()
-        unsanitized = [f for f in taint_result.taint_flows if not f.sanitized]
-        taint_data = {
-            "total_sources": taint_result.total_sources,
-            "total_sinks": taint_result.total_sinks,
-            "unsanitized_flows": len(unsanitized),
-            "sanitized_flows": taint_result.sanitized_flows,
-            "high_risk_count": taint_result.high_risk_count,
-        }
-    except Exception as e:
-        logger.debug("Taint analysis failed: %s", e)
-
-    # 5f. IaC scanning
-    iac_data = {"total_findings": 0, "critical": 0, "high": 0, "medium": 0, "low": 0, "findings": [], "frameworks_detected": []}
-    try:
-        try:
-            from .iac_scanner import scan_iac_to_dict
-        except ImportError:
-            from iac_scanner import scan_iac_to_dict
-        iac_data = scan_iac_to_dict(project_path)
-    except Exception as e:
-        logger.debug("IaC scan failed: %s", e)
-
-    # 5g. License policy check
-    license_policy_issues = []
-    try:
-        try:
-            from .rule_loader import get_license_policies
-        except ImportError:
-            from rule_loader import get_license_policies
-        policies = get_license_policies()
-        dep_licenses = license_data.get("dependency_licenses", {})
-        # Check each dependency license against policy
-        for lic_id, count in dep_licenses.items():
-            if lic_id in policies.get("deny", set()):
-                license_policy_issues.append({
-                    "license": lic_id, "risk_level": "critical",
-                    "reason": f"License {lic_id} is in deny list", "count": count,
-                })
-            elif lic_id in policies.get("warn", set()):
-                license_policy_issues.append({
-                    "license": lic_id, "risk_level": "high",
-                    "reason": f"Copyleft license {lic_id} may force open-source derivatives", "count": count,
-                })
-        if not policies.get("allow_unlicensed", False):
-            unlicensed_count = license_data.get("dependencies_without_license_count", 0)
-            if unlicensed_count > 0:
-                license_policy_issues.append({
-                    "license": "UNLICENSED", "risk_level": "medium",
-                    "reason": f"{unlicensed_count} dependencies have no detectable license", "count": unlicensed_count,
-                })
-    except Exception as e:
-        logger.debug("License policy check failed: %s", e)
-
-    # 5h. Framework detection
-    frameworks_data = []
-    try:
-        try:
-            from .framework_detector import detect_frameworks
-        except ImportError:
-            from framework_detector import detect_frameworks
-        frameworks = detect_frameworks(project_path)
-        frameworks_data = [fw.to_dict() for fw in frameworks]
-    except Exception as e:
-        logger.debug("Framework detection failed: %s", e)
-
-    # 6. Services detection
     services = _detect_services(deps)
-
-    # 7. Project type classification
-    component_count = idx["symbol_counts"].get("component", 0)
     project_type_info = _classify_project_type(
         languages=fs["languages"],
         api_definitions=idx["api_definitions"],
-        components=component_count,
+        components=idx["symbol_counts"].get("component", 0),
         dep_names=dep_names,
         patterns=patterns,
         entry_points=idx["entry_points"],
         all_files=fs["_all_files"],
     )
 
-    # 8. Health dimensions (needs project_type)
-    health_inputs = idx.get("_health_inputs")
-    if health_inputs:
-        health_dims = _compute_health_dimensions(
-            health_inputs["symbols"],
-            health_inputs["reverse_index"],
-            health_inputs["index_dir"],
-            health_inputs["complexity_summary"],
-            project_type_info["type"],
-        )
-    else:
-        health_dims = {
-            "overall": {"score": 0, "max": 100, "grade": "?"},
-        }
+    health_dims = _build_health_dims(idx, project_type_info["type"])
+    health_dims["overall"] = _adjust_overall_health(
+        health_dims.get("overall", {}),
+        secrets_data, taint_data, iac_data, license_policy_issues,
+        documentation_data, project_type_info["type"],
+    )
 
-    # 8b. Apply secrets + taint penalty to overall health score
-    #     The security dimension only counts SAST findings from SecurityScanner,
-    #     but secret_scanner and taint analysis are separate passes.
-    overall = health_dims.get("overall", {})
-    adj_score = overall.get("score", 0)
-
-    # Secrets penalty: critical=-5, high=-3, medium=-1 per finding
-    sec_critical = secrets_data.get("critical", 0)
-    sec_high = secrets_data.get("high", 0) if isinstance(secrets_data, dict) else 0
-    sec_medium = secrets_data.get("medium", 0) if isinstance(secrets_data, dict) else 0
-    secret_raw_penalty = sec_critical * 5 + sec_high * 3 + sec_medium * 1
-    if secret_raw_penalty > 0:
-        # Logistic cap at 20 points max
-        adj_score -= int(20 * secret_raw_penalty / (secret_raw_penalty + 30))
-
-    # Taint flow penalty: -3 per unsanitized high-risk flow
-    taint_high = taint_data.get("high_risk_count", 0) if isinstance(taint_data, dict) else 0
-    if taint_high > 0:
-        adj_score -= min(taint_high * 3, 15)  # cap at 15
-
-    # IaC penalty: critical=-5, high=-3, medium=-1
-    iac_crit = iac_data.get("critical", 0) if isinstance(iac_data, dict) else 0
-    iac_high_count = iac_data.get("high", 0) if isinstance(iac_data, dict) else 0
-    iac_raw_penalty = iac_crit * 5 + iac_high_count * 3
-    if iac_raw_penalty > 0:
-        adj_score -= int(15 * iac_raw_penalty / (iac_raw_penalty + 30))  # cap at 15
-
-    # License policy penalty: each denied license = -5, warned = -2
-    for issue in license_policy_issues:
-        if issue.get("risk_level") == "critical":
-            adj_score -= 5
-        elif issue.get("risk_level") == "high":
-            adj_score -= 2
-
-    # Documentation penalty/bonus (already applied inside _compute_health_dimensions for code projects,
-    # but for unknown/static it might be the only dimension)
-    doc_overall = documentation_data.get("overall_score", 0) if isinstance(documentation_data, dict) else 0
-    if project_type_info["type"] not in ("static", "unknown", "") and doc_overall < 30:
-        adj_score -= 5  # extra penalty for very poor docs
-
-    adj_score = max(0, min(100, adj_score))
-    adj_grade = "A" if adj_score >= 90 else "B" if adj_score >= 80 else "C" if adj_score >= 70 else "D" if adj_score >= 60 else "F"
-    health_dims["overall"] = {"score": adj_score, "max": 100, "grade": adj_grade}
-
-    # Build profile
     profile = {
         "name": project_name,
         "path": str(project_path),
@@ -1902,10 +1937,7 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
 # Human-readable formatter
 # ---------------------------------------------------------------------------
 
-def format_profile(profile: dict) -> str:
-    """Format a project profile as human-readable text."""
-    lines = []
-    # Header with project type
+def _format_header(profile: dict) -> list[str]:
     project_type = profile.get("project_type", "")
     project_sub_type = profile.get("project_sub_type", "")
     type_label = project_type
@@ -1914,208 +1946,260 @@ def format_profile(profile: dict) -> str:
     header = f"Project Profile: {profile['name']}"
     if type_label:
         header += f" [{type_label}]"
-    lines.append(header)
-    lines.append(f"Generated: {profile['generated_at']}")
-    lines.append("")
+    return [header, f"Generated: {profile['generated_at']}", ""]
 
-    # Structure
+
+def _format_structure(profile: dict) -> list[str]:
     langs = profile.get("languages", {})
     lang_str = ", ".join(f"{k} ({v})" for k, v in
                          sorted(langs.items(), key=lambda x: -x[1])[:8])
-    lines.append("Structure")
-    struct_parts = [f"Files: {profile['file_count']}"]
+    parts = [f"Files: {profile['file_count']}"]
     folder_structure = profile.get("folder_structure")
     if folder_structure:
-        struct_parts.append(f"Folders: {len(folder_structure)}")
-    struct_parts.append(f"Languages: {lang_str}")
-    lines.append(f"  {' | '.join(struct_parts)}")
-    lines.append("")
+        parts.append(f"Folders: {len(folder_structure)}")
+    parts.append(f"Languages: {lang_str}")
+    return ["Structure", f"  {' | '.join(parts)}", ""]
 
-    # Services & APIs
+
+def _format_apis(profile: dict) -> list[str]:
     api_defs = profile.get("api_definitions", [])
     api_internal = profile.get("api_calls_internal", [])
     api_external = profile.get("api_calls_external", [])
     services = profile.get("services", [])
-    has_api_section = api_defs or api_internal or api_external or services
-    if has_api_section:
-        lines.append("Services & APIs")
-        if api_defs:
-            lines.append(f"  Backend routes: {len(api_defs)} defined")
-            for route in api_defs[:15]:
-                method = route.get("method", "GET")
-                path = route.get("path", "")
-                lines.append(f"    {method:6s} {path}")
-            if len(api_defs) > 15:
-                lines.append(f"    ... and {len(api_defs) - 15} more")
-            lines.append("")
-        if services:
-            svc_names = ", ".join(s["name"] for s in services)
-            lines.append(f"  Services: {svc_names}")
-            lines.append("")
-        if api_internal:
-            lines.append(f"  Frontend API calls: {len(api_internal)} internal")
-        if api_external:
-            lines.append(f"  External API calls: {len(api_external)}")
-        if api_internal or api_external:
-            lines.append("")
+    if not (api_defs or api_internal or api_external or services):
+        return []
 
-    # Models
+    out = ["Services & APIs"]
+    if api_defs:
+        out.append(f"  Backend routes: {len(api_defs)} defined")
+        for route in api_defs[:15]:
+            method = route.get("method", "GET")
+            path = route.get("path", "")
+            out.append(f"    {method:6s} {path}")
+        if len(api_defs) > 15:
+            out.append(f"    ... and {len(api_defs) - 15} more")
+        out.append("")
+    if services:
+        svc_names = ", ".join(s["name"] for s in services)
+        out.append(f"  Services: {svc_names}")
+        out.append("")
+    if api_internal:
+        out.append(f"  Frontend API calls: {len(api_internal)} internal")
+    if api_external:
+        out.append(f"  External API calls: {len(api_external)}")
+    if api_internal or api_external:
+        out.append("")
+    return out
+
+
+def _format_models(profile: dict) -> list[str]:
     models = profile.get("models", [])
-    if models:
-        lines.append(f"Models ({len(models)})")
-        for m in models[:15]:
-            field_str = f"{m['fields']} fields" if m.get("fields") else "no fields extracted"
-            lines.append(f"  {m['name']} ({field_str}) -- {m['file']}:{m['line']}")
-        if len(models) > 15:
-            lines.append(f"  ... and {len(models) - 15} more")
-        lines.append("")
+    if not models:
+        return []
+    out = [f"Models ({len(models)})"]
+    for m in models[:15]:
+        field_str = f"{m['fields']} fields" if m.get("fields") else "no fields extracted"
+        out.append(f"  {m['name']} ({field_str}) -- {m['file']}:{m['line']}")
+    if len(models) > 15:
+        out.append(f"  ... and {len(models) - 15} more")
+    out.append("")
+    return out
 
-    # Symbols
+
+def _format_symbols(profile: dict) -> list[str]:
     sym_counts = profile.get("symbol_counts", {})
-    if sym_counts:
-        lines.append("Symbols")
-        def _plural(word, count):
-            if count == 1:
-                return word
-            if word.endswith("s"):
-                return word + "es"
-            return word + "s"
-        sym_parts = [f"{v} {_plural(k, v)}" for k, v in
-                     sorted(sym_counts.items(), key=lambda x: -x[1])]
-        lines.append(f"  {', '.join(sym_parts)}")
-        lines.append("")
+    if not sym_counts:
+        return []
 
-    # Dependencies
+    def _plural(word: str, count: int) -> str:
+        if count == 1:
+            return word
+        if word.endswith("s"):
+            return word + "es"
+        return word + "s"
+
+    parts = [f"{v} {_plural(k, v)}" for k, v in
+             sorted(sym_counts.items(), key=lambda x: -x[1])]
+    return ["Symbols", f"  {', '.join(parts)}", ""]
+
+
+def _format_dependencies(profile: dict) -> list[str]:
     deps = profile.get("dependencies", {})
-    if deps and deps.get("total_count", 0) > 0:
-        eco_str = ", ".join(deps.get("ecosystems", []))
-        lines.append("Dependencies")
-        lines.append(
-            f"  {deps['total_count']} packages "
-            f"({deps.get('production_count', 0)} production, "
-            f"{deps.get('dev_count', 0)} dev"
-            + (f", {deps.get('indirect_count', 0)} indirect" if deps.get("indirect_count") else "")
-            + f") across {len(deps.get('ecosystems', []))} ecosystem{'s' if len(deps.get('ecosystems', [])) != 1 else ''} [{eco_str}]"
-        )
-        lines.append("")
+    if not (deps and deps.get("total_count", 0) > 0):
+        return []
+    eco = deps.get("ecosystems", [])
+    indirect = (f", {deps.get('indirect_count', 0)} indirect"
+                if deps.get("indirect_count") else "")
+    plural = "s" if len(eco) != 1 else ""
+    return [
+        "Dependencies",
+        (f"  {deps['total_count']} packages "
+         f"({deps.get('production_count', 0)} production, "
+         f"{deps.get('dev_count', 0)} dev{indirect}) "
+         f"across {len(eco)} ecosystem{plural} [{', '.join(eco)}]"),
+        "",
+    ]
 
-    # Connections
+
+def _format_connections(profile: dict) -> list[str]:
     module_graph = profile.get("module_graph", [])
-    if module_graph:
-        lines.append(f"Connections (top {min(10, len(module_graph))} module pairs)")
-        for edge in module_graph[:10]:
-            lines.append(
-                f"  {edge['source_file']} -> {edge['target_file']} ({edge['import_count']} refs)"
-            )
-        graph_summary = profile.get("module_graph_summary", {})
-        if graph_summary:
-            total_conn = graph_summary.get("total_connections", 0)
-            avg_refs = graph_summary.get("avg_refs_per_module", 0)
-            orphan_count = graph_summary.get("orphan_count", 0)
-            most_connected = graph_summary.get("most_connected_file", "")
-            lines.append(f"  --- {total_conn} total connections, avg {avg_refs} refs/module")
-            if most_connected:
-                lines.append(f"  Most connected: {most_connected}")
-            if orphan_count > 0:
-                lines.append(f"  Orphan files (no imports/importers): {orphan_count}")
-        lines.append("")
+    if not module_graph:
+        return []
+    out = [f"Connections (top {min(10, len(module_graph))} module pairs)"]
+    for edge in module_graph[:10]:
+        out.append(
+            f"  {edge['source_file']} -> {edge['target_file']} ({edge['import_count']} refs)"
+        )
+    summary = profile.get("module_graph_summary", {})
+    if summary:
+        total_conn = summary.get("total_connections", 0)
+        avg_refs = summary.get("avg_refs_per_module", 0)
+        orphan_count = summary.get("orphan_count", 0)
+        most_connected = summary.get("most_connected_file", "")
+        out.append(f"  --- {total_conn} total connections, avg {avg_refs} refs/module")
+        if most_connected:
+            out.append(f"  Most connected: {most_connected}")
+        if orphan_count > 0:
+            out.append(f"  Orphan files (no imports/importers): {orphan_count}")
+    out.append("")
+    return out
 
-    # Complexity
+
+def _format_complexity(profile: dict) -> list[str]:
     complexity = profile.get("complexity_summary", {})
-    if complexity and complexity.get("total_functions", 0) > 0:
-        total_fn = complexity["total_functions"]
-        complex_fn = complexity["complex_functions"]
-        avg_cx = complexity["avg_complexity"]
-        lines.append(f"Complexity")
-        lines.append(f"  {total_fn} functions analyzed, {complex_fn} complex (score >= 5), avg score {avg_cx}")
-        most_complex = complexity.get("most_complex", [])
-        if most_complex:
-            lines.append(f"  Top complex functions:")
-            for fn in most_complex[:5]:
-                lines.append(f"    {fn['name']} (score={fn['score']}) -- {fn['path']}:{fn.get('line', 0)}")
-        lines.append("")
+    if not (complexity and complexity.get("total_functions", 0) > 0):
+        return []
+    out = [
+        "Complexity",
+        (f"  {complexity['total_functions']} functions analyzed, "
+         f"{complexity['complex_functions']} complex (score >= 5), "
+         f"avg score {complexity['avg_complexity']}"),
+    ]
+    most_complex = complexity.get("most_complex", [])
+    if most_complex:
+        out.append("  Top complex functions:")
+        for fn in most_complex[:5]:
+            out.append(f"    {fn['name']} (score={fn['score']}) -- {fn['path']}:{fn.get('line', 0)}")
+    out.append("")
+    return out
 
-    # Health Score
+
+def _format_health_dim_detail(dim_name: str, dim: dict) -> str:
+    if dim_name == "security" and dim.get("finding_count", 0) > 0:
+        return f"  ({dim['finding_count']} findings)"
+    if dim_name == "complexity" and dim.get("complex_count", 0) > 0:
+        return f"  ({dim['complex_count']} complex functions)"
+    if dim_name == "dead_code" and dim.get("dead_count", 0) > 0:
+        return f"  ({dim['dead_count']} unreferenced symbols)"
+    if dim_name == "coverage":
+        if dim.get("coverage_pct", 0) > 0:
+            return f"  ({dim['coverage_pct']}% covered)"
+        return "  (no coverage data)"
+    return ""
+
+
+def _format_health(profile: dict) -> list[str]:
     health = profile.get("health_dimensions", {})
-    if health and health.get("overall"):
-        overall = health["overall"]
-        lines.append(f"Health Score: {overall['grade']} ({overall['score']}/{overall['max']})")
-        for dim_name in ("security", "complexity", "dead_code", "coverage"):
-            dim = health.get(dim_name, {})
-            if dim:
-                label = dim_name.replace("_", " ").title()
-                detail = ""
-                if dim_name == "security" and dim.get("finding_count", 0) > 0:
-                    detail = f"  ({dim['finding_count']} findings)"
-                elif dim_name == "complexity" and dim.get("complex_count", 0) > 0:
-                    detail = f"  ({dim['complex_count']} complex functions)"
-                elif dim_name == "dead_code" and dim.get("dead_count", 0) > 0:
-                    detail = f"  ({dim['dead_count']} unreferenced symbols)"
-                elif dim_name == "coverage":
-                    if dim.get("coverage_pct", 0) > 0:
-                        detail = f"  ({dim['coverage_pct']}% covered)"
-                    else:
-                        detail = "  (no coverage data)"
-                lines.append(f"  {label:12s} {dim['score']:2d}/{dim['max']} {dim['status']}{detail}")
-        lines.append("")
+    if not (health and health.get("overall")):
+        return []
+    overall = health["overall"]
+    out = [f"Health Score: {overall['grade']} ({overall['score']}/{overall['max']})"]
+    for dim_name in ("security", "complexity", "dead_code", "coverage"):
+        dim = health.get(dim_name, {})
+        if not dim:
+            continue
+        label = dim_name.replace("_", " ").title()
+        detail = _format_health_dim_detail(dim_name, dim)
+        out.append(f"  {label:12s} {dim['score']:2d}/{dim['max']} {dim['status']}{detail}")
+    out.append("")
+    return out
 
-    # Entry points
+
+def _format_entry_points(profile: dict) -> list[str]:
     entry_points = profile.get("entry_points", [])
-    if entry_points:
-        lines.append(f"Entry Points ({len(entry_points)})")
-        for ep in entry_points[:10]:
-            lines.append(f"  {ep}")
-        if len(entry_points) > 10:
-            lines.append(f"  ... and {len(entry_points) - 10} more")
-        lines.append("")
+    if not entry_points:
+        return []
+    out = [f"Entry Points ({len(entry_points)})"]
+    for ep in entry_points[:10]:
+        out.append(f"  {ep}")
+    if len(entry_points) > 10:
+        out.append(f"  ... and {len(entry_points) - 10} more")
+    out.append("")
+    return out
 
-    # Frameworks
+
+def _format_frameworks(profile: dict) -> list[str]:
     frameworks = profile.get("frameworks", [])
-    if frameworks:
-        lines.append(f"Frameworks ({len(frameworks)})")
-        for fw in frameworks:
-            version_str = f" v{fw['version']}" if fw.get("version") else ""
-            lines.append(f"  {fw['name']}{version_str} [{fw['type']}]")
-            if fw.get("conventions"):
-                conv_parts = [f"{k}={v}" for k, v in fw["conventions"].items()]
-                lines.append(f"    Conventions: {', '.join(conv_parts)}")
-            if fw.get("entry_points"):
-                ep_list = fw["entry_points"][:3]
-                lines.append(f"    Entry points: {', '.join(ep_list)}")
-        lines.append("")
+    if not frameworks:
+        return []
+    out = [f"Frameworks ({len(frameworks)})"]
+    for fw in frameworks:
+        version_str = f" v{fw['version']}" if fw.get("version") else ""
+        out.append(f"  {fw['name']}{version_str} [{fw['type']}]")
+        if fw.get("conventions"):
+            conv_parts = [f"{k}={v}" for k, v in fw["conventions"].items()]
+            out.append(f"    Conventions: {', '.join(conv_parts)}")
+        if fw.get("entry_points"):
+            ep_list = fw["entry_points"][:3]
+            out.append(f"    Entry points: {', '.join(ep_list)}")
+    out.append("")
+    return out
 
-    # Patterns
+
+def _format_patterns(profile: dict) -> list[str]:
     patterns = profile.get("patterns", [])
-    if patterns:
-        lines.append("Patterns Detected")
-        lines.append(f"  {', '.join(patterns)}")
-        lines.append("")
+    if not patterns:
+        return []
+    return ["Patterns Detected", f"  {', '.join(patterns)}", ""]
 
-    # Infrastructure
-    infra_parts = []
-    for key, label in [("has_docker", "Docker"), ("has_ci", "CI"),
-                       ("has_tests", "Tests"), ("has_docs", "Docs")]:
-        infra_parts.append(f"{label}: {'yes' if profile.get(key) else 'no'}")
-    lines.append("Infrastructure")
-    lines.append(f"  {' | '.join(infra_parts)}")
 
+def _format_infrastructure(profile: dict) -> list[str]:
+    parts = [
+        f"{label}: {'yes' if profile.get(key) else 'no'}"
+        for key, label in [("has_docker", "Docker"), ("has_ci", "CI"),
+                           ("has_tests", "Tests"), ("has_docs", "Docs")]
+    ]
+    out = ["Infrastructure", f"  {' | '.join(parts)}"]
     config_files = profile.get("config_files", [])
     if config_files:
-        lines.append(f"  Config: {', '.join(config_files[:10])}")
+        out.append(f"  Config: {', '.join(config_files[:10])}")
         if len(config_files) > 10:
-            lines.append(f"    ... and {len(config_files) - 10} more")
-    lines.append("")
+            out.append(f"    ... and {len(config_files) - 10} more")
+    out.append("")
+    return out
 
-    # Git
+
+def _format_git(profile: dict) -> list[str]:
     authors = profile.get("recent_authors", [])
     last_commit = profile.get("last_commit_date", "")
-    if authors or last_commit:
-        lines.append("Git")
-        if authors:
-            lines.append(f"  Authors: {', '.join(authors)}")
-        if last_commit:
-            # Truncate to date only
-            date_only = last_commit[:10] if len(last_commit) >= 10 else last_commit
-            lines.append(f"  Last commit: {date_only}")
+    if not (authors or last_commit):
+        return []
+    out = ["Git"]
+    if authors:
+        out.append(f"  Authors: {', '.join(authors)}")
+    if last_commit:
+        date_only = last_commit[:10] if len(last_commit) >= 10 else last_commit
+        out.append(f"  Last commit: {date_only}")
+    return out
 
+
+def format_profile(profile: dict) -> str:
+    """Format a project profile as human-readable text."""
+    sections = [
+        _format_header(profile),
+        _format_structure(profile),
+        _format_apis(profile),
+        _format_models(profile),
+        _format_symbols(profile),
+        _format_dependencies(profile),
+        _format_connections(profile),
+        _format_complexity(profile),
+        _format_health(profile),
+        _format_entry_points(profile),
+        _format_frameworks(profile),
+        _format_patterns(profile),
+        _format_infrastructure(profile),
+        _format_git(profile),
+    ]
+    lines = [line for section in sections for line in section]
     return "\n".join(lines)

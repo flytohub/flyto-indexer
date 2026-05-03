@@ -355,23 +355,54 @@ class TestToolRegistryIntegration:
         }
 
     def test_smart_tools_in_dispatch(self):
-        from tool_registry import execute_tool
-        # Verify smart tools are registered (will fail at execution since no index, but shouldn't KeyError)
+        """Verify smart tools are registered. Uses has_tool() not
+        execute_tool() — invoking handlers in CI was flaky because
+        they could hang on partially-loaded module state from
+        earlier tests in the suite."""
+        from tool_registry import has_tool
         for name in ["search", "impact", "audit", "task", "structure"]:
-            try:
-                execute_tool(name, {"query": "test"} if name == "search" else {})
-            except KeyError:
-                pytest.fail(f"Smart tool '{name}' not found in dispatch")
-            except Exception:
-                pass  # Expected — no index loaded
+            assert has_tool(name), f"Smart tool '{name}' not in registered dispatch"
+
+    def test_tool_names_stay_in_sync_with_dispatch(self):
+        """Drift guard: the manually-curated _TOOL_NAMES set must stay
+        identical to the keys execute_tool actually dispatches.
+
+        Instead of invoking each tool (slow + flaky in CI when state
+        is partially loaded), we AST-parse the source of execute_tool
+        and pull the dict keys directly. Pure lexical check, sub-100ms.
+        """
+        import ast, inspect
+        from tool_registry import _TOOL_NAMES, execute_tool
+
+        src = inspect.getsource(execute_tool)
+        tree = ast.parse(src)
+        dispatch_keys: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                t = node.targets[0]
+                if isinstance(t, ast.Name) and t.id == "_DISPATCH":
+                    if isinstance(node.value, ast.Dict):
+                        for k in node.value.keys:
+                            if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                                dispatch_keys.add(k.value)
+                        break
+        assert dispatch_keys, "ast parse failed to find _DISPATCH dict"
+
+        names_set = set(_TOOL_NAMES)
+        only_in_names = names_set - dispatch_keys
+        only_in_dispatch = dispatch_keys - names_set
+        assert only_in_names == set(), (
+            f"_TOOL_NAMES has entries dispatch doesn't: {sorted(only_in_names)}"
+        )
+        assert only_in_dispatch == set(), (
+            f"dispatch has entries _TOOL_NAMES doesn't: {sorted(only_in_dispatch)}. "
+            f"Add them to _TOOL_NAMES so has_tool() reports correctly."
+        )
 
     def test_legacy_tools_still_in_dispatch(self):
-        from tool_registry import execute_tool
-        # Old tools should still work via dispatch
+        """Old tools must keep their dispatch entries. Uses has_tool()
+        for the same flakiness reason as the smart-tools test."""
+        from tool_registry import has_tool
         for name in ["search_code", "find_references", "code_health_score", "analyze_task"]:
-            try:
-                execute_tool(name, {"query": "test"} if "search" in name else {})
-            except KeyError:
-                pytest.fail(f"Legacy tool '{name}' missing from dispatch")
-            except Exception:
-                pass  # Expected — no index loaded
+            assert has_tool(name), f"Legacy tool '{name}' missing from dispatch"
+

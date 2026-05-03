@@ -1,0 +1,394 @@
+# IaC rule corpus loaded by iac_scanner.py.
+#
+# Each rule is a regex match against either:
+#  - a Terraform `resource "<type>" "<name>" {...}` block body
+#  - a single line of a Kubernetes manifest
+#  - a single line of a Docker Compose file or Dockerfile
+#
+# Rules with complex semantics (port-range filtering, multi-line block
+# inspection) live in iac_scanner.py as hardcoded checks. YAML covers the
+# common case: "if file matches X, this rule fires."
+#
+# Schema:
+#   id           — IAC_<FW>_<SHORT> stable identifier
+#   framework    — terraform | kubernetes | docker_compose | dockerfile
+#   severity     — CRITICAL | HIGH | MEDIUM | LOW
+#   resource     — (terraform only) resource type filter, e.g. aws_s3_bucket
+#   pattern      — Python regex; matched with re.IGNORECASE inside relevant scope
+#   title        — short human label
+#   guideline    — one-line remediation hint
+#
+# Re-running the scanner is safe — rules are pure functions of file content.
+
+rules:
+  # ---------------------------------------------------------------------
+  # Terraform — AWS
+  # ---------------------------------------------------------------------
+  - id: IAC_TF_AWS_SG_OPEN_SSH
+    framework: terraform
+    severity: HIGH
+    resource: aws_security_group
+    pattern: 'from_port\s*=\s*22[\s\S]{0,400}cidr_blocks\s*=\s*\[\s*"0\.0\.0\.0/0"'
+    title: SSH (22) open to the internet
+    guideline: Restrict SSH ingress to bastion / VPN CIDR or use SSM Session Manager.
+
+  - id: IAC_TF_AWS_SG_OPEN_RDP
+    framework: terraform
+    severity: HIGH
+    resource: aws_security_group
+    pattern: 'from_port\s*=\s*3389[\s\S]{0,400}cidr_blocks\s*=\s*\[\s*"0\.0\.0\.0/0"'
+    title: RDP (3389) open to the internet
+    guideline: Restrict RDP ingress to specific corporate CIDRs.
+
+  - id: IAC_TF_AWS_SG_OPEN_DB
+    framework: terraform
+    severity: CRITICAL
+    resource: aws_security_group
+    pattern: 'from_port\s*=\s*(3306|5432|1433|27017|6379|9200)[\s\S]{0,400}cidr_blocks\s*=\s*\[\s*"0\.0\.0\.0/0"'
+    title: Database port open to the internet
+    guideline: Databases must never be reachable from 0.0.0.0/0.
+
+  - id: IAC_TF_AWS_S3_NO_VERSIONING
+    framework: terraform
+    severity: MEDIUM
+    resource: aws_s3_bucket
+    pattern: '^(?!.*versioning\s*\{[\s\S]*enabled\s*=\s*true)'
+    title: S3 bucket without versioning
+    guideline: Enable versioning so accidental deletes / ransomware are recoverable.
+
+  - id: IAC_TF_AWS_S3_NO_LOGGING
+    framework: terraform
+    severity: MEDIUM
+    resource: aws_s3_bucket
+    pattern: '^(?!.*logging\s*\{)'
+    title: S3 bucket without access logging
+    guideline: Configure logging to a separate bucket for audit trail.
+
+  - id: IAC_TF_AWS_RDS_NO_BACKUP
+    framework: terraform
+    severity: HIGH
+    resource: aws_db_instance
+    pattern: 'backup_retention_period\s*=\s*0\b'
+    title: RDS instance without backup retention
+    guideline: Set backup_retention_period to at least 7 days.
+
+  - id: IAC_TF_AWS_RDS_NO_ENCRYPTION
+    framework: terraform
+    severity: HIGH
+    resource: aws_db_instance
+    pattern: '^(?!.*storage_encrypted\s*=\s*true)'
+    title: RDS storage not encrypted at rest
+    guideline: Set storage_encrypted = true; required by SOC2 / HIPAA.
+
+  - id: IAC_TF_AWS_EBS_NO_ENCRYPTION
+    framework: terraform
+    severity: HIGH
+    resource: aws_ebs_volume
+    pattern: '^(?!.*encrypted\s*=\s*true)'
+    title: EBS volume not encrypted
+    guideline: Set encrypted = true; cheap and prevents data leakage on snapshot share.
+
+  - id: IAC_TF_AWS_IAM_WILDCARD_ACTION
+    framework: terraform
+    severity: HIGH
+    resource: aws_iam_policy
+    pattern: '(?:"Action"\s*:\s*"\*"|Action\s*=\s*"\*")'
+    title: IAM policy with wildcard Action ("*")
+    guideline: Replace "*" with explicit action list. Wildcard violates least privilege.
+
+  - id: IAC_TF_AWS_IAM_WILDCARD_RESOURCE
+    framework: terraform
+    severity: MEDIUM
+    resource: aws_iam_policy
+    pattern: '(?:"Resource"\s*:\s*"\*"|Resource\s*=\s*"\*")'
+    title: IAM policy with wildcard Resource
+    guideline: Scope Resource to specific ARNs.
+
+  - id: IAC_TF_AWS_KMS_NO_ROTATION
+    framework: terraform
+    severity: MEDIUM
+    resource: aws_kms_key
+    pattern: '^(?!.*enable_key_rotation\s*=\s*true)'
+    title: KMS key without automatic rotation
+    guideline: Set enable_key_rotation = true.
+
+  - id: IAC_TF_AWS_LB_HTTP_LISTENER
+    framework: terraform
+    severity: MEDIUM
+    resource: aws_lb_listener
+    pattern: 'protocol\s*=\s*"HTTP"\s*$'
+    title: ALB/NLB listener using plain HTTP
+    guideline: Use HTTPS with ACM cert; redirect HTTP → HTTPS.
+
+  - id: IAC_TF_AWS_LAMBDA_NO_DLQ
+    framework: terraform
+    severity: LOW
+    resource: aws_lambda_function
+    pattern: '^(?!.*dead_letter_config\s*\{)'
+    title: Lambda function without dead-letter queue
+    guideline: Configure dead_letter_config so failed invocations are recoverable.
+
+  - id: IAC_TF_AWS_CLOUDTRAIL_NOT_GLOBAL
+    framework: terraform
+    severity: HIGH
+    resource: aws_cloudtrail
+    pattern: 'is_multi_region_trail\s*=\s*false'
+    title: CloudTrail not multi-region
+    guideline: Set is_multi_region_trail = true to capture activity in every region.
+
+  - id: IAC_TF_AWS_EFS_NO_ENCRYPTION
+    framework: terraform
+    severity: HIGH
+    resource: aws_efs_file_system
+    pattern: '^(?!.*encrypted\s*=\s*true)'
+    title: EFS file system not encrypted
+    guideline: Set encrypted = true; KMS key optional but recommended.
+
+  - id: IAC_TF_AWS_API_GATEWAY_NO_LOGGING
+    framework: terraform
+    severity: MEDIUM
+    resource: aws_api_gateway_stage
+    pattern: '^(?!.*access_log_settings\s*\{)'
+    title: API Gateway stage without access logs
+    guideline: Configure access_log_settings to capture per-request audit trail.
+
+  # ---------------------------------------------------------------------
+  # Terraform — GCP
+  # ---------------------------------------------------------------------
+  - id: IAC_TF_GCP_GCS_PUBLIC
+    framework: terraform
+    severity: CRITICAL
+    resource: google_storage_bucket_iam_member
+    pattern: '"member"\s*=\s*"allUsers"'
+    title: GCS bucket exposed to allUsers
+    guideline: Use specific principals; never grant allUsers.
+
+  - id: IAC_TF_GCP_SQL_PUBLIC_IP
+    framework: terraform
+    severity: HIGH
+    resource: google_sql_database_instance
+    pattern: 'ipv4_enabled\s*=\s*true'
+    title: Cloud SQL with public IPv4 enabled
+    guideline: Disable public IPv4; require private VPC connectivity.
+
+  - id: IAC_TF_GCP_GKE_PUBLIC_NODES
+    framework: terraform
+    severity: HIGH
+    resource: google_container_cluster
+    pattern: '^(?!.*private_cluster_config\s*\{)'
+    title: GKE cluster without private nodes
+    guideline: Enable private_cluster_config to keep nodes off the public internet.
+
+  # ---------------------------------------------------------------------
+  # Terraform — Azure
+  # ---------------------------------------------------------------------
+  - id: IAC_TF_AZURE_STORAGE_PUBLIC
+    framework: terraform
+    severity: HIGH
+    resource: azurerm_storage_account
+    pattern: 'allow_nested_items_to_be_public\s*=\s*true'
+    title: Azure Storage allows public nested items
+    guideline: Set allow_nested_items_to_be_public = false at account level.
+
+  - id: IAC_TF_AZURE_NSG_OPEN_SSH
+    framework: terraform
+    severity: HIGH
+    resource: azurerm_network_security_rule
+    pattern: 'destination_port_range\s*=\s*"22"[\s\S]{0,400}source_address_prefix\s*=\s*"\*"'
+    title: Azure NSG SSH open to *
+    guideline: Limit source_address_prefix to specific CIDRs.
+
+  - id: IAC_TF_AZURE_KEYVAULT_NO_PURGE_PROTECTION
+    framework: terraform
+    severity: MEDIUM
+    resource: azurerm_key_vault
+    pattern: '^(?!.*purge_protection_enabled\s*=\s*true)'
+    title: Key Vault without purge protection
+    guideline: Enable purge_protection_enabled to defend against malicious deletion.
+
+  # ---------------------------------------------------------------------
+  # Kubernetes — line-based heuristics
+  # ---------------------------------------------------------------------
+  - id: IAC_K8S_NO_LIVENESS
+    framework: kubernetes
+    severity: LOW
+    pattern: '^kind:\s*(Deployment|StatefulSet|DaemonSet)\b'
+    title: Workload without livenessProbe (heuristic — verify per-container)
+    guideline: Add livenessProbe to detect hung containers and trigger restart.
+
+  - id: IAC_K8S_ALLOW_PRIVILEGE_ESCALATION
+    framework: kubernetes
+    severity: HIGH
+    pattern: 'allowPrivilegeEscalation:\s*true'
+    title: Container allows privilege escalation
+    guideline: Set allowPrivilegeEscalation = false in securityContext.
+
+  - id: IAC_K8S_HOST_PID
+    framework: kubernetes
+    severity: HIGH
+    pattern: 'hostPID:\s*true'
+    title: Pod uses host PID namespace
+    guideline: hostPID = true breaks process isolation; remove unless absolutely required.
+
+  - id: IAC_K8S_HOST_IPC
+    framework: kubernetes
+    severity: HIGH
+    pattern: 'hostIPC:\s*true'
+    title: Pod uses host IPC namespace
+    guideline: Same isolation concern as hostPID; disable.
+
+  - id: IAC_K8S_CAP_ADD_ALL
+    framework: kubernetes
+    severity: CRITICAL
+    pattern: 'capabilities:[\s\S]{0,200}add:[\s\S]{0,200}-\s*ALL'
+    title: Container adds all Linux capabilities
+    guideline: Drop ALL and add only required capabilities.
+
+  - id: IAC_K8S_NO_READONLY_FS
+    framework: kubernetes
+    severity: MEDIUM
+    pattern: 'readOnlyRootFilesystem:\s*false'
+    title: Container without read-only root filesystem
+    guideline: Set readOnlyRootFilesystem = true; mount tmpfs for writable scratch.
+
+  - id: IAC_K8S_DEFAULT_SA
+    framework: kubernetes
+    severity: MEDIUM
+    pattern: 'automountServiceAccountToken:\s*true'
+    title: Pod automounts default ServiceAccount token
+    guideline: Set automountServiceAccountToken = false unless RBAC needed.
+
+  # ---------------------------------------------------------------------
+  # Docker Compose — line-based
+  # ---------------------------------------------------------------------
+  - id: IAC_DC_BUILD_NO_PIN
+    framework: docker_compose
+    severity: LOW
+    pattern: 'image:\s*\S+:latest\b'
+    title: Image pinned to :latest tag
+    guideline: Pin to a specific version or sha256 digest for reproducibility.
+
+  - id: IAC_DC_HOST_NETWORK
+    framework: docker_compose
+    severity: HIGH
+    pattern: 'network_mode:\s*"?host"?\b'
+    title: Service uses host networking
+    guideline: Bridges container network to host; avoid unless absolutely required.
+
+  - id: IAC_DC_PRIV_PORT_BIND
+    framework: docker_compose
+    severity: MEDIUM
+    pattern: 'ports:[\s\S]{0,80}-\s*"?0\.0\.0\.0:'
+    title: Service binds port to all interfaces (0.0.0.0)
+    guideline: Bind to 127.0.0.1 unless service is intentionally external.
+
+  - id: IAC_DC_DEFAULT_PASSWORD
+    framework: docker_compose
+    severity: HIGH
+    pattern: '(?:POSTGRES_PASSWORD|MYSQL_ROOT_PASSWORD|REDIS_PASSWORD)\s*[:=]\s*[''"]?(?:password|admin|root|123456|test)[''"]?\b'
+    title: Default / weak database password in compose
+    guideline: Read from secrets / env file, never inline a known-weak value.
+
+  # ---------------------------------------------------------------------
+  # Dockerfile
+  # ---------------------------------------------------------------------
+  - id: IAC_DF_USE_ROOT
+    framework: dockerfile
+    severity: MEDIUM
+    pattern: '^(?!.*USER\s+\S+)'
+    title: Dockerfile runs as root (no USER directive)
+    guideline: Add USER nonroot before final CMD; root in container = root on host kernel exploits.
+
+  - id: IAC_DF_LATEST_BASE
+    framework: dockerfile
+    severity: LOW
+    pattern: '^FROM\s+\S+:latest\b'
+    title: Base image pinned to :latest
+    guideline: Pin to specific version or sha256 digest.
+
+  - id: IAC_DF_NO_HEALTHCHECK
+    framework: dockerfile
+    severity: LOW
+    pattern: '^(?!.*HEALTHCHECK)'
+    title: No HEALTHCHECK directive
+    guideline: Add HEALTHCHECK so orchestrators can detect broken containers.
+
+  - id: IAC_DF_ADD_INSTEAD_OF_COPY
+    framework: dockerfile
+    severity: LOW
+    pattern: '^ADD\s+(?!https?://)\S+'
+    title: Use COPY instead of ADD for local files
+    guideline: ADD has tar / URL semantics that surprise; COPY is explicit.
+
+  - id: IAC_DF_APT_NO_CLEAN
+    framework: dockerfile
+    severity: LOW
+    pattern: 'apt-get\s+install\b(?![\s\S]{0,400}rm\s+-rf\s+/var/lib/apt/lists)'
+    title: apt-get install without cleaning lists
+    guideline: Append `&& rm -rf /var/lib/apt/lists/*` to drop ~30MB layer.
+
+  - id: IAC_DF_HARDCODED_SECRET
+    framework: dockerfile
+    severity: HIGH
+    pattern: '^(?:ENV|ARG)\s+\S*(?:PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY)\s*[=]?\s*[''"]?[^\s${]'
+    title: Hardcoded secret in Dockerfile ENV/ARG
+    guideline: Inject secrets at runtime via --secret or runtime env, never bake into image.
+
+  - id: IAC_DF_CURL_PIPE_BASH
+    framework: dockerfile
+    severity: HIGH
+    pattern: 'curl\s+[^|]*\|\s*(?:bash|sh)\b'
+    title: Dockerfile pipes curl output directly to shell
+    guideline: Download → verify checksum → execute. Pipe-to-shell can't be audited.
+
+  # ---------------------------------------------------------------------
+  # GitHub Actions workflows
+  # ---------------------------------------------------------------------
+  - id: GHA_PWN_REQUEST
+    framework: github_actions
+    severity: CRITICAL
+    pattern: 'on:[\s\S]{0,500}pull_request_target[\s\S]{0,1500}actions/checkout[\s\S]{0,200}ref:\s*\$\{\{\s*github\.event\.pull_request'
+    title: pwn-request — pull_request_target checks out PR head
+    guideline: pull_request_target runs in privileged context; checking out attacker-controlled head turns this into RCE on org secrets. Use pull_request, or checkout the base sha only.
+
+  - id: GHA_SCRIPT_INJECTION
+    framework: github_actions
+    severity: HIGH
+    pattern: 'run:\s*[^\n]*\$\{\{\s*github\.event\.(?:issue\.title|issue\.body|pull_request\.title|pull_request\.body|pull_request\.head\.ref|comment\.body|head_commit\.message)'
+    title: Script injection via attacker-controlled GitHub context
+    guideline: Move ${{ github.event.X }} into env: then use $X in run:. Direct interpolation is shell injection.
+
+  - id: GHA_SECRET_ECHO
+    framework: github_actions
+    severity: HIGH
+    pattern: 'run:\s*[^\n]*echo\s+[^\n]*\$\{\{\s*secrets\.'
+    title: Workflow echoes a secret to stdout
+    guideline: Echoing secrets to stdout exposes them in logs even with masking. Pipe to a file or use the secret directly.
+
+  - id: GHA_UNPINNED_THIRDPARTY
+    framework: github_actions
+    severity: MEDIUM
+    pattern: 'uses:\s*(?!actions/|github/)([\w-]+/[\w.-]+)@(?:v?\d+(?:\.\d+)*|main|master|latest|develop)\b'
+    title: Third-party Action pinned to mutable tag
+    guideline: Pin third-party actions to a 40-char SHA. Tags can be force-moved by the maintainer.
+
+  - id: GHA_WRITE_ALL
+    framework: github_actions
+    severity: HIGH
+    pattern: 'permissions:\s*write-all'
+    title: Workflow grants write-all to GITHUB_TOKEN
+    guideline: Replace permissions: write-all with explicit per-scope grants (contents: read, pull-requests: write, etc.).
+
+  - id: GHA_SELF_HOSTED_PUBLIC
+    framework: github_actions
+    severity: HIGH
+    pattern: 'runs-on:\s*self-hosted'
+    title: Workflow uses self-hosted runner
+    guideline: Self-hosted runners on public repos are at risk of arbitrary code execution by forks. Restrict to private repos or use ephemeral runners.
+
+  - id: GHA_TOKEN_IN_URL
+    framework: github_actions
+    severity: HIGH
+    pattern: 'https?://[^\s]*\$\{\{\s*secrets\.GITHUB_TOKEN'
+    title: GITHUB_TOKEN embedded in URL
+    guideline: Tokens in URLs end up in proxy / fetch logs. Use the auth header or a credential helper.

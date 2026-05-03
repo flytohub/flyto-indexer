@@ -1908,6 +1908,45 @@ def _call_hierarchy_dispatch(args: Dict[str, Any]) -> Dict[str, Any]:
 # Unified tool dispatch
 # =============================================================================
 
+# Single source of truth for dispatch-table membership. Auto-derived
+# from the _DISPATCH dict literal inside execute_tool() — kept as
+# a frozenset constant so callers (has_tool, tests) can introspect
+# without invoking a handler. Drift is caught by the
+# test_tool_names_stay_in_sync_with_dispatch property test.
+_TOOL_NAMES = frozenset({
+    "search_code", "fulltext_search", "semantic_search",
+    "find_references", "impact_analysis", "batch_impact_analysis",
+    "edit_impact_preview", "cross_project_impact", "dependency_graph",
+    "get_symbol_content", "get_file_info", "get_file_symbols",
+    "get_file_context", "list_categories", "list_apis", "list_projects",
+    "get_description", "update_description", "find_test_file",
+    "find_dead_code", "find_todos", "check_index_status",
+    "check_and_reindex", "session_track", "session_get",
+    "find_complex_functions", "find_duplicates", "security_scan",
+    "analyze_data_flow", "find_stale_files", "code_health_score",
+    "suggest_refactoring", "impact_from_diff",
+    "analyze_task", "task_gate_check", "validate_changes",
+    "git_hotspots", "git_cochange", "git_churn", "git_risk_commits",
+    "coverage_report", "coverage_gaps", "untested_changes",
+    "extract_type_schema", "check_api_contracts", "contract_drift",
+    "list_dependencies",
+    # Smart tools (consolidated)
+    "search", "impact", "audit", "task", "structure",
+    "scan_secrets", "scan_licenses", "scan_documentation",
+    "project_profile", "analyze_pr_risk", "detect_frameworks",
+    "check_layers", "call_hierarchy",
+    "add_layer", "add_taint_source", "add_taint_sink",
+    "add_taint_sanitizer", "list_taint_rules",
+})
+
+
+def has_tool(name: str) -> bool:
+    """Return True when `name` is a known dispatch entry. Tests use
+    this instead of invoking the handler to avoid spurious failures
+    when execute_tool() hangs on partial state."""
+    return name in _TOOL_NAMES
+
+
 def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict[str, Any]:
     """
     Execute an indexer tool by canonical name. Returns the tool result dict.
