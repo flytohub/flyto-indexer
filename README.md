@@ -428,4 +428,4 @@ flyto-index setup . --remove              # Uninstall
 
 [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for attribution.
 
-<!-- mcp-name: io.github.ChesterHsu/flyto-indexer -->
+<!-- mcp-name: io.github.flytohub/flyto-indexer -->
