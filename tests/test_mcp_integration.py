@@ -320,6 +320,56 @@ class TestMCPInitialize:
         assert "version" in result["serverInfo"]
 
 
+class TestProtocolVersionNegotiation:
+    """Regression: server must echo client's supported MCP protocol version
+    (flyto-core/issues/16). Older clients on 2025-06-18 / 2025-03-26 must not
+    receive 2025-11-25 forced back."""
+
+    def test_negotiate_helper_supported(self):
+        from src.mcp_server import negotiate_protocol_version, SUPPORTED_PROTOCOL_VERSIONS
+        for v in SUPPORTED_PROTOCOL_VERSIONS:
+            assert negotiate_protocol_version(v) == v
+
+    def test_negotiate_helper_fallback(self):
+        from src.mcp_server import negotiate_protocol_version, SUPPORTED_PROTOCOL_VERSIONS
+        assert negotiate_protocol_version("1999-01-01") == SUPPORTED_PROTOCOL_VERSIONS[0]
+        assert negotiate_protocol_version(None) == SUPPORTED_PROTOCOL_VERSIONS[0]
+        assert negotiate_protocol_version("") == SUPPORTED_PROTOCOL_VERSIONS[0]
+
+    def test_initialize_echoes_2025_06_18(self, mcp_server):
+        resp = _call(mcp_server, "initialize", {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {"name": "lm-studio-like", "version": "0.1"},
+        })
+        assert resp["result"]["protocolVersion"] == "2025-06-18"
+
+    def test_initialize_echoes_2025_03_26(self, mcp_server):
+        resp = _call(mcp_server, "initialize", {
+            "protocolVersion": "2025-03-26",
+            "capabilities": {},
+            "clientInfo": {"name": "older-client", "version": "0.1"},
+        })
+        assert resp["result"]["protocolVersion"] == "2025-03-26"
+
+    def test_initialize_echoes_2025_11_25(self, mcp_server):
+        resp = _call(mcp_server, "initialize", {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {"name": "latest", "version": "0.1"},
+        })
+        assert resp["result"]["protocolVersion"] == "2025-11-25"
+
+    def test_initialize_unsupported_falls_back(self, mcp_server):
+        resp = _call(mcp_server, "initialize", {
+            "protocolVersion": "1999-01-01",
+            "capabilities": {},
+            "clientInfo": {"name": "fake", "version": "0.1"},
+        })
+        # Server returns its preferred (newest) version.
+        assert resp["result"]["protocolVersion"] == "2025-11-25"
+
+
 class TestToolsList:
     """Test tools/list responses."""
 

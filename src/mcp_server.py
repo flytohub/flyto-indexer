@@ -26,7 +26,7 @@ import os
 import sys
 import time as _time
 from collections import deque
-from typing import Any
+from typing import Any, Optional
 
 logger = logging.getLogger("flyto-indexer.mcp")
 
@@ -34,6 +34,25 @@ logger = logging.getLogger("flyto-indexer.mcp")
 # =============================================================================
 # MCP Protocol — JSON-RPC communication
 # =============================================================================
+
+# MCP protocol versions we support, newest first. Server echoes the client's
+# requested version when supported, otherwise returns SUPPORTED_PROTOCOL_VERSIONS[0]
+# and lets the client decide whether to disconnect.
+# Reference: https://modelcontextprotocol.io/specification/versioning
+SUPPORTED_PROTOCOL_VERSIONS = (
+    "2025-11-25",
+    "2025-06-18",
+    "2025-03-26",
+    "2024-11-05",
+)
+
+
+def negotiate_protocol_version(client_version: Optional[str]) -> str:
+    """Echo client's requested MCP protocol version when supported, else server preferred."""
+    if client_version and client_version in SUPPORTED_PROTOCOL_VERSIONS:
+        return client_version
+    return SUPPORTED_PROTOCOL_VERSIONS[0]
+
 
 def send_response(id: Any, result: Any):
     response = {"jsonrpc": "2.0", "id": id, "result": result}
@@ -281,8 +300,8 @@ def handle_request(request: dict):
     params = request.get("params", {})
 
     if method == "initialize":
-        client_version = params.get("protocolVersion", "2024-11-05")
-        server_version = "2025-11-25" if client_version >= "2025-06-18" else "2024-11-05"
+        client_version = params.get("protocolVersion") if isinstance(params, dict) else None
+        server_version = negotiate_protocol_version(client_version)
 
         send_response(id, {
             "protocolVersion": server_version,
