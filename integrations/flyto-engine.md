@@ -221,6 +221,75 @@ flyto-scan:
 
 ---
 
+## 工程智慧分析（v2.11+）
+
+`export` 自動包含 7 個額外的工程分析維度，涵蓋品質、架構、營運面向。
+所有分析器皆為純 Python stdlib 實作，不需安裝額外套件。
+
+### 分析維度
+
+| 欄位 | 分析什麼 | 範例 |
+|------|---------|------|
+| `config_drift` | `.env.example` vs code 的 env var 比對 | 偵測到 `SECRET_KEY` 被程式引用但 .env 未定義 |
+| `tech_debt` | TODO / FIXME / HACK 等註解標記 | 42 個標記，其中 14 個 FIXME（高優先） |
+| `error_handling` | try/except 覆蓋率與反模式 | 覆蓋率 37%，3 個 bare except |
+| `api_drift` | 前端呼叫 vs 後端定義的 endpoint 比對 | `/api/orders` 前端有呼叫但後端無定義 |
+| `bus_factor` | 每個檔案的獨立貢獻者數量（git 分析） | `billing.py` 只有 1 人改過 |
+| `perf_patterns` | 效能反模式偵測 | for loop 內呼叫 `db.query()`（N+1 風險） |
+| `import_health` | 模組耦合度與架構健康指標 | `utils.py` 被 22 個檔案引用（God module） |
+
+### 範例
+
+```json
+{
+  "profile": {
+    "file_count": 150,
+    "health_score": 82,
+    "config_drift": {
+      "env_vars_defined": 12,
+      "env_vars_referenced": 15,
+      "issue_count": 3
+    },
+    "tech_debt": {
+      "total_items": 42,
+      "by_tag": {"TODO": 28, "FIXME": 10, "HACK": 4}
+    },
+    "error_handling": {
+      "total_functions": 120,
+      "coverage_pct": 37.5,
+      "issue_count": 8
+    },
+    "api_drift": {
+      "total_definitions": 25,
+      "total_calls": 30,
+      "broken_calls": 2,
+      "dead_endpoints": 3
+    },
+    "bus_factor": {
+      "total_files_analyzed": 150,
+      "bus_factor_1_count": 23,
+      "avg_bus_factor": 2.8
+    },
+    "perf_patterns": {
+      "total_issues": 4,
+      "by_category": {"n_plus_1": 2, "sync_in_async": 1}
+    },
+    "import_health": {
+      "total_modules": 85,
+      "coupling_density": 0.029,
+      "god_module_count": 2
+    }
+  }
+}
+```
+
+### 隱私
+
+所有分析器只輸出統計數據與 metadata（檔名、行號、計數、類別名稱）。
+不含原始碼、不含 function body、不含註解內容。
+
+---
+
 ## 故障排除
 
 | 問題 | 原因 | 解法 |
