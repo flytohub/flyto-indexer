@@ -211,7 +211,7 @@ def _load_single_index(index_dir: Path) -> dict:
             return json.load(f)
     path = index_dir / "index.json"
     if path.exists():
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     return {}
 
 
@@ -344,7 +344,7 @@ def load_project_map() -> dict:
             with gzip.open(gz_path, 'rt', encoding='utf-8') as f:
                 data = json.load(f)
         elif path.exists():
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8"))
         if not data:
             continue
         if merged is None:

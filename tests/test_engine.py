@@ -405,7 +405,7 @@ class TestEngineScan:
         result = engine.scan(incremental=False)
 
         assert result["files_scanned"] >= 2
-        paths = [s.path for s in engine.index.symbols.values()]
+        paths = [s.path.replace("\\", "/") for s in engine.index.symbols.values()]
         assert any("src/utils/math.py" in p for p in paths)
         assert any("src/models/base.py" in p for p in paths)
 

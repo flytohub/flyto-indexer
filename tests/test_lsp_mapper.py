@@ -33,6 +33,7 @@ class TestUriConversions:
         assert uri.startswith("file://")
         assert "foo.py" in uri
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Unix path test")
     def test_uri_to_path_unix(self):
         path = uri_to_path("file:///home/user/code/foo.py")
         assert path == "/home/user/code/foo.py"
@@ -47,6 +48,7 @@ class TestUriConversions:
     def test_uri_to_path_no_scheme(self):
         assert uri_to_path("/tmp/foo.py") == "/tmp/foo.py"
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Unix path test")
     def test_uri_to_path_double_slash(self):
         result = uri_to_path("file:///tmp/foo.py")
         assert result == "/tmp/foo.py"
@@ -144,10 +146,10 @@ class TestSymbolToLspPosition:
                 "name": "hello",
                 "start_line": 3,  # 1-based
             }
-            result = symbol_to_lsp_position(symbol, "/")
+            result = symbol_to_lsp_position(symbol, os.path.dirname(tmp_path))
             assert result is not None
             uri, line, col = result
-            assert "hello" in uri or tmp_path in uri_to_path(uri)
+            assert "hello" in uri or tmp_path.replace("\\", "/") in uri_to_path(uri).replace("\\", "/")
             assert line == 2  # 0-based
             assert col == 4  # after 'def '
         finally:

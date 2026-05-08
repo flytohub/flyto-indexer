@@ -13,8 +13,12 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from hypothesis import given, settings, HealthCheck
-from hypothesis import strategies as st
+
+try:
+    from hypothesis import given, settings, HealthCheck
+    from hypothesis import strategies as st
+except ImportError:
+    pytest.skip("hypothesis not installed", allow_module_level=True)
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 

@@ -29,12 +29,15 @@ def _make_project(tmpdir: str, rules: dict, files: dict[str, str] | None = None)
     """Create a temp project with rules and optional files."""
     root = Path(tmpdir)
     rules_path = root / ".flyto-rules.yaml"
-    rules_path.write_text(yaml.dump(rules, default_flow_style=False))
+    rules_path.write_text(yaml.dump(rules, default_flow_style=False), encoding="utf-8")
     if files:
         for fpath, content in files.items():
             full = root / fpath
             full.parent.mkdir(parents=True, exist_ok=True)
-            full.write_text(content)
+            if isinstance(content, bytes):
+                full.write_bytes(content)
+            else:
+                full.write_text(content, encoding="utf-8")
     return root
 
 
@@ -384,7 +387,7 @@ class TestEdgeCases:
                     "grep_deny": [r"eval\("],
                 }],
             }, files={
-                "image.png": "\x89PNG\r\n",
+                "image.png": b"\x89PNG\r\n",
             })
             # Should not crash
             report = RulesChecker(root).check()

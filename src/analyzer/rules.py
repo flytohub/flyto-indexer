@@ -84,7 +84,7 @@ def load_rules(project_root: Path) -> dict | None:
         return None
 
     try:
-        with open(rules_path) as f:
+        with open(rules_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         if not isinstance(data, dict):
             return None
@@ -109,7 +109,7 @@ def _collect_files(project_root: Path) -> list[str]:
     for fpath in project_root.rglob("*"):
         if not fpath.is_file():
             continue
-        rel = str(fpath.relative_to(project_root))
+        rel = str(fpath.relative_to(project_root)).replace("\\", "/")
         if _SKIP_DIRS.search(rel):
             continue
         if rel in _SKIP_FILES or fpath.name in _SKIP_FILES:
@@ -153,7 +153,8 @@ def _check_glob_deny(
     violations = []
     for pat in patterns:
         for fpath in all_files:
-            if _glob_match(fpath, pat):
+            # Normalize Windows backslashes for glob matching
+            if _glob_match(fpath.replace("\\", "/"), pat):
                 violations.append(RuleViolation(
                     rule=rule_text,
                     category="architecture",
@@ -333,7 +334,7 @@ def add_rule(
     # Load existing or start fresh
     if rules_path.is_file():
         try:
-            with open(rules_path) as f:
+            with open(rules_path, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
         except Exception:
             data = {}
@@ -373,7 +374,7 @@ def add_rule(
     data[category].append(entry)
 
     # Write back
-    with open(rules_path, "w") as f:
+    with open(rules_path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
     return {"status": "added", "category": category, "rule": rule, "path": str(rules_path)}
@@ -391,7 +392,7 @@ def remove_rule(project_root: Path, category: str, rule_text: str) -> dict:
         return {"error": "No .flyto-rules.yaml found"}
 
     try:
-        with open(rules_path) as f:
+        with open(rules_path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
     except Exception as e:
         return {"error": str(e)}
@@ -406,7 +407,7 @@ def remove_rule(project_root: Path, category: str, rule_text: str) -> dict:
     if before == after:
         return {"status": "not_found", "rule": rule_text}
 
-    with open(rules_path, "w") as f:
+    with open(rules_path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
     return {"status": "removed", "rule": rule_text}

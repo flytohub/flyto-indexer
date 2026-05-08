@@ -43,7 +43,7 @@ def configure_logging(level: int = logging.INFO):
 def atomic_write_text(path: Path, content: str, encoding: str = "utf-8"):
     """Write text to a file atomically via temp file + rename.
 
-    On POSIX, os.rename() is atomic within the same filesystem.
+    os.replace() is atomic on POSIX and handles existing files on Windows.
     Writing to a temp file first ensures the target is never partially written.
     """
     path = Path(path)
@@ -58,7 +58,7 @@ def atomic_write_text(path: Path, content: str, encoding: str = "utf-8"):
             f.write(content)
             f.flush()
             os.fsync(f.fileno())
-        os.rename(tmp_path, path)
+        os.replace(tmp_path, path)
     except BaseException:
         # Clean up temp file on any failure
         try:
@@ -93,7 +93,7 @@ def atomic_write_lines(path: Path, lines_iter, encoding: str = "utf-8"):
                 f.write(line)
             f.flush()
             os.fsync(f.fileno())
-        os.rename(tmp_path, path)
+        os.replace(tmp_path, path)
     except BaseException:
         try:
             os.unlink(tmp_path)
