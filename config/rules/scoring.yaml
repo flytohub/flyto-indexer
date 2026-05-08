@@ -66,3 +66,38 @@ cve_penalty:
     critical: 10
     high: 5
     moderate: 2
+
+# Engineering intelligence penalties (v2.11+)
+# These deduct from the overall score when thresholds are exceeded.
+engineering_penalties:
+  error_handling:
+    max_deduction: 10
+    triggers:
+      - condition: "coverage_pct < 20 AND issue_count > 5"
+        formula: "min(bare_except * 3 + empty_except * 2, 10)"
+
+  tech_debt:
+    max_deduction: 5
+    triggers:
+      - condition: "high_count > 10"
+        formula: "min(high_count / 5, 5)"
+
+  perf_patterns:
+    max_deduction: 10
+    triggers:
+      - condition: "total_issues > 0"
+        formula: "min(n_plus_1 * 4 + sync_in_async * 3 + missing_timeout, 10)"
+
+  import_health:
+    max_deduction: 5
+    triggers:
+      - condition: "god_module_count > 0 OR circular_dep_count > 0"
+        formula: "min(god_module_count * 2 + circular_dep_count * 3, 5)"
+
+# Display-only dimensions (shown in dashboard, do NOT affect health score)
+# These are informational — scoring them would produce false penalties
+# on projects where the dimension doesn't apply.
+display_only:
+  - config_drift    # many projects legitimately have no .env.example
+  - bus_factor      # solo projects always have bus_factor=1
+  - api_drift       # only applies to frontend+backend repos

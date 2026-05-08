@@ -49,6 +49,49 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
     license_policy_issues = check_license_policy(license_data)
     frameworks_data = scan_frameworks(project_path)
 
+    # Engineering intelligence analyzers (v2.11+)
+    # These run here so their results feed into both the health score
+    # (penalties) and the export bundle (profile fields).
+    _eng_intel = {}
+    try:
+        from ..analyzer.error_handling import analyze_error_handling
+        _eng_intel["error_handling"] = analyze_error_handling(project_path).to_dict()
+    except Exception:
+        pass
+    try:
+        from ..analyzer.tech_debt import analyze_tech_debt
+        _eng_intel["tech_debt"] = analyze_tech_debt(project_path).to_dict()
+    except Exception:
+        pass
+    try:
+        from ..analyzer.perf_patterns import analyze_perf_patterns
+        _eng_intel["perf_patterns"] = analyze_perf_patterns(project_path).to_dict()
+    except Exception:
+        pass
+    try:
+        from ..analyzer.import_health import analyze_import_health
+        _eng_intel["import_health"] = analyze_import_health(project_path).to_dict()
+    except Exception:
+        pass
+    try:
+        from ..analyzer.config_drift import analyze_config_drift
+        _eng_intel["config_drift"] = analyze_config_drift(project_path).to_dict()
+    except Exception:
+        pass
+    try:
+        from ..analyzer.bus_factor import analyze_bus_factor
+        _eng_intel["bus_factor"] = analyze_bus_factor(project_path).to_dict()
+    except Exception:
+        pass
+    try:
+        from ..analyzer.api_drift import analyze_api_drift
+        api_defs = idx.get("api_definitions", [])
+        api_calls = idx.get("api_calls_internal", [])
+        if api_defs or api_calls:
+            _eng_intel["api_drift"] = analyze_api_drift(api_defs, api_calls).to_dict()
+    except Exception:
+        pass
+
     services = detect_services(deps)
     project_type_info = classify_project_type(
         languages=fs["languages"],
@@ -65,6 +108,10 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         health_dims.get("overall", {}),
         secrets_data, taint_data, iac_data, license_policy_issues,
         documentation_data, project_type_info["type"],
+        error_handling_data=_eng_intel.get("error_handling"),
+        tech_debt_data=_eng_intel.get("tech_debt"),
+        perf_patterns_data=_eng_intel.get("perf_patterns"),
+        import_health_data=_eng_intel.get("import_health"),
     )
 
     profile = {
@@ -160,6 +207,12 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         },
         "documentation": documentation_data,
     }
+
+    # Engineering intelligence (v2.11+) — only include non-empty results
+    for key in ("config_drift", "tech_debt", "error_handling", "api_drift",
+                "bus_factor", "perf_patterns", "import_health"):
+        if key in _eng_intel:
+            profile[key] = _eng_intel[key]
 
     if not compact:
         profile["folder_structure"] = fs["folder_structure"]

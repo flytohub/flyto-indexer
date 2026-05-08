@@ -288,13 +288,74 @@ def build_health_dims(idx: dict, project_type: str) -> dict:
     )
 
 
+def _error_handling_penalty(data: dict) -> int:
+    """Penalty for poor error handling: bare except, empty except, low coverage."""
+    if not isinstance(data, dict):
+        return 0
+    coverage = data.get("coverage_pct", 100)
+    issue_count = data.get("issue_count", 0)
+    if coverage >= 20 or issue_count <= 5:
+        return 0
+    by_cat = data.get("by_category", {})
+    raw = by_cat.get("bare_except", 0) * 3 + by_cat.get("empty_except", 0) * 2
+    return min(raw, 10)
+
+
+def _tech_debt_penalty(data: dict) -> int:
+    """Penalty for excessive high-severity tech debt markers (FIXME/HACK/BUG)."""
+    if not isinstance(data, dict):
+        return 0
+    high = data.get("high_count", 0)
+    if high <= 10:
+        return 0
+    return min(high // 5, 5)
+
+
+def _perf_patterns_penalty(data: dict) -> int:
+    """Penalty for performance anti-patterns: N+1, sync-in-async, missing timeout."""
+    if not isinstance(data, dict):
+        return 0
+    by_cat = data.get("by_category", {})
+    raw = (by_cat.get("n_plus_1", 0) * 4
+           + by_cat.get("sync_in_async", 0) * 3
+           + by_cat.get("missing_timeout", 0))
+    return min(raw, 10)
+
+
+def _import_health_penalty(data: dict) -> int:
+    """Penalty for architectural issues: god modules, circular dependencies."""
+    if not isinstance(data, dict):
+        return 0
+    god = data.get("god_module_count", 0)
+    circular = data.get("circular_dep_count", 0)
+    if god == 0 and circular == 0:
+        return 0
+    return min(god * 2 + circular * 3, 5)
+
+
 def adjust_overall_health(
     overall: dict,
     secrets_data: dict, taint_data: dict, iac_data: dict,
     license_policy_issues: list, documentation_data: dict,
     project_type: str,
+    error_handling_data: dict = None,
+    tech_debt_data: dict = None,
+    perf_patterns_data: dict = None,
+    import_health_data: dict = None,
 ) -> dict:
-    """Apply secret/taint/IaC/license/doc penalties on top of dimension-derived score."""
+    """Apply penalties on top of dimension-derived score.
+
+    Penalty sources (all capped individually, cumulative):
+      - Secrets: logistic, max -20
+      - Taint: linear, max -15
+      - IaC: logistic, max -15
+      - License: per-violation
+      - Documentation: -5 if score < 30
+      - Error handling: max -10 (bare/empty except when coverage < 20%)
+      - Tech debt: max -5 (>10 high-severity markers)
+      - Perf patterns: max -10 (N+1, sync-in-async)
+      - Import health: max -5 (god modules, circular deps)
+    """
     score = overall.get("score", 0)
 
     if isinstance(secrets_data, dict):
@@ -324,6 +385,12 @@ def adjust_overall_health(
     if project_type not in ("static", "unknown", "") and isinstance(documentation_data, dict):
         if documentation_data.get("overall_score", 0) < 30:
             score -= 5
+
+    # Engineering intelligence penalties (v2.11+)
+    score -= _error_handling_penalty(error_handling_data)
+    score -= _tech_debt_penalty(tech_debt_data)
+    score -= _perf_patterns_penalty(perf_patterns_data)
+    score -= _import_health_penalty(import_health_data)
 
     score = max(0, min(100, score))
     return {"score": score, "max": 100, "grade": grade_for_score(score)}
