@@ -214,6 +214,14 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         if key in _eng_intel:
             profile[key] = _eng_intel[key]
 
+    # Pyramid composite scores (v2.12+)
+    try:
+        from ..analyzer.pyramid import compute_pyramids
+        pyramid_report = compute_pyramids(profile)
+        profile["pyramids"] = pyramid_report.to_dict()
+    except Exception:
+        pass
+
     if not compact:
         profile["folder_structure"] = fs["folder_structure"]
 
