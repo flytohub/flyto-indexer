@@ -222,6 +222,13 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
     except Exception:
         pass
 
+    # Lens analysis — cross-signal hotspots per perspective (v2.12+)
+    try:
+        from ..analyzer.lens import compute_all_lenses
+        profile["lenses"] = compute_all_lenses(profile)
+    except Exception:
+        pass
+
     if not compact:
         profile["folder_structure"] = fs["folder_structure"]
 
