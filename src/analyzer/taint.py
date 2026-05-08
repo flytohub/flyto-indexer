@@ -35,10 +35,10 @@ from .taint_rules import (
 logger = logging.getLogger(__name__)
 
 # ── Performance limits ──────────────────────────────────────────────────────
-MAX_FUNCTIONS = 200
-MAX_FINDINGS = 50
-MAX_CALLERS = 500
-MAX_CROSS_DEPTH = 3
+MAX_FUNCTIONS = 1000
+MAX_FINDINGS = 200
+MAX_CALLERS = 2000
+MAX_CROSS_DEPTH = 6
 SKIP_DIR_PATTERNS = re.compile(
     r"(?:^|/)(?:test|tests|__tests__|mock|fixture|node_modules|__pycache__|"
     r"\.git|dist|build|\.venv|venv|\.nuxt|\.output)(?:/|$)"
@@ -51,6 +51,15 @@ CATEGORY_SEVERITY = {
     "xss": "high",
     "path_traversal": "high",
     "deserialization": "critical",
+    "ssrf": "high",
+    "ssti": "high",
+    "open_redirect": "medium",
+    "xxe": "high",
+    "ldap_injection": "high",
+    "nosql_injection": "high",
+    "crlf_injection": "medium",
+    "redos": "medium",
+    "prototype_pollution": "high",
 }
 
 
@@ -247,6 +256,11 @@ class TaintAnalyzer:
             tuple[str, str], list[tuple[int, str, str, str, str]]
         ] = {}
 
+        # Visited set for cross-function traversal — prevents exponential
+        # blowup and infinite loops when call graph has cycles.
+        # Key: (caller_file, caller_func, callee_name, depth)
+        self._cross_visited: set[tuple[str, str, str, int]] = set()
+
         # Source/sink counts for DataFlowResult
         self._source_count = 0
         self._sink_count = 0
@@ -301,7 +315,7 @@ class TaintAnalyzer:
         for py_path in py_files:
             if len(self.findings) >= MAX_FINDINGS:
                 break
-            rel = str(py_path.relative_to(self.project_root))
+            rel = str(py_path.relative_to(self.project_root)).replace("\\", "/")
             if SKIP_DIR_PATTERNS.search(rel):
                 continue
 
@@ -396,6 +410,9 @@ class TaintAnalyzer:
 
         elif isinstance(stmt, ast.Return):
             if stmt.value:
+                # Check if the return value is a sink call (e.g., return render_template_string(x))
+                if isinstance(stmt.value, ast.Call):
+                    self._handle_call_stmt(stmt.value, taint_state, file_path, func_name)
                 tainted, src, chain = self._expr_is_tainted(stmt.value, taint_state)
                 if tainted:
                     # Record that this function returns tainted data
@@ -586,13 +603,19 @@ class TaintAnalyzer:
             return False, "", []
 
         if isinstance(node, ast.Attribute):
-            # Check full dotted name
+            # Check full dotted name (e.g., "user.email")
             full = _safe_unparse(node)
-            # Check if it's a source itself
+            # 1. Check if the full dotted name is in taint_state
+            #    (e.g., "user.email" was assigned from a tainted source)
+            if full and full in taint_state:
+                src, chain = taint_state[full]
+                return True, src, chain
+            # 2. Check if it's a source itself
             for s in self._sources.get("python", []):
                 if s in full:
                     return True, full, [full]
-            # Check if the value part is tainted
+            # 3. Check if the value part is tainted (property propagation)
+            #    e.g., user is tainted → user.email is also tainted
             return self._expr_is_tainted(node.value, taint_state)
 
         if isinstance(node, ast.Subscript):
@@ -609,6 +632,12 @@ class TaintAnalyzer:
             # Check if any arg is tainted (taint propagates through calls)
             for arg in node.args:
                 t, s, c = self._expr_is_tainted(arg, taint_state)
+                if t:
+                    return True, s, c
+            # Check if the receiver (method call) is tainted:
+            # e.g., data.get("x") where data is tainted → result is tainted
+            if isinstance(node.func, ast.Attribute):
+                t, s, c = self._expr_is_tainted(node.func.value, taint_state)
                 if t:
                     return True, s, c
             return False, "", []
@@ -701,9 +730,19 @@ class TaintAnalyzer:
         return False
 
     def _target_name(self, target: ast.AST) -> str | None:
-        """Extract variable name from an assignment target."""
+        """Extract variable name from an assignment target.
+
+        Handles:
+          - Name: ``x = ...``  → ``"x"``
+          - Attribute: ``self.x = ...``  → ``"self.x"``  (enables property taint)
+          - Tuple: ``(x, y) = ...``  → ``"x"``  (first element only)
+        """
         if isinstance(target, ast.Name):
             return target.id
+        if isinstance(target, ast.Attribute):
+            # Track attribute assignments: user.email = ... → "user.email"
+            full = _safe_unparse(target)
+            return full if full else None
         if isinstance(target, ast.Tuple):
             # Only handle first element for simplicity
             if target.elts and isinstance(target.elts[0], ast.Name):
@@ -861,6 +900,12 @@ class TaintAnalyzer:
         """
         if depth > MAX_CROSS_DEPTH:
             return
+
+        # Cycle detection — skip if we've already visited this exact traversal
+        visit_key = (caller_file, caller_func_name, callee_name, depth)
+        if visit_key in self._cross_visited:
+            return
+        self._cross_visited.add(visit_key)
 
         # Try AST cache first, then read from disk
         tree = self._ast_cache.get(caller_file)

@@ -1,0 +1,167 @@
+"""
+Main profile builder — aggregates all data sources into one profile dict.
+"""
+
+from datetime import datetime, timezone
+from pathlib import Path
+
+from .classify import classify_project_type, detect_patterns, detect_services
+from .filesystem import scan_filesystem
+from .health import build_health_dims, adjust_overall_health
+from .index_extract import extract_from_index, compute_reachability
+from .scanners import (
+    git_info, scan_deps, scan_secrets, scan_code_vulnerabilities,
+    scan_git_history, scan_dockerfile, scan_license, scan_documentation,
+    scan_taint, scan_iac, scan_frameworks, check_license_policy,
+)
+
+
+def build_project_profile(project_path: Path, compact: bool = False) -> dict:
+    """
+    Build a complete project profile by aggregating all available data sources.
+
+    Args:
+        project_path: Absolute path to the project root.
+        compact: If True, return a summary-only profile with reduced detail.
+
+    Returns:
+        A dict containing the full project profile.
+    """
+    project_path = project_path.resolve()
+    project_name = project_path.name
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    fs = scan_filesystem(project_path)
+    idx = extract_from_index(project_path)
+    deps = scan_deps(project_path)
+    git = git_info(project_path)
+    dep_names = {d.get("name", "") for d in deps.get("dependencies", []) if isinstance(d, dict)}
+    patterns = detect_patterns(fs["_all_files"], dep_names, index_data=idx)
+
+    secrets_data = scan_secrets(project_path)
+    code_vulns_data = scan_code_vulnerabilities(project_path)
+    git_leaked_data = scan_git_history(project_path)
+    dockerfile_data = scan_dockerfile(project_path)
+    license_data = scan_license(project_path)
+    documentation_data = scan_documentation(project_path)
+    taint_data = scan_taint(project_path)
+    iac_data = scan_iac(project_path)
+    license_policy_issues = check_license_policy(license_data)
+    frameworks_data = scan_frameworks(project_path)
+
+    services = detect_services(deps)
+    project_type_info = classify_project_type(
+        languages=fs["languages"],
+        api_definitions=idx["api_definitions"],
+        components=idx["symbol_counts"].get("component", 0),
+        dep_names=dep_names,
+        patterns=patterns,
+        entry_points=idx["entry_points"],
+        all_files=fs["_all_files"],
+    )
+
+    health_dims = build_health_dims(idx, project_type_info["type"])
+    health_dims["overall"] = adjust_overall_health(
+        health_dims.get("overall", {}),
+        secrets_data, taint_data, iac_data, license_policy_issues,
+        documentation_data, project_type_info["type"],
+    )
+
+    profile = {
+        "name": project_name,
+        "path": str(project_path),
+        "generated_at": now,
+
+        # Classification
+        "project_type": project_type_info["type"],
+        "project_sub_type": project_type_info["sub_type"],
+
+        # Structure
+        "file_count": fs["file_count"],
+        "languages": fs["languages"],
+
+        # APIs (classified)
+        "api_definitions": idx["api_definitions"],
+        "api_calls_internal": idx["api_calls_internal"],
+        "api_calls_external": idx["api_calls_external"],
+        "api_routes": idx["api_routes"],  # backward compat: union of all
+
+        # Services
+        "services": services,
+
+        # Models
+        "models": idx["models"],
+
+        # Dependencies
+        "dependencies": deps,
+
+        # Symbols
+        "symbol_counts": idx["symbol_counts"],
+        "entry_points": idx["entry_points"],
+
+        # Connections
+        "module_graph": idx["module_graph"],
+        "module_graph_full": idx["module_graph_full"],
+        "module_graph_summary": idx["module_graph_summary"],
+
+        # Complexity
+        "complexity_summary": idx["complexity_summary"],
+
+        # Counts — for flyto-engine compat
+        "api_definition_count": len(idx["api_definitions"]),
+        "model_count": len(idx["models"]),
+        "dependency_count": deps.get("total_count", 0),
+        "secret_count": secrets_data.get("total_findings", 0),
+        "taint_flow_count": taint_data.get("unsanitized_flows", 0),
+        "complex_functions": idx["complexity_summary"].get("complex_functions", 0),
+        "avg_complexity": idx["complexity_summary"].get("avg_complexity", 0),
+        "dead_code_count": health_dims.get("dead_code", {}).get("dead_count", 0),
+        "connection_count": idx["module_graph_summary"].get("total_connections", 0),
+
+        # Health — top-level for flyto-engine compat
+        "health_score": health_dims.get("overall", {}).get("score", 0),
+        "health_grade": health_dims.get("overall", {}).get("grade", "?"),
+        "health_dimensions": health_dims,
+
+        # Infrastructure
+        "has_docker": fs["has_docker"],
+        "has_ci": fs["has_ci"],
+        "has_tests": fs["has_tests"],
+        "has_docs": fs["has_docs"],
+        "config_files": fs["config_files"],
+
+        # Git
+        "recent_authors": git["recent_authors"],
+        "last_commit_date": git["last_commit_date"],
+
+        # Patterns
+        "patterns": patterns,
+
+        # Frameworks
+        "frameworks": frameworks_data,
+
+        # Analysis
+        "secrets": secrets_data,
+        "code_vulnerabilities": code_vulns_data,
+        "git_leaked_secrets": git_leaked_data,
+        "dockerfile_issues": dockerfile_data,
+        "taint_flows": taint_data,
+        "license": license_data,
+        "license_policy_issues": license_policy_issues,
+        "iac_findings": iac_data,
+        "reachability": compute_reachability(deps, idx),
+        "container_findings": {
+            "total_findings": dockerfile_data.get("total_issues", 0),
+            "critical": sum(1 for i in dockerfile_data.get("issues", []) if i.get("severity") == "CRITICAL"),
+            "high": sum(1 for i in dockerfile_data.get("issues", []) if i.get("severity") == "HIGH"),
+            "medium": sum(1 for i in dockerfile_data.get("issues", []) if i.get("severity") == "MEDIUM"),
+            "low": sum(1 for i in dockerfile_data.get("issues", []) if i.get("severity") == "LOW"),
+            "findings": dockerfile_data.get("issues", []),
+        },
+        "documentation": documentation_data,
+    }
+
+    if not compact:
+        profile["folder_structure"] = fs["folder_structure"]
+
+    return profile

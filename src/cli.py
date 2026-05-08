@@ -1398,6 +1398,52 @@ def cmd_export(args):
         "categories": sorted(categories),
     }
 
+    # 3b. Run supplementary analyzers (all pure stdlib, no source code exported)
+    try:
+        from .analyzer.config_drift import analyze_config_drift
+        profile["config_drift"] = analyze_config_drift(project_path).to_dict()
+    except Exception as e:
+        logger.debug("config_drift skipped: %s", e)
+
+    try:
+        from .analyzer.tech_debt import analyze_tech_debt
+        profile["tech_debt"] = analyze_tech_debt(project_path).to_dict()
+    except Exception as e:
+        logger.debug("tech_debt skipped: %s", e)
+
+    try:
+        from .analyzer.error_handling import analyze_error_handling
+        profile["error_handling"] = analyze_error_handling(project_path).to_dict()
+    except Exception as e:
+        logger.debug("error_handling skipped: %s", e)
+
+    try:
+        from .analyzer.api_drift import analyze_api_drift
+        api_defs = profile.get("api_definitions", [])
+        api_calls = profile.get("api_calls_internal", [])
+        if api_defs or api_calls:
+            profile["api_drift"] = analyze_api_drift(api_defs, api_calls).to_dict()
+    except Exception as e:
+        logger.debug("api_drift skipped: %s", e)
+
+    try:
+        from .analyzer.bus_factor import analyze_bus_factor
+        profile["bus_factor"] = analyze_bus_factor(project_path).to_dict()
+    except Exception as e:
+        logger.debug("bus_factor skipped: %s", e)
+
+    try:
+        from .analyzer.perf_patterns import analyze_perf_patterns
+        profile["perf_patterns"] = analyze_perf_patterns(project_path).to_dict()
+    except Exception as e:
+        logger.debug("perf_patterns skipped: %s", e)
+
+    try:
+        from .analyzer.import_health import analyze_import_health
+        profile["import_health"] = analyze_import_health(project_path, index=index).to_dict()
+    except Exception as e:
+        logger.debug("import_health skipped: %s", e)
+
     # 4. Build the upload bundle
     bundle = {"profile": profile}
     if hasattr(args, "commit") and args.commit:

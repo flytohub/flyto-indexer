@@ -208,6 +208,32 @@ SINKS = {
         ("yaml.load(", "high", "Use yaml.safe_load() instead of yaml.load()"),
         ("yaml.unsafe_load(", "critical", "Use yaml.safe_load() instead"),
         ("marshal.loads(", "critical", "Never unmarshal untrusted data"),
+        ("jsonpickle.decode(", "critical", "jsonpickle can execute arbitrary code; use json.loads()"),
+        ("jsonpickle.loads(", "critical", "jsonpickle can execute arbitrary code; use json.loads()"),
+        ("shelve.open(", "high", "shelve uses pickle internally; never open untrusted shelve files"),
+        ("dill.loads(", "critical", "dill can execute arbitrary code; use JSON instead"),
+        ("dill.load(", "critical", "dill can execute arbitrary code; use JSON instead"),
+        ("cloudpickle.loads(", "critical", "cloudpickle can execute arbitrary code; use JSON"),
+        # Java
+        ("ObjectInputStream(", "critical", "Never deserialize untrusted data; use allow-list filter"),
+        ("readObject(", "critical", "readObject on untrusted data enables RCE; use JSON"),
+        # Go
+        ("gob.NewDecoder(", "high", "gob can instantiate arbitrary types; validate source"),
+    ],
+    "ssti": [
+        # Python — server-side template injection
+        ("render_template_string(", "high", "Use render_template() with file-based templates"),
+        ("Template(", "high", "Never construct Template from user input; use file-based templates"),
+        ("Jinja2.from_string(", "high", "Never build templates from user input"),
+        ("Environment.from_string(", "high", "Never build templates from user input"),
+        ("mako.template.Template(", "high", "Never pass user input as Mako template source"),
+        # Go
+        ("template.New(", "medium", "Never parse user input as template source"),
+        # JS
+        ("ejs.render(", "high", "Never pass user input as EJS template string"),
+        ("pug.render(", "high", "Never pass user input as Pug template string"),
+        ("Handlebars.compile(", "high", "Never compile user input as Handlebars template"),
+        ("nunjucks.renderString(", "high", "Never pass user input to renderString"),
     ],
     # --- batch 1: categories that SAST really should catch ----------------
 
@@ -340,6 +366,13 @@ SANITIZERS = [
     ("secure_filename(", ["path_traversal"]),
     # SQL parameterization indicators (heuristic — these appear in safe patterns)
     ("parameterized", ["sql_injection"]),
+    # SSRF sanitizers — URL validation
+    ("urlparse(", ["ssrf", "open_redirect"]),
+    ("urllib.parse.urlparse(", ["ssrf", "open_redirect"]),
+    ("is_safe_url(", ["ssrf", "open_redirect"]),
+    ("url_has_allowed_host_and_scheme(", ["ssrf", "open_redirect"]),
+    # NoSQL sanitizer
+    ("bson.ObjectId(", ["nosql_injection"]),
     # Generic sanitization keywords (substring match)
     ("sanitize(", ["*"]),
     ("clean(", ["xss"]),
@@ -402,6 +435,12 @@ JS_TAINT_PATTERNS = [
     # Prototype pollution — merge target, req.*
     (r'(?:Object\.assign|_\.merge|_\.defaultsDeep|hoek\.merge)\s*\([^,]+,\s*(?:req|request)\.',
      "prototype_pollution", "high", "Never merge user input into shared objects"),
+
+    # SSTI — user input → template engine render
+    (r'(?:req|request)\.(?:body|query|params)\b.*?(?:ejs\.render|pug\.render|Handlebars\.compile|nunjucks\.renderString)\s*\(',
+     "ssti", "high", "Never pass user input as template source"),
+    (r'(?:ejs\.render|pug\.render|Handlebars\.compile|nunjucks\.renderString)\s*\([^)]*(?:req|request)\.(?:body|query|params)\b',
+     "ssti", "high", "Never pass user input as template source"),
 ]
 
 GO_TAINT_PATTERNS = [
@@ -447,4 +486,9 @@ GO_TAINT_PATTERNS = [
     # XML XXE
     (r'xml\.NewDecoder\s*\([^)]*\b(?:r\.Body|c\.Request\.Body)\b',
      "xxe", "high", "Disable external entities; use encoding/xml with care"),
+    # SSTI — Go template with user input
+    (r'(?:FormValue|URL\.Query|c\.(?:Query|Param|PostForm|FormValue))\b.*?template\.(?:New|Must)\s*\(',
+     "ssti", "high", "Never parse user input as Go template source"),
+    (r'template\.(?:New|Must)\s*\([^)]*(?:FormValue|URL\.Query|c\.(?:Query|Param|PostForm|FormValue))\b',
+     "ssti", "high", "Never parse user input as Go template source"),
 ]

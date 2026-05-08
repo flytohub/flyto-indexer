@@ -427,4 +427,5 @@ def vuln_{i}():
             (root / "app.py").write_text(code)
             analyzer = TaintAnalyzer(root)
             findings = analyzer.analyze()
-            assert len(findings) <= 50  # MAX_FINDINGS
+            from analyzer.taint import MAX_FINDINGS
+            assert len(findings) <= MAX_FINDINGS
