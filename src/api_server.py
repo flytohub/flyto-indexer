@@ -28,9 +28,18 @@ API Endpoints:
 import argparse
 import json
 import logging
+import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
+
+_ALLOWED_ORIGINS: set[str] = set(
+    origin.strip()
+    for origin in os.environ.get(
+        "FLYTO_CORS_ORIGINS", "http://localhost:5173,http://localhost:5180"
+    ).split(",")
+    if origin.strip()
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -359,12 +368,25 @@ def get_stats() -> dict:
 class APIHandler(BaseHTTPRequestHandler):
     """HTTP request handler"""
 
+    def _get_cors_origin(self) -> str | None:
+        """Return the request Origin if it is in the allowed set, else None."""
+        origin = self.headers.get("Origin", "")
+        if origin in _ALLOWED_ORIGINS:
+            return origin
+        return None
+
+    def _send_cors_headers(self):
+        origin = self._get_cors_origin()
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
     def _send_json(self, data: dict, status: int = 200):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self._send_cors_headers()
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
 
@@ -377,9 +399,7 @@ class APIHandler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self._send_cors_headers()
         self.end_headers()
 
     def do_GET(self):
