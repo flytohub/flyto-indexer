@@ -77,8 +77,27 @@ _KEYWORDS = {
 
 
 def _walk(root: Path):
+    # Symlink defense: rglob follows symlinks by default. flyto-indexer
+    # is run against arbitrary user paths from the CLI; a symlink to
+    # /etc or ~/.ssh would otherwise be scanned. Skip any path whose
+    # resolved form escapes the root (or whose immediate path is a
+    # symlink). See profile/filesystem.py for the os.walk mirror.
+    try:
+        root_resolved = root.resolve()
+    except OSError:
+        return
     for path in root.rglob("*"):
         if not path.is_file():
+            continue
+        if path.is_symlink():
+            continue
+        try:
+            resolved = path.resolve()
+        except OSError:
+            continue
+        try:
+            resolved.relative_to(root_resolved)  # raises if escapes root
+        except ValueError:
             continue
         if any(part in _SKIP_DIRS for part in path.parts):
             continue
@@ -360,7 +379,13 @@ def scan_project_call_sites(project_root: Path) -> dict:
             src = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        rel = str(path.relative_to(project_root))
+        # Normalize to forward slashes — Path.relative_to on Windows
+        # emits backslashes which leak into the call-graph FQN
+        # ("myapp\\handler.py:helper") and break every downstream
+        # consumer that keys by the POSIX-style path (tests, the
+        # flyto-engine reachability layer, exported indexes shared
+        # between Win-dev and Linux-CI). One source of truth.
+        rel = str(path.relative_to(project_root)).replace("\\", "/")
 
         if ext == ".py":
             known = _detect_imports(src, ext)

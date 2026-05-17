@@ -21,9 +21,22 @@ def scan_filesystem(project_path: Path) -> dict:
     has_docs = False
     all_files = []  # relative paths for pattern detection
 
-    for dirpath, dirnames, filenames in os.walk(project_path):
-        # Filter skip dirs in-place
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+    # followlinks=False explicit even though it's the Python default
+    # — defense in depth. flyto-indexer ships as a standalone CLI
+    # (`pip install flyto-indexer`) and users point it at arbitrary
+    # paths. A symlink to /etc or ~/.ssh would otherwise get scanned
+    # and surface in the output. flyto-engine's scanner.go also
+    # clones with core.symlinks=false; this is the indexer-side
+    # mirror. Audit 2026-05-17 noted indexer had no symlink defenses.
+    for dirpath, dirnames, filenames in os.walk(project_path, followlinks=False):
+        # Filter skip dirs in-place + drop symlinked dirs (followlinks
+        # bounds the walker but doesn't suppress them appearing in
+        # dirnames; explicitly drop so they don't get scanned via
+        # alternative path traversal).
+        dirnames[:] = [
+            d for d in dirnames
+            if d not in SKIP_DIRS and not os.path.islink(os.path.join(dirpath, d))
+        ]
 
         rel_dir = os.path.relpath(dirpath, project_path)
         depth = 0 if rel_dir == "." else rel_dir.count(os.sep) + 1

@@ -1938,8 +1938,21 @@ def cmd_taint(args):
 
     if hasattr(args, "as_json") and args.as_json:
         output = result.to_dict()
+        # Apply --max-results to the JSON path too. Pre-fix the flag
+        # was honoured only in the human-readable branch (line ~1972);
+        # JSON callers (flyto-engine scanner.go passes --max-results=500
+        # and downstream caps fall back to MaxTaintFlowsKept=200) were
+        # surprised by full unbounded output, especially on large repos.
+        max_results = getattr(args, "max_results", 0) or 0
         if args.severity:
-            output["taint_flows"] = [f.to_dict() for f in flows]
+            target = flows
+        else:
+            target = [f for f in result.taint_flows if not f.sanitized]
+        if max_results and max_results > 0 and len(target) > max_results:
+            target = target[:max_results]
+            output["truncated"] = True
+            output["max_results"] = max_results
+        output["taint_flows"] = [f.to_dict() for f in target]
         output["elapsed_seconds"] = round(elapsed, 2)
         return output
 
