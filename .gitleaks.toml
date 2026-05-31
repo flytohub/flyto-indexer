@@ -1,0 +1,24 @@
+# gitleaks config — flyto-indexer
+# Authored by SecurityEngineer for FLYA-35 (triage of FLYA-30 Track B findings).
+# Posture: extend the default ruleset (fail-closed), narrow allowlist below.
+#
+# Triage result: the single finding is a unit-test fixture. test_architecture.py
+# writes a temp file containing the well-known AWS canary key
+# `AKIAI44QH8DHBR3WZLPQ` (the same fake key gitleaks/detect-secrets use in their
+# own test suites) to verify the indexer's own secret scanner detects it. No
+# real credential committed (verified: `git log -S` for sk-/AIza returns only
+# the fixture string `sk-url-for-external-true`).
+
+title = "flyto-indexer gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "AWS canary fixture in the indexer's own scanner test (FLYA-35)"
+paths = [
+  '''tests/test_architecture\.py''',
+]
+regexes = [
+  '''AKIAI44QH8DHBR3WZLPQ''',
+]
