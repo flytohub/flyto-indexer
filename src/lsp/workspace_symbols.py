@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
-from .manager import LSPManager, _LSP_SERVERS
+from .manager import _LSP_SERVERS, LSPManager
 from .protocol import uri_to_path
 
 logger = logging.getLogger("flyto-indexer.lsp.workspace_symbols")

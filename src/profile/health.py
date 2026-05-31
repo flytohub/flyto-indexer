@@ -81,9 +81,7 @@ def _is_dead_symbol(sym: dict, sym_id: str, reverse_index: dict) -> bool:
     path = sym.get("path", "")
     if name.startswith("_"):
         return False
-    if path.endswith(".go") and name and name[0].isupper():
-        return False
-    return True
+    return not (path.endswith(".go") and name and name[0].isupper())
 
 
 def _dead_code_dim(symbols: dict, reverse_index: dict) -> tuple[int, int, list]:

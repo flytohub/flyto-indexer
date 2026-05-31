@@ -4,17 +4,25 @@ from .complexity import ComplexityAnalyzer, ComplexityReport, analyze_complexity
 from .coverage import CoverageAnalyzer, CoverageReport, analyze_coverage
 from .dead_code import DeadCodeDetector, DeadCodeReport, detect_dead_code
 from .duplicates import DuplicateDetector, DuplicateReport, detect_duplicates
-from .security import SecurityReport, SecurityScanner, scan_security
-from .stale_files import StaleFileDetector, StaleReport, detect_stale_files
 from .layers import (
-    LayerDef, LayerReport, LayerViolation,
-    add_layer, check_layers, check_layers_dict, remove_layer,
+    LayerDef,
+    LayerReport,
+    LayerViolation,
+    add_layer,
+    check_layers,
+    check_layers_dict,
+    remove_layer,
 )
 from .rules import RulesChecker, RulesReport, RuleViolation, add_rule, check_rules, remove_rule
+from .security import SecurityReport, SecurityScanner, scan_security
+from .stale_files import StaleFileDetector, StaleReport, detect_stale_files
 from .taint import TaintAnalyzer, TaintFlow
 from .taint_dsl import (
-    add_taint_sanitizer, add_taint_sink, add_taint_source,
-    list_taint_rules, remove_taint_rule,
+    add_taint_sanitizer,
+    add_taint_sink,
+    add_taint_source,
+    list_taint_rules,
+    remove_taint_rule,
 )
 
 __all__ = [

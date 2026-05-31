@@ -14,10 +14,10 @@ Every public helper here checks LSPManager.enabled and degrades cleanly —
 callers can always pretend LSP is available and fall back on empty results.
 """
 
-from .manager import LSPManager
 from .cache import clear_cache, get_cache
-from .resolver import lsp_available_for, resolve_import_via_lsp
 from .call_graph import CallEdge, incoming_calls, outgoing_calls
+from .manager import LSPManager
+from .resolver import lsp_available_for, resolve_import_via_lsp
 from .workspace_symbols import WorkspaceSymbol, query_symbol
 
 __all__ = [

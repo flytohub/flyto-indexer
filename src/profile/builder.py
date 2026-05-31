@@ -7,12 +7,21 @@ from pathlib import Path
 
 from .classify import classify_project_type, detect_patterns, detect_services
 from .filesystem import scan_filesystem
-from .health import build_health_dims, adjust_overall_health
-from .index_extract import extract_from_index, compute_reachability
+from .health import adjust_overall_health, build_health_dims
+from .index_extract import compute_reachability, extract_from_index
 from .scanners import (
-    git_info, scan_deps, scan_secrets, scan_code_vulnerabilities,
-    scan_git_history, scan_dockerfile, scan_license, scan_documentation,
-    scan_taint, scan_iac, scan_frameworks, check_license_policy,
+    check_license_policy,
+    git_info,
+    scan_code_vulnerabilities,
+    scan_deps,
+    scan_dockerfile,
+    scan_documentation,
+    scan_frameworks,
+    scan_git_history,
+    scan_iac,
+    scan_license,
+    scan_secrets,
+    scan_taint,
 )
 
 

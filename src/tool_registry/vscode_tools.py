@@ -9,7 +9,6 @@ from typing import Dict, Set
 
 from .mcp_tools import MCP_TOOLS
 
-
 # Tools exposed to VSCode agent (subset of MCP_TOOLS)
 _VSCODE_TOOL_NAMES: Set[str] = {
     "search_code", "get_symbol_content", "get_file_context",

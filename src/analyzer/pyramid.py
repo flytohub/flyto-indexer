@@ -23,7 +23,6 @@ Pure Python stdlib, no external dependencies.
 from dataclasses import dataclass, field
 from typing import Any
 
-
 # ── Pyramid definitions ───────────────────────────────────────────────
 
 PYRAMIDS = {

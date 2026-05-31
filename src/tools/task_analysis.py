@@ -28,32 +28,31 @@ Execution plan (data-driven cognitive guidance):
 import hashlib
 import time
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 try:
-    from .references import (
-        find_references,
-        impact_analysis,
-        edit_impact_preview,
-        cross_project_impact,
-        dependency_graph,
-    )
-    from .code_info import find_test_file, list_projects
-    from .search import search_by_keyword
     from ..index_store import load_index
     from ..quality import code_health_score
-except ImportError:
-    from tools.references import (
-        find_references,
-        impact_analysis,
-        edit_impact_preview,
+    from .code_info import find_test_file, list_projects
+    from .references import (
         cross_project_impact,
         dependency_graph,
+        edit_impact_preview,
+        find_references,
+        impact_analysis,
     )
-    from tools.code_info import find_test_file, list_projects
-    from tools.search import search_by_keyword
+    from .search import search_by_keyword
+except ImportError:
     from index_store import load_index
     from quality import code_health_score
+    from tools.code_info import find_test_file
+    from tools.references import (
+        dependency_graph,
+        edit_impact_preview,
+        find_references,
+        impact_analysis,
+    )
+    from tools.search import search_by_keyword
 
 
 # =========================================================================
@@ -543,10 +542,7 @@ def _score_test_risk(resolved: List[dict]) -> dict:
     total_targets = targets_with_tests + targets_without_tests
     total_callers = callers_with_tests + callers_without_tests
 
-    if total_targets == 0:
-        target_ratio = 0.0
-    else:
-        target_ratio = targets_with_tests / total_targets
+    target_ratio = 0.0 if total_targets == 0 else targets_with_tests / total_targets
 
     if total_callers == 0:
         caller_ratio = 1.0  # No callers = no caller risk
@@ -1025,7 +1021,7 @@ def _derive_constraints(dimensions: Dict[str, dict], intent: str) -> dict:
         constraints.setdefault("max_files_per_step", 2)
     else:
         # Normal max_files_per_step based on blast_radius alone
-        blast_score = dimensions.get("blast_radius", {}).get("score", 0)
+        dimensions.get("blast_radius", {}).get("score", 0)
         if blast_level == "high":
             constraints.setdefault("max_files_per_step", 2)
         elif blast_level == "medium" or constraints.get("must_use_small_steps"):

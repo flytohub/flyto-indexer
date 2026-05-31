@@ -1,5 +1,6 @@
 """LSP manager — multi-language server pool with lazy startup."""
 
+import contextlib
 import logging
 import os
 import shutil
@@ -149,10 +150,8 @@ class LSPManager:
     def shutdown_all(self):
         """Gracefully shut down all active LSP clients."""
         for client in self._clients.values():
-            try:
+            with contextlib.suppress(Exception):
                 client.shutdown()
-            except Exception:
-                pass
         self._clients.clear()
 
     def language_for_path(self, path: str) -> Optional[str]:

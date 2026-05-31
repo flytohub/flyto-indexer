@@ -169,7 +169,7 @@ class _PerfVisitor(ast.NodeVisitor):
 def _scan_unbounded_queries(project_root: Path) -> list[PerfIssue]:
     """Regex scan for SQL queries without LIMIT across all languages."""
     issues = []
-    sql_pattern = re.compile(
+    re.compile(
         r"""(?:SELECT\s+.+?\s+FROM\s+\w+)(?!.*\bLIMIT\b)""",
         re.IGNORECASE | re.DOTALL,
     )

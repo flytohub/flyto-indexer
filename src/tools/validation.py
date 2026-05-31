@@ -5,8 +5,8 @@ Usage:
     validate_changes(project="flyto-indexer", run_tests=True)
 """
 
-import subprocess
 import re
+import subprocess
 from pathlib import Path
 
 try:

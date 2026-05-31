@@ -18,10 +18,8 @@ Pure Python stdlib, no external dependencies.
 """
 
 from collections import defaultdict
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Any
-
 
 # ── Which signals feed each lens, and how to extract file-level hits ──
 

@@ -6,6 +6,7 @@ mcp_server.py and other consumers can import from a single source of truth
 without circular dependencies.
 """
 
+import contextlib
 import gzip
 import json
 import logging
@@ -233,10 +234,8 @@ def _check_generation() -> bool:
 def _write_generation(index_dir: Path):
     """Write current timestamp to index_dir/.generation to signal cache staleness."""
     gen_file = index_dir / ".generation"
-    try:
+    with contextlib.suppress(OSError):
         gen_file.write_text(str(_time.time()))
-    except OSError:
-        pass
 
 
 def _merge_index_into(merged: dict, idx: dict):
@@ -286,9 +285,8 @@ def load_index() -> dict:
     # global into a local so a concurrent invalidate_caches() can't turn
     # the value into None between the truthiness check and the return.
     cached = _index_cache
-    if cached is not None:
-        if not _check_generation():
-            return cached
+    if cached is not None and not _check_generation():
+        return cached
 
     with _load_lock:
         # Double-check after acquiring lock — another thread may have loaded already
@@ -411,11 +409,10 @@ def _rebuild_semantic_index(index_dir: Path):
     Called lazily when a .semantic_stale marker is found.
     """
     try:
-        from .semantic import SemanticIndex
         from .bm25 import tokenize
+        from .semantic import SemanticIndex
     except ImportError:
         from semantic import SemanticIndex
-        from bm25 import tokenize
 
     index_data = load_index()
     if not index_data:
@@ -449,10 +446,8 @@ def _rebuild_semantic_index(index_dir: Path):
     semantic = SemanticIndex()
     semantic.build(documents, index_data=index_data)
 
-    try:
-        from .safe_io import atomic_write_json
-    except ImportError:
-        from safe_io import atomic_write_json
+    with contextlib.suppress(ImportError):
+        pass
 
     semantic.save(index_dir / "semantic.json")
     return semantic
@@ -574,10 +569,8 @@ def _invalidate_caches_unlocked():
     _cache_generation = 0.0
     # Shutdown LSP servers on cache invalidation
     if _lsp_manager is not None:
-        try:
+        with contextlib.suppress(Exception):
             _lsp_manager.shutdown_all()
-        except Exception:
-            pass
         _lsp_manager = None
         try:
             try:

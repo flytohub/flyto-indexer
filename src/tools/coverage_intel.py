@@ -1,5 +1,6 @@
 """Coverage Intelligence tools — coverage report, gap analysis, untested changes."""
 
+import contextlib
 import json
 import os
 import re
@@ -10,9 +11,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 try:
-    from ..index_store import load_index, get_symbol_content_text
+    from ..index_store import get_symbol_content_text, load_index
 except ImportError:
-    from index_store import load_index, get_symbol_content_text
+    from index_store import load_index
 
 
 # Parse unified diff headers: @@ -start[,count] +start[,count] @@
@@ -133,10 +134,8 @@ def _parse_coverage_sqlite(db_path: str) -> Dict[str, Set[int]]:
 
             file_path = files[file_id]
             if os.path.isabs(file_path):
-                try:
+                with contextlib.suppress(ValueError):
                     file_path = os.path.relpath(file_path, project_root)
-                except ValueError:
-                    pass
 
             lines = _decode_numbits(numbits)
             if file_path in result:

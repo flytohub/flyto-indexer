@@ -375,9 +375,7 @@ class DependencyResolverMixin:
         if is_init and (import_module == exp_dir or
                         import_module.endswith('/' + exp_dir.rsplit('/', 1)[-1]) if exp_dir else False):
             return True
-        if import_module.replace('@/', 'src/').replace('./', '') in exp_path:
-            return True
-        return False
+        return import_module.replace('@/', 'src/').replace('./', '') in exp_path
 
     def _resolve_re_export_deps(self, file_imports, changed_paths: set = None):
         """Resolve dependencies through re-export chains."""

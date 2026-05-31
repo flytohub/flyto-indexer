@@ -19,7 +19,6 @@ import re
 from collections import defaultdict
 from typing import Optional
 
-
 # Language detection by file extension
 _EXT_LANG_MAP = {
     ".py": "python",
@@ -69,9 +68,8 @@ class SymbolResolver:
                 self._project_symbols[project].add(sym_id)
 
             # 1. Export map: symbol name and explicit exports
-            if name:
-                if sym_id not in self._export_map[name]:
-                    self._export_map[name].append(sym_id)
+            if name and sym_id not in self._export_map[name]:
+                self._export_map[name].append(sym_id)
             for exp in exports:
                 if sym_id not in self._export_map[exp]:
                     self._export_map[exp].append(sym_id)

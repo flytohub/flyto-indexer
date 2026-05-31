@@ -8,9 +8,8 @@ private keys, database URLs, service-specific tokens, and more.
 import logging
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger("flyto-indexer.secret-scanner")
 
@@ -130,12 +129,7 @@ def _is_test_file(rel_path: str) -> bool:
     parts = rel_path.lower().split(os.sep)
     if any(p in ("tests", "test", "__tests__", "spec", "specs", "fixtures") for p in parts):
         return True
-    if (base.startswith("test_") or base.endswith("_test.py")
-            or base.endswith(".test.ts") or base.endswith(".test.js")
-            or base.endswith(".spec.ts") or base.endswith(".spec.js")
-            or base.endswith("_test.go")):
-        return True
-    return False
+    return bool(base.startswith("test_") or base.endswith("_test.py") or base.endswith(".test.ts") or base.endswith(".test.js") or base.endswith(".spec.ts") or base.endswith(".spec.js") or base.endswith("_test.go"))
 
 
 def _should_skip_file(fname: str, rel_path: str) -> bool:
@@ -147,9 +141,7 @@ def _should_skip_file(fname: str, rel_path: str) -> bool:
         return True
     if fname.endswith(".min.js") or fname.endswith(".min.css"):
         return True
-    if _is_test_file(rel_path):
-        return True
-    return False
+    return bool(_is_test_file(rel_path))
 
 
 def _is_doc_file(fname: str, rel_path: str) -> bool:
@@ -160,9 +152,7 @@ def _is_doc_file(fname: str, rel_path: str) -> bool:
     if ext.lower() in _DOC_EXTENSIONS:
         return True
     parts = rel_path.lower().split(os.sep)
-    if any(p in ("docs", "doc", "documentation", "examples", "example", "samples") for p in parts):
-        return True
-    return False
+    return bool(any(p in ("docs", "doc", "documentation", "examples", "example", "samples") for p in parts))
 
 
 # Patterns to skip in specific contexts — line content indicates example/placeholder

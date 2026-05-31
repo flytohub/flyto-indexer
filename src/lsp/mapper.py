@@ -5,7 +5,7 @@ import os
 import re
 from typing import Dict, List, Optional, Tuple
 
-from .protocol import Location, uri_to_path, path_to_uri
+from .protocol import Location, path_to_uri, uri_to_path
 
 logger = logging.getLogger("flyto-indexer.lsp.mapper")
 

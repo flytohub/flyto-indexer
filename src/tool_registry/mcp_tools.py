@@ -4,7 +4,6 @@ MCP Tool Definitions (canonical source).
 Each entry is a dict with name, title, description, annotations, inputSchema.
 """
 
-from typing import Set
 
 MCP_TOOLS: list = [
     # Reference & Dependency Analysis

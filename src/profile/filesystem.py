@@ -6,7 +6,7 @@ import os
 from collections import Counter
 from pathlib import Path
 
-from .constants import SKIP_DIRS, EXT_LANG, CONFIG_FILES
+from .constants import CONFIG_FILES, EXT_LANG, SKIP_DIRS
 
 
 def scan_filesystem(project_path: Path) -> dict:

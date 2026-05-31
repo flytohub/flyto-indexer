@@ -7,14 +7,14 @@ Public API (all re-exported for backward compat):
     has_tool, execute_tool, _TOOL_NAMES
 """
 
+from .dispatch import _TOOL_NAMES, execute_tool, has_tool
 from .mcp_tools import MCP_TOOLS
-from .smart_tools import SMART_TOOLS, SMART_TOOL_NAMES
+from .smart_tools import SMART_TOOL_NAMES, SMART_TOOLS
 from .vscode_tools import (
-    get_vscode_tool_schemas,
-    _mcp_to_openai,
     _VSCODE_TOOL_NAMES,
+    _mcp_to_openai,
+    get_vscode_tool_schemas,
 )
-from .dispatch import has_tool, execute_tool, _TOOL_NAMES
 
 # Derived constant
 INDEXER_TOOL_NAMES = {tool["name"] for tool in MCP_TOOLS} | SMART_TOOL_NAMES

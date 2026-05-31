@@ -19,7 +19,6 @@ import re
 from pathlib import Path
 from typing import Dict, List, Set
 
-
 _CODE_EXTS = {".py", ".js", ".jsx", ".ts", ".tsx", ".go"}
 _SKIP_DIRS = {"node_modules", "vendor", "dist", ".git", "build", "target", "__pycache__", ".venv"}
 _MAX_FILE_BYTES = 256 * 1024
@@ -416,7 +415,7 @@ def scan_project_call_sites(project_root: Path) -> dict:
         # Same for the call graph: any callee that resolves to a
         # different origin gets BOTH the original and the resolved
         # name added — Layer-3's intersection then matches either.
-        for fn, callees in list(local_call_graph.items()):
+        for _fn, callees in list(local_call_graph.items()):
             extras: Set[str] = set()
             for c in callees:
                 resolved = _resolve_through_reexports(c, reexports)

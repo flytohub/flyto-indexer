@@ -19,7 +19,7 @@ from typing import List, Optional, Set, Tuple
 
 from .cache import CacheKey, get_cache
 from .manager import LSPManager
-from .protocol import Location, path_to_uri, uri_to_path, utf16_offset
+from .protocol import path_to_uri, uri_to_path, utf16_offset
 
 logger = logging.getLogger("flyto-indexer.lsp.call_graph")
 
