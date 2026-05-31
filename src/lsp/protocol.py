@@ -1,9 +1,9 @@
 """Minimal LSP protocol types — zero third-party dependencies."""
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-import sys
 
 if sys.platform == "win32":
     _URI_PREFIX = "file:///"

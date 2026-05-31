@@ -17,7 +17,7 @@ Usage:
 import logging
 import os
 import re
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -268,7 +268,7 @@ def _check_terraform(file_path: str, content: str) -> list[IaCFinding]:
     # --- Resource block checks ---
     for match in _TF_RESOURCE_RE.finditer(content):
         res_type = match.group(1)
-        res_name = match.group(2)
+        match.group(2)
         block_start = match.start()
         block_text, _ = _extract_tf_block(content, match.end() - 1)
         block_line = _line_number_at(content, block_start)
@@ -289,41 +289,39 @@ def _check_terraform(file_path: str, content: str) -> list[IaCFinding]:
                 ))
 
         # 3. IAC_TF_NO_ENCRYPT (S3 without server-side encryption)
-        if res_type == "aws_s3_bucket":
-            if not _TF_SSE_RE.search(block_text):
+        if res_type == "aws_s3_bucket" and not _TF_SSE_RE.search(block_text):
+            findings.append(IaCFinding(
+                file_path=rel_path,
+                resource_type=res_type,
+                check_id="IAC_TF_NO_ENCRYPT",
+                check_name="S3 bucket without server-side encryption",
+                severity="MEDIUM",
+                line=block_line,
+                guideline="Add server_side_encryption_configuration with AES256 or aws:kms.",
+                framework="terraform",
+            ))
+
+        # 2. IAC_TF_OPEN_SG (security group open to 0.0.0.0/0 on non-web ports)
+        if res_type == "aws_security_group" and _TF_OPEN_CIDR_RE.search(block_text):
+            # Try to find the port in the ingress block
+            port_matches = re.findall(
+                r'(?:from_port|to_port)\s*=\s*(\d+)', block_text
+            )
+            ports = {int(p) for p in port_matches}
+            non_web = ports - _WEB_PORTS
+            if non_web or not ports:
+                m = _TF_OPEN_CIDR_RE.search(block_text)
+                line_offset = block_text[:m.start()].count("\n") if m else 0
                 findings.append(IaCFinding(
                     file_path=rel_path,
                     resource_type=res_type,
-                    check_id="IAC_TF_NO_ENCRYPT",
-                    check_name="S3 bucket without server-side encryption",
-                    severity="MEDIUM",
-                    line=block_line,
-                    guideline="Add server_side_encryption_configuration with AES256 or aws:kms.",
+                    check_id="IAC_TF_OPEN_SG",
+                    check_name="Security group open to 0.0.0.0/0 on non-web port",
+                    severity="HIGH",
+                    line=block_line + line_offset,
+                    guideline="Restrict cidr_blocks to specific IP ranges for non-HTTP(S) ports.",
                     framework="terraform",
                 ))
-
-        # 2. IAC_TF_OPEN_SG (security group open to 0.0.0.0/0 on non-web ports)
-        if res_type == "aws_security_group":
-            if _TF_OPEN_CIDR_RE.search(block_text):
-                # Try to find the port in the ingress block
-                port_matches = re.findall(
-                    r'(?:from_port|to_port)\s*=\s*(\d+)', block_text
-                )
-                ports = {int(p) for p in port_matches}
-                non_web = ports - _WEB_PORTS
-                if non_web or not ports:
-                    m = _TF_OPEN_CIDR_RE.search(block_text)
-                    line_offset = block_text[:m.start()].count("\n") if m else 0
-                    findings.append(IaCFinding(
-                        file_path=rel_path,
-                        resource_type=res_type,
-                        check_id="IAC_TF_OPEN_SG",
-                        check_name="Security group open to 0.0.0.0/0 on non-web port",
-                        severity="HIGH",
-                        line=block_line + line_offset,
-                        guideline="Restrict cidr_blocks to specific IP ranges for non-HTTP(S) ports.",
-                        framework="terraform",
-                    ))
 
         # 5. IAC_TF_PUBLIC_RDS
         if res_type == "aws_db_instance":
@@ -457,9 +455,6 @@ def _check_kubernetes(file_path: str, content: str) -> list[IaCFinding]:
         # Build quick lookup sets
         has_run_as_non_root = False
         has_resource_limits = False
-        has_privileged = False
-        has_host_network = False
-        has_host_path = False
         images: list[tuple[str, int]] = []
 
         for e in entries:
@@ -473,7 +468,6 @@ def _check_kubernetes(file_path: str, content: str) -> list[IaCFinding]:
 
             # IAC_K8S_PRIVILEGED
             if key == "privileged" and val.lower() == "true":
-                has_privileged = True
                 findings.append(IaCFinding(
                     file_path=rel_path,
                     resource_type=kind,
@@ -491,7 +485,6 @@ def _check_kubernetes(file_path: str, content: str) -> list[IaCFinding]:
 
             # IAC_K8S_HOST_NETWORK
             if key == "hostNetwork" and val.lower() == "true":
-                has_host_network = True
                 findings.append(IaCFinding(
                     file_path=rel_path,
                     resource_type=kind,
@@ -505,7 +498,6 @@ def _check_kubernetes(file_path: str, content: str) -> list[IaCFinding]:
 
             # IAC_K8S_HOST_PATH
             if key == "hostPath":
-                has_host_path = True
                 findings.append(IaCFinding(
                     file_path=rel_path,
                     resource_type=kind,
@@ -589,7 +581,6 @@ def _check_docker_compose(file_path: str, content: str) -> list[IaCFinding]:
     service_has_limits: dict[str, bool] = {}
 
     in_services = False
-    services_indent = -1
 
     for e in entries:
         path = e["path"]
@@ -600,7 +591,7 @@ def _check_docker_compose(file_path: str, content: str) -> list[IaCFinding]:
         # Detect top-level "services" key
         if key == "services" and e["indent"] == 0:
             in_services = True
-            services_indent = e["indent"]
+            e["indent"]
             continue
 
         if not in_services:
@@ -643,7 +634,6 @@ def _check_docker_compose(file_path: str, content: str) -> list[IaCFinding]:
     # Look for lines like: - "3306:3306" or - 5432:5432
     port_re = re.compile(r'^\s*-\s*["\']?(\d+)(?::(\d+))?["\']?\s*$')
     in_ports = False
-    current_svc_for_ports = ""
 
     for line_num, raw_line in enumerate(content.splitlines(), start=1):
         stripped = raw_line.strip()
@@ -658,7 +648,7 @@ def _check_docker_compose(file_path: str, content: str) -> list[IaCFinding]:
                 if e["line"] < line_num and e["indent"] < indent:
                     path_parts = e["path"].split(".")
                     if len(path_parts) >= 2 and path_parts[0] == "services":
-                        current_svc_for_ports = path_parts[1]
+                        path_parts[1]
                     break
             continue
 
@@ -735,10 +725,7 @@ def _is_k8s_yaml(file_path: Path, content: str) -> bool:
     # Check content for K8s markers
     if re.search(r'^apiVersion\s*:', content, re.MULTILINE):
         return True
-    if re.search(r'^kind\s*:\s*(?:' + "|".join(_K8S_WORKLOAD_KINDS) + r')', content, re.MULTILINE):
-        return True
-
-    return False
+    return bool(re.search(r'^kind\s*:\s*(?:' + "|".join(_K8S_WORKLOAD_KINDS) + r')', content, re.MULTILINE))
 
 
 def _is_docker_compose(file_name: str) -> bool:

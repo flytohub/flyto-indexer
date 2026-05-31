@@ -21,9 +21,9 @@ import re
 from typing import Optional
 
 try:
-    from ..index_store import load_index, get_symbol_content_text
+    from ..index_store import get_symbol_content_text, load_index
 except ImportError:
-    from index_store import load_index, get_symbol_content_text
+    from index_store import get_symbol_content_text, load_index
 
 
 # =============================================================================
@@ -241,20 +241,14 @@ def _is_optional_annotation(annotation: ast.expr) -> bool:
             if annotation.value.id == "Union":
                 if isinstance(annotation.slice, ast.Tuple):
                     for elt in annotation.slice.elts:
-                        if isinstance(elt, ast.Constant) and elt.value is None:
-                            return True
-                        elif isinstance(elt, ast.Name) and elt.id == "None":
+                        if isinstance(elt, ast.Constant) and elt.value is None or isinstance(elt, ast.Name) and elt.id == "None":
                             return True
     elif isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
         # X | None
-        if isinstance(annotation.right, ast.Constant) and annotation.right.value is None:
-            return True
-        elif isinstance(annotation.right, ast.Name) and annotation.right.id == "None":
+        if isinstance(annotation.right, ast.Constant) and annotation.right.value is None or isinstance(annotation.right, ast.Name) and annotation.right.id == "None":
             return True
         # None | X
-        if isinstance(annotation.left, ast.Constant) and annotation.left.value is None:
-            return True
-        elif isinstance(annotation.left, ast.Name) and annotation.left.id == "None":
+        if isinstance(annotation.left, ast.Constant) and annotation.left.value is None or isinstance(annotation.left, ast.Name) and annotation.left.id == "None":
             return True
     return False
 
@@ -900,7 +894,7 @@ def _find_consumer_mismatches(handler_sid: str, api_sid: str, api_project: str,
     for ref_id, ref_project in consumer_refs:
         ref_sym = symbols.get(ref_id, {})
         ref_path = ref_sym.get("path", "")
-        ref_lang = _detect_language(ref_path)
+        _detect_language(ref_path)
 
         # Search ALL type symbols in the consumer project (not just same file)
         for csid, csym in symbols.items():
@@ -1051,7 +1045,7 @@ def contract_drift(project: str = None) -> dict:
     types_checked = 0
 
     for name, entries in type_symbols.items():
-        projects_seen = set(e[2] for e in entries)
+        projects_seen = {e[2] for e in entries}
         if len(projects_seen) < 2:
             continue
 

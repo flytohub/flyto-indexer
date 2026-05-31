@@ -9,11 +9,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 try:
-    from .index_store import load_index, get_symbol_content_text
-    from .analyzer.complexity import _line_threshold_for_file, _is_test_file
+    from .analyzer.complexity import _is_test_file, _line_threshold_for_file
+    from .index_store import get_symbol_content_text, load_index
 except ImportError:
-    from index_store import load_index, get_symbol_content_text
-    from analyzer.complexity import _line_threshold_for_file, _is_test_file
+    from analyzer.complexity import _is_test_file, _line_threshold_for_file
+    from index_store import get_symbol_content_text, load_index
 
 
 def find_complex_functions(

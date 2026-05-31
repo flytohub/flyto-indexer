@@ -4,6 +4,7 @@ Search-index mixin for IndexEngine.
 Builds and incrementally updates BM25 and semantic search indexes.
 Extracted from engine.py.
 """
+import contextlib
 
 try:
     from .bm25 import BM25Index
@@ -95,7 +96,5 @@ class SearchIndexMixin:
 
         # Mark semantic index as stale (lazy rebuild on next load)
         stale_marker = self.index_dir / ".semantic_stale"
-        try:
+        with contextlib.suppress(OSError):
             stale_marker.write_text("1")
-        except OSError:
-            pass

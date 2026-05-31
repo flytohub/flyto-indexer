@@ -10,13 +10,21 @@ ReferenceContext = namedtuple('ReferenceContext', ['names', 'files', 'classes'])
 
 try:
     from ..index_store import (
-        INDEX_DIR, load_index, load_project_map, get_symbol_content_text,
-        invalidate_caches, _get_session_store,
+        INDEX_DIR,
+        _get_session_store,
+        get_symbol_content_text,
+        invalidate_caches,
+        load_index,
+        load_project_map,
     )
 except ImportError:
     from index_store import (
-        INDEX_DIR, load_index, load_project_map, get_symbol_content_text,
-        invalidate_caches, _get_session_store,
+        INDEX_DIR,
+        _get_session_store,
+        get_symbol_content_text,
+        invalidate_caches,
+        load_index,
+        load_project_map,
     )
 
 try:
@@ -120,9 +128,7 @@ def _is_excluded_by_name(sym_type, sym_name, sym_path):
         return True
     if sym_type == "function" and sym_path.endswith(".vue"):
         return True
-    if sym_name.startswith("_") and not sym_name.startswith("__"):
-        return True
-    return False
+    return bool(sym_name.startswith("_") and not sym_name.startswith("__"))
 
 
 def _is_referenced_by_context(sym_type, sym_name, sym_path, ref_ctx):
@@ -142,10 +148,7 @@ def _is_referenced_by_context(sym_type, sym_name, sym_path, ref_ctx):
         return True
 
     file_basename = sym_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-    if file_basename in ref_ctx.files or sym_path in ref_ctx.files:
-        return True
-
-    return False
+    return bool(file_basename in ref_ctx.files or sym_path in ref_ctx.files)
 
 
 def _is_imported_component(sym_type, sym_name, sym_path, dependencies):

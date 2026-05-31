@@ -1,5 +1,6 @@
 """LSP client — manages a single language server subprocess over stdio."""
 
+import contextlib
 import json
 import logging
 import subprocess
@@ -12,7 +13,6 @@ from .protocol import (
     Range,
     encode_message,
     parse_content_length,
-    path_to_uri,
 )
 
 logger = logging.getLogger("flyto-indexer.lsp.client")
@@ -143,10 +143,8 @@ class LSPClient:
         """Ensure the subprocess is fully killed and reaped."""
         self._alive = False
         if self._process is not None:
-            try:
+            with contextlib.suppress(OSError, ProcessLookupError):
                 self._process.kill()
-            except (OSError, ProcessLookupError):
-                pass
             try:
                 self._process.wait(timeout=3)
             except subprocess.TimeoutExpired:

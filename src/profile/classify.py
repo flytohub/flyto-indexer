@@ -137,10 +137,7 @@ def classify_project_type(
         else:
             framework_signals = {"middleware", "plugin", "hook", "provider", "adapter"}
             file_basenames = {os.path.basename(f).lower().split(".")[0] for f in all_files}
-            if framework_signals & file_basenames:
-                sub_type = "framework"
-            else:
-                sub_type = "utility"
+            sub_type = "framework" if framework_signals & file_basenames else "utility"
 
     return {"type": project_type, "sub_type": sub_type}
 
