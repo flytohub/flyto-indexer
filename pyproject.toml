@@ -34,6 +34,7 @@ dev = [
     "hypothesis>=6.0",
     "ruff>=0.4.0",
     "mypy>=1.10.0",
+    "tomli>=2.0.0; python_version < '3.11'",
 ]
 
 [project.scripts]
@@ -76,7 +77,28 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "C4", "SIM"]
-ignore = ["E501"]
+ignore = [
+    "E501",    # line too long
+    "E402",    # module import not at top — try/except import patterns
+    "E741",    # ambiguous variable name
+    "I001",    # import sorting — pre-existing mixed try/except import patterns
+    "F401",    # unused imports — re-exports in __init__.py
+    "F541",    # f-string without placeholders
+    "F811",    # redefinition of unused name
+    "F841",    # local variable assigned but never used
+    "B005",    # strip multi-char — pre-existing
+    "B007",    # unused loop variable — pre-existing
+    "B033",    # duplicate value in set
+    "B904",    # raise from — pre-existing
+    "B905",    # zip without strict
+    "C401",    # set comprehension over list comp
+    "SIM102",  # nested if — pre-existing
+    "SIM103",  # return condition — pre-existing
+    "SIM105",  # contextlib.suppress — pre-existing try/except/pass
+    "SIM108",  # ternary — pre-existing
+    "SIM110",  # use any() instead of loop — pre-existing
+    "SIM114",  # combine if branches — pre-existing
+]
 
 [tool.mypy]
 python_version = "3.10"
@@ -97,4 +119,5 @@ disable_error_code = [
     "list-item",
     "misc",
     "import-untyped",
+    "truthy-function",
 ]

@@ -31,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY pyproject.toml README.md LICENSE NOTICE ./
 COPY src/ ./src/
+COPY config/ ./config/
 
 RUN pip install --upgrade pip build \
     && python -m build --wheel --outdir /wheels .
