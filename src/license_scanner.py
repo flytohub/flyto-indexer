@@ -9,7 +9,10 @@ import json
 import logging
 import os
 import re
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore[no-redef]  # Python 3.10 compat
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
