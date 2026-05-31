@@ -63,6 +63,8 @@ class TestZeroDependency:
         "tqdm", "requests", "openai",
         # yaml is optional (taint_dsl falls back gracefully)
         "yaml",
+        # tomli is the Python 3.10 backport of tomllib (stdlib in 3.11+)
+        "tomli",
     }
 
     # All modules that live inside src/ (internal relative imports)
@@ -176,7 +178,10 @@ class TestZeroDependency:
         pyproject = SRC_DIR.parent / "pyproject.toml"
         if not pyproject.exists():
             pytest.skip("pyproject.toml not found")
-        import tomllib
+        try:
+            import tomllib
+        except ModuleNotFoundError:
+            import tomli as tomllib  # type: ignore[no-redef]  # Python 3.10 compat
         data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
         deps = data.get("project", {}).get("dependencies", [])
         assert deps == [] or deps is None or len(deps) == 0, (
