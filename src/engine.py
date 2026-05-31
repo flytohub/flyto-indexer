@@ -14,12 +14,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from .safe_io import atomic_write_text, atomic_write_lines, atomic_write_json
+
 from .context.loader import ContextLoader
 from .dependency_resolver import DependencyResolverMixin
 from .indexer import IncrementalIndexer, scan_directory_hashes
 from .models import Dependency, DependencyType, FileManifest, ProjectIndex, Symbol, SymbolType
 from .reverse_index import ReverseIndexMixin
-from .safe_io import atomic_write_json, atomic_write_lines
 from .scanner import (
     GoScanner,
     JavaScanner,
@@ -622,6 +623,7 @@ class IndexEngine(
 
         # Restore dependencies
         for did, ddata in data.get("dependencies", {}).items():
+            from .models import DependencyType
             index.dependencies[did] = Dependency(
                 source_id=ddata["source"],
                 target_id=ddata["target"],

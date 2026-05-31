@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger("flyto-indexer.analyzer.call_sites_lsp")
 
@@ -35,11 +36,11 @@ def enrich_with_lsp(project_root: Path, existing: dict) -> dict:
     """Walk function symbols, resolve outgoing calls via LSP, merge
     into existing[local_call_graph]. Returns stats."""
     try:
-        from ..lsp.call_graph import outgoing_calls
         from ..lsp.manager import LSPManager
+        from ..lsp.call_graph import outgoing_calls
     except ImportError:
-        from lsp.call_graph import outgoing_calls  # type: ignore
         from lsp.manager import LSPManager  # type: ignore
+        from lsp.call_graph import outgoing_calls  # type: ignore
 
     mgr = LSPManager.get_instance()
     if not mgr._enabled:

@@ -11,15 +11,15 @@ import json
 import logging
 import os
 import re
-
 try:
     import tomllib
 except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]  # Python 3.10 compat
 import xml.etree.ElementTree as ET
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 logger = logging.getLogger("flyto-indexer.dependency-scanner")
 
@@ -109,7 +109,13 @@ def _find_manifest_files(project_path: Path) -> list[Path]:
         # Filter out skip dirs in-place
         dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
         for fname in filenames:
-            if fname in _MANIFEST_FILES or fname.startswith("Dockerfile") or fname.endswith(".csproj"):
+            if fname in _MANIFEST_FILES:
+                found.append(Path(dirpath) / fname)
+            # Also match Dockerfile.* variants
+            elif fname.startswith("Dockerfile"):
+                found.append(Path(dirpath) / fname)
+            # .NET *.csproj files (variable names)
+            elif fname.endswith(".csproj"):
                 found.append(Path(dirpath) / fname)
     return sorted(found)
 
@@ -550,7 +556,9 @@ def _parse_pom_xml(file_path: Path, project_path: Path) -> list[PackageDependenc
                 scope = "dev"
             elif scope_val == "provided":
                 scope = "optional"
-            elif scope_val == "runtime" or scope_val == "compile":
+            elif scope_val == "runtime":
+                scope = "production"
+            elif scope_val == "compile":
                 scope = "production"
         if optional and optional.strip().lower() == "true":
             scope = "optional"
@@ -1163,7 +1171,9 @@ def scan_dependencies(project_path: str | Path) -> DependencyInventory:
             seen[key] = [entry]
         else:
             existing_versions = {e["version"] for e in seen[key]}
-            if dep.version not in existing_versions or dep.source_file not in {e["source_file"] for e in seen[key]}:
+            if dep.version not in existing_versions:
+                seen[key].append(entry)
+            elif dep.source_file not in {e["source_file"] for e in seen[key]}:
                 seen[key].append(entry)
 
     for (eco, name), entries in seen.items():
@@ -1172,7 +1182,7 @@ def scan_dependencies(project_path: str | Path) -> DependencyInventory:
             conflicts.append(VersionConflict(name=name, ecosystem=eco, versions=entries))
 
     # Build inventory
-    ecosystems = sorted({d.ecosystem for d in all_deps})
+    ecosystems = sorted(set(d.ecosystem for d in all_deps))
     prod_count = sum(1 for d in all_deps if d.scope == "production")
     dev_count = sum(1 for d in all_deps if d.scope in ("dev", "build"))
     indirect_count = sum(1 for d in all_deps if d.scope == "indirect")

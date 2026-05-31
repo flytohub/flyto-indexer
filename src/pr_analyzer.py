@@ -213,7 +213,9 @@ def _check_touches_api(file_path: str, added_lines: list[str], deleted_lines: li
                 return True
     # Also check file path
     path_lower = file_path.lower()
-    return bool(any(seg in path_lower for seg in ("/api/", "/routes/", "/router/", "/endpoints/", "/controllers/")))
+    if any(seg in path_lower for seg in ("/api/", "/routes/", "/router/", "/endpoints/", "/controllers/")):
+        return True
+    return False
 
 
 def _check_touches_auth(file_path: str, added_lines: list[str], deleted_lines: list[str]) -> bool:
@@ -621,7 +623,7 @@ def _classify_change_type(file_info: dict) -> str:
 def format_pr_risk(result: PRRiskResult) -> str:
     """Format PR risk analysis as human-readable text."""
     lines = [
-        "PR Risk Analysis",
+        f"PR Risk Analysis",
         f"  Score: {result.risk_score}/100 ({result.risk_level})",
         f"  Files changed: {result.files_changed}",
         f"  Lines: +{result.lines_added} / -{result.lines_deleted}",

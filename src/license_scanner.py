@@ -7,14 +7,12 @@ manifest files, and uses the dependency scanner for package inventory.
 
 import json
 import logging
+import os
 import re
-
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redef]  # Python 3.10 compat
-from dataclasses import dataclass
+import tomllib
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 logger = logging.getLogger("flyto-indexer.license-scanner")
 
@@ -185,7 +183,7 @@ def _collect_dependency_licenses(project_path: Path) -> tuple[dict, list]:
     pkg_json = project_path / "package.json"
     if pkg_json.is_file():
         try:
-            json.loads(pkg_json.read_text(encoding="utf-8"))
+            data = json.loads(pkg_json.read_text(encoding="utf-8"))
             # Check individual dependencies in node_modules if available
             node_modules = project_path / "node_modules"
             if node_modules.is_dir():

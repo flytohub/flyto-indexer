@@ -6,6 +6,7 @@ Pure Python stdlib, no external dependencies.
 """
 
 import logging
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -31,9 +32,9 @@ def scan_git_history(project_path: str | Path, max_commits: int = 100) -> dict:
 
     # Import secret patterns from secret_scanner
     try:
-        from .secret_scanner import _EXAMPLE_INDICATORS, _SEVERITY_MAP, SECRET_PATTERNS
+        from .secret_scanner import SECRET_PATTERNS, _SEVERITY_MAP, _EXAMPLE_INDICATORS
     except ImportError:
-        from secret_scanner import _EXAMPLE_INDICATORS, SECRET_PATTERNS
+        from secret_scanner import SECRET_PATTERNS, _SEVERITY_MAP, _EXAMPLE_INDICATORS
 
     # Check if this is a git repo
     git_dir = project_path / ".git"

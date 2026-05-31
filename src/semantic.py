@@ -76,7 +76,7 @@ class ConceptGraph:
     @classmethod
     def _collect_file_cooccurrence(cls, cooccur, file_to_syms, sym_tokens):
         """Signal 1: File co-location — symbols in the same file share terms."""
-        for _path, sids in file_to_syms.items():
+        for path, sids in file_to_syms.items():
             if len(sids) < 2:
                 continue
             file_token_sets = [sym_tokens[s] for s in sids if s in sym_tokens]
@@ -87,7 +87,7 @@ class ConceptGraph:
     @classmethod
     def _collect_import_cooccurrence(cls, cooccur, deps, sym_tokens):
         """Signal 2: Import edges — connected symbols have related vocabulary."""
-        for _dep_id, dep in deps.items():
+        for dep_id, dep in deps.items():
             if isinstance(dep, dict):
                 src = dep.get("source", "")
                 tgt = dep.get("target", "")
@@ -131,7 +131,7 @@ class ConceptGraph:
         term_freq: dict[str, float] = defaultdict(float)
         total_cooccur = 0.0
         for t1, neighbors in cooccur.items():
-            for _t2, count in neighbors.items():
+            for t2, count in neighbors.items():
                 term_freq[t1] += count
                 total_cooccur += count
 

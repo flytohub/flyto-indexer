@@ -159,7 +159,7 @@ def analyze_import_health(
     Can use pre-built index (dependencies/reverse_index) or scan from scratch.
     """
     project_root = Path(project_root)
-    ImportHealthReport()
+    report = ImportHealthReport()
 
     # Strategy 1: Use index if available (much faster)
     if index and index.get("dependencies"):
@@ -207,12 +207,12 @@ def _analyze_from_index(index: dict, threshold: int) -> ImportHealthReport:
     file_imported_by: dict[str, set[str]] = defaultdict(set)
     all_files: set[str] = set()
 
-    for _sym_id, sym in symbols.items():
+    for sym_id, sym in symbols.items():
         path = sym.get("path", "")
         if path:
             all_files.add(path)
 
-    for _dep_id, dep in deps.items():
+    for dep_id, dep in deps.items():
         if dep.get("type") not in ("imports", "calls", "uses", "extends", "implements"):
             continue
         source_id = dep.get("source", "")

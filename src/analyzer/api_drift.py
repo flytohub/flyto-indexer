@@ -16,6 +16,7 @@ Pure Python stdlib, no external dependencies.
 
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass
@@ -83,7 +84,7 @@ def _path_matches(def_path: str, call_path: str) -> bool:
     if len(def_parts) != len(call_parts):
         return False
 
-    for dp, cp in zip(def_parts, call_parts, strict=False):
+    for dp, cp in zip(def_parts, call_parts):
         if dp.startswith("{") or cp.startswith("{"):
             continue  # param segment — matches anything
         if dp != cp:
@@ -98,8 +99,9 @@ def _detect_version_drift(def_path: str, call_path: str) -> str | None:
     def_match = ver_pattern.search(def_path)
     call_match = ver_pattern.search(call_path)
 
-    if def_match and call_match and def_match.group(1) != call_match.group(1):
-        return f"Backend defines v{def_match.group(1)}, frontend calls v{call_match.group(1)}"
+    if def_match and call_match:
+        if def_match.group(1) != call_match.group(1):
+            return f"Backend defines v{def_match.group(1)}, frontend calls v{call_match.group(1)}"
     return None
 
 

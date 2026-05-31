@@ -11,12 +11,8 @@ from pathlib import Path
 from typing import Optional
 
 from .constants import (
-    API_CATEGORY_KEYS,
-    BACKEND_EXTS,
-    ENTRY_FILE_PATTERN,
-    ENTRY_NAMES,
-    FRONTEND_EXTS,
-    HTTP_METHODS,
+    BACKEND_EXTS, FRONTEND_EXTS, HTTP_METHODS,
+    ENTRY_FILE_PATTERN, ENTRY_NAMES, API_CATEGORY_KEYS,
 )
 
 logger = logging.getLogger("flyto-indexer.profile")
@@ -133,8 +129,9 @@ def _collect_api_from_dep_edges(index: dict, result: dict) -> None:
         if url.startswith("http://") or url.startswith("https://") or url.startswith("*/"):
             if entry not in result["api_calls_external"]:
                 result["api_calls_external"].append(entry)
-        elif url and entry not in result["api_calls_internal"]:
-            result["api_calls_internal"].append(entry)
+        elif url:
+            if entry not in result["api_calls_internal"]:
+                result["api_calls_internal"].append(entry)
 
 
 def _collect_api_from_routes(index: dict, result: dict) -> None:
@@ -187,8 +184,9 @@ def _collect_entry_points(symbols: dict) -> list[str]:
         path = sym.get("path", "")
         if path and ENTRY_FILE_PATTERN.search(path):
             entry_files.add(path)
-        if sym.get("name", "").lower() in ENTRY_NAMES and path:
-            entry_files.add(path)
+        if sym.get("name", "").lower() in ENTRY_NAMES:
+            if path:
+                entry_files.add(path)
     return sorted(entry_files)
 
 
@@ -293,9 +291,9 @@ def compute_complexity_summary(symbols: dict, index_dir: Path) -> dict:
     """Compute complexity summary from indexed symbols."""
     try:
         try:
-            from ..analyzer.complexity import _is_test_file, _line_threshold_for_file
+            from ..analyzer.complexity import _line_threshold_for_file, _is_test_file
         except ImportError:
-            from analyzer.complexity import _is_test_file, _line_threshold_for_file
+            from analyzer.complexity import _line_threshold_for_file, _is_test_file
     except ImportError:
         def _line_threshold_for_file(p):
             return 100 if any(p.endswith(e) for e in (".vue", ".tsx", ".jsx")) else 80
@@ -466,7 +464,10 @@ def compute_reachability(deps: dict, idx: dict) -> dict:
     unreachable = 0
     details = []
     for dep in dep_list:
-        name = dep.get("name", "") if isinstance(dep, dict) else str(dep)
+        if isinstance(dep, dict):
+            name = dep.get("name", "")
+        else:
+            name = str(dep)
         if not name:
             continue
         total += 1

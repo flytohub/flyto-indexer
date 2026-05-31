@@ -33,13 +33,13 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-_ALLOWED_ORIGINS: set[str] = {
+_ALLOWED_ORIGINS: set[str] = set(
     origin.strip()
     for origin in os.environ.get(
         "FLYTO_CORS_ORIGINS", "http://localhost:5173,http://localhost:5180"
     ).split(",")
     if origin.strip()
-}
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -38,8 +38,8 @@ _NON_TAINTABLE_TYPES = {
     # TypeScript / JavaScript
     "number", "boolean", "bigint", "Date", "symbol",
     # Go — best-effort literal types
-    "int32", "int64", "uint", "uint32", "uint64",
-    "float32", "float64", "time.Time", "time.Duration",
+    "int", "int32", "int64", "uint", "uint32", "uint64",
+    "float32", "float64", "bool", "time.Time", "time.Duration",
 }
 
 

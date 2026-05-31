@@ -5,7 +5,6 @@ Atomic writes prevent index corruption on crash/power loss.
 Structured logging replaces bare `except Exception` swallowing.
 """
 
-import contextlib
 import json
 import logging
 import os
@@ -62,8 +61,10 @@ def atomic_write_text(path: Path, content: str, encoding: str = "utf-8"):
         os.replace(tmp_path, path)
     except BaseException:
         # Clean up temp file on any failure
-        with contextlib.suppress(OSError):
+        try:
             os.unlink(tmp_path)
+        except OSError:
+            pass
         raise
 
 
@@ -94,6 +95,8 @@ def atomic_write_lines(path: Path, lines_iter, encoding: str = "utf-8"):
             os.fsync(f.fileno())
         os.replace(tmp_path, path)
     except BaseException:
-        with contextlib.suppress(OSError):
+        try:
             os.unlink(tmp_path)
+        except OSError:
+            pass
         raise

@@ -3,7 +3,6 @@ Python scanner using AST analysis.
 """
 
 import ast
-import contextlib
 from pathlib import Path
 from typing import Optional
 
@@ -435,8 +434,10 @@ class PythonScanner(BaseScanner):
                         # Try to infer type from Field() call or value
                         type_str = ""
                         if isinstance(item.value, ast.Call):
-                            with contextlib.suppress(Exception):
+                            try:
                                 type_str = ast.unparse(item.value.func)
+                            except Exception:
+                                pass
                         fields.append({"name": name, "type": type_str})
 
         return fields

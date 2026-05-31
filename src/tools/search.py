@@ -4,24 +4,24 @@ import re
 
 try:
     from ..index_store import (
-        LOW_PRIORITY_PATHS,
-        TYPE_WEIGHTS,
-        _get_session_store,
+        load_index,
+        get_symbol_content_text,
         _load_bm25,
         _load_semantic,
-        get_symbol_content_text,
-        load_index,
+        _get_session_store,
+        TYPE_WEIGHTS,
+        LOW_PRIORITY_PATHS,
     )
     from ..synonyms import expand_query
 except ImportError:
     from index_store import (
-        LOW_PRIORITY_PATHS,
-        TYPE_WEIGHTS,
-        _get_session_store,
+        load_index,
+        get_symbol_content_text,
         _load_bm25,
         _load_semantic,
-        get_symbol_content_text,
-        load_index,
+        _get_session_store,
+        TYPE_WEIGHTS,
+        LOW_PRIORITY_PATHS,
     )
     from synonyms import expand_query
 
@@ -290,7 +290,11 @@ def _build_candidates(all_symbols, bm25_scores, query_lower, query_words, synony
         if symbol_id in candidates:
             continue
         name = symbol.get("name", "").lower()
-        if any(w in name for w in query_words) or synonym_tokens and any(w in name for w in synonym_tokens) or query_lower == name:
+        if any(w in name for w in query_words):
+            candidates[symbol_id] = symbol
+        elif synonym_tokens and any(w in name for w in synonym_tokens):
+            candidates[symbol_id] = symbol
+        elif query_lower == name:
             candidates[symbol_id] = symbol
 
     return candidates

@@ -247,15 +247,15 @@ def _get_prompt(name: str, arguments: dict = None) -> dict:
 def _read_resource(uri: str) -> dict:
     """Read an MCP resource by URI."""
     try:
-        from .index_store import load_index
-        from .quality import code_health_score
         from .tools.code_info import list_projects
         from .tools.maintenance import check_and_reindex
+        from .quality import code_health_score
+        from .index_store import load_index
     except ImportError:
-        from index_store import load_index
-        from quality import code_health_score
         from tools.code_info import list_projects
         from tools.maintenance import check_and_reindex
+        from quality import code_health_score
+        from index_store import load_index
 
     if uri == "indexer://projects":
         data = list_projects()
@@ -514,62 +514,62 @@ def _build_analyze_task_directive(result: dict) -> str:
 
 try:
     from . import index_store as _index_store_mod
-    from .diff_impact import impact_from_diff
     from .index_store import (
-        INDEX_DIR,
-        LOW_PRIORITY_PATHS,
-        TYPE_WEIGHTS,
-        _get_session_store,
-        _get_test_mapper,
-        _load_bm25,
-        _load_semantic,
-        get_symbol_content_text,
-        load_content_file,
-        load_index,
-        load_project_map,
+        INDEX_DIR, load_index, load_project_map, load_content_file,
+        get_symbol_content_text, TYPE_WEIGHTS, LOW_PRIORITY_PATHS,
+        _load_bm25, _load_semantic, _get_test_mapper, _get_session_store,
     )
-    from .quality import (
-        analyze_data_flow,
-        code_health_score,
-        find_complex_functions,
-        find_duplicates,
-        find_stale_files,
-        security_scan,
-        suggest_refactoring,
+    from .tools.search import search_by_keyword, fulltext_search, semantic_search
+    from .tools.references import (
+        find_references, impact_analysis, batch_impact_analysis,
+        edit_impact_preview, cross_project_impact, dependency_graph,
     )
     from .tools.code_info import (
-        find_test_file,
-        get_description,
-        get_file_context,
-        get_file_info,
-        get_file_symbols,
-        get_symbol_content,
-        list_apis,
-        list_categories,
-        list_projects,
-        update_description,
+        get_file_info, get_file_symbols, get_symbol_content,
+        get_file_context, list_categories, list_apis, list_projects,
+        get_description, update_description, find_test_file,
     )
     from .tools.maintenance import (
-        _perform_live_reindex,
-        check_and_reindex,
-        check_index_status,
-        find_dead_code,
-        find_todos,
-        session_get,
-        session_track,
+        find_dead_code, find_todos, check_index_status,
+        check_and_reindex, _perform_live_reindex,
+        session_track, session_get,
     )
-    from .tools.references import (
-        batch_impact_analysis,
-        cross_project_impact,
-        dependency_graph,
-        edit_impact_preview,
-        find_references,
-        impact_analysis,
-    )
-    from .tools.search import fulltext_search, search_by_keyword, semantic_search
     from .tools.task_analysis import analyze_task, task_gate_check
+    from .quality import (
+        find_complex_functions, find_duplicates, security_scan,
+        find_stale_files, code_health_score, suggest_refactoring,
+        analyze_data_flow,
+    )
+    from .diff_impact import impact_from_diff
 except ImportError:
     import index_store as _index_store_mod
+    from index_store import (
+        INDEX_DIR, load_index, load_project_map, load_content_file,
+        get_symbol_content_text, TYPE_WEIGHTS, LOW_PRIORITY_PATHS,
+        _load_bm25, _load_semantic, _get_test_mapper, _get_session_store,
+    )
+    from tools.search import search_by_keyword, fulltext_search, semantic_search
+    from tools.references import (
+        find_references, impact_analysis, batch_impact_analysis,
+        edit_impact_preview, cross_project_impact, dependency_graph,
+    )
+    from tools.code_info import (
+        get_file_info, get_file_symbols, get_symbol_content,
+        get_file_context, list_categories, list_apis, list_projects,
+        get_description, update_description, find_test_file,
+    )
+    from tools.maintenance import (
+        find_dead_code, find_todos, check_index_status,
+        check_and_reindex, _perform_live_reindex,
+        session_track, session_get,
+    )
+    from tools.task_analysis import analyze_task, task_gate_check
+    from quality import (
+        find_complex_functions, find_duplicates, security_scan,
+        find_stale_files, code_health_score, suggest_refactoring,
+        analyze_data_flow,
+    )
+    from diff_impact import impact_from_diff
 
 # Expose index_store internal state for backward compat —
 # tests set mcp_server._index_cache, _content_cache, _content_loaded,
@@ -579,7 +579,6 @@ _PROXIED_ATTRS = {"_index_cache", "_content_cache", "_content_loaded",
                   "_test_mapper", "_session_store"}
 
 import types as _types
-
 
 class _IndexStoreProxy(_types.ModuleType):
     def __setattr__(self, name, value):
