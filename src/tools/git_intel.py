@@ -9,12 +9,12 @@ import os
 import re
 import subprocess
 import time
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 try:
-    from ..index_store import get_symbol_content_text, load_index
+    from ..index_store import load_index, get_symbol_content_text
 except ImportError:
-    from index_store import load_index
+    from index_store import load_index, get_symbol_content_text
 
 
 # ---------------------------------------------------------------------------

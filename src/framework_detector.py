@@ -12,13 +12,10 @@ import json
 import logging
 import os
 import re
-
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redef]  # Python 3.10 compat
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 logger = logging.getLogger("flyto-indexer.framework")
 

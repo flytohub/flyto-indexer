@@ -513,7 +513,7 @@ class TaintAnalyzer:
                 continue
 
             # Check if any argument is tainted
-            for _i, arg in enumerate(call.args):
+            for i, arg in enumerate(call.args):
                 tainted, src, chain = self._expr_is_tainted(arg, taint_state)
                 if tainted:
                     # Check if sanitized for this vuln type
@@ -713,7 +713,10 @@ class TaintAnalyzer:
         if not isinstance(node, ast.Call):
             return False
         text = _safe_unparse(node.func)
-        return any(pattern.rstrip("(") in text for pattern, _ in self._sanitizers)
+        for pattern, _ in self._sanitizers:
+            if pattern.rstrip("(") in text:
+                return True
+        return False
 
     def _is_sanitized_for(self, node: ast.AST, vuln_type: str) -> bool:
         """Check if expression is wrapped in a sanitizer for given vuln type."""
@@ -1131,7 +1134,7 @@ class TaintAnalyzer:
                 call = stmt.value
                 call_name = _safe_unparse(call.func)
                 if callee_name in call_name:
-                    for param_idx, _param_name, vuln_type, severity, rec in param_info_list:
+                    for param_idx, param_name, vuln_type, severity, rec in param_info_list:
                         if param_idx < len(call.args):
                             tainted, src, chain = self._expr_is_tainted(
                                 call.args[param_idx], taint_state,

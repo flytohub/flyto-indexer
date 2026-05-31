@@ -5,17 +5,17 @@ from pathlib import Path
 
 try:
     from ..index_store import (
-        _get_test_mapper,
-        get_symbol_content_text,
         load_index,
+        get_symbol_content_text,
         load_project_map,
+        _get_test_mapper,
     )
 except ImportError:
     from index_store import (
-        _get_test_mapper,
-        get_symbol_content_text,
         load_index,
+        get_symbol_content_text,
         load_project_map,
+        _get_test_mapper,
     )
 
 

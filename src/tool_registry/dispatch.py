@@ -4,30 +4,14 @@ Unified tool dispatch — single entry point for all tool execution.
 
 import os
 from pathlib import Path as _P
-from typing import Any, Dict
+from typing import Any, Dict, Set
 
 from .lazy_imports import (
-    _coverage_intel,
-    _dep_scanner,
-    _diff,
-    _doc_scanner,
-    _framework_detector,
-    _git_intel,
-    _info,
-    _layers_mod,
-    _license_scanner,
-    _maint,
-    _pr_analyzer,
-    _profile,
-    _quality,
-    _refs,
-    _search,
-    _secret_scanner,
-    _smart,
-    _taint_dsl_mod,
-    _task,
-    _type_contracts,
-    _validation,
+    _search, _refs, _info, _maint, _quality, _diff, _task,
+    _validation, _git_intel, _coverage_intel, _type_contracts,
+    _dep_scanner, _profile, _secret_scanner, _license_scanner,
+    _doc_scanner, _pr_analyzer, _framework_detector, _smart,
+    _layers_mod, _taint_dsl_mod,
 )
 
 

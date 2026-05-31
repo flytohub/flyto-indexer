@@ -16,7 +16,6 @@ Usage:
 """
 
 import argparse
-import contextlib
 import json
 import os
 import subprocess
@@ -1247,7 +1246,7 @@ def cmd_setup(args):
     print("  [3/3] Configuring MCP server...")
     _configure_mcp_settings()
 
-    print("\nDone! Restart Claude Code to activate.")
+    print(f"\nDone! Restart Claude Code to activate.")
     print("Try: ask Claude to audit this project.")
     return None
 
@@ -1307,7 +1306,7 @@ def cmd_setup_claude(args):
 
 def cmd_deps(args):
     """Scan and list all external package dependencies."""
-    from .dependency_scanner import format_dependency_table, scan_dependencies
+    from .dependency_scanner import scan_dependencies, format_dependency_table
 
     project_path = Path(args.path).resolve()
     if not project_path.exists():
@@ -1350,8 +1349,8 @@ def cmd_export(args):
     Combines profile + taint into the format expected by
     POST /api/v1/code/repos/{id}/scan-upload.
     """
-    from .analyzer.taint import TaintAnalyzer
     from .project_profile import build_project_profile
+    from .analyzer.taint import TaintAnalyzer
 
     project_path = Path(args.path).resolve()
     if not project_path.exists():
@@ -1366,8 +1365,10 @@ def cmd_export(args):
     index = {}
     index_path = project_path / ".flyto-index" / "index.json"
     if index_path.exists():
-        with contextlib.suppress(Exception):
+        try:
             index = json.loads(index_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
     analyzer = TaintAnalyzer(project_path, index=index)
     taint_result = analyzer.analyze_full()
     elapsed = time.monotonic() - t0
@@ -1413,7 +1414,10 @@ def cmd_export(args):
         exclude_patterns = getattr(args, "exclude", []) or []
 
         def _should_exclude(path: str) -> bool:
-            return any(fnmatch.fnmatch(path, pat) for pat in exclude_patterns)
+            for pat in exclude_patterns:
+                if fnmatch.fnmatch(path, pat):
+                    return True
+            return False
 
         # Filter symbols and dependencies by exclude patterns
         filtered_symbols = {}
@@ -1465,9 +1469,8 @@ def cmd_export(args):
 
 def cmd_secrets(args):
     """Scan project for hardcoded secrets."""
+    from .secret_scanner import scan_secrets, format_secret_scan
     from dataclasses import asdict
-
-    from .secret_scanner import format_secret_scan, scan_secrets
 
     project_path = Path(args.path).resolve()
     if not project_path.exists():
@@ -1492,9 +1495,8 @@ def cmd_secrets(args):
 
 def cmd_license(args):
     """Detect project and dependency licenses."""
+    from .license_scanner import scan_licenses, format_license_scan
     from dataclasses import asdict
-
-    from .license_scanner import format_license_scan, scan_licenses
 
     project_path = Path(args.path).resolve()
     if not project_path.exists():
@@ -1512,9 +1514,8 @@ def cmd_license(args):
 
 def cmd_docs(args):
     """Analyze documentation coverage."""
+    from .doc_scanner import scan_documentation, format_doc_scan
     from dataclasses import asdict
-
-    from .doc_scanner import format_doc_scan, scan_documentation
 
     project_path = Path(args.path).resolve()
     if not project_path.exists():
@@ -1920,8 +1921,10 @@ def cmd_taint(args):
     index = {}
     index_path = project_path / ".flyto-index" / "index.json"
     if index_path.exists():
-        with contextlib.suppress(Exception):
+        try:
             index = json.loads(index_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
 
     t0 = time.monotonic()
     analyzer = TaintAnalyzer(project_path, index=index)
@@ -1941,7 +1944,10 @@ def cmd_taint(args):
         # and downstream caps fall back to MaxTaintFlowsKept=200) were
         # surprised by full unbounded output, especially on large repos.
         max_results = getattr(args, "max_results", 0) or 0
-        target = flows if args.severity else [f for f in result.taint_flows if not f.sanitized]
+        if args.severity:
+            target = flows
+        else:
+            target = [f for f in result.taint_flows if not f.sanitized]
         if max_results and max_results > 0 and len(target) > max_results:
             target = target[:max_results]
             output["truncated"] = True

@@ -5,15 +5,16 @@ classify change type (signature vs body), and run impact analysis.
 Imports index data directly from index_store.
 """
 
+import os
 import re
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 try:
-    from .index_store import get_symbol_content_text, load_index
+    from .index_store import load_index, get_symbol_content_text
 except ImportError:
-    from index_store import get_symbol_content_text, load_index
+    from index_store import load_index, get_symbol_content_text
 
 try:
     from .signature import ChangeKind, classify_symbol_change

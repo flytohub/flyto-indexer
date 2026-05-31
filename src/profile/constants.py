@@ -2,6 +2,7 @@
 Shared constants for project profile analysis.
 """
 
+import os
 import re
 
 # Directories to skip during filesystem walk

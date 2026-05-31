@@ -303,6 +303,7 @@ class ComplexityAnalyzer:
         max_depth = 0
         depth = 0
 
+        nesting_keywords = {"if", "for", "while", "switch", "try", "catch"}
         branch_keywords = {"if", "else", "for", "while", "switch", "try", "catch", "case"}
 
         for line in content.split("\n"):

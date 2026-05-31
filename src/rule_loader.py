@@ -84,7 +84,7 @@ def _parse_yaml_lines(lines: list[str], start: int, base_indent: int) -> tuple[A
                 # Inline mapping in list item: - key: value
                 item_dict = {}
                 # Check for multi-line mapping
-                indent + 2
+                item_indent = indent + 2
                 k, v = item_text.split(":", 1)
                 k = k.strip().strip('"').strip("'")
                 v = v.strip()

@@ -5,15 +5,14 @@ import re
 from pathlib import Path
 
 try:
-    from ..index_store import get_symbol_content_text, load_index
+    from ..index_store import load_index, get_symbol_content_text
 except ImportError:
-    from index_store import get_symbol_content_text, load_index
+    from index_store import load_index, get_symbol_content_text
 
 try:
-    from .resolver import get_dedup_key as _resolver_dedup_key
-    from .resolver import resolve_symbol
+    from .resolver import resolve_symbol, get_dedup_key as _resolver_dedup_key
 except ImportError:
-    from resolver import resolve_symbol
+    from resolver import resolve_symbol, get_dedup_key as _resolver_dedup_key
 
 logger = logging.getLogger("flyto-indexer.references")
 
@@ -349,6 +348,7 @@ def _enrich_impact_with_call_hierarchy(
 
     if project_root is None:
         import os
+        from pathlib import Path as _P
         project_root = os.environ.get("FLYTO_PROJECT_ROOT") or os.getcwd()
     project_root_path = Path(project_root)
 
@@ -422,16 +422,19 @@ def _enrich_with_lsp(resolved_id: str, target_symbol: dict, index: dict) -> list
             # Fallback: try to infer from index dir
             import os
             project_root = os.environ.get("FLYTO_INDEX_DIR", "")
-            project_root = str(os.path.dirname(project_root)) if project_root else os.getcwd()
+            if project_root:
+                project_root = str(os.path.dirname(project_root))
+            else:
+                project_root = os.getcwd()
 
         client = manager.get_client(language, project_root)
         if client is None:
             return []
 
         try:
-            from ..lsp.mapper import lsp_locations_to_references, symbol_to_lsp_position
+            from ..lsp.mapper import symbol_to_lsp_position, lsp_locations_to_references
         except ImportError:
-            from lsp.mapper import lsp_locations_to_references, symbol_to_lsp_position
+            from lsp.mapper import symbol_to_lsp_position, lsp_locations_to_references
 
         pos = symbol_to_lsp_position(target_symbol, project_root)
         if pos is None:

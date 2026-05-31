@@ -213,7 +213,7 @@ def analyze_config_drift(project_root: str | Path) -> ConfigDriftReport:
                 var_name=var,
                 category="missing_in_env",
                 severity="high",
-                description="Referenced in code but not defined in any .env file",
+                description=f"Referenced in code but not defined in any .env file",
                 files=files[:5],
             ))
 
