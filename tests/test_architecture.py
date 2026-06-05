@@ -87,7 +87,7 @@ class TestZeroDependency:
         "workflow",
         "dependency_resolver", "reverse_index", "search_index",
         "profile", "builder", "formatter", "classify", "filesystem",
-        "health", "index_extract", "scanners", "constants",
+        "health", "index_extract", "scanners", "constants", "import_usage",
         "mcp_tools", "smart_tools", "vscode_tools", "lazy_imports", "dispatch",
         "git_secret_scanner",
         # Python builtins that show up as imports

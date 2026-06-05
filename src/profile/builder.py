@@ -2,8 +2,11 @@
 Main profile builder — aggregates all data sources into one profile dict.
 """
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from .classify import classify_project_type, detect_patterns, detect_services
 from .filesystem import scan_filesystem
@@ -57,32 +60,32 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         from ..analyzer.error_handling import analyze_error_handling
         _eng_intel["error_handling"] = analyze_error_handling(project_path).to_dict()
     except Exception:
-        pass
+        logger.warning("optional profile analyzer failed; continuing with partial profile", exc_info=True)
     try:
         from ..analyzer.tech_debt import analyze_tech_debt
         _eng_intel["tech_debt"] = analyze_tech_debt(project_path).to_dict()
     except Exception:
-        pass
+        logger.warning("optional profile analyzer failed; continuing with partial profile", exc_info=True)
     try:
         from ..analyzer.perf_patterns import analyze_perf_patterns
         _eng_intel["perf_patterns"] = analyze_perf_patterns(project_path).to_dict()
     except Exception:
-        pass
+        logger.warning("optional profile analyzer failed; continuing with partial profile", exc_info=True)
     try:
         from ..analyzer.import_health import analyze_import_health
         _eng_intel["import_health"] = analyze_import_health(project_path).to_dict()
     except Exception:
-        pass
+        logger.warning("optional profile analyzer failed; continuing with partial profile", exc_info=True)
     try:
         from ..analyzer.config_drift import analyze_config_drift
         _eng_intel["config_drift"] = analyze_config_drift(project_path).to_dict()
     except Exception:
-        pass
+        logger.warning("optional profile analyzer failed; continuing with partial profile", exc_info=True)
     try:
         from ..analyzer.bus_factor import analyze_bus_factor
         _eng_intel["bus_factor"] = analyze_bus_factor(project_path).to_dict()
     except Exception:
-        pass
+        logger.warning("optional profile analyzer failed; continuing with partial profile", exc_info=True)
     try:
         from ..analyzer.api_drift import analyze_api_drift
         api_defs = idx.get("api_definitions", [])
@@ -90,7 +93,17 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         if api_defs or api_calls:
             _eng_intel["api_drift"] = analyze_api_drift(api_defs, api_calls).to_dict()
     except Exception:
-        pass
+        logger.warning("optional profile analyzer failed; continuing with partial profile", exc_info=True)
+
+    # Per-package import usage (import_counts / import_files) for flyto-engine
+    # CVE reachability. Degrade to empty on failure rather than break the export.
+    _import_counts: dict = {}
+    _import_files: dict = {}
+    try:
+        from .import_usage import compute_import_usage
+        _import_counts, _import_files = compute_import_usage(project_path)
+    except Exception:
+        logger.warning("import_usage extraction failed", exc_info=True)
 
     services = detect_services(deps)
     project_type_info = classify_project_type(
@@ -197,6 +210,12 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         "license_policy_issues": license_policy_issues,
         "iac_findings": iac_data,
         "reachability": compute_reachability(deps, idx),
+        # Top-level import_counts / import_files — flyto-engine reads these from
+        # the uploaded profile (integrations/flyto-engine.md) to anchor
+        # package-level CVE reachability to real source files. Previously absent,
+        # so the engine silently dropped reachability on every upload.
+        "import_counts": _import_counts,
+        "import_files": _import_files,
         "container_findings": {
             "total_findings": dockerfile_data.get("total_issues", 0),
             "critical": sum(1 for i in dockerfile_data.get("issues", []) if i.get("severity") == "CRITICAL"),
@@ -220,14 +239,14 @@ def build_project_profile(project_path: Path, compact: bool = False) -> dict:
         pyramid_report = compute_pyramids(profile)
         profile["pyramids"] = pyramid_report.to_dict()
     except Exception:
-        pass
+        logger.warning("optional profile analyzer failed; continuing with partial profile", exc_info=True)
 
     # Lens analysis — cross-signal hotspots per perspective (v2.12+)
     try:
         from ..analyzer.lens import compute_all_lenses
         profile["lenses"] = compute_all_lenses(profile)
     except Exception:
-        pass
+        logger.warning("optional profile analyzer failed; continuing with partial profile", exc_info=True)
 
     if not compact:
         profile["folder_structure"] = fs["folder_structure"]
