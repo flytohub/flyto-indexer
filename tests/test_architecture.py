@@ -71,7 +71,7 @@ class TestZeroDependency:
     INTERNAL_MODULES = {
         "src", "models", "analyzer", "scanner", "tools", "lsp", "indexer",
         "mapper", "context", "auditor", "engine", "bm25", "semantic",
-        "safe_io", "index_store", "quality", "diff_impact", "signature",
+        "safe_io", "safe_xml", "index_store", "quality", "diff_impact", "signature",
         "tool_registry", "mcp_server", "cli", "project_profile",
         "secret_scanner", "dependency_scanner", "iac_scanner",
         "license_scanner", "doc_scanner", "pr_analyzer", "sbom_export",

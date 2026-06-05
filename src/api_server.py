@@ -29,9 +29,37 @@ import argparse
 import json
 import logging
 import os
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
+
+# Cap request bodies so a single connection cannot force an unbounded
+# self.rfile.read() allocation (memory-exhaustion DoS). 4 MiB is generous for
+# the tiny JSON these endpoints accept.
+MAX_BODY_BYTES = 4 * 1024 * 1024
+
+# Bound how long a slow/incomplete request may hold a worker thread (slow-loris).
+SOCKET_TIMEOUT_SECONDS = 30
+
+# Upper bound on search result counts a client may request.
+MAX_SEARCH_RESULTS = 100
+
+
+class _BadRequest(Exception):
+    """Malformed request body — surfaced as HTTP 400."""
+
+
+class _PayloadTooLarge(Exception):
+    """Request body over MAX_BODY_BYTES — surfaced as HTTP 413."""
+
+
+def _clamp_max_results(value, default: int = 10) -> int:
+    """Coerce a client-supplied max_results into [1, MAX_SEARCH_RESULTS]."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(1, min(n, MAX_SEARCH_RESULTS))
 
 _ALLOWED_ORIGINS: set[str] = set(
     origin.strip()
@@ -368,6 +396,10 @@ def get_stats() -> dict:
 class APIHandler(BaseHTTPRequestHandler):
     """HTTP request handler"""
 
+    # StreamRequestHandler.setup() applies this as the per-connection socket
+    # timeout, bounding slow-loris reads that would otherwise pin a worker.
+    timeout = SOCKET_TIMEOUT_SECONDS
+
     def _get_cors_origin(self) -> str | None:
         """Return the request Origin if it is in the allowed set, else None."""
         origin = self.headers.get("Origin", "")
@@ -391,11 +423,23 @@ class APIHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
 
     def _read_json(self) -> dict:
-        content_length = int(self.headers.get("Content-Length", 0))
-        if content_length > 0:
-            body = self.rfile.read(content_length)
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except (TypeError, ValueError):
+            raise _BadRequest("invalid Content-Length")
+        if content_length < 0:
+            raise _BadRequest("invalid Content-Length")
+        if content_length > MAX_BODY_BYTES:
+            raise _PayloadTooLarge(
+                f"request body {content_length} exceeds {MAX_BODY_BYTES}-byte limit"
+            )
+        if content_length == 0:
+            return {}
+        body = self.rfile.read(content_length)
+        try:
             return json.loads(body.decode("utf-8"))
-        return {}
+        except (ValueError, UnicodeDecodeError) as e:
+            raise _BadRequest(f"invalid JSON body: {e}")
 
     def do_OPTIONS(self):
         self.send_response(200)
@@ -425,11 +469,18 @@ class APIHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        body = self._read_json()
+        try:
+            body = self._read_json()
+        except _PayloadTooLarge as e:
+            self._send_json({"error": str(e)}, 413)
+            return
+        except _BadRequest as e:
+            self._send_json({"error": str(e)}, 400)
+            return
 
         if path == "/search":
             query = body.get("query", "")
-            max_results = body.get("max_results", 10)
+            max_results = _clamp_max_results(body.get("max_results", 10))
             self._send_json(search_by_keyword(query, max_results))
 
         elif path == "/file/info":
@@ -454,10 +505,15 @@ class APIHandler(BaseHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description="Flyto Indexer HTTP API Server")
     parser.add_argument("--port", type=int, default=8765, help="Server port")
-    parser.add_argument("--host", default="0.0.0.0", help="Server host")
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Server host (defaults to loopback; this service has no auth)",
+    )
     args = parser.parse_args()
 
-    server = HTTPServer((args.host, args.port), APIHandler)
+    server = ThreadingHTTPServer((args.host, args.port), APIHandler)
+    server.timeout = SOCKET_TIMEOUT_SECONDS
     logger.info(f"Flyto Indexer API Server running at http://{args.host}:{args.port}")
     logger.info(f"OpenAPI spec: http://{args.host}:{args.port}/openapi.json")
     logger.info(f"Health check: http://{args.host}:{args.port}/health")

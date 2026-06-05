@@ -7,6 +7,11 @@ import sqlite3
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+try:
+    from ..safe_xml import safe_parse_xml, UnsafeXMLError
+except ImportError:  # imported with src/ directly on sys.path
+    from safe_xml import safe_parse_xml, UnsafeXMLError
 from typing import Dict, List, Optional, Set, Tuple
 
 try:
@@ -160,7 +165,7 @@ def _parse_coverage_xml(xml_path: str) -> Dict[str, Set[int]]:
     result: Dict[str, Set[int]] = {}
 
     try:
-        tree = ET.parse(xml_path)
+        tree = safe_parse_xml(xml_path)
         root = tree.getroot()
 
         for cls in root.iter("class"):
@@ -181,7 +186,7 @@ def _parse_coverage_xml(xml_path: str) -> Dict[str, Set[int]]:
             else:
                 result[filename] = lines
 
-    except (ET.ParseError, OSError):
+    except (ET.ParseError, OSError, UnsafeXMLError):
         pass
 
     return result

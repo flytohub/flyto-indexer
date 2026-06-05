@@ -17,6 +17,11 @@ except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]  # Python 3.10 compat
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field, asdict
+
+try:
+    from .safe_xml import safe_parse_xml, UnsafeXMLError
+except ImportError:  # imported as a top-level module (src/ on sys.path)
+    from safe_xml import safe_parse_xml, UnsafeXMLError
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -527,8 +532,8 @@ def _parse_pom_xml(file_path: Path, project_path: Path) -> list[PackageDependenc
     deps = []
     source = _rel_path(file_path, project_path)
     try:
-        tree = ET.parse(file_path)
-    except (ET.ParseError, OSError) as e:
+        tree = safe_parse_xml(file_path)
+    except (ET.ParseError, OSError, UnsafeXMLError) as e:
         logger.warning("Failed to parse %s: %s", file_path, e)
         return deps
 
