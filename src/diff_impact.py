@@ -55,6 +55,11 @@ def _run_git_diff(root: str, mode: str, base: str) -> str:
     Returns:
         Raw unified diff text
     """
+    # SECURITY: a base ref starting with '-' would be parsed by git as an option
+    # (argument injection). Refuse it; the ref is interpolated into the command.
+    if base and base.startswith("-"):
+        raise ValueError("invalid base ref: must not start with '-'")
+
     cmd = ["git", "-C", root, "diff", "--unified=0", "--no-color"]
 
     if mode == "staged":

@@ -5,9 +5,37 @@ Usage:
     validate_changes(project="flyto-indexer", run_tests=True)
 """
 
+import os
 import subprocess
 import re
 from pathlib import Path
+
+# pytest auto-imports conftest.py from the tree it runs against, so executing it
+# on an ingested/untrusted repository is arbitrary code execution. Gate it behind
+# an explicit opt-in.
+_ALLOW_TEST_EXECUTION_ENV = "FLYTO_ALLOW_TEST_EXECUTION"
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def _test_execution_allowed() -> bool:
+    return os.environ.get(_ALLOW_TEST_EXECUTION_ENV, "").strip().lower() in _TRUTHY
+
+
+def _validate_test_path(test_path: str, project_root: str):
+    """Confine test_path to a relative path inside project_root.
+
+    Returns (True, relative_path) or (False, error_message). Rejects a leading
+    '-' (pytest argument injection) and any path that escapes the project root.
+    """
+    if test_path.startswith("-"):
+        return False, "invalid test_path: must not start with '-'"
+    root = Path(project_root).resolve()
+    candidate = (root / test_path).resolve()
+    try:
+        rel = candidate.relative_to(root)
+    except ValueError:
+        return False, "invalid test_path: escapes the project root"
+    return True, str(rel)
 
 try:
     from ..index_store import load_index
@@ -82,7 +110,29 @@ def _run_pytest(project_root: str, test_path: str = None) -> dict:
         "output": "",
     }
 
-    cmd = ["python", "-m", "pytest", test_path or ".", "-x", "--tb=short", "-q"]
+    # SECURITY: refuse to execute tests unless explicitly opted in — pytest
+    # auto-imports conftest.py from the target tree (code execution on an
+    # untrusted/ingested repo).
+    if not _test_execution_allowed():
+        result["output"] = (
+            "test execution disabled: pytest auto-imports conftest.py from the "
+            "target tree, which is arbitrary code execution on untrusted repos. "
+            f"Set {_ALLOW_TEST_EXECUTION_ENV}=1 to enable."
+        )
+        return result
+
+    # SECURITY: confine the target to a relative path inside project_root and
+    # pass it after '--' so it can never be parsed as a pytest option.
+    target = "."
+    if test_path:
+        ok, value = _validate_test_path(test_path, project_root)
+        if not ok:
+            result["status"] = "error"
+            result["output"] = value
+            return result
+        target = value
+
+    cmd = ["python", "-m", "pytest", "-x", "--tb=short", "-q", "--", target]
 
     try:
         proc = subprocess.run(
