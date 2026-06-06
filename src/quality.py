@@ -600,7 +600,7 @@ def code_health_score(project: str = None) -> dict:
             # Fallback: skip dead code scoring
             find_dead_code = None
 
-    if find_dead_code:
+    if find_dead_code is not None:
         dead_result = find_dead_code(project=project, min_lines=5)
         dead_count = dead_result.get("total_dead", 0)
     else:
@@ -735,7 +735,7 @@ def suggest_refactoring(project: str = None, max_results: int = 20) -> dict:
         except ImportError:
             find_dead_code = None
 
-    if find_dead_code:
+    if find_dead_code is not None:
         dead_result = find_dead_code(project=project, min_lines=10)
         for sym in dead_result.get("dead_symbols", []):
             lines = sym.get("lines", 0)

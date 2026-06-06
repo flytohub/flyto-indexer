@@ -291,6 +291,16 @@ class TestEngineScan:
         assert manifest.content_hash != ""
         assert manifest.line_count > 0
 
+    def test_scan_creates_file_symbols(self, tmp_path):
+        """File-level dependency IDs should resolve to real file symbols."""
+        engine = _make_engine(tmp_path, {"hello.py": SIMPLE_PYTHON})
+        engine.scan(incremental=False)
+
+        file_id = "test:hello.py:file:hello"
+        assert file_id in engine.index.symbols
+        assert engine.index.symbols[file_id].symbol_type == SymbolType.FILE
+        assert engine.index.files["hello.py"].symbols[0] == file_id
+
     def test_scan_multiple_files(self, tmp_path):
         """Scan a project with multiple Python files."""
         engine = _make_engine(tmp_path, {

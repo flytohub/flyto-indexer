@@ -174,7 +174,7 @@ def query_type_at(
     except ImportError:
         _ensure_open = None
 
-    if _ensure_open:
+    if _ensure_open is not None:
         _LANG_ID = {"python": "python", "typescript": "typescript", "go": "go", "rust": "rust"}
         _ensure_open(client, uri, _LANG_ID.get(language, language), str(source_file))
 

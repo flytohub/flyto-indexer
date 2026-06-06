@@ -496,6 +496,38 @@ class IndexEngine(
             "resolved": False,
         }
 
+    def _file_symbol_for_manifest(self, manifest: FileManifest) -> Symbol:
+        """Create the canonical file-level symbol used by import dependencies."""
+        path = Path(manifest.path)
+        return Symbol(
+            project=self.project_name,
+            path=manifest.path,
+            symbol_type=SymbolType.FILE,
+            name=path.stem,
+            start_line=1 if manifest.line_count else 0,
+            end_line=manifest.line_count,
+            content="",
+            content_hash=manifest.content_hash,
+            summary=f"File {manifest.path}",
+            language=self._language_for_path(path),
+        )
+
+    @staticmethod
+    def _language_for_path(path: Path) -> str:
+        """Infer a stable language label from a source path."""
+        suffix = path.suffix.lower()
+        return {
+            ".py": "python",
+            ".ts": "typescript",
+            ".tsx": "typescript",
+            ".js": "javascript",
+            ".jsx": "javascript",
+            ".vue": "vue",
+            ".go": "go",
+            ".rs": "rust",
+            ".java": "java",
+        }.get(suffix, suffix[1:] if suffix else "")
+
     def _load_or_create_index(self) -> ProjectIndex:
         """Load or create index"""
         index_file = self.index_dir / "index.json"
@@ -542,6 +574,12 @@ class IndexEngine(
         # Add new data
         for symbol in result.symbols:
             self.index.symbols[symbol.id] = symbol
+
+        for manifest in result.manifests:
+            file_symbol = self._file_symbol_for_manifest(manifest)
+            self.index.symbols[file_symbol.id] = file_symbol
+            if file_symbol.id not in manifest.symbols:
+                manifest.symbols.insert(0, file_symbol.id)
 
         for dep in result.dependencies:
             self.index.dependencies[dep.id] = dep

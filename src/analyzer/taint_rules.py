@@ -373,6 +373,8 @@ SANITIZERS = [
     ("url_has_allowed_host_and_scheme(", ["ssrf", "open_redirect"]),
     # NoSQL sanitizer
     ("bson.ObjectId(", ["nosql_injection"]),
+    # ReDoS sanitizers
+    ("_validate_grep_pattern(", ["redos"]),
     # Generic sanitization keywords (substring match)
     ("sanitize(", ["*"]),
     ("clean(", ["xss"]),
@@ -445,14 +447,14 @@ JS_TAINT_PATTERNS = [
 
 GO_TAINT_PATTERNS = [
     # r.FormValue/URL.Query → db.Query/Exec (source first)
-    (r'(?:FormValue|URL\.Query)\b.*?(?:db\.(?:Query|Exec|QueryRow)|\.Query|\.Exec)\s*\(',
+    (r'(?:FormValue|URL\.Query)\b.*?(?:\b(?:db|tx|conn|database)\.(?:Query|Exec|QueryRow))\s*\(',
      "sql_injection", "high", "Use parameterized queries with $1 placeholders"),
     # Same but sink first — real Go code often writes
     # `db.Query("SELECT ... " + c.Query("x"))`.
-    (r'(?:db\.(?:Query|Exec|QueryRow)|\.Query|\.Exec)\s*\([^)]*(?:FormValue|URL\.Query|c\.(?:Query|Param|PostForm|BindJSON|FormValue))\b',
+    (r'(?:\b(?:db|tx|conn|database)\.(?:Query|Exec|QueryRow))\s*\([^)]*(?:FormValue|URL\.Query|c\.(?:Query|Param|PostForm|BindJSON|FormValue))\b',
      "sql_injection", "high", "Use parameterized queries with $1 placeholders"),
     # Gin/Echo/Fiber sources → db.Query/Exec (common framework surface)
-    (r'(?:c\.(?:Query|Param|PostForm|BindJSON|ShouldBindJSON|Bind|FormValue|GetHeader))\b.*?(?:db\.(?:Query|Exec|QueryRow)|\.Query|\.Exec)\s*\(',
+    (r'(?:c\.(?:Query|Param|PostForm|BindJSON|ShouldBindJSON|Bind|FormValue|GetHeader))\b.*?(?:\b(?:db|tx|conn|database)\.(?:Query|Exec|QueryRow))\s*\(',
      "sql_injection", "high", "Use parameterized queries with $1 placeholders"),
     # r.FormValue → exec.Command
     (r'(?:FormValue|URL\.Query)\b.*?exec\.Command\s*\(',

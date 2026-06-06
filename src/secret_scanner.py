@@ -8,6 +8,7 @@ private keys, database URLs, service-specific tokens, and more.
 import logging
 import os
 import re
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -167,8 +168,22 @@ def _is_doc_file(fname: str, rel_path: str) -> bool:
 
 # Patterns to skip in specific contexts — line content indicates example/placeholder
 _EXAMPLE_INDICATORS = re.compile(
-    r"(?i)(example|placeholder|TODO|your[_\-]|change[_\-]?me|replace|sample|dummy|fake|mock|template|xxx)",
+    r"(?i)(example|placeholder|TODO|your[_\-]|change[_\-]?me|replace|sample|dummy|fake|mock|template|xxx|fixture|canary|gitleaks|detect-secrets|well-known)",
 )
+
+_KNOWN_FAKE_SECRET_VALUES = frozenset({
+    # Public AWS canary key used by secret-scanner test suites.
+    "AKIAI44QH8DHBR3WZLPQ",
+})
+
+_COMMENT_LOW_SIGNAL_PATTERNS = frozenset({
+    "api_key",
+    "api_token",
+    "database_url",
+    "generic_secret",
+    "password",
+    "secret",
+})
 
 
 def _mask_value(match_text: str) -> str:
@@ -176,6 +191,39 @@ def _mask_value(match_text: str) -> str:
     if len(match_text) <= 4:
         return match_text + "***"
     return match_text[:4] + "***"
+
+
+def _is_scanner_rule_definition(rel_path: str, line: str) -> bool:
+    """Skip regex/rule definitions that describe secrets rather than contain them."""
+    normalized = rel_path.replace("\\", "/")
+    if normalized.startswith("config/rules/"):
+        return True
+    if normalized in {".gitleaks.toml", ".secrets.baseline"}:
+        return True
+    if normalized.endswith(("secret_scanner.py", "analyzer/security.py", "rule_loader.py")):
+        lower = line.lower()
+        if "re.compile" in lower or "re.search" in lower or "pattern" in lower:
+            return True
+    return False
+
+
+def _load_git_ignored_paths(project_path: Path) -> set[str]:
+    """Return gitignored, untracked paths so local secrets do not fail repo scans."""
+    try:
+        result = subprocess.run(
+            [
+                "git", "-C", str(project_path),
+                "ls-files", "--others", "--ignored", "--exclude-standard", "-z",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return set()
+    if result.returncode != 0 or not result.stdout:
+        return set()
+    return {path for path in result.stdout.split("\0") if path}
 
 
 def scan_secrets(project_path: str | Path) -> SecretScanResult:
@@ -205,6 +253,7 @@ def scan_secrets(project_path: str | Path) -> SecretScanResult:
     project_path = Path(project_path).resolve()
     findings: list[SecretFinding] = []
     files_scanned = 0
+    git_ignored_paths = _load_git_ignored_paths(project_path)
 
     for dirpath, dirnames, filenames in os.walk(project_path):
         # Filter skip dirs in-place
@@ -218,6 +267,8 @@ def scan_secrets(project_path: str | Path) -> SecretScanResult:
                 rel_path = str(file_path)
 
             if _should_skip_file(fname, rel_path):
+                continue
+            if rel_path in git_ignored_paths:
                 continue
 
             # Try to read as text
@@ -237,12 +288,16 @@ def scan_secrets(project_path: str | Path) -> SecretScanResult:
             for line_num, line in enumerate(content.splitlines(), start=1):
                 # Skip comment-only lines in source files
                 stripped = line.strip()
-                if stripped.startswith("//") or stripped.startswith("#") or stripped.startswith("*"):
-                    # Still check for actual key patterns (AWS, GitHub token etc.)
-                    # but skip generic patterns like password/database_url in comments
-                    pass
+                is_comment_only = (
+                    stripped.startswith("//")
+                    or stripped.startswith("#")
+                    or stripped.startswith("*")
+                )
 
                 for pattern_name, pattern_re, pattern_severity in patterns_to_use:
+                    if is_comment_only and pattern_name in _COMMENT_LOW_SIGNAL_PATTERNS:
+                        continue
+
                     # Skip generic patterns in doc files — they're examples
                     if is_doc and pattern_name in ("database_url", "password", "secret", "api_key", "api_token"):
                         continue
@@ -253,8 +308,17 @@ def scan_secrets(project_path: str | Path) -> SecretScanResult:
                         if match.lastindex:
                             matched_text = match.group(match.lastindex)
 
+                        if matched_text in _KNOWN_FAKE_SECRET_VALUES:
+                            continue
+
                         # Skip if line contains example/placeholder indicators
                         if _EXAMPLE_INDICATORS.search(line):
+                            continue
+
+                        if _is_scanner_rule_definition(rel_path, line):
+                            continue
+
+                        if re.search(r"\$\{[A-Z0-9_]*(?:SECRET|TOKEN|KEY)[A-Z0-9_]*:-\}", line):
                             continue
 
                         # Skip HTML input type="password" and similar false positives

@@ -41,7 +41,8 @@ MAX_CALLERS = 2000
 MAX_CROSS_DEPTH = 6
 SKIP_DIR_PATTERNS = re.compile(
     r"(?:^|/)(?:test|tests|__tests__|mock|fixture|node_modules|__pycache__|"
-    r"\.git|dist|build|\.venv|venv|\.nuxt|\.output)(?:/|$)"
+    r"\.git|dist|dist-next|build|\.venv|venv|\.nuxt|\.output|coverage)(?:/|$)|"
+    r"(?:^|/)[^/]*(?:_test\.go|_test\.py|\.test\.[jt]sx?|\.spec\.[jt]sx?)$"
 )
 
 # Severity ranking for category defaults
@@ -497,6 +498,10 @@ class TaintAnalyzer:
         """Handle a call expression as a statement — check if it's a sink."""
         call_str = _safe_unparse(call.func)
 
+        if self._is_subprocess_sink(call_str):
+            self._handle_subprocess_shell_call(call, taint_state, file_path, func_name)
+            return
+
         for pattern, vuln_type, severity, rec in self._flat_sinks:
             # Strip trailing ( for matching against unparsed func name
             match_pat = pattern.rstrip("(")
@@ -506,6 +511,12 @@ class TaintAnalyzer:
             idx = call_str.find(match_pat)
             end_idx = idx + len(match_pat)
             if end_idx < len(call_str) and call_str[end_idx].isalnum():
+                continue
+
+            # subprocess.* is only an RCE sink in this AST pass when shell=True.
+            # Arg-list subprocess usage is handled as safe by default; shell=True
+            # is checked explicitly in the keyword-arg block below.
+            if self._is_subprocess_sink(match_pat):
                 continue
 
             # Parameterized query detection: execute(sql, params) is safe
@@ -565,29 +576,45 @@ class TaintAnalyzer:
                             ).append((param_idx, param_name, vuln_type, severity, rec))
                     break  # one finding per call site
 
-            # Also check keyword args
-            for kw in call.keywords:
-                if kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True:
-                    # subprocess with shell=True — check if first arg is tainted
-                    if call.args:
-                        tainted, src, chain = self._expr_is_tainted(call.args[0], taint_state)
-                        if tainted:
-                            self.findings.append(TaintFlow(
-                                file_path=file_path,
-                                line=getattr(call, "lineno", 0),
-                                severity="critical",
-                                category="rce",
-                                source_expr=src,
-                                sink_expr=_safe_unparse(call),
-                                flow_chain=chain + [_safe_unparse(call)],
-                                recommendation="Do not pass shell=True with user input; use arg list",
-                                source_file=file_path,
-                                source_line=getattr(call, "lineno", 0),
-                                sink_file=file_path,
-                                sink_line=getattr(call, "lineno", 0),
-                                path=[f"{file_path}:{func_name}:{getattr(call, 'lineno', 0)}"],
-                                sanitized=False,
-                            ))
+    @staticmethod
+    def _is_subprocess_sink(match_pat: str) -> bool:
+        return match_pat in {
+            "subprocess.run",
+            "subprocess.call",
+            "subprocess.Popen",
+        }
+
+    def _handle_subprocess_shell_call(
+        self,
+        call: ast.Call,
+        taint_state: dict,
+        file_path: str,
+        func_name: str,
+    ) -> None:
+        for kw in call.keywords:
+            if kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True:
+                if not call.args:
+                    return
+                tainted, src, chain = self._expr_is_tainted(call.args[0], taint_state)
+                if not tainted:
+                    return
+                self.findings.append(TaintFlow(
+                    file_path=file_path,
+                    line=getattr(call, "lineno", 0),
+                    severity="critical",
+                    category="rce",
+                    source_expr=src,
+                    sink_expr=_safe_unparse(call),
+                    flow_chain=chain + [_safe_unparse(call)],
+                    recommendation="Do not pass shell=True with user input; use arg list",
+                    source_file=file_path,
+                    source_line=getattr(call, "lineno", 0),
+                    sink_file=file_path,
+                    sink_line=getattr(call, "lineno", 0),
+                    path=[f"{file_path}:{func_name}:{getattr(call, 'lineno', 0)}"],
+                    sanitized=False,
+                ))
+                return
 
     def _expr_is_tainted(
         self, node: ast.AST, taint_state: dict,

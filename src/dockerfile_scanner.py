@@ -21,7 +21,7 @@ except ImportError:
     except ImportError:
         get_docker_rules = None
 
-_docker_rules = get_docker_rules() if get_docker_rules else None
+_docker_rules = get_docker_rules() if get_docker_rules is not None else None
 
 # Directories to skip
 _SKIP_DIRS = frozenset({

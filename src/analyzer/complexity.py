@@ -23,7 +23,11 @@ except ImportError:
     except ImportError:
         get_complexity_thresholds = None
 
-_thresholds = get_complexity_thresholds() if get_complexity_thresholds else None
+_thresholds = (
+    get_complexity_thresholds()
+    if get_complexity_thresholds is not None
+    else None
+)
 
 
 # File-type-aware line thresholds

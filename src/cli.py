@@ -275,6 +275,22 @@ def main():
     check_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as structured JSON")
     check_parser.add_argument("--base", help="Git ref to compare against (default: detect from index staleness)")
 
+    # verify
+    verify_parser = subparsers.add_parser(
+        "verify",
+        help="Run no-dependency closed-loop verification for AI-assisted changes",
+        description=(
+            "Run scan/status integrity, context lookup, impact analysis, secret scan, "
+            "taint scan, docs coverage, and agent-hygiene checks without external tools."
+        ),
+    )
+    verify_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    verify_parser.add_argument("--full-scan", action="store_true", help="Rebuild the index before verification")
+    verify_parser.add_argument("--query", help="Context query to verify (default: most-referenced symbol name)")
+    verify_parser.add_argument("--symbol", help="Symbol to verify with impact analysis (default: most-referenced symbol)")
+    verify_parser.add_argument("--strict", action="store_true", help="Treat warnings as failures")
+    verify_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
+
     # pr-risk
     pr_risk_parser = subparsers.add_parser(
         "pr-risk",
@@ -419,6 +435,8 @@ def main():
             result = cmd_call_sites(args)
         elif args.command == "check":
             result = cmd_check(args)
+        elif args.command == "verify":
+            result = cmd_verify(args)
         elif args.command == "pr-risk":
             result = cmd_pr_risk(args)
         elif args.command == "sbom":
@@ -940,6 +958,25 @@ def cmd_tools(args):
             "side_effects": [],
             "examples": ["flyto-index context --path . --query 'authentication flow'"],
             "exit_codes": {"0": "success", "1": "error"},
+        },
+        {
+            "name": "verify",
+            "summary": "Run no-dependency closed-loop verification for AI-assisted changes",
+            "args": [
+                {"name": "path", "type": "string", "required": False, "default": ".", "description": "Project root path"},
+                {"name": "--full-scan", "type": "boolean", "required": False, "default": False, "description": "Rebuild the index before verification"},
+                {"name": "--query", "type": "string", "required": False, "description": "Context query to verify"},
+                {"name": "--symbol", "type": "string", "required": False, "description": "Symbol to verify with impact analysis"},
+                {"name": "--strict", "type": "boolean", "required": False, "default": False, "description": "Treat warnings as failures"},
+                {"name": "--json", "type": "boolean", "required": False, "default": False, "description": "Output as JSON"},
+            ],
+            "outputs": [],
+            "side_effects": ["may write .flyto-index/ when --full-scan is used or no index exists"],
+            "examples": [
+                "flyto-index verify .",
+                "flyto-index verify . --full-scan --strict --json",
+            ],
+            "exit_codes": {"0": "success", "2": "verification failed"},
         },
         {
             "name": "outline",
@@ -2097,6 +2134,27 @@ def cmd_check(args):
     if should_fail:
         sys.exit(1)
 
+    return None
+
+
+def cmd_verify(args):
+    """Run the no-external-dependency verification gate."""
+    from .verify import format_verification, run_verification
+
+    result = run_verification(
+        args.path,
+        full_scan=args.full_scan,
+        query=args.query,
+        symbol=args.symbol,
+        strict=args.strict,
+    )
+
+    if hasattr(args, "as_json") and args.as_json:
+        return result
+
+    print(format_verification(result))
+    if not result["pass"]:
+        sys.exit(2)
     return None
 
 

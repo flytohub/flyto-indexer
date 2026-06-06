@@ -58,6 +58,15 @@ class TestDirectSourceToSink:
         assert len(findings) >= 1
         assert findings[0].category == "rce"
 
+    def test_subprocess_shell_true(self):
+        findings = _analyze_code("""\
+            def run_cmd():
+                cmd = request.args.get('cmd')
+                subprocess.run(cmd, shell=True)
+        """)
+        assert len(findings) >= 1
+        assert findings[0].category == "rce"
+
     def test_xss_render_template_string(self):
         findings = _analyze_code("""\
             def show():
@@ -199,6 +208,55 @@ class TestNoFalsePositives:
                 os.system(f"echo {name}")
         """)
         assert len(findings) == 0
+
+    def test_subprocess_arg_list_without_shell_is_safe(self):
+        findings = _analyze_code("""\
+            def process():
+                repo = request.args.get('repo')
+                subprocess.run(["git", "-C", repo, "status"], timeout=30)
+        """)
+        assert len(findings) == 0
+
+    def test_regex_validator_clears_redos(self):
+        findings = _analyze_code("""\
+            def process():
+                pattern = sys.argv[3]
+                pattern = _validate_grep_pattern(pattern)
+                re.compile(pattern)
+        """)
+        assert len(findings) == 0
+
+    def test_dist_next_assets_are_skipped(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            asset_dir = root / "dist-next" / "assets"
+            asset_dir.mkdir(parents=True)
+            (asset_dir / "bundle.js").write_text(
+                "location.hash && (document.body.innerHTML = location.hash)\n",
+                encoding="utf-8",
+            )
+            findings = TaintAnalyzer(root).analyze()
+            assert len(findings) == 0
+
+    def test_go_url_query_read_alone_is_safe(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "handler.go").write_text(
+                'func h(r *http.Request) { filter := r.URL.Query().Get("repo_id"); _ = filter }\n',
+                encoding="utf-8",
+            )
+            findings = TaintAnalyzer(root).analyze()
+            assert len(findings) == 0
+
+    def test_go_url_query_to_db_query_is_flagged(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "handler.go").write_text(
+                'func h(r *http.Request) { filter := r.URL.Query().Get("repo_id"); db.Query("select " + filter) }\n',
+                encoding="utf-8",
+            )
+            findings = TaintAnalyzer(root).analyze()
+            assert any(f.category == "sql_injection" for f in findings)
 
     def test_sanitizer_reassignment(self):
         findings = _analyze_code("""\

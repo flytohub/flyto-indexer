@@ -31,6 +31,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY pyproject.toml README.md LICENSE NOTICE ./
 COPY src/ ./src/
+# config/rules is force-included into the wheel (see pyproject
+# [tool.hatch.build.targets.wheel.force-include]); the wheel build fails
+# without it present in the build context.
 COPY config/ ./config/
 
 RUN pip install --upgrade pip build \

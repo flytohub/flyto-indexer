@@ -273,7 +273,7 @@ def impact_from_diff(
     risk_summary = {"high_risk": 0, "moderate_risk": 0, "low_risk": 0, "safe": 0}
 
     for sym in changed_symbols:
-        if impact_analysis:
+        if impact_analysis is not None:
             impact_result = impact_analysis(sym["symbol_id"])
         else:
             impact_result = {"affected_count": 0, "affected": []}

@@ -57,7 +57,7 @@ def _prepare_item(
     except ImportError:
         _ensure_open = None
     _LANG_ID = {"python": "python", "typescript": "typescript", "go": "go", "rust": "rust"}
-    if _ensure_open:
+    if _ensure_open is not None:
         _ensure_open(client, uri, _LANG_ID.get(language, language), str(source_file))
 
     try:

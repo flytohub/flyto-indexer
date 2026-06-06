@@ -7,7 +7,7 @@
     <a href="https://github.com/flytohub/flyto-indexer/actions"><img src="https://github.com/flytohub/flyto-indexer/workflows/CI/badge.svg" alt="CI"></a>
     <a href="https://pypi.org/project/flyto-indexer/"><img src="https://img.shields.io/pypi/v/flyto-indexer.svg" alt="PyPI"></a>
     <a href="https://github.com/flytohub/flyto-indexer/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License"></a>
-    <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
+    <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+"></a>
   </p>
   <p>
     MCP server that gives AI assistants impact analysis, cross-project reference tracking, and code health scoring.<br/>
@@ -74,6 +74,26 @@ That's it. One command does everything:
 3. **Configures** Claude Code MCP settings (`~/.claude/settings.json`)
 
 Restart Claude Code and start using it. Works with any MCP client — Claude Code, Cursor, Windsurf, etc.
+
+## Usage
+
+Use `flyto-index verify` as the default gate before an AI agent finishes a code
+change. It runs the local indexer, validates graph integrity, checks context and
+impact loops, and runs the built-in weak scanners without Semgrep, Checkov, or
+network access.
+
+```bash
+flyto-index scan . --full
+flyto-index verify . --strict
+flyto-index impact MySharedSymbol --path .
+flyto-index context --path . --query "auth routes query keys"
+flyto-index secrets . --json
+flyto-index taint . --json --max-results 100
+```
+
+For CI, use `verify --strict` to fail on incomplete graph closure, unresolved
+impact references, high-risk secret findings, high-risk taint flows, or missing
+agent instructions.
 
 <details>
 <summary>Manual setup (other MCP clients)</summary>

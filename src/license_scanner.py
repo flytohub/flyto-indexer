@@ -49,7 +49,7 @@ _LICENSE_PATTERNS = [
 ]
 
 # Copyleft licenses that may impose restrictions (YAML override or hardcoded fallback)
-_policies = get_license_policies() if get_license_policies else None
+_policies = get_license_policies() if get_license_policies is not None else None
 _COPYLEFT_LICENSES = frozenset(_policies["copyleft"]) if _policies else frozenset({
     "GPL-2.0", "GPL-3.0", "AGPL-3.0", "LGPL",
     "GPL", "AGPL", "LGPL-2.1", "LGPL-3.0",
@@ -239,7 +239,7 @@ def check_license_policy(dep_licenses: dict) -> list[dict]:
         List of policy issues found, each a dict with keys:
         package, license, risk_level, reason.
     """
-    policies = get_license_policies() if get_license_policies else None
+    policies = get_license_policies() if get_license_policies is not None else None
     if not policies:
         # No policies loaded — only flag known copyleft as a basic check
         issues = []

@@ -136,7 +136,7 @@ def _check_api_doc_coverage(project_path: Path) -> float:
     api_symbols = [s for s in symbols.values() if s.get("type") == "api"]
 
     if not api_symbols:
-        return 0.0  # No API routes found — not applicable
+        return 1.0  # No API routes found — not applicable, so do not penalize CLI/library projects.
 
     documented = sum(1 for s in api_symbols if s.get("summary", "").strip())
     return documented / len(api_symbols)

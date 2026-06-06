@@ -20,6 +20,7 @@ import importlib
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -147,7 +148,11 @@ class TestZeroDependency:
 
     def _is_internal(self, module_name: str) -> bool:
         """Check if a module is internal (relative import or src package)."""
-        return module_name in self.INTERNAL_MODULES
+        return (
+            module_name in self.INTERNAL_MODULES
+            or (SRC_DIR / f"{module_name}.py").exists()
+            or (SRC_DIR / module_name / "__init__.py").exists()
+        )
 
     def test_no_external_imports_in_production_code(self):
         """Every import in src/ must be stdlib, internal, or guarded optional."""
@@ -732,14 +737,48 @@ class TestScannerCompleteness:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "config.py"
-            # Use a realistic-looking key (not the AWS docs example)
+            # Use a realistic-looking key (not the AWS docs example or canary)
             test_file.write_text(
-                'AWS_ACCESS_KEY = "AKIAI44QH8DHBR3WZLPQ"\n',
+                'AWS_ACCESS_KEY = "AKIA1234567890ABCDEF"\n',
                 encoding="utf-8",
             )
             result = scan_secrets(tmpdir)
             findings = getattr(result, "findings", result)
             assert len(findings) >= 1, "Failed to detect AWS access key"
+
+    def test_secret_scanner_skips_public_canary_key(self):
+        """Public canary keys used in scanner tests should not fail project scans."""
+        from secret_scanner import scan_secrets
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / ".gitleaks.toml"
+            test_file.write_text(
+                "regexes = [\n"
+                "  '''AKIAI44QH8DHBR3WZLPQ''',\n"
+                "]\n",
+                encoding="utf-8",
+            )
+            result = scan_secrets(tmpdir)
+            findings = getattr(result, "findings", result)
+            assert len(findings) == 0
+
+    def test_secret_scanner_skips_rule_definitions(self):
+        """Regex/rule definitions should not be treated as leaked credentials."""
+        from secret_scanner import scan_secrets
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            analyzer_dir = Path(tmpdir) / "src" / "analyzer"
+            analyzer_dir.mkdir(parents=True)
+            test_file = analyzer_dir / "security.py"
+            test_file.write_text(
+                "# Type definitions (password: 'password' style mappings)\n"
+                "if re.search(r'password[=:]passw0rd123', line):\n"
+                "    return True\n",
+                encoding="utf-8",
+            )
+            result = scan_secrets(tmpdir)
+            findings = getattr(result, "findings", result)
+            assert len(findings) == 0
 
     def test_secret_scanner_skips_placeholders(self):
         """Placeholder values like 'your-api-key-here' must NOT be flagged."""
@@ -760,6 +799,37 @@ class TestScannerCompleteness:
                 f"Placeholder values incorrectly flagged as secrets: "
                 f"{[(f.pattern_name, f.masked_value) for f in findings]}"
             )
+
+    def test_secret_scanner_skips_empty_env_expansion_defaults(self):
+        """Compose-style ${SECRET:-} references are variable names, not leaked values."""
+        from secret_scanner import scan_secrets
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "docker-compose.yml"
+            test_file.write_text(
+                'FLYTO_RUNNER_SECRET: "${FLYTO_RUNNER_SECRET:-}"\n',
+                encoding="utf-8",
+            )
+            result = scan_secrets(tmpdir)
+            findings = getattr(result, "findings", result)
+            assert len(findings) == 0
+
+    def test_secret_scanner_skips_gitignored_local_env_files(self):
+        """Ignored local env files should not fail repository secret scans."""
+        from secret_scanner import scan_secrets
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            subprocess.run(["git", "init", str(root)], capture_output=True, check=True)
+            (root / ".gitignore").write_text(".env\n", encoding="utf-8")
+            (root / ".env").write_text(
+                'AWS_ACCESS_KEY_ID = "AKIA1234567890ABCDEF"\n',
+                encoding="utf-8",
+            )
+
+            result = scan_secrets(root)
+            findings = getattr(result, "findings", result)
+            assert len(findings) == 0
 
     def test_dependency_scanner_all_ecosystems(self):
         """Dependency scanner must handle all claimed ecosystems."""

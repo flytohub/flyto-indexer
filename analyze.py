@@ -57,6 +57,21 @@ CODE_EXTENSIONS = {
 }
 
 
+def _validate_grep_pattern(pattern: str) -> str:
+    """Reject regex patterns likely to cause catastrophic backtracking."""
+    if len(pattern) > 200:
+        raise ValueError("pattern is too long (max 200 characters)")
+    risky_patterns = (
+        r"\([^)]*[+*][^)]*\)[+*?]",
+        r"\([^)]*\{[0-9,]+\}[^)]*\)[+*?]",
+        r"\.\*[+*]",
+    )
+    for risky in risky_patterns:
+        if re.search(risky, pattern):
+            raise ValueError("pattern contains nested quantifiers")
+    return pattern
+
+
 def cmd_ls(target_path: Path):
     """List directory contents"""
     if not target_path.is_dir():
@@ -147,8 +162,9 @@ def cmd_grep(project_path: Path, pattern: str = None):
     print(f"{'='*70}\n")
 
     try:
+        pattern = _validate_grep_pattern(pattern)
         regex = re.compile(pattern, re.IGNORECASE)
-    except re.error as e:
+    except (re.error, ValueError) as e:
         print(f"Error: Invalid regex pattern - {e}")
         return
 
