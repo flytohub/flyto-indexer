@@ -1113,5 +1113,83 @@ class TestReverseIndex:
         assert "ref" in engine.BUILTIN_NAMES
 
 
+class TestImpact:
+    """Test impact analysis output."""
+
+    def test_impact_uses_reverse_index_references(self, tmp_path):
+        """impact() should surface reverse-index callers even without dep edges."""
+        engine = _make_engine(tmp_path, {})
+        target = Symbol(
+            project="test",
+            path="src/shared.py",
+            symbol_type=SymbolType.FUNCTION,
+            name="shared_helper",
+        )
+        caller = Symbol(
+            project="test",
+            path="src/page.py",
+            symbol_type=SymbolType.FUNCTION,
+            name="render_page",
+        )
+        engine.index.symbols[target.id] = target
+        engine.index.symbols[caller.id] = caller
+        engine.index.reverse_index[target.id] = [caller.id]
+
+        result = engine.impact("shared_helper", max_depth=2)
+
+        assert result["total_direct_references"] == 1
+        assert result["direct_references"][0]["id"] == caller.id
+        assert result["direct_references"][0]["resolved"] is True
+        assert result["impact_chain"][0]["affected"][0]["id"] == caller.id
+
+    def test_impact_keeps_reverse_index_only_reference_ids(self, tmp_path):
+        """Unresolved reverse-index IDs are still useful and should not be hidden."""
+        engine = _make_engine(tmp_path, {})
+        target = Symbol(
+            project="test",
+            path="src/shared.py",
+            symbol_type=SymbolType.FUNCTION,
+            name="shared_helper",
+        )
+        caller_id = "test:src/page.py:import:shared_helper"
+        engine.index.symbols[target.id] = target
+        engine.index.reverse_index[target.id] = [caller_id]
+
+        result = engine.impact("shared_helper", max_depth=2)
+
+        assert result["total_direct_references"] == 1
+        assert result["direct_references"][0] == {
+            "id": caller_id,
+            "path": "src/page.py",
+            "type": "import",
+            "name": "shared_helper",
+            "resolved": False,
+        }
+        assert result["impact_chain"][0]["affected"][0]["id"] == caller_id
+
+
+class TestContextQuery:
+    """Test query-driven context loading."""
+
+    def test_context_multi_token_query_matches_symbol_name_and_path(self, tmp_path):
+        """Multi-word/CamelCase queries should not require exact substring matches."""
+        engine = _make_engine(tmp_path, {
+            "src/workspace/page_shell.py": (
+                "def workspace_page_shell_navbar():\n"
+                "    return 'routes and query keys'\n"
+            )
+        })
+        engine.scan(incremental=False)
+
+        result = engine.context(
+            query="workspace PageShell navbar route query key closure",
+            level="auto",
+        )
+
+        assert result["level"] == "l2"
+        assert result["symbols"]
+        assert "workspace_page_shell_navbar" in result["content"]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

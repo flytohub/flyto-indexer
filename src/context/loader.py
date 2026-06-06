@@ -11,6 +11,7 @@ Usage flow:
 3. Read L2 (only necessary snippets)
 """
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -281,29 +282,76 @@ class ContextLoader:
         # TODO: Integrate vector search
         # Currently using simple keyword matching
         results = []
-        query_lower = query.lower()
+        query_lower = query.lower().strip()
+        terms = self._query_terms(query)
 
         for symbol_id, symbol in self.index.symbols.items():
             if symbol.symbol_type == SymbolType.FILE:
                 continue
 
+            name = symbol.name.lower()
+            path = symbol.path.lower()
+            summary = (symbol.summary or "").lower()
+            content = (symbol.content or "").lower()
             score = 0
-            # Name match
-            if query_lower in symbol.name.lower():
-                score += 10
-            # Summary match
-            if symbol.summary and query_lower in symbol.summary.lower():
+
+            if query_lower:
+                if query_lower in name:
+                    score += 30
+                if query_lower in path:
+                    score += 20
+                if query_lower in summary:
+                    score += 12
+                if query_lower in content:
+                    score += 3
+
+            matched_terms = 0
+            for term in terms:
+                matched = False
+                if term in name:
+                    score += 10
+                    matched = True
+                if term in path:
+                    score += 7
+                    matched = True
+                if term in summary:
+                    score += 4
+                    matched = True
+                if term in content:
+                    score += 1
+                    matched = True
+                if matched:
+                    matched_terms += 1
+
+            if terms and matched_terms == len(terms):
                 score += 5
-            # Content match
-            if query_lower in symbol.content.lower():
-                score += 1
 
             if score > 0:
-                results.append((score, symbol_id))
+                results.append((score, symbol.reference_count, symbol_id))
 
         # Sort and take top_k
-        results.sort(reverse=True)
-        return [self.load_l2(sid) for _, sid in results[:top_k]]
+        results.sort(key=lambda item: (item[0], item[1], item[2]), reverse=True)
+        return [self.load_l2(sid) for _, _, sid in results[:top_k]]
+
+    def _query_terms(self, query: str) -> list[str]:
+        """Tokenize natural-language and CamelCase queries for keyword fallback."""
+        camel_spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", query)
+        raw_terms = re.findall(r"[\w./-]+", query.lower())
+        raw_terms.extend(re.findall(r"[\w./-]+", camel_spaced.lower()))
+
+        stopwords = {
+            "and", "or", "the", "for", "with", "from", "into", "that",
+            "this", "what", "where",
+        }
+        terms = []
+        seen = set()
+        for term in raw_terms:
+            term = term.strip("._-/")
+            if len(term) < 2 or term in stopwords or term in seen:
+                continue
+            seen.add(term)
+            terms.append(term)
+        return terms
 
     def _generate_tree(self, max_depth: int = 3) -> str:
         """Generate directory tree"""

@@ -332,13 +332,19 @@ class IndexEngine(
 
         # Get impact chain
         chain = self.index.get_impact_chain(full_id, max_depth)
+        direct_references = self.index.get_affected_by(full_id)
 
         # Add symbol info
         result = {
             "symbol": full_id,
             "symbol_info": self.index.symbols[full_id].to_dict() if full_id in self.index.symbols else None,
+            "total_direct_references": len(direct_references),
+            "direct_references": [],
             "impact_chain": [],
         }
+
+        for sid in direct_references:
+            result["direct_references"].append(self._symbol_ref(sid))
 
         for level in chain["levels"]:
             level_info = {
@@ -346,14 +352,7 @@ class IndexEngine(
                 "affected": [],
             }
             for sid in level["symbols"]:
-                if sid in self.index.symbols:
-                    s = self.index.symbols[sid]
-                    level_info["affected"].append({
-                        "id": sid,
-                        "path": s.path,
-                        "type": s.symbol_type.value,
-                        "name": s.name,
-                    })
+                level_info["affected"].append(self._symbol_ref(sid))
             result["impact_chain"].append(level_info)
 
         return result
@@ -468,6 +467,34 @@ class IndexEngine(
                 return sid
 
         return None
+
+    def _symbol_ref(self, symbol_id: str) -> dict:
+        """Return a stable symbol reference, even for reverse-index-only IDs."""
+        if symbol_id in self.index.symbols:
+            symbol = self.index.symbols[symbol_id]
+            return {
+                "id": symbol_id,
+                "path": symbol.path,
+                "type": symbol.symbol_type.value,
+                "name": symbol.name,
+                "resolved": True,
+            }
+
+        parts = symbol_id.split(":", 3)
+        if len(parts) == 4:
+            _project, path, symbol_type, name = parts
+        else:
+            path = ""
+            symbol_type = "unknown"
+            name = symbol_id
+
+        return {
+            "id": symbol_id,
+            "path": path,
+            "type": symbol_type,
+            "name": name,
+            "resolved": False,
+        }
 
     def _load_or_create_index(self) -> ProjectIndex:
         """Load or create index"""

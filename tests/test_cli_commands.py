@@ -17,6 +17,8 @@ from src.cli import (
     cmd_install_hook,
     cmd_demo,
     cmd_check,
+    cmd_scan,
+    cmd_status,
     HOOK_MARKER_BEGIN,
     HOOK_MARKER_END,
     main,
@@ -62,6 +64,35 @@ def write_python_files(tmp_path: Path):
         '    routes = get_routes()\n'
         '    print(routes)\n'
     )
+
+
+# ===========================================================================
+# status tests
+# ===========================================================================
+
+class TestStatus:
+    def test_status_reads_modern_flyto_index(self, tmp_path):
+        """status should read .flyto-index/index.json produced by scan."""
+        write_python_files(tmp_path)
+        cmd_scan(make_args(path=str(tmp_path), full=True, name="demo", output=None))
+
+        result = cmd_status(make_args(path=str(tmp_path), as_json=True))
+
+        assert result["ok"] is True
+        assert result["project"] == "demo"
+        assert result["index_format"] == ".flyto-index"
+        assert result["counts"]["files"] >= 3
+        assert result["counts"]["symbols"] >= 3
+        assert "dependencies" in result["counts"]
+
+    def test_status_reports_missing_generated_indexes(self, tmp_path):
+        """status should mention both supported generated index directories."""
+        result = cmd_status(make_args(path=str(tmp_path), as_json=True))
+
+        assert result == {
+            "ok": False,
+            "error": "no .flyto-index/ or .flyto/ found",
+        }
 
 
 # ===========================================================================

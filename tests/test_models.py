@@ -206,6 +206,29 @@ class TestProjectIndex:
         affected = idx.get_affected_by("b")
         assert "a" in affected
 
+    def test_get_affected_by_uses_reverse_index(self):
+        """Reverse index references should count even without dependency edges."""
+        idx = ProjectIndex(project="p", root_path="/tmp")
+        idx.reverse_index["b"] = ["a"]
+
+        affected = idx.get_affected_by("b")
+
+        assert affected == ["a"]
+
+    def test_get_affected_by_dedupes_reverse_and_dependencies(self):
+        """The same caller in reverse_index and dependencies should only appear once."""
+        idx = ProjectIndex(project="p", root_path="/tmp")
+        idx.reverse_index["b"] = ["a"]
+        dep = Dependency(
+            source_id="a", target_id="b",
+            dep_type=DependencyType.CALLS,
+        )
+        idx.dependencies[dep.id] = dep
+
+        affected = idx.get_affected_by("b")
+
+        assert affected == ["a"]
+
     def test_get_depends_on(self):
         idx = ProjectIndex(project="p", root_path="/tmp")
         dep = Dependency(
@@ -227,6 +250,18 @@ class TestProjectIndex:
         assert chain["symbol"] == "a"
         assert len(chain["levels"]) >= 1
         assert "b" in chain["levels"][0]["symbols"]
+
+    def test_get_impact_chain_uses_reverse_index(self):
+        idx = ProjectIndex(project="p", root_path="/tmp")
+        idx.reverse_index = {
+            "a": ["b"],
+            "b": ["c"],
+        }
+
+        chain = idx.get_impact_chain("a", max_depth=3)
+
+        assert chain["levels"][0]["symbols"] == ["b"]
+        assert chain["levels"][1]["symbols"] == ["c"]
 
     def test_empty_impact_chain(self):
         idx = ProjectIndex(project="p", root_path="/tmp")

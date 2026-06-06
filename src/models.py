@@ -247,9 +247,22 @@ class ProjectIndex:
         Like changing a seat number and tracing back which classes/grades are impacted.
         """
         affected = []
+        seen = set()
+
+        def add(source_id: str):
+            if source_id and source_id != symbol_id and source_id not in seen:
+                seen.add(source_id)
+                affected.append(source_id)
+
+        for source_id in self.reverse_index.get(symbol_id, []):
+            add(source_id)
+
         for dep in self.dependencies.values():
             if dep.target_id == symbol_id:
-                affected.append(dep.source_id)
+                add(dep.source_id)
+            elif dep.metadata.get("resolved_target") == symbol_id:
+                add(dep.source_id)
+
         return affected
 
     def get_depends_on(self, symbol_id: str) -> list[str]:

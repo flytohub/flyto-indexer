@@ -50,12 +50,12 @@ def main():
     # init
     init_parser = subparsers.add_parser(
         "init",
-        help="Initialize .flyto/ in a project",
-        description="Create the .flyto/ directory structure for a project. This is required before scanning.",
+        help="Initialize Flyto metadata in a project",
+        description="Create the legacy .flyto/ metadata directory and generated-index ignore rules.",
     )
     init_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
     init_parser.add_argument("--name", help="Project name (default: directory name)")
-    init_parser.add_argument("--no-gitignore", action="store_true", help="Do not add .flyto/ to .gitignore")
+    init_parser.add_argument("--no-gitignore", action="store_true", help="Do not add generated Flyto directories to .gitignore")
     init_parser.add_argument("--index", action="store_true", help="Run indexer immediately after init")
 
     # scan
@@ -67,7 +67,7 @@ def main():
     scan_parser.add_argument("path", help="Project root path")
     scan_parser.add_argument("--full", action="store_true", help="Full rebuild instead of incremental update")
     scan_parser.add_argument("--name", help="Project name (default: directory name)")
-    scan_parser.add_argument("--output", help="Index output directory (default: .flyto/)")
+    scan_parser.add_argument("--output", help="Index output directory (default: .flyto-index/)")
 
     # impact
     impact_parser = subparsers.add_parser(
@@ -95,7 +95,7 @@ def main():
     status_parser = subparsers.add_parser(
         "status",
         help="Show index status (file count, symbol count, staleness)",
-        description="Display .flyto/ index statistics and check if re-indexing is needed.",
+        description="Display .flyto-index/ statistics and fall back to legacy .flyto/ metadata when needed.",
     )
     status_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
     status_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON instead of human-readable text")
@@ -536,17 +536,20 @@ def cmd_init(args):
     # Add to .gitignore
     if not args.no_gitignore:
         gitignore_path = project_path / ".gitignore"
-        entry = ".flyto/"
-        already_ignored = False
+        entries = [".flyto/", ".flyto-index/"]
+        existing_lines = []
         if gitignore_path.exists():
-            content = gitignore_path.read_text()
-            already_ignored = entry in content.splitlines()
-        if not already_ignored:
+            existing_lines = gitignore_path.read_text().splitlines()
+
+        missing_entries = [entry for entry in entries if entry not in existing_lines]
+        if missing_entries:
             with open(gitignore_path, "a") as f:
                 if gitignore_path.exists() and not gitignore_path.read_text().endswith("\n"):
                     f.write("\n")
-                f.write(f"\n# Flyto index (generated)\n{entry}\n")
-            print(f"Added '{entry}' to .gitignore")
+                f.write("\n# Flyto indexes (generated)\n")
+                for entry in missing_entries:
+                    f.write(f"{entry}\n")
+            print(f"Added {', '.join(repr(e) for e in missing_entries)} to .gitignore")
 
     # Optionally run indexer
     if args.index:
@@ -559,32 +562,70 @@ def cmd_init(args):
     return {"ok": True, "path": str(flyto_dir)}
 
 
-def cmd_status(args):
-    """Show .flyto/ status for a project."""
-    project_path = Path(args.path).resolve()
+def _status_from_modern_index(project_path: Path) -> dict | None:
+    """Build status from the primary .flyto-index/index.json format."""
+    index_dir = project_path / ".flyto-index"
+    index_path = index_dir / "index.json"
+    if not index_path.exists():
+        return None
+
+    data = json.loads(index_path.read_text(encoding="utf-8"))
+    symbols = data.get("symbols", {})
+    dependencies = data.get("dependencies", {})
+    files = data.get("files", {})
+
+    languages = {}
+    for symbol in symbols.values():
+        language = symbol.get("language") or "unknown"
+        languages[language] = languages.get(language, 0) + 1
+
+    content_records = 0
+    content_path = index_dir / "content.jsonl"
+    if content_path.exists():
+        content = content_path.read_text(encoding="utf-8").strip()
+        content_records = len(content.splitlines()) if content else 0
+
+    return {
+        "ok": True,
+        "project": data.get("project", project_path.name),
+        "schemaVersion": data.get("schemaVersion", 1),
+        "generatedAt": data.get("indexed_at", ""),
+        "generator": data.get("generator", {}).get("version", ""),
+        "index_format": ".flyto-index",
+        "index_dir": str(index_dir),
+        "has_content_file": bool(data.get("has_content_file")),
+        "content_records": content_records,
+        "counts": {
+            "files": len(files),
+            "symbols": len(symbols),
+            "dependencies": len(dependencies),
+            "languages": languages,
+        },
+        "tags": {},
+        "tags_total": 0,
+        "descriptions": {"total": 0},
+    }
+
+
+def _status_from_legacy_flyto(project_path: Path) -> dict | None:
+    """Build status from the legacy .flyto/ metadata format."""
     flyto_dir = project_path / ".flyto"
-
     if not flyto_dir.exists():
-        print(f"No .flyto/ found at {project_path}")
-        print("Run 'flyto-index init' to initialize.")
-        return {"ok": False, "error": "no .flyto/ found"}
+        return None
 
-    # Read flyto.json
     flyto_json = {}
     flyto_path = flyto_dir / "flyto.json"
     if flyto_path.exists():
         flyto_json = json.loads(flyto_path.read_text(encoding="utf-8"))
 
-    # Read summary.json
     summary = {}
     summary_path = flyto_dir / "index" / "summary.json"
     if summary_path.exists():
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
 
-    # Count tags
-    tags_path = flyto_dir / "tags" / "symbol_tags.jsonl"
     tag_counts = {}
     tag_total = 0
+    tags_path = flyto_dir / "tags" / "symbol_tags.jsonl"
     if tags_path.exists():
         for line in tags_path.read_text(encoding="utf-8").strip().split("\n"):
             if not line.strip():
@@ -597,54 +638,73 @@ def cmd_status(args):
             except json.JSONDecodeError:
                 pass
 
-    # Count descriptions
-    desc_path = flyto_dir / "descriptions.jsonl"
     desc_count = 0
+    desc_path = flyto_dir / "descriptions.jsonl"
     if desc_path.exists():
         content = desc_path.read_text(encoding="utf-8").strip()
         if content:
             desc_count = len(content.split("\n"))
 
-    # Build result
-    counts = summary.get("counts", {})
     tag_stats = summary.get("tags", {})
     desc_stats = summary.get("descriptions", {})
-    result = {
+    return {
         "ok": True,
         "project": flyto_json.get("project", {}).get("name", "unknown"),
         "schemaVersion": flyto_json.get("schemaVersion", 0),
         "generatedAt": flyto_json.get("generatedAt", ""),
         "generator": flyto_json.get("generator", {}).get("version", ""),
-        "counts": counts,
+        "index_format": ".flyto",
+        "index_dir": str(flyto_dir),
+        "counts": summary.get("counts", {}),
         "tags": tag_stats if tag_stats else tag_counts,
         "tags_total": tag_total,
         "descriptions": desc_stats if desc_stats else {"total": desc_count},
     }
 
+
+def cmd_status(args):
+    """Show index status for a project."""
+    project_path = Path(args.path).resolve()
+
+    result = _status_from_modern_index(project_path) or _status_from_legacy_flyto(project_path)
+    if not result:
+        message = "no .flyto-index/ or .flyto/ found"
+        if hasattr(args, "as_json") and args.as_json:
+            return {"ok": False, "error": message}
+        print(f"No .flyto-index/ or .flyto/ found at {project_path}")
+        print("Run 'flyto-index scan <path>' to create .flyto-index/.")
+        return {"ok": False, "error": message}
+
     if hasattr(args, "as_json") and args.as_json:
         return result
 
-    # Human-readable output
+    counts = result.get("counts", {})
+    tag_stats = result.get("tags", {})
+    desc_stats = result.get("descriptions", {})
+
     print(f"Flyto Status: {result['project']}")
+    print(f"  Format:     {result.get('index_format', 'unknown')}")
+    print(f"  Index Dir:  {result.get('index_dir', '')}")
     print(f"  Schema:     v{result['schemaVersion']}")
     print(f"  Generated:  {result['generatedAt']}")
     print(f"  Generator:  flyto-indexer {result['generator']}")
     print()
     print(f"  Files:      {counts.get('files', 0)}")
     print(f"  Symbols:    {counts.get('symbols', 0)}")
+    print(f"  Dependencies: {counts.get('dependencies', 0)}")
     print(f"  Languages:  {counts.get('languages', {})}")
+    if result.get("has_content_file"):
+        print(f"  Content:    {result.get('content_records', 0)} records")
     print()
     if tag_stats:
         print("  Tags:")
         print(f"    Dead code:      {tag_stats.get('dead_code', 0)} symbols ({tag_stats.get('dead_code_lines', 0)} lines)")
         print(f"    TDD covered:    {tag_stats.get('tdd_covered', 0)} / {tag_stats.get('tdd_testable', 0)} testable")
         print(f"    TDD uncovered:  {tag_stats.get('tdd_uncovered', 0)}")
-    elif tag_counts:
-        print(f"  Tags: {tag_counts}")
     else:
         print("  Tags: (none)")
     print()
-    if desc_stats:
+    if desc_stats and "fresh" in desc_stats:
         desc_total = desc_stats.get("total", 0)
         desc_fresh = desc_stats.get("fresh", 0)
         hs_total = desc_stats.get("hotspot_total", 0)
@@ -653,7 +713,7 @@ def cmd_status(args):
         if hs_total > 0:
             print(f"    Hotspots:   {hs_covered}/{hs_total} covered")
     else:
-        print(f"  Descriptions: {desc_count} entries")
+        print(f"  Descriptions: {desc_stats.get('total', 0)} entries")
 
     return result
 
@@ -815,15 +875,15 @@ def cmd_tools(args):
     commands = [
         {
             "name": "init",
-            "summary": "Initialize .flyto/ directory in a project for indexing",
+            "summary": "Initialize Flyto metadata and generated-index ignore rules in a project",
             "args": [
                 {"name": "path", "type": "string", "required": False, "default": ".", "description": "Project root path"},
                 {"name": "--name", "type": "string", "required": False, "description": "Project name (default: directory name)"},
-                {"name": "--no-gitignore", "type": "boolean", "required": False, "default": False, "description": "Do not add .flyto/ to .gitignore"},
+                {"name": "--no-gitignore", "type": "boolean", "required": False, "default": False, "description": "Do not add .flyto/ and .flyto-index/ to .gitignore"},
                 {"name": "--index", "type": "boolean", "required": False, "default": False, "description": "Run indexing immediately after init"},
             ],
-            "outputs": [".flyto/flyto.json", ".flyto/nav/map.json", ".flyto/descriptions.jsonl", ".flyto/index/summary.json"],
-            "side_effects": ["creates .flyto/ directory", "may modify .gitignore"],
+            "outputs": [".flyto/flyto.json", ".flyto/nav/map.json", ".flyto/descriptions.jsonl", ".flyto/index/summary.json", ".flyto-index/index.json when --index is used"],
+            "side_effects": ["creates .flyto/ directory", "may create .flyto-index/ when --index is used", "may modify .gitignore"],
             "examples": ["flyto-index init", "flyto-index init ./my-project --name myapp --index"],
             "exit_codes": {"0": "success", "1": "error"},
         },
@@ -836,14 +896,14 @@ def cmd_tools(args):
                 {"name": "--name", "type": "string", "required": False, "description": "Project name (default: directory name)"},
                 {"name": "--output", "type": "string", "required": False, "description": "Index output directory"},
             ],
-            "outputs": [".flyto/index/", ".flyto/tags/", ".flyto/descriptions.jsonl"],
-            "side_effects": ["writes index files to .flyto/"],
+            "outputs": [".flyto-index/index.json", ".flyto-index/content.jsonl", ".flyto-index/bm25.json", ".flyto-index/semantic.json"],
+            "side_effects": ["writes index files to .flyto-index/"],
             "examples": ["flyto-index scan .", "flyto-index scan ./my-project --full --name myapp"],
             "exit_codes": {"0": "success", "1": "error"},
         },
         {
             "name": "status",
-            "summary": "Show .flyto/ index status: file count, symbol count, staleness",
+            "summary": "Show .flyto-index/ status: file count, symbol count, dependency count, staleness",
             "args": [
                 {"name": "path", "type": "string", "required": False, "default": ".", "description": "Project root path"},
                 {"name": "--json", "type": "boolean", "required": False, "default": False, "description": "Output as JSON"},
@@ -851,7 +911,7 @@ def cmd_tools(args):
             "outputs": [],
             "side_effects": [],
             "examples": ["flyto-index status", "flyto-index status ./my-project --json"],
-            "exit_codes": {"0": "success", "1": "no .flyto/ found"},
+            "exit_codes": {"0": "success", "1": "no .flyto-index/ or .flyto/ found"},
         },
         {
             "name": "impact",
