@@ -137,6 +137,16 @@ _DYNAMIC_VALIDATION_GUARDS = {
     "branch_guard": "guard:branch",
     "compliance_evidence": "compliance:ci",
 }
+_RECIPE_ASSERTION_KINDS = {
+    "event_invalidates_query",
+    "query_key_present",
+    "api_path_present",
+    "event_routed",
+    "route_renders_without_error",
+    "dom_contains",
+    "http_status",
+    "command_succeeds",
+}
 
 
 def run_verification(
@@ -1322,6 +1332,8 @@ def _check_dynamic_validation_plan(projects: list[Path], checks: list[dict[str, 
                 reasons.append("missing_recipe_files")
             if surface_report["registry_recipes"] and not surface_report["browser_recipe_files"]:
                 reasons.append("recipes_without_browser_or_flyto_core_steps")
+            if surface_report["prose_assertion_recipes"]:
+                reasons.append("recipes_without_machine_checkable_assertions")
             if surface_report["invalid_routes"]:
                 reasons.append("invalid_smoke_route_contract")
             if reasons:
@@ -1337,6 +1349,7 @@ def _check_dynamic_validation_plan(projects: list[Path], checks: list[dict[str, 
                         "browser_recipe_files": len(surface_report["browser_recipe_files"]),
                     },
                     "missing_recipe_files": surface_report["missing_recipe_files"][:8],
+                    "prose_assertion_recipes": surface_report["prose_assertion_recipes"][:8],
                     "invalid_routes": surface_report["invalid_routes"][:8],
                 })
         missing_guards = [
@@ -1412,6 +1425,8 @@ def _collect_dynamic_validation_project(project: Path) -> dict[str, Any]:
             text = recipe_path.read_text(encoding="utf-8", errors="ignore")
             if _recipe_has_dynamic_steps(text):
                 surfaces[surface]["browser_recipe_files"].append(recipe)
+            if not _recipe_assertions_machine_checkable(text):
+                surfaces[surface]["prose_assertion_recipes"].append(recipe)
 
     _ci_files, ci_text = _read_ci_files(project)
     package_text = ""
@@ -1444,6 +1459,7 @@ def _empty_dynamic_surface_report() -> dict[str, dict[str, Any]]:
             "existing_recipe_files": [],
             "browser_recipe_files": [],
             "missing_recipe_files": [],
+            "prose_assertion_recipes": [],
             "invalid_routes": [],
         }
         for surface in _PRODUCT_LOOP_SURFACES
@@ -1475,6 +1491,48 @@ def _recipe_has_dynamic_steps(text: str) -> bool:
         "browser.evaluate",
         "browser.wait",
     ))
+
+
+def _recipe_assertions_machine_checkable(text: str) -> bool:
+    """True only when a recipe carries a non-empty, structured assertions block.
+
+    A machine-checkable assertion is a block-sequence item that opens a mapping
+    keyed on a known ``assert:`` kind (e.g.
+    ``- assert: event_invalidates_query``). Prose assertions
+    (``- pipeline.progress invalidates ...``), unknown kinds, or a missing block
+    fail this check, so a recipe of "browser.goto + browser.extract + paragraph"
+    can no longer count as a closed validation plan.
+    """
+    lines = text.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if line.strip().startswith("#") or not line.strip():
+            continue
+        if line.lstrip() == "assertions:" and not line.startswith(" "):
+            start = i
+            break
+    if start is None:
+        return False
+
+    items: list[str] = []
+    for line in lines[start + 1:]:
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip())
+        if indent == 0:
+            break  # dedent to the next top-level key ends the block
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            items.append(stripped[2:].strip())
+    if not items:
+        return False
+    for item in items:
+        if not item.startswith("assert:"):
+            return False
+        kind = item.split(":", 1)[1].strip()
+        if kind not in _RECIPE_ASSERTION_KINDS:
+            return False
+    return True
 
 
 def _string_list(value: Any) -> list[str]:

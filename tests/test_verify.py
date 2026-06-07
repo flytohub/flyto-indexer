@@ -215,6 +215,8 @@ def _write_dynamic_validation_project(
     valid_route: bool = True,
     write_recipe: bool = True,
     guard_scripts: bool = True,
+    machine_checkable_assertions: bool = True,
+    assertion_kind: str = "route_renders_without_error",
 ):
     root.mkdir(parents=True, exist_ok=True)
     (root / "src-next").mkdir(parents=True, exist_ok=True)
@@ -258,6 +260,14 @@ def _write_dynamic_validation_project(
         encoding="utf-8",
     )
     if write_recipe:
+        assertions_block = (
+            "assertions:\n"
+            f"  - assert: {assertion_kind}\n"
+            "    step: 1\n"
+        ) if machine_checkable_assertions else (
+            "assertions:\n"
+            "  - footprint page renders without an error boundary\n"
+        )
         (recipe_dir / "footprint-full-loop.yaml").write_text(
             "name: footprint-full-loop\n"
             "steps:\n"
@@ -266,7 +276,8 @@ def _write_dynamic_validation_project(
             "      url: \"{{baseUrl}}/projects/{{projectId}}/footprint?mode=engineer\"\n"
             "  - module: browser.extract\n"
             "    params:\n"
-            "      selector: main\n",
+            "      selector: main\n"
+            + assertions_block,
             encoding="utf-8",
         )
     workflow = root / ".github" / "workflows" / "ci.yml"
@@ -653,6 +664,42 @@ def test_dynamic_validation_plan_warns_for_missing_recipe_and_invalid_route(tmp_
         if gap["surface"] == "workspace"
     )
     assert "missing_dynamic_validation_ci_guards" in guard_gap["reasons"]
+
+
+def test_dynamic_validation_plan_warns_for_prose_assertions(tmp_path):
+    frontend = tmp_path / "frontend"
+    _write_dynamic_validation_project(frontend, machine_checkable_assertions=False)
+    checks = []
+
+    _check_dynamic_validation_plan([frontend], checks)
+
+    by_name = {check["name"]: check for check in checks}
+    check = by_name["dynamic_validation_plan"]
+    assert check["status"] == "warn"
+    exposure_gap = next(
+        gap for gap in check["metrics"]["gaps"]
+        if gap["surface"] == "exposure"
+    )
+    assert "recipes_without_machine_checkable_assertions" in exposure_gap["reasons"]
+    assert exposure_gap["prose_assertion_recipes"] == ["footprint-full-loop.yaml"]
+
+
+def test_dynamic_validation_plan_warns_for_unknown_assertion_kind(tmp_path):
+    frontend = tmp_path / "frontend"
+    _write_dynamic_validation_project(frontend, assertion_kind="looks_machine_checkable_but_is_not_known")
+    checks = []
+
+    _check_dynamic_validation_plan([frontend], checks)
+
+    by_name = {check["name"]: check for check in checks}
+    check = by_name["dynamic_validation_plan"]
+    assert check["status"] == "warn"
+    exposure_gap = next(
+        gap for gap in check["metrics"]["gaps"]
+        if gap["surface"] == "exposure"
+    )
+    assert "recipes_without_machine_checkable_assertions" in exposure_gap["reasons"]
+    assert exposure_gap["prose_assertion_recipes"] == ["footprint-full-loop.yaml"]
 
 
 def test_single_project_islands_warns_for_unwired_product_component():
