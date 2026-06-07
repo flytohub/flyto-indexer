@@ -15,6 +15,7 @@ from src.cli import cmd_verify, cmd_verify_baseline, cmd_verify_workspace
 from src.verify import (
     _classify_product_surfaces,
     _check_cross_project_contract,
+    _check_dynamic_validation_plan,
     _check_mcp_runtime_smoke,
     _check_product_loop_closure,
     _check_single_project_islands,
@@ -206,6 +207,87 @@ def _write_product_loop_evidence(root: Path):
     recipe = root / "docs" / "platform-loops" / "footprint.yaml"
     recipe.parent.mkdir(parents=True, exist_ok=True)
     recipe.write_text("surface: footprint\nrecipe: footprint graph\n", encoding="utf-8")
+
+
+def _write_dynamic_validation_project(
+    root: Path,
+    *,
+    valid_route: bool = True,
+    write_recipe: bool = True,
+    guard_scripts: bool = True,
+):
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "src-next").mkdir(parents=True, exist_ok=True)
+    scripts = {
+        "audit:loops": "node scripts/audit-platform-loops.mjs",
+        "audit:navbar-smoke": "node scripts/audit-navbar-smoke-registry.mjs",
+        "guard:branch": "npm run audit:loops && npm run audit:navbar-smoke",
+        "compliance:ci": "node scripts/audit-compliance.mjs",
+    } if guard_scripts else {}
+    (root / "package.json").write_text(
+        json.dumps({"name": "frontend", "scripts": scripts}),
+        encoding="utf-8",
+    )
+    loop_dir = root / "docs" / "platform-loops"
+    recipe_dir = loop_dir / "recipes"
+    recipe_dir.mkdir(parents=True, exist_ok=True)
+    route = {
+        "id": "footprint.graph",
+        "moduleId": "footprint.graph",
+        "surface": "exposure",
+        "pathTemplate": "/projects/:projectId/footprint?mode=engineer",
+        "mode": "engineer",
+        "scrollPolicy": "host",
+        "expectedText": ["Footprint"],
+    }
+    if not valid_route:
+        route.pop("expectedText")
+        route["mode"] = "invalid"
+    (loop_dir / "navbar-smoke-registry.json").write_text(
+        json.dumps({"routes": [route]}),
+        encoding="utf-8",
+    )
+    (loop_dir / "platform-loop-registry.json").write_text(
+        json.dumps({
+            "surfaces": [{
+                "id": "exposure",
+                "modules": ["footprint.graph"],
+                "recipes": ["footprint-full-loop.yaml"],
+            }],
+        }),
+        encoding="utf-8",
+    )
+    if write_recipe:
+        (recipe_dir / "footprint-full-loop.yaml").write_text(
+            "name: footprint-full-loop\n"
+            "steps:\n"
+            "  - module: browser.goto\n"
+            "    params:\n"
+            "      url: \"{{baseUrl}}/projects/{{projectId}}/footprint?mode=engineer\"\n"
+            "  - module: browser.extract\n"
+            "    params:\n"
+            "      selector: main\n",
+            encoding="utf-8",
+        )
+    workflow = root / ".github" / "workflows" / "ci.yml"
+    workflow.parent.mkdir(parents=True, exist_ok=True)
+    workflow_text = (
+        "name: CI\n"
+        "jobs:\n"
+        "  verify:\n"
+        "    steps:\n"
+        "      - run: npm run audit:loops\n"
+        "      - run: npm run audit:navbar-smoke\n"
+        "      - run: npm run guard:branch\n"
+        "      - run: npm run compliance:ci\n"
+    ) if guard_scripts else (
+        "name: CI\n"
+        "jobs:\n"
+        "  verify:\n"
+        "    steps:\n"
+        "      - run: npm test\n"
+    )
+    workflow.write_text(workflow_text, encoding="utf-8")
 
 
 def _run_single_project_island_check(symbols: dict, dependencies: dict | None = None, reverse_index: dict | None = None):
@@ -511,6 +593,58 @@ def test_product_loop_surface_classifier_uses_token_boundaries():
 
     assert "exposure" in surfaces
     assert "assets" not in surfaces
+
+
+def test_product_loop_surface_classifier_matches_darkweb_nav_ids():
+    surfaces = _classify_product_surfaces(
+        "src-next/types/modules.ts threat_actors data_leaks ioc_lookup sensor_map botshield"
+    )
+
+    assert "darkweb" in surfaces
+
+
+def test_dynamic_validation_plan_passes_with_smoke_recipe_and_guards(tmp_path):
+    frontend = tmp_path / "frontend"
+    _write_dynamic_validation_project(frontend)
+    checks = []
+
+    _check_dynamic_validation_plan([frontend], checks)
+
+    by_name = {check["name"]: check for check in checks}
+    check = by_name["dynamic_validation_plan"]
+    assert check["status"] == "pass"
+    exposure = check["metrics"]["projects"][0]["surfaces"]["exposure"]
+    assert exposure["browser_routes"] == ["footprint.graph"]
+    assert exposure["browser_recipe_files"] == ["footprint-full-loop.yaml"]
+
+
+def test_dynamic_validation_plan_warns_for_missing_recipe_and_invalid_route(tmp_path):
+    frontend = tmp_path / "frontend"
+    _write_dynamic_validation_project(
+        frontend,
+        valid_route=False,
+        write_recipe=False,
+        guard_scripts=False,
+    )
+    checks = []
+
+    _check_dynamic_validation_plan([frontend], checks)
+
+    by_name = {check["name"]: check for check in checks}
+    check = by_name["dynamic_validation_plan"]
+    assert check["status"] == "warn"
+    exposure_gap = next(
+        gap for gap in check["metrics"]["gaps"]
+        if gap["surface"] == "exposure"
+    )
+    assert "missing_recipe_files" in exposure_gap["reasons"]
+    assert "invalid_smoke_route_contract" in exposure_gap["reasons"]
+    assert exposure_gap["missing_recipe_files"] == ["footprint-full-loop.yaml"]
+    guard_gap = next(
+        gap for gap in check["metrics"]["gaps"]
+        if gap["surface"] == "workspace"
+    )
+    assert "missing_dynamic_validation_ci_guards" in guard_gap["reasons"]
 
 
 def test_single_project_islands_warns_for_unwired_product_component():

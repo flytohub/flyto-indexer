@@ -109,7 +109,12 @@ _PRODUCT_LOOP_SURFACES: dict[str, tuple[str, ...]] = {
         "workload", "workloads",
     ),
     "darkweb": (
-        "breach", "credential", "darkweb", "dark-web", "leak", "leaks",
+        "botshield", "breach", "credential", "darkweb", "dark-web",
+        "data-leaks", "data_leaks", "ioc", "ioc-lookup", "ioc_lookup",
+        "leak", "leaks", "malware", "malware-families",
+        "malware_families", "ransomware", "ransomware-incidents",
+        "ransomware_incidents", "sensor-map", "sensor_map", "threat",
+        "threat-actors", "threat_actors", "threat-intel", "threat_intel",
     ),
     "scoring_compliance": (
         "audit", "compliance", "control", "evidence", "policy", "score",
@@ -125,6 +130,12 @@ _PRODUCT_LOOP_EVIDENCE_PARTS = {
 }
 _PRODUCT_LOOP_EVIDENCE_SUFFIXES = {
     ".json", ".md", ".yaml", ".yml",
+}
+_DYNAMIC_VALIDATION_GUARDS = {
+    "audit_loops": "audit:loops",
+    "audit_navbar_smoke": "audit:navbar-smoke",
+    "branch_guard": "guard:branch",
+    "compliance_evidence": "compliance:ci",
 }
 
 
@@ -247,6 +258,7 @@ def run_workspace_verification(
     workspace_checks: list[dict[str, Any]] = []
     _check_cross_project_contract(projects, workspace_checks)
     _check_product_loop_closure(projects, workspace_checks)
+    _check_dynamic_validation_plan(projects, workspace_checks)
     workspace_summary = _summarize_checks(workspace_checks)
     summary["workspace_checks"] = len(workspace_checks)
     summary["workspace_warn"] = workspace_summary.get("warn", 0)
@@ -1247,9 +1259,208 @@ def _classify_product_surfaces(text: str) -> list[str]:
     tokens = set(re.split(r"[^a-z0-9]+", lowered))
     matches = []
     for surface, terms in _PRODUCT_LOOP_SURFACES.items():
-        if any((term in lowered if "-" in term else term in tokens) for term in terms):
+        if any(
+            (term in lowered if "-" in term or "_" in term else term in tokens)
+            for term in terms
+        ):
             matches.append(surface)
     return matches
+
+
+def _check_dynamic_validation_plan(projects: list[Path], checks: list[dict[str, Any]]) -> None:
+    frontend_projects = [project for project in projects if _looks_like_frontend(project)]
+    if not frontend_projects:
+        checks.append({
+            "name": "dynamic_validation_plan",
+            "status": "pass",
+            "summary": "No frontend project requiring browser/YAML validation plan",
+            "metrics": {"frontend_projects": []},
+        })
+        return
+
+    project_reports = []
+    gaps: list[dict[str, Any]] = []
+    for project in frontend_projects:
+        report = _collect_dynamic_validation_project(project)
+        project_reports.append(report)
+        missing_registries = [
+            name for name, present in report["registries"].items()
+            if not present
+        ]
+        if missing_registries:
+            gaps.append({
+                "project": project.name,
+                "surface": "workspace",
+                "reasons": ["missing_dynamic_validation_registries"],
+                "missing_registries": missing_registries,
+            })
+        for surface, surface_report in report["surfaces"].items():
+            reasons = []
+            if surface_report["registry_modules"] and not surface_report["browser_routes"]:
+                reasons.append("missing_navbar_browser_smoke_route")
+            if surface_report["registry_recipes"] and surface_report["missing_recipe_files"]:
+                reasons.append("missing_recipe_files")
+            if surface_report["registry_recipes"] and not surface_report["browser_recipe_files"]:
+                reasons.append("recipes_without_browser_or_flyto_core_steps")
+            if surface_report["invalid_routes"]:
+                reasons.append("invalid_smoke_route_contract")
+            if reasons:
+                gaps.append({
+                    "project": project.name,
+                    "surface": surface,
+                    "reasons": reasons,
+                    "counts": {
+                        "registry_modules": len(surface_report["registry_modules"]),
+                        "browser_routes": len(surface_report["browser_routes"]),
+                        "registry_recipes": len(surface_report["registry_recipes"]),
+                        "existing_recipe_files": len(surface_report["existing_recipe_files"]),
+                        "browser_recipe_files": len(surface_report["browser_recipe_files"]),
+                    },
+                    "missing_recipe_files": surface_report["missing_recipe_files"][:8],
+                    "invalid_routes": surface_report["invalid_routes"][:8],
+                })
+        missing_guards = [
+            name for name, present in report["guards"].items()
+            if not present
+        ]
+        if missing_guards:
+            gaps.append({
+                "project": project.name,
+                "surface": "workspace",
+                "reasons": ["missing_dynamic_validation_ci_guards"],
+                "missing_guards": missing_guards,
+            })
+
+    status = "pass"
+    summary = "Browser smoke and YAML recipe validation plans are closed"
+    if gaps:
+        status = "warn"
+        summary = "Dynamic validation plan has missing smoke/recipe/CI coverage"
+
+    checks.append({
+        "name": "dynamic_validation_plan",
+        "status": status,
+        "summary": summary,
+        "metrics": {
+            "frontend_projects": [project.name for project in frontend_projects],
+            "projects": project_reports,
+            "gap_count": len(gaps),
+            "gaps": gaps[:12],
+        },
+    })
+
+
+def _collect_dynamic_validation_project(project: Path) -> dict[str, Any]:
+    navbar_registry = _load_json_file(project / "docs" / "platform-loops" / "navbar-smoke-registry.json")
+    loop_registry = _load_json_file(project / "docs" / "platform-loops" / "platform-loop-registry.json")
+    surfaces = _empty_dynamic_surface_report()
+
+    routes = navbar_registry.get("routes", [])
+    if not isinstance(routes, list):
+        routes = []
+    for route in routes:
+        if not isinstance(route, dict):
+            continue
+        surface = str(route.get("surface") or "")
+        if surface not in surfaces:
+            continue
+        route_id = str(route.get("id") or route.get("moduleId") or route.get("pathTemplate") or "")
+        surfaces[surface]["browser_routes"].append(route_id)
+        invalid = _invalid_navbar_smoke_route(route)
+        if invalid:
+            surfaces[surface]["invalid_routes"].append({"route": route_id, "missing": invalid})
+
+    surface_entries = loop_registry.get("surfaces", [])
+    if not isinstance(surface_entries, list):
+        surface_entries = []
+    for surface_entry in surface_entries:
+        if not isinstance(surface_entry, dict):
+            continue
+        surface = str(surface_entry.get("id") or "")
+        if surface not in surfaces:
+            continue
+        modules = _string_list(surface_entry.get("modules"))
+        recipes = _string_list(surface_entry.get("recipes"))
+        surfaces[surface]["registry_modules"].extend(modules)
+        surfaces[surface]["registry_recipes"].extend(recipes)
+        for recipe in recipes:
+            recipe_path = project / "docs" / "platform-loops" / "recipes" / recipe
+            if not recipe_path.is_file():
+                surfaces[surface]["missing_recipe_files"].append(recipe)
+                continue
+            surfaces[surface]["existing_recipe_files"].append(recipe)
+            text = recipe_path.read_text(encoding="utf-8", errors="ignore")
+            if _recipe_has_dynamic_steps(text):
+                surfaces[surface]["browser_recipe_files"].append(recipe)
+
+    _ci_files, ci_text = _read_ci_files(project)
+    package_text = ""
+    package_json = project / "package.json"
+    if package_json.is_file():
+        package_text = package_json.read_text(encoding="utf-8", errors="ignore")
+    guard_text = f"{ci_text}\n{package_text}"
+    guards = {
+        name: token in guard_text
+        for name, token in _DYNAMIC_VALIDATION_GUARDS.items()
+    }
+
+    return {
+        "project": project.name,
+        "registries": {
+            "navbar_smoke": bool(navbar_registry),
+            "platform_loops": bool(loop_registry),
+        },
+        "guards": guards,
+        "surfaces": surfaces,
+    }
+
+
+def _empty_dynamic_surface_report() -> dict[str, dict[str, Any]]:
+    return {
+        surface: {
+            "registry_modules": [],
+            "browser_routes": [],
+            "registry_recipes": [],
+            "existing_recipe_files": [],
+            "browser_recipe_files": [],
+            "missing_recipe_files": [],
+            "invalid_routes": [],
+        }
+        for surface in _PRODUCT_LOOP_SURFACES
+    }
+
+
+def _invalid_navbar_smoke_route(route: dict[str, Any]) -> list[str]:
+    missing = []
+    if not route.get("pathTemplate"):
+        missing.append("pathTemplate")
+    if route.get("mode") not in {"both", "engineer", "exec"}:
+        missing.append("mode")
+    if route.get("scrollPolicy") not in {"host", "self", "page", "document"}:
+        missing.append("scrollPolicy")
+    expected = route.get("expectedText")
+    if not isinstance(expected, list) or not [item for item in expected if str(item).strip()]:
+        missing.append("expectedText")
+    return missing
+
+
+def _recipe_has_dynamic_steps(text: str) -> bool:
+    lowered = text.lower()
+    return any(token in lowered for token in (
+        "flyto-core",
+        "module: browser.",
+        "browser.goto",
+        "browser.click",
+        "browser.extract",
+        "browser.evaluate",
+        "browser.wait",
+    ))
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if item]
 
 
 def _looks_like_frontend(project: Path) -> bool:
@@ -2112,6 +2323,16 @@ def _load_index_json(root: Path) -> dict[str, Any]:
         return json.loads(index_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
+
+
+def _load_json_file(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def _verification_metadata(root: Path, checks: list[dict[str, Any]]) -> dict[str, Any]:
