@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.cli import cmd_verify, cmd_verify_baseline, cmd_verify_workspace
 from src.verify import (
+    _check_cross_project_contract,
     _check_mcp_runtime_smoke,
     format_verification,
     format_workspace_verification,
@@ -107,6 +108,49 @@ def _write_indexer_package_config(root: Path):
         "\"src\" = \"flyto_indexer\"\n\n"
         "[tool.hatch.build.targets.wheel.force-include]\n"
         "\"config/rules\" = \"flyto_indexer/config/rules\"\n",
+        encoding="utf-8",
+    )
+
+
+def _write_backend_index(root: Path, routes: list[tuple[str, str]]):
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "go.mod").write_text("module backend\n", encoding="utf-8")
+    index_dir = root / ".flyto-index"
+    index_dir.mkdir(parents=True)
+    symbols = {}
+    for i, (method, path) in enumerate(routes):
+        sid = f"backend:api/router.go:api:{method} {path}"
+        symbols[sid] = {
+            "project": "backend",
+            "path": "api/router.go",
+            "type": "api",
+            "name": f"{method} {path}",
+            "start_line": i + 1,
+            "end_line": i + 1,
+            "language": "go",
+            "metadata": {"method": method, "path": path, "handler": "handler"},
+        }
+    (index_dir / "index.json").write_text(
+        json.dumps({
+            "project": "backend",
+            "files": {},
+            "symbols": symbols,
+            "dependencies": [],
+            "reverse_index": {},
+        }),
+        encoding="utf-8",
+    )
+
+
+def _write_frontend_client(root: Path, endpoint: str):
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "package.json").write_text('{"name":"frontend"}\n', encoding="utf-8")
+    client = root / "src-next" / "lib" / "engine" / "client.ts"
+    client.parent.mkdir(parents=True)
+    client.write_text(
+        "export function loadFootprint(orgId: string) {\n"
+        f"  return request('GET', `{endpoint}`)\n"
+        "}\n",
         encoding="utf-8",
     )
 
@@ -282,6 +326,65 @@ def test_workspace_verification_aggregates_projects(tmp_path):
     assert "Flyto Workspace Verify" in format_workspace_verification(result)
 
 
+def test_cross_project_contract_matches_frontend_to_backend(tmp_path):
+    frontend = tmp_path / "frontend"
+    backend = tmp_path / "backend"
+    _write_frontend_client(frontend, "/api/v1/code/orgs/${orgId}/footprint/path/${entityId}")
+    _write_backend_index(backend, [("GET", "/api/v1/code/orgs/{id}/footprint/path/{entityId}")])
+    checks = []
+
+    _check_cross_project_contract([frontend, backend], checks)
+
+    by_name = {check["name"]: check for check in checks}
+    assert by_name["cross_project_contract"]["status"] == "pass"
+    assert by_name["cross_project_contract"]["metrics"]["matched_calls"] == 1
+
+
+def test_cross_project_contract_warns_for_unmatched_frontend_call(tmp_path):
+    frontend = tmp_path / "frontend"
+    backend = tmp_path / "backend"
+    _write_frontend_client(frontend, "/api/v1/code/orgs/${orgId}/footprint/path/${entityId}")
+    _write_backend_index(backend, [("GET", "/api/v1/code/orgs/{id}/domains")])
+    checks = []
+
+    _check_cross_project_contract([frontend, backend], checks)
+
+    by_name = {check["name"]: check for check in checks}
+    assert by_name["cross_project_contract"]["status"] == "warn"
+    assert by_name["cross_project_contract"]["metrics"]["unmatched_calls"] == 1
+
+
+def test_cross_project_contract_strips_template_query_suffix(tmp_path):
+    frontend = tmp_path / "frontend"
+    backend = tmp_path / "backend"
+    _write_frontend_client(frontend, "/api/v1/code/orgs/${orgId}/footprint/actionable${qs}")
+    _write_backend_index(backend, [("GET", "/api/v1/code/orgs/{id}/footprint/actionable")])
+    checks = []
+
+    _check_cross_project_contract([frontend, backend], checks)
+
+    by_name = {check["name"]: check for check in checks}
+    assert by_name["cross_project_contract"]["status"] == "pass"
+    assert by_name["cross_project_contract"]["metrics"]["matched_calls"] == 1
+
+
+def test_cross_project_contract_ignores_frontend_test_fixtures(tmp_path):
+    frontend = tmp_path / "frontend"
+    backend = tmp_path / "backend"
+    _write_frontend_client(frontend, "/api/v1/code/orgs/${orgId}/footprint/actionable")
+    test_client = frontend / "src-next" / "lib" / "engine" / "__tests__" / "client.test.ts"
+    test_client.parent.mkdir(parents=True)
+    test_client.write_text("expect('/api/v1/code/orgs/org-1/missing-test-only')\n", encoding="utf-8")
+    _write_backend_index(backend, [("GET", "/api/v1/code/orgs/{id}/footprint/actionable")])
+    checks = []
+
+    _check_cross_project_contract([frontend, backend], checks)
+
+    by_name = {check["name"]: check for check in checks}
+    assert by_name["cross_project_contract"]["status"] == "pass"
+    assert by_name["cross_project_contract"]["metrics"]["unmatched_calls"] == 0
+
+
 def test_cmd_verify_workspace_json(tmp_path):
     project = tmp_path / "project"
     _write_project(project)
@@ -332,7 +435,7 @@ def test_verify_policy_budget_allows_named_warning(tmp_path):
         "  warn_as_fail: ['*']\n"
         "  allow_warn:\n"
         "    - agent_hygiene\n"
-        "    - docs_coverage\n",
+        "    - docs_coverage\n"
         "    - ci_closed_loop\n",
         encoding="utf-8",
     )

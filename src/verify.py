@@ -12,6 +12,7 @@ import json
 import html
 import fnmatch
 import hashlib
+import re
 import subprocess
 import tomllib
 from pathlib import Path
@@ -59,6 +60,13 @@ _HIGH_RISK_CHANGE_PATTERNS = (
     "*secret*",
     "*credential*",
     ".claude/settings.local.json",
+)
+_CONTRACT_SOURCE_EXTENSIONS = {".ts", ".tsx", ".js", ".jsx", ".go", ".py"}
+_CONTRACT_SKIP_PARTS = {"__tests__", "__mocks__", "tests", "test", "fixtures"}
+_CONTRACT_SKIP_SUFFIXES = (".test", ".spec")
+_CONTRACT_SURFACE_TERMS = (
+    "asset-map", "asset", "compliance", "ctem", "darkweb", "domain", "domains",
+    "footprint", "pentest", "report", "reports", "scan", "scoring",
 )
 
 
@@ -177,11 +185,18 @@ def run_workspace_verification(
         "warn": sum(1 for result in results if result["pass"] and result["summary"].get("warn", 0) > 0),
         "fail": sum(1 for result in results if not result["pass"]),
     }
+    workspace_checks: list[dict[str, Any]] = []
+    _check_cross_project_contract(projects, workspace_checks)
+    workspace_summary = _summarize_checks(workspace_checks)
+    summary["workspace_checks"] = len(workspace_checks)
+    summary["workspace_warn"] = workspace_summary.get("warn", 0)
+    summary["workspace_fail"] = workspace_summary.get("fail", 0)
     return {
         "workspace": root.name,
         "path": str(root),
-        "pass": summary["fail"] == 0,
+        "pass": summary["fail"] == 0 and summary["workspace_fail"] == 0,
         "summary": summary,
+        "workspace_checks": workspace_checks,
         "skipped_projects": skipped_projects,
         "projects": results,
     }
@@ -230,6 +245,8 @@ def format_workspace_verification(result: dict[str, Any]) -> str:
         f"  Status:   {'PASS' if result['pass'] else 'FAIL'}",
         f"  Projects: {result['summary']['pass']} pass, {result['summary']['warn']} warn, "
         f"{result['summary']['fail']} fail, {result['summary'].get('skipped', 0)} skipped",
+        f"  Workspace checks: {result['summary'].get('workspace_warn', 0)} warn, "
+        f"{result['summary'].get('workspace_fail', 0)} fail",
         "",
     ]
     for project in result["projects"]:
@@ -676,6 +693,255 @@ def _check_mcp_runtime_smoke(root: Path, add_check) -> None:
             "problems": problems,
         },
     )
+
+
+def _check_cross_project_contract(projects: list[Path], checks: list[dict[str, Any]]) -> None:
+    frontends = [project for project in projects if _looks_like_frontend(project)]
+    backends = [project for project in projects if _looks_like_backend(project)]
+    if not frontends or not backends:
+        checks.append({
+            "name": "cross_project_contract",
+            "status": "pass",
+            "summary": "No frontend/backend project pair in this workspace verification",
+            "metrics": {
+                "frontends": [project.name for project in frontends],
+                "backends": [project.name for project in backends],
+            },
+        })
+        return
+
+    frontend_calls: list[dict[str, Any]] = []
+    frontend_terms: dict[str, int] = {}
+    for project in frontends:
+        calls, terms = _extract_frontend_contract_signals(project)
+        frontend_calls.extend(calls)
+        _merge_term_counts(frontend_terms, terms)
+
+    backend_routes: list[dict[str, Any]] = []
+    backend_terms: dict[str, int] = {}
+    for project in backends:
+        routes, terms = _extract_backend_contract_signals(project)
+        backend_routes.extend(routes)
+        _merge_term_counts(backend_terms, terms)
+
+    backend_keys = {
+        (route.get("method", ""), route.get("normalized", ""))
+        for route in backend_routes
+    }
+    backend_path_keys = {route.get("normalized", "") for route in backend_routes}
+    unmatched = []
+    matched = 0
+    for call in frontend_calls:
+        method = call.get("method", "")
+        normalized = call.get("normalized", "")
+        if (method and (method, normalized) in backend_keys) or (not method and normalized in backend_path_keys):
+            matched += 1
+            continue
+        if method and normalized in backend_path_keys:
+            matched += 1
+            continue
+        unmatched.append(call)
+
+    shared_terms = sorted(set(frontend_terms) & set(backend_terms))
+    frontend_only_terms = sorted(set(frontend_terms) - set(backend_terms))
+    backend_only_terms = sorted(set(backend_terms) - set(frontend_terms))
+    status = "pass"
+    summary = "Frontend API calls are backed by backend routes"
+    if not frontend_calls or not backend_routes:
+        status = "warn"
+        summary = "Frontend/backend contract has no extractable endpoints"
+    elif unmatched:
+        status = "warn"
+        summary = "Some frontend API calls do not match indexed backend routes"
+    elif not shared_terms:
+        status = "warn"
+        summary = "Frontend/backend endpoints match, but no shared product surface terms were found"
+
+    checks.append({
+        "name": "cross_project_contract",
+        "status": status,
+        "summary": summary,
+        "metrics": {
+            "frontends": [project.name for project in frontends],
+            "backends": [project.name for project in backends],
+            "frontend_calls": len(frontend_calls),
+            "backend_routes": len(backend_routes),
+            "matched_calls": matched,
+            "unmatched_calls": len(unmatched),
+            "unmatched_samples": _contract_samples(unmatched),
+            "shared_terms": shared_terms,
+            "frontend_only_terms": frontend_only_terms,
+            "backend_only_terms": backend_only_terms,
+        },
+    })
+
+
+def _looks_like_frontend(project: Path) -> bool:
+    package_json = project / "package.json"
+    return package_json.exists() and ((project / "src-next").exists() or (project / "src").exists())
+
+
+def _looks_like_backend(project: Path) -> bool:
+    return (project / "go.mod").exists() or (project / "api").exists() or (project / "internal").exists()
+
+
+def _extract_frontend_contract_signals(project: Path) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    calls: list[dict[str, Any]] = []
+    terms: dict[str, int] = {}
+    roots = [path for path in (project / "src-next", project / "src") if path.exists()]
+    for root in roots:
+        for path in _iter_contract_source_files(root):
+            rel = str(path.relative_to(project))
+            try:
+                text = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            _count_surface_terms(rel + "\n" + text, terms)
+            for call in _extract_api_calls_from_text(text):
+                call["project"] = project.name
+                call["source"] = rel
+                calls.append(call)
+    return _dedupe_contract_items(calls), terms
+
+
+def _extract_backend_contract_signals(project: Path) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    routes = _extract_backend_routes_from_index(project)
+    terms: dict[str, int] = {}
+    for route in routes:
+        _count_surface_terms(f"{route.get('path', '')}\n{route.get('raw', '')}", terms)
+    for root_name in ("api", "internal"):
+        root = project / root_name
+        if not root.exists():
+            continue
+        for path in _iter_contract_source_files(root):
+            try:
+                text = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            _count_surface_terms(str(path.relative_to(project)) + "\n" + text, terms)
+    return routes, terms
+
+
+def _extract_backend_routes_from_index(project: Path) -> list[dict[str, Any]]:
+    index = _load_index_json(project)
+    routes: list[dict[str, Any]] = []
+    for symbol in (index.get("symbols") or {}).values():
+        if not isinstance(symbol, dict) or symbol.get("type") != "api":
+            continue
+        metadata = symbol.get("metadata") if isinstance(symbol.get("metadata"), dict) else {}
+        method = str(metadata.get("method") or "").upper()
+        route_path = str(metadata.get("path") or "")
+        raw = str(symbol.get("name") or "")
+        if not route_path and " " in raw:
+            method_part, route_path = raw.split(" ", 1)
+            method = method or method_part.upper()
+        if not route_path.startswith("/api/"):
+            continue
+        routes.append({
+            "project": project.name,
+            "method": method,
+            "path": route_path,
+            "raw": raw,
+            "normalized": _normalize_api_path(route_path),
+            "source": symbol.get("path", ""),
+        })
+    return _dedupe_contract_items(routes)
+
+
+def _extract_api_calls_from_text(text: str) -> list[dict[str, Any]]:
+    calls: list[dict[str, Any]] = []
+    string_pattern = re.compile(r"(?P<quote>[`'\"])(?P<value>[^`'\"\n\r]*/api/v1[^`'\"\n\r]*)(?P=quote)")
+    comment_pattern = re.compile(r"\b(?P<method>GET|POST|PUT|PATCH|DELETE)\s+(?P<path>/api/v1/[^\s,;`'\")]+)")
+    for match in string_pattern.finditer(text):
+        raw = match.group("value")
+        method = _infer_http_method(text[max(0, match.start() - 100):match.start()])
+        calls.append({
+            "method": method,
+            "path": _strip_url_to_api_path(raw),
+            "raw": raw,
+            "normalized": _normalize_api_path(raw),
+        })
+    for match in comment_pattern.finditer(text):
+        raw = match.group("path")
+        calls.append({
+            "method": match.group("method").upper(),
+            "path": _strip_url_to_api_path(raw),
+            "raw": raw,
+            "normalized": _normalize_api_path(raw),
+        })
+    return _dedupe_contract_items(calls)
+
+
+def _iter_contract_source_files(root: Path):
+    for path in root.rglob("*"):
+        if not path.is_file() or path.suffix not in _CONTRACT_SOURCE_EXTENSIONS:
+            continue
+        parts = set(path.parts)
+        if parts & _SKIP_WORKSPACE_DIRS or parts & _CONTRACT_SKIP_PARTS:
+            continue
+        if any(path.stem.endswith(suffix) for suffix in _CONTRACT_SKIP_SUFFIXES):
+            continue
+        yield path
+
+
+def _infer_http_method(prefix: str) -> str:
+    matches = re.findall(r"\b(GET|POST|PUT|PATCH|DELETE)\b", prefix, flags=re.IGNORECASE)
+    return matches[-1].upper() if matches else ""
+
+
+def _strip_url_to_api_path(raw: str) -> str:
+    raw = raw.strip()
+    idx = raw.find("/api/v1")
+    path = raw[idx:] if idx >= 0 else raw
+    path = path.split("?", 1)[0].split("#", 1)[0]
+    path = re.sub(r"(?<!/)\$\{[^}/]*(?:\}|$)", "", path)
+    return path.rstrip(".,:;")
+
+
+def _normalize_api_path(raw: str) -> str:
+    path = _strip_url_to_api_path(raw)
+    path = re.sub(r"\$\{[^}]+\}", "{param}", path)
+    path = re.sub(r"\{[^}/]+\}", "{param}", path)
+    path = re.sub(r":[A-Za-z_][A-Za-z0-9_]*", "{param}", path)
+    path = re.sub(r"/+", "/", path).rstrip("/")
+    return path or "/"
+
+
+def _dedupe_contract_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    seen = set()
+    for item in items:
+        key = (item.get("method", ""), item.get("normalized", ""), item.get("path", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
+def _count_surface_terms(text: str, counts: dict[str, int]) -> None:
+    lowered = text.lower()
+    for term in _CONTRACT_SURFACE_TERMS:
+        count = lowered.count(term)
+        if count:
+            counts[term] = counts.get(term, 0) + count
+
+
+def _merge_term_counts(target: dict[str, int], incoming: dict[str, int]) -> None:
+    for key, value in incoming.items():
+        target[key] = target.get(key, 0) + value
+
+
+def _contract_samples(items: list[dict[str, Any]], limit: int = 10) -> list[dict[str, Any]]:
+    return [
+        {
+            "method": item.get("method", ""),
+            "path": item.get("path", ""),
+            "normalized": item.get("normalized", ""),
+            "source": item.get("source", ""),
+        }
+        for item in items[:limit]
+    ]
 
 
 def _check_agent_hygiene(root: Path, add_check) -> None:
@@ -1149,6 +1415,8 @@ def _flatten_report_checks(result: dict[str, Any]) -> list[tuple[str, dict[str, 
     if "projects" not in result:
         return [(result.get("project", "project"), check, result.get("path", "")) for check in result.get("checks", [])]
     flattened = []
+    for check in result.get("workspace_checks", []):
+        flattened.append((result.get("workspace", "workspace"), check, result.get("path", "")))
     for project in result.get("projects", []):
         for check in project.get("checks", []):
             flattened.append((project.get("project", "project"), check, project.get("path", "")))
@@ -1307,15 +1575,21 @@ def _checks_fingerprint(checks: list[dict[str, Any]]) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def _summarize_checks(checks: list[dict[str, Any]]) -> dict[str, int]:
+    summary = {"pass": 0, "warn": 0, "fail": 0}
+    for check in checks:
+        status = str(check.get("status", "fail"))
+        summary[status] = summary.get(status, 0) + 1
+    return summary
+
+
 def _finalize(
     root: Path,
     checks: list[dict[str, Any]],
     *,
     pass_override: bool | None = None,
 ) -> dict[str, Any]:
-    summary = {"pass": 0, "warn": 0, "fail": 0}
-    for check in checks:
-        summary[check["status"]] = summary.get(check["status"], 0) + 1
+    summary = _summarize_checks(checks)
     return {
         "project": root.name,
         "path": str(root),
