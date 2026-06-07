@@ -85,6 +85,9 @@ network access.
 ```bash
 flyto-index scan . --full
 flyto-index verify . --strict
+flyto-index verify-workspace /Users/chester/flytohub --project flyto-code --project flyto-engine --project flyto-indexer
+flyto-index verify . --save-baseline .flyto-baselines/flyto-indexer.json --json
+flyto-index verify . --baseline .flyto-baselines/flyto-indexer.json --regression-only
 flyto-index impact MySharedSymbol --path .
 flyto-index context --path . --query "auth routes query keys"
 flyto-index secrets . --json
@@ -92,8 +95,10 @@ flyto-index taint . --json --max-results 100
 ```
 
 For CI, use `verify --strict` to fail on incomplete graph closure, unresolved
-impact references, high-risk secret findings, high-risk taint flows, or missing
-agent instructions.
+impact references, high-risk secret findings, high-risk taint flows, missing
+agent instructions, or MCP tool registry drift. Use `--baseline` with
+`--regression-only` when a project has known warnings but new AI-generated
+regressions must still be blocked.
 
 <details>
 <summary>Manual setup (other MCP clients)</summary>
@@ -418,7 +423,7 @@ flyto-index scan .
 ```yaml
 # Fail the PR if changes affect too many call sites
 - run: pip install flyto-indexer
-- run: flyto-index scan .
+- run: flyto-index verify . --full-scan --strict
 - run: flyto-index check . --threshold medium --base main
 ```
 

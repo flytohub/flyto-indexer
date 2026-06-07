@@ -1,5 +1,5 @@
 """
-Smart Tools — 5 consolidated entry points (exposed to MCP).
+Smart Tools — consolidated entry points exposed to MCP.
 
 These replace the 45+ granular tools for MCP listing.
 Old tools remain in dispatch for backward compat and internal use.
@@ -257,6 +257,62 @@ SMART_TOOLS.append({
                 "type": "boolean",
                 "default": False,
                 "description": "If true, warnings are treated as failures.",
+            },
+            "baseline": {
+                "type": "string",
+                "description": "Optional baseline JSON file. Current checks are compared against it for regression gating.",
+            },
+            "regression_only": {
+                "type": "boolean",
+                "default": False,
+                "description": "If true with baseline, only newly-worse checks fail the result.",
+            },
+        },
+    },
+})
+
+SMART_TOOLS.append({
+    "name": "verify_workspace",
+    "title": "Verify Workspace",
+    "annotations": {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False},
+    "description": (
+        "Run the closed-loop verification gate across a workspace of projects and aggregate the result. "
+        "Use this for multi-repo AI sessions where frontend, backend, engine, and tooling must stay "
+        "coherent instead of being checked as isolated islands.\n\n"
+        "If projects is omitted, immediate child directories that look like projects are discovered. "
+        "With baseline_dir and regression_only=true, existing warnings can be tolerated while newly-worse "
+        "checks fail the workspace."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Workspace root path. Defaults to current working directory.",
+            },
+            "projects": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Explicit project paths to verify. Omit to auto-discover immediate child projects.",
+            },
+            "full_scan": {
+                "type": "boolean",
+                "default": False,
+                "description": "If true, rebuild each project index before verification.",
+            },
+            "strict": {
+                "type": "boolean",
+                "default": False,
+                "description": "If true, warnings are treated as failures.",
+            },
+            "baseline_dir": {
+                "type": "string",
+                "description": "Directory containing per-project baseline JSON files named <project>.json.",
+            },
+            "regression_only": {
+                "type": "boolean",
+                "default": False,
+                "description": "If true with baseline_dir, only newly-worse checks fail each project.",
             },
         },
     },
@@ -624,7 +680,5 @@ SMART_TOOLS.append({
         "required": ["name", "paths"],
     },
 })
-
-SMART_TOOL_NAMES: Set[str] = {tool["name"] for tool in SMART_TOOLS}
 
 SMART_TOOL_NAMES: Set[str] = {tool["name"] for tool in SMART_TOOLS}

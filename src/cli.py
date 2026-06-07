@@ -289,7 +289,27 @@ def main():
     verify_parser.add_argument("--query", help="Context query to verify (default: most-referenced symbol name)")
     verify_parser.add_argument("--symbol", help="Symbol to verify with impact analysis (default: most-referenced symbol)")
     verify_parser.add_argument("--strict", action="store_true", help="Treat warnings as failures")
+    verify_parser.add_argument("--baseline", help="Baseline JSON result to compare for regression gating")
+    verify_parser.add_argument("--regression-only", action="store_true", help="Only fail on checks that regress versus --baseline")
+    verify_parser.add_argument("--save-baseline", help="Write the current verification JSON result to this file")
     verify_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
+
+    # verify-workspace
+    workspace_parser = subparsers.add_parser(
+        "verify-workspace",
+        help="Run closed-loop verification across multiple projects",
+        description=(
+            "Discover or explicitly list projects in a workspace, run verify for each, "
+            "and aggregate the result. Designed for monorepos and multi-repo AI workspaces."
+        ),
+    )
+    workspace_parser.add_argument("path", nargs="?", default=".", help="Workspace root path (default: current directory)")
+    workspace_parser.add_argument("--project", action="append", dest="projects", help="Project path to verify. Repeatable. Defaults to auto-discovery.")
+    workspace_parser.add_argument("--full-scan", action="store_true", help="Rebuild each project index before verification")
+    workspace_parser.add_argument("--strict", action="store_true", help="Treat warnings as failures")
+    workspace_parser.add_argument("--baseline-dir", help="Directory containing per-project baseline JSON files named <project>.json")
+    workspace_parser.add_argument("--regression-only", action="store_true", help="Only fail projects with regressions versus --baseline-dir")
+    workspace_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
 
     # pr-risk
     pr_risk_parser = subparsers.add_parser(
@@ -437,6 +457,8 @@ def main():
             result = cmd_check(args)
         elif args.command == "verify":
             result = cmd_verify(args)
+        elif args.command == "verify-workspace":
+            result = cmd_verify_workspace(args)
         elif args.command == "pr-risk":
             result = cmd_pr_risk(args)
         elif args.command == "sbom":
@@ -968,6 +990,9 @@ def cmd_tools(args):
                 {"name": "--query", "type": "string", "required": False, "description": "Context query to verify"},
                 {"name": "--symbol", "type": "string", "required": False, "description": "Symbol to verify with impact analysis"},
                 {"name": "--strict", "type": "boolean", "required": False, "default": False, "description": "Treat warnings as failures"},
+                {"name": "--baseline", "type": "string", "required": False, "description": "Baseline JSON result for regression gating"},
+                {"name": "--regression-only", "type": "boolean", "required": False, "default": False, "description": "Only fail on checks that regress versus --baseline"},
+                {"name": "--save-baseline", "type": "string", "required": False, "description": "Write current verification result to this JSON file"},
                 {"name": "--json", "type": "boolean", "required": False, "default": False, "description": "Output as JSON"},
             ],
             "outputs": [],
@@ -975,6 +1000,27 @@ def cmd_tools(args):
             "examples": [
                 "flyto-index verify .",
                 "flyto-index verify . --full-scan --strict --json",
+                "flyto-index verify . --baseline .flyto-baselines/current.json --regression-only",
+            ],
+            "exit_codes": {"0": "success", "2": "verification failed"},
+        },
+        {
+            "name": "verify-workspace",
+            "summary": "Run closed-loop verification across multiple projects",
+            "args": [
+                {"name": "path", "type": "string", "required": False, "default": ".", "description": "Workspace root path"},
+                {"name": "--project", "type": "string[]", "required": False, "description": "Project path to verify. Repeatable. Defaults to auto-discovery"},
+                {"name": "--full-scan", "type": "boolean", "required": False, "default": False, "description": "Rebuild each project index before verification"},
+                {"name": "--strict", "type": "boolean", "required": False, "default": False, "description": "Treat warnings as failures"},
+                {"name": "--baseline-dir", "type": "string", "required": False, "description": "Directory with <project>.json baseline files"},
+                {"name": "--regression-only", "type": "boolean", "required": False, "default": False, "description": "Only fail projects that regress versus --baseline-dir"},
+                {"name": "--json", "type": "boolean", "required": False, "default": False, "description": "Output as JSON"},
+            ],
+            "outputs": [],
+            "side_effects": ["may write .flyto-index/ for each project when --full-scan is used or no index exists"],
+            "examples": [
+                "flyto-index verify-workspace /Users/chester/flytohub --project flyto-code --project flyto-engine",
+                "flyto-index verify-workspace . --baseline-dir .flyto-baselines --regression-only --json",
             ],
             "exit_codes": {"0": "success", "2": "verification failed"},
         },
@@ -2147,12 +2193,41 @@ def cmd_verify(args):
         query=args.query,
         symbol=args.symbol,
         strict=args.strict,
+        baseline_path=args.baseline,
+        regression_only=args.regression_only,
     )
+
+    if getattr(args, "save_baseline", None):
+        output_path = Path(args.save_baseline)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
     if hasattr(args, "as_json") and args.as_json:
         return result
 
     print(format_verification(result))
+    if not result["pass"]:
+        sys.exit(2)
+    return None
+
+
+def cmd_verify_workspace(args):
+    """Run verification across a workspace."""
+    from .verify import format_workspace_verification, run_workspace_verification
+
+    result = run_workspace_verification(
+        args.path,
+        project_paths=args.projects,
+        full_scan=args.full_scan,
+        strict=args.strict,
+        baseline_dir=args.baseline_dir,
+        regression_only=args.regression_only,
+    )
+
+    if hasattr(args, "as_json") and args.as_json:
+        return result
+
+    print(format_workspace_verification(result))
     if not result["pass"]:
         sys.exit(2)
     return None

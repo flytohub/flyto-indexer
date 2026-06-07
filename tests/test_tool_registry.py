@@ -87,6 +87,7 @@ class TestIndexerToolNames:
         assert "impact_analysis" in INDEXER_TOOL_NAMES
         assert "find_dead_code" in INDEXER_TOOL_NAMES
         assert "verify" in INDEXER_TOOL_NAMES
+        assert "verify_workspace" in INDEXER_TOOL_NAMES
 
     def test_all_names_are_strings(self):
         for name in INDEXER_TOOL_NAMES:

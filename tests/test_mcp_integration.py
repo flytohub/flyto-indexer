@@ -19,7 +19,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-EXPECTED_TOOL_COUNT = 19
+EXPECTED_TOOL_COUNT = 20
 EXPECTED_TOOL_NAMES = sorted([
     "search",
     "impact",
@@ -27,6 +27,7 @@ EXPECTED_TOOL_NAMES = sorted([
     "task",
     "structure",
     "verify",
+    "verify_workspace",
     "project_profile",
     "scan_secrets",
     "scan_licenses",
@@ -470,6 +471,40 @@ class TestToolCalls:
         assert checks["index_integrity"]["status"] == "pass"
         assert checks["context_loop"]["status"] == "pass"
         assert checks["weak_scan_secrets"]["status"] == "pass"
+
+    def test_verify_workspace(self, mcp_server, tmp_path):
+        """verify_workspace runs the aggregate gate through the MCP server."""
+        project = tmp_path / "workspace" / "app"
+        (project / "src").mkdir(parents=True)
+        (project / ".gitignore").write_text(".flyto-index/\n", encoding="utf-8")
+        (project / "AGENTS.md").write_text(
+            "Use flyto-indexer. Run flyto-index verify before finishing.\n",
+            encoding="utf-8",
+        )
+        (project / "README.md").write_text(
+            "# Workspace App\n\n## Installation\n\nInstall.\n\n## Usage\n\nRun.\n",
+            encoding="utf-8",
+        )
+        (project / "src" / "app.py").write_text(
+            "def workspace_demo():\n"
+            "    return True\n",
+            encoding="utf-8",
+        )
+
+        resp = _call(mcp_server, "tools/call", {
+            "name": "verify_workspace",
+            "arguments": {
+                "path": str(tmp_path / "workspace"),
+                "projects": [str(project)],
+                "full_scan": True,
+            },
+        })
+
+        assert "error" not in resp, f"Got error: {resp.get('error')}"
+        content = resp["result"]["content"]
+        data = json.loads(content[0]["text"])
+        assert data["pass"] is True
+        assert data["summary"]["projects"] == 1
 
 
 class TestErrorHandling:

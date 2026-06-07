@@ -70,7 +70,7 @@ _TOOL_NAMES = frozenset({
     "extract_type_schema", "check_api_contracts", "contract_drift",
     "list_dependencies",
     # Smart tools (consolidated)
-    "search", "impact", "audit", "task", "structure", "verify",
+    "search", "impact", "audit", "task", "structure", "verify", "verify_workspace",
     "scan_secrets", "scan_licenses", "scan_documentation",
     "project_profile", "analyze_pr_risk", "detect_frameworks",
     "check_layers", "call_hierarchy",
@@ -354,6 +354,16 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             query=args.get("query"),
             symbol=args.get("symbol"),
             strict=args.get("strict", False),
+            baseline_path=args.get("baseline"),
+            regression_only=args.get("regression_only", False),
+        ),
+        "verify_workspace": lambda args: _verify().run_workspace_verification(
+            workspace_path=args.get("path") or os.getcwd(),
+            project_paths=args.get("projects"),
+            full_scan=args.get("full_scan", False),
+            strict=args.get("strict", False),
+            baseline_dir=args.get("baseline_dir"),
+            regression_only=args.get("regression_only", False),
         ),
 
         # Analysis scanners

@@ -19,6 +19,17 @@ from .engine import IndexEngine
 from .models import SymbolType
 from .secret_scanner import scan_secrets
 
+_STATUS_RANK = {"pass": 0, "warn": 1, "fail": 2}
+_PROJECT_MARKERS = (
+    ".git", "pyproject.toml", "package.json", "go.mod", "Cargo.toml",
+    "composer.json", "Gemfile", "src", "src-next",
+)
+_SKIP_WORKSPACE_DIRS = {
+    ".git", ".flyto-index", ".venv", "venv", "node_modules", "dist",
+    "build", "coverage", "__pycache__", ".pytest_cache", ".mypy_cache",
+    ".ruff_cache",
+}
+
 
 def run_verification(
     project_path: str | Path,
@@ -27,10 +38,13 @@ def run_verification(
     query: str | None = None,
     symbol: str | None = None,
     strict: bool = False,
+    baseline_path: str | Path | None = None,
+    regression_only: bool = False,
 ) -> dict[str, Any]:
     """Run the no-external-dependency verification suite."""
     root = Path(project_path).resolve()
     checks: list[dict[str, Any]] = []
+    pass_override: bool | None = None
 
     def add_check(
         name: str,
@@ -73,9 +87,56 @@ def run_verification(
     _check_context_loop(engine, query, add_check)
     _check_impact_loop(engine, symbol, add_check)
     _check_weak_scanners(root, add_check)
+    _check_mcp_registry(root, add_check)
     _check_agent_hygiene(root, add_check)
 
-    return _finalize(root, checks)
+    if baseline_path is not None:
+        pass_override = _check_regression_gate(checks, Path(baseline_path), regression_only)
+
+    return _finalize(root, checks, pass_override=pass_override)
+
+
+def run_workspace_verification(
+    workspace_path: str | Path = ".",
+    *,
+    project_paths: list[str | Path] | None = None,
+    full_scan: bool = False,
+    strict: bool = False,
+    baseline_dir: str | Path | None = None,
+    regression_only: bool = False,
+) -> dict[str, Any]:
+    """Run verification across multiple projects and aggregate the result."""
+    root = Path(workspace_path).resolve()
+    projects = [
+        Path(path).resolve()
+        for path in (project_paths or _discover_workspace_projects(root))
+    ]
+
+    baseline_root = Path(baseline_dir).resolve() if baseline_dir else None
+    results: list[dict[str, Any]] = []
+    for project in projects:
+        baseline_path = baseline_root / f"{project.name}.json" if baseline_root else None
+        results.append(run_verification(
+            project,
+            full_scan=full_scan,
+            strict=strict,
+            baseline_path=baseline_path,
+            regression_only=regression_only,
+        ))
+
+    summary = {
+        "projects": len(results),
+        "pass": sum(1 for result in results if result["pass"] and result["summary"].get("warn", 0) == 0),
+        "warn": sum(1 for result in results if result["pass"] and result["summary"].get("warn", 0) > 0),
+        "fail": sum(1 for result in results if not result["pass"]),
+    }
+    return {
+        "workspace": root.name,
+        "path": str(root),
+        "pass": summary["fail"] == 0,
+        "summary": summary,
+        "projects": results,
+    }
 
 
 def format_verification(result: dict[str, Any]) -> str:
@@ -96,6 +157,25 @@ def format_verification(result: dict[str, Any]) -> str:
             if len(compact) > 280:
                 compact = compact[:277] + "..."
             lines.append(f"  {compact}")
+    return "\n".join(lines)
+
+
+def format_workspace_verification(result: dict[str, Any]) -> str:
+    """Human-readable workspace verification report."""
+    lines = [
+        f"Flyto Workspace Verify: {result['workspace']}",
+        f"  Path:     {result['path']}",
+        f"  Status:   {'PASS' if result['pass'] else 'FAIL'}",
+        f"  Projects: {result['summary']['pass']} pass, {result['summary']['warn']} warn, {result['summary']['fail']} fail",
+        "",
+    ]
+    for project in result["projects"]:
+        summary = project["summary"]
+        status = "PASS" if project["pass"] else "FAIL"
+        lines.append(
+            f"[{status}] {project['project']}: "
+            f"{summary.get('pass', 0)} pass, {summary.get('warn', 0)} warn, {summary.get('fail', 0)} fail"
+        )
     return "\n".join(lines)
 
 
@@ -316,6 +396,44 @@ def _check_agent_hygiene(root: Path, add_check) -> None:
     )
 
 
+def _check_mcp_registry(root: Path, add_check) -> None:
+    """Verify MCP smart tool schemas and dispatch stay in sync."""
+    if not (root / "src" / "tool_registry").exists():
+        return
+
+    try:
+        from .tool_registry import SMART_TOOLS, SMART_TOOL_NAMES, has_tool
+    except ImportError:
+        try:
+            from tool_registry import SMART_TOOLS, SMART_TOOL_NAMES, has_tool
+        except ImportError as exc:
+            add_check("mcp_registry", "fail", f"Cannot import tool registry: {exc}")
+            return
+
+    names = [tool.get("name", "") for tool in SMART_TOOLS]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    missing_dispatch = sorted(name for name in names if name and not has_tool(name))
+    derived_mismatch = sorted(set(names) ^ set(SMART_TOOL_NAMES))
+    missing_schema = sorted(
+        name for name, tool in zip(names, SMART_TOOLS)
+        if not tool.get("inputSchema") or not tool.get("description")
+    )
+
+    problems = duplicates or missing_dispatch or derived_mismatch or missing_schema
+    add_check(
+        "mcp_registry",
+        "fail" if problems else "pass",
+        "MCP smart tools and dispatch are in sync" if not problems else "MCP smart tool registry has drift",
+        metrics={
+            "smart_tools": len(names),
+            "duplicates": duplicates,
+            "missing_dispatch": missing_dispatch,
+            "derived_mismatch": derived_mismatch,
+            "missing_schema": missing_schema,
+        },
+    )
+
+
 def _generated_index_is_ignored(root: Path) -> bool:
     """Check .flyto-index ignore status using git when available."""
     try:
@@ -335,6 +453,99 @@ def _generated_index_is_ignored(root: Path) -> bool:
         return False
     content = gitignore.read_text(encoding="utf-8", errors="ignore")
     return ".flyto-index/" in content or ".flyto-index" in content
+
+
+def _check_regression_gate(
+    checks: list[dict[str, Any]],
+    baseline_path: Path,
+    regression_only: bool,
+) -> bool | None:
+    """Add a regression gate check comparing current checks to a baseline result."""
+    baseline = _load_baseline(baseline_path)
+    if baseline is None:
+        checks.append({
+            "name": "regression_gate",
+            "status": "fail",
+            "summary": f"Baseline file not found or invalid: {baseline_path}",
+            "metrics": {"baseline": str(baseline_path), "regressions": []},
+        })
+        return False if regression_only else None
+
+    regressions = _find_status_regressions(checks, baseline)
+    checks.append({
+        "name": "regression_gate",
+        "status": "fail" if regressions else "pass",
+        "summary": "No new verification regressions" if not regressions else "New verification regressions detected",
+        "metrics": {
+            "baseline": str(baseline_path),
+            "regressions": regressions,
+            "regression_only": regression_only,
+        },
+    })
+    return not regressions if regression_only else None
+
+
+def _load_baseline(path: Path) -> dict[str, Any] | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _find_status_regressions(
+    current_checks: list[dict[str, Any]],
+    baseline: dict[str, Any],
+) -> list[dict[str, Any]]:
+    baseline_checks = {
+        check.get("name"): check
+        for check in baseline.get("checks", [])
+        if isinstance(check, dict) and check.get("name")
+    }
+    regressions: list[dict[str, Any]] = []
+    for check in current_checks:
+        name = check.get("name", "")
+        if name == "regression_gate":
+            continue
+        current_status = check.get("status", "fail")
+        baseline_status = (baseline_checks.get(name) or {}).get("status")
+        if baseline_status is None:
+            if current_status != "pass":
+                regressions.append({
+                    "check": name,
+                    "baseline": "missing",
+                    "current": current_status,
+                    "reason": "new non-pass check",
+                })
+            continue
+        if _STATUS_RANK.get(current_status, 3) > _STATUS_RANK.get(baseline_status, 3):
+            regressions.append({
+                "check": name,
+                "baseline": baseline_status,
+                "current": current_status,
+                "reason": "status worsened",
+            })
+    return regressions
+
+
+def _discover_workspace_projects(root: Path) -> list[Path]:
+    if _looks_like_project(root):
+        return [root]
+    try:
+        children = sorted(root.iterdir(), key=lambda path: path.name)
+    except OSError:
+        return []
+    projects = []
+    for child in children:
+        if not child.is_dir() or child.name.startswith(".") or child.name in _SKIP_WORKSPACE_DIRS:
+            continue
+        if _looks_like_project(child):
+            projects.append(child)
+    return projects
+
+
+def _looks_like_project(path: Path) -> bool:
+    return any((path / marker).exists() for marker in _PROJECT_MARKERS)
 
 
 def _pick_context_query(engine: IndexEngine) -> str:
@@ -369,14 +580,19 @@ def _load_index_json(root: Path) -> dict[str, Any]:
         return {}
 
 
-def _finalize(root: Path, checks: list[dict[str, Any]]) -> dict[str, Any]:
+def _finalize(
+    root: Path,
+    checks: list[dict[str, Any]],
+    *,
+    pass_override: bool | None = None,
+) -> dict[str, Any]:
     summary = {"pass": 0, "warn": 0, "fail": 0}
     for check in checks:
         summary[check["status"]] = summary.get(check["status"], 0) + 1
     return {
         "project": root.name,
         "path": str(root),
-        "pass": summary.get("fail", 0) == 0,
+        "pass": pass_override if pass_override is not None else summary.get("fail", 0) == 0,
         "summary": summary,
         "checks": checks,
     }
