@@ -88,6 +88,44 @@ _SINGLE_PROJECT_ENTRY_NAMES = {
     "__init__", "__main__", "app", "cli", "configure", "handler", "index",
     "main", "page", "route", "server", "setup",
 }
+_PRODUCT_LOOP_SURFACES: dict[str, tuple[str, ...]] = {
+    "overview": (
+        "dashboard", "overview", "posture", "workspace",
+    ),
+    "assets": (
+        "asset", "asset-map", "inventory", "domain", "domains", "repo", "repos",
+        "repository",
+    ),
+    "code_redteam": (
+        "attack", "attack-path", "autofix", "pentest", "redteam", "red-team",
+        "runner", "scan",
+    ),
+    "exposure": (
+        "brand", "exposure", "external-report", "footprint", "issue", "issues",
+        "sla",
+    ),
+    "runtime_cloud_identity": (
+        "cloud", "container", "identity", "iam", "kubernetes", "runtime",
+        "workload", "workloads",
+    ),
+    "darkweb": (
+        "breach", "credential", "darkweb", "dark-web", "leak", "leaks",
+    ),
+    "scoring_compliance": (
+        "audit", "compliance", "control", "evidence", "policy", "score",
+        "scoring",
+    ),
+    "operations_admin": (
+        "admin", "approval", "business-unit", "business-units", "fusion",
+        "integration", "integrations", "organization", "settings",
+    ),
+}
+_PRODUCT_LOOP_EVIDENCE_PARTS = {
+    "docs", "evidence", "platform-loops", "recipes", "workflows",
+}
+_PRODUCT_LOOP_EVIDENCE_SUFFIXES = {
+    ".json", ".md", ".yaml", ".yml",
+}
 
 
 def run_verification(
@@ -208,6 +246,7 @@ def run_workspace_verification(
     }
     workspace_checks: list[dict[str, Any]] = []
     _check_cross_project_contract(projects, workspace_checks)
+    _check_product_loop_closure(projects, workspace_checks)
     workspace_summary = _summarize_checks(workspace_checks)
     summary["workspace_checks"] = len(workspace_checks)
     summary["workspace_warn"] = workspace_summary.get("warn", 0)
@@ -945,6 +984,272 @@ def _check_cross_project_contract(projects: list[Path], checks: list[dict[str, A
             "backend_only_terms": backend_only_terms,
         },
     })
+
+
+def _check_product_loop_closure(projects: list[Path], checks: list[dict[str, Any]]) -> None:
+    loops = _empty_product_loops()
+    project_roles: dict[str, list[str]] = {}
+    for project in projects:
+        roles = []
+        if _looks_like_frontend(project):
+            roles.append("frontend")
+        if _looks_like_backend(project):
+            roles.append("backend")
+        project_roles[project.name] = roles or ["project"]
+        if roles:
+            _merge_product_loops(loops, _collect_project_product_loop_signals(project, roles))
+
+    active = {
+        surface: metrics for surface, metrics in loops.items()
+        if _product_loop_is_active(metrics)
+    }
+    unmatched_by_surface = _workspace_unmatched_api_calls_by_surface(projects)
+    gaps: list[dict[str, Any]] = []
+    for surface, metrics in active.items():
+        reasons = []
+        if metrics["ui"] and not metrics["api_calls"] and not metrics["backend_routes"]:
+            reasons.append("ui_without_data_contract")
+        if metrics["api_calls"] and not metrics["backend_routes"]:
+            reasons.append("frontend_calls_without_backend_route")
+        if unmatched_by_surface.get(surface):
+            reasons.append("unmatched_frontend_api_calls")
+        if metrics["backend_routes"] and not metrics["ui"]:
+            reasons.append("backend_route_without_ui_surface")
+        if metrics["ui"] and not metrics["tests"]:
+            reasons.append("ui_without_surface_tests")
+        if (metrics["ui"] or metrics["backend_routes"] or metrics["api_calls"]) and not (metrics["evidence"] or metrics["workflows"]):
+            reasons.append("missing_evidence_or_recipe")
+        if reasons:
+            gaps.append({
+                "surface": surface,
+                "reasons": reasons,
+                "counts": _product_loop_counts(metrics),
+                "unmatched_api_call_samples": _contract_samples(unmatched_by_surface.get(surface, []), limit=6),
+                "samples": metrics["samples"][:6],
+            })
+
+    status = "pass"
+    summary = "Product surfaces have closed-loop signals"
+    if gaps:
+        status = "warn"
+        summary = "Product surfaces have missing loop signals"
+
+    checks.append({
+        "name": "product_loop_closure",
+        "status": status,
+        "summary": summary,
+        "metrics": {
+            "projects": project_roles,
+            "surfaces": {surface: _product_loop_counts(metrics) for surface, metrics in active.items()},
+            "active_surfaces": sorted(active),
+            "unmatched_api_calls_by_surface": {
+                surface: len(calls)
+                for surface, calls in sorted(unmatched_by_surface.items())
+            },
+            "gap_count": len(gaps),
+            "gaps": gaps[:12],
+        },
+    })
+
+
+def _collect_project_product_loop_signals(project: Path, roles: list[str]) -> dict[str, dict[str, Any]]:
+    loops = _empty_product_loops()
+    index = _load_index_json(project)
+    symbols = index.get("symbols") or {}
+    dependencies = index.get("dependencies") or {}
+    deps_iter = dependencies.values() if isinstance(dependencies, dict) else dependencies
+
+    for sid, symbol in symbols.items():
+        path = _symbol_path(symbol)
+        name = _symbol_name(symbol)
+        sym_type = _symbol_type(symbol)
+        text = f"{path}\n{name}\n{json.dumps(_symbol_metadata(symbol), ensure_ascii=False, sort_keys=True)}"
+        for surface in _classify_product_surfaces(text):
+            if sym_type in {"component", "route", "store", "composable"} and _looks_like_frontend(project):
+                _add_product_loop_signal(loops, surface, "ui", project.name, path, name)
+            elif sym_type == "api":
+                _add_product_loop_signal(loops, surface, "backend_routes", project.name, path, name)
+
+    for dep in deps_iter:
+        if _dep_type(dep) != "api_calls":
+            continue
+        metadata = _dep_metadata(dep)
+        raw = str(metadata.get("url") or _dep_value(dep, "target_id", "target") or "")
+        source = _dep_value(dep, "source_id", "source")
+        text = f"{raw}\n{source}"
+        for surface in _classify_product_surfaces(text):
+            _add_product_loop_signal(
+                loops,
+                surface,
+                "api_calls",
+                project.name,
+                _symbol_id_path(source),
+                raw,
+            )
+
+    for path in _iter_product_loop_files(project):
+        rel = str(path.relative_to(project))
+        text = rel
+        try:
+            if path.suffix in _PRODUCT_LOOP_EVIDENCE_SUFFIXES:
+                text += "\n" + path.read_text(encoding="utf-8", errors="ignore")[:20000]
+        except OSError:
+            pass
+        surfaces = _classify_product_surfaces(text)
+        if not surfaces:
+            continue
+        kind = _product_loop_file_kind(rel, path)
+        for surface in surfaces:
+            _add_product_loop_signal(loops, surface, kind, project.name, rel, Path(rel).name)
+
+    _ci_files, ci_text = _read_ci_files(project)
+    for surface in _classify_product_surfaces(ci_text):
+        _add_product_loop_signal(loops, surface, "ci", project.name, "ci", surface)
+
+    return loops
+
+
+def _workspace_unmatched_api_calls_by_surface(projects: list[Path]) -> dict[str, list[dict[str, Any]]]:
+    frontends = [project for project in projects if _looks_like_frontend(project)]
+    backends = [project for project in projects if _looks_like_backend(project)]
+    if not frontends or not backends:
+        return {}
+
+    frontend_calls: list[dict[str, Any]] = []
+    for project in frontends:
+        calls, _terms = _extract_frontend_contract_signals(project)
+        frontend_calls.extend(calls)
+    backend_routes: list[dict[str, Any]] = []
+    for project in backends:
+        routes, _terms = _extract_backend_contract_signals(project)
+        backend_routes.extend(routes)
+
+    backend_keys = {
+        (route.get("method", ""), route.get("normalized", ""))
+        for route in backend_routes
+    }
+    backend_path_keys = {route.get("normalized", "") for route in backend_routes}
+    unmatched_by_surface: dict[str, list[dict[str, Any]]] = {}
+    for call in frontend_calls:
+        method = call.get("method", "")
+        normalized = call.get("normalized", "")
+        if (method and (method, normalized) in backend_keys) or normalized in backend_path_keys:
+            continue
+        surfaces = _classify_product_surfaces(
+            f"{call.get('path', '')}\n{call.get('raw', '')}\n{call.get('source', '')}"
+        )
+        for surface in surfaces:
+            unmatched_by_surface.setdefault(surface, []).append(call)
+    return unmatched_by_surface
+
+
+def _iter_product_loop_files(project: Path):
+    for path in project.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = str(path.relative_to(project))
+        parts = set(Path(rel).parts)
+        if parts & _SKIP_WORKSPACE_DIRS:
+            continue
+        suffix = path.suffix.lower()
+        if parts & {"docs", "evidence", "recipes", "workflows", ".github"}:
+            yield path
+            continue
+        if any(Path(rel).stem.endswith(test_suffix) for test_suffix in _CONTRACT_SKIP_SUFFIXES):
+            yield path
+            continue
+        if suffix in _PRODUCT_LOOP_EVIDENCE_SUFFIXES and parts & _PRODUCT_LOOP_EVIDENCE_PARTS:
+            yield path
+
+
+def _product_loop_file_kind(rel: str, path: Path) -> str:
+    parts = set(Path(rel).parts)
+    stem = Path(rel).stem
+    if ".github" in parts:
+        return "ci"
+    if "recipes" in parts or "workflows" in parts or path.suffix.lower() in {".yaml", ".yml"}:
+        return "workflows"
+    if any(stem.endswith(test_suffix) for test_suffix in _CONTRACT_SKIP_SUFFIXES) or parts & {"__tests__", "tests", "test"}:
+        return "tests"
+    if parts & _PRODUCT_LOOP_EVIDENCE_PARTS:
+        return "evidence"
+    return "evidence"
+
+
+def _empty_product_loops() -> dict[str, dict[str, Any]]:
+    return {
+        surface: {
+            "ui": set(),
+            "api_calls": set(),
+            "backend_routes": set(),
+            "tests": set(),
+            "evidence": set(),
+            "workflows": set(),
+            "ci": set(),
+            "projects": set(),
+            "samples": [],
+        }
+        for surface in _PRODUCT_LOOP_SURFACES
+    }
+
+
+def _merge_product_loops(target: dict[str, dict[str, Any]], incoming: dict[str, dict[str, Any]]) -> None:
+    for surface, metrics in incoming.items():
+        if surface not in target:
+            target[surface] = metrics
+            continue
+        for key, value in metrics.items():
+            if key == "samples":
+                existing = target[surface]["samples"]
+                for sample in value:
+                    if sample not in existing:
+                        existing.append(sample)
+                continue
+            target[surface].setdefault(key, set()).update(value)
+
+
+def _add_product_loop_signal(
+    loops: dict[str, dict[str, Any]],
+    surface: str,
+    kind: str,
+    project: str,
+    source: str,
+    name: str,
+) -> None:
+    if surface not in loops:
+        return
+    loops[surface].setdefault(kind, set()).add(f"{project}:{source}:{name}")
+    loops[surface]["projects"].add(project)
+    sample = {"project": project, "kind": kind, "source": source, "name": name}
+    if len(loops[surface]["samples"]) < 20 and sample not in loops[surface]["samples"]:
+        loops[surface]["samples"].append(sample)
+
+
+def _product_loop_is_active(metrics: dict[str, Any]) -> bool:
+    return any(metrics[key] for key in ("ui", "api_calls", "backend_routes", "tests", "evidence", "workflows"))
+
+
+def _product_loop_counts(metrics: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "ui": len(metrics["ui"]),
+        "api_calls": len(metrics["api_calls"]),
+        "backend_routes": len(metrics["backend_routes"]),
+        "tests": len(metrics["tests"]),
+        "evidence": len(metrics["evidence"]),
+        "workflows": len(metrics["workflows"]),
+        "ci": len(metrics["ci"]),
+        "projects": sorted(metrics["projects"]),
+    }
+
+
+def _classify_product_surfaces(text: str) -> list[str]:
+    lowered = text.lower()
+    tokens = set(re.split(r"[^a-z0-9]+", lowered))
+    matches = []
+    for surface, terms in _PRODUCT_LOOP_SURFACES.items():
+        if any((term in lowered if "-" in term else term in tokens) for term in terms):
+            matches.append(surface)
+    return matches
 
 
 def _looks_like_frontend(project: Path) -> bool:

@@ -13,8 +13,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.cli import cmd_verify, cmd_verify_baseline, cmd_verify_workspace
 from src.verify import (
+    _classify_product_surfaces,
     _check_cross_project_contract,
     _check_mcp_runtime_smoke,
+    _check_product_loop_closure,
     _check_single_project_islands,
     format_verification,
     format_workspace_verification,
@@ -155,6 +157,55 @@ def _write_frontend_client(root: Path, endpoint: str):
         "}\n",
         encoding="utf-8",
     )
+
+
+def _write_frontend_loop_index(root: Path, endpoint: str = "/api/v1/code/orgs/{id}/footprint/graph"):
+    _write_frontend_client(root, endpoint)
+    index_dir = root / ".flyto-index"
+    index_dir.mkdir(parents=True, exist_ok=True)
+    component_sid = "frontend:src-next/components/compounds/footprint/FootprintGraphView.tsx:component:FootprintGraphView"
+    client_sid = "frontend:src-next/lib/engine/footprint.ts:file:footprint"
+    (index_dir / "index.json").write_text(
+        json.dumps({
+            "project": "frontend",
+            "files": {},
+            "symbols": {
+                component_sid: {
+                    "project": "frontend",
+                    "path": "src-next/components/compounds/footprint/FootprintGraphView.tsx",
+                    "type": "component",
+                    "name": "FootprintGraphView",
+                    "language": "typescript",
+                },
+                client_sid: {
+                    "project": "frontend",
+                    "path": "src-next/lib/engine/footprint.ts",
+                    "type": "file",
+                    "name": "footprint",
+                    "language": "typescript",
+                },
+            },
+            "dependencies": {
+                "footprint-call": {
+                    "source": client_sid,
+                    "target": endpoint,
+                    "type": "api_calls",
+                    "metadata": {"method": "GET", "url": endpoint},
+                }
+            },
+            "reverse_index": {},
+        }),
+        encoding="utf-8",
+    )
+
+
+def _write_product_loop_evidence(root: Path):
+    test_path = root / "src-next" / "components" / "compounds" / "footprint" / "FootprintGraphView.test.tsx"
+    test_path.parent.mkdir(parents=True, exist_ok=True)
+    test_path.write_text("describe('footprint graph loop', () => {})\n", encoding="utf-8")
+    recipe = root / "docs" / "platform-loops" / "footprint.yaml"
+    recipe.parent.mkdir(parents=True, exist_ok=True)
+    recipe.write_text("surface: footprint\nrecipe: footprint graph\n", encoding="utf-8")
 
 
 def _run_single_project_island_check(symbols: dict, dependencies: dict | None = None, reverse_index: dict | None = None):
@@ -405,6 +456,61 @@ def test_cross_project_contract_ignores_frontend_test_fixtures(tmp_path):
     by_name = {check["name"]: check for check in checks}
     assert by_name["cross_project_contract"]["status"] == "pass"
     assert by_name["cross_project_contract"]["metrics"]["unmatched_calls"] == 0
+
+
+def test_product_loop_closure_passes_when_surface_has_full_loop(tmp_path):
+    frontend = tmp_path / "frontend"
+    backend = tmp_path / "backend"
+    _write_frontend_loop_index(frontend)
+    _write_product_loop_evidence(frontend)
+    _write_backend_index(backend, [("GET", "/api/v1/code/orgs/{id}/footprint/graph")])
+    checks = []
+
+    _check_product_loop_closure([frontend, backend], checks)
+
+    by_name = {check["name"]: check for check in checks}
+    check = by_name["product_loop_closure"]
+    assert check["status"] == "pass"
+    assert "exposure" in check["metrics"]["active_surfaces"]
+
+
+def test_product_loop_closure_warns_when_frontend_call_has_no_backend_route(tmp_path):
+    frontend = tmp_path / "frontend"
+    backend = tmp_path / "backend"
+    _write_frontend_loop_index(frontend)
+    _write_product_loop_evidence(frontend)
+    _write_backend_index(backend, [])
+    checks = []
+
+    _check_product_loop_closure([frontend, backend], checks)
+
+    by_name = {check["name"]: check for check in checks}
+    check = by_name["product_loop_closure"]
+    assert check["status"] == "warn"
+    assert check["metrics"]["gaps"][0]["surface"] == "exposure"
+    assert "frontend_calls_without_backend_route" in check["metrics"]["gaps"][0]["reasons"]
+
+
+def test_product_loop_closure_warns_without_evidence_or_recipe(tmp_path):
+    frontend = tmp_path / "frontend"
+    backend = tmp_path / "backend"
+    _write_frontend_loop_index(frontend)
+    _write_backend_index(backend, [("GET", "/api/v1/code/orgs/{id}/footprint/graph")])
+    checks = []
+
+    _check_product_loop_closure([frontend, backend], checks)
+
+    by_name = {check["name"]: check for check in checks}
+    check = by_name["product_loop_closure"]
+    assert check["status"] == "warn"
+    assert "missing_evidence_or_recipe" in check["metrics"]["gaps"][0]["reasons"]
+
+
+def test_product_loop_surface_classifier_uses_token_boundaries():
+    surfaces = _classify_product_surfaces("/api/v1/code/orgs/{id}/external-report")
+
+    assert "exposure" in surfaces
+    assert "assets" not in surfaces
 
 
 def test_single_project_islands_warns_for_unwired_product_component():
