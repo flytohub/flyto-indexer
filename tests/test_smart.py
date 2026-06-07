@@ -344,9 +344,10 @@ class TestToolRegistryIntegration:
 
     def test_smart_tools_in_registry(self):
         from tool_registry import SMART_TOOLS, SMART_TOOL_NAMES
-        assert len(SMART_TOOLS) == 18
+        assert len(SMART_TOOLS) == 19
         assert SMART_TOOL_NAMES == {
             "search", "impact", "audit", "task", "structure",
+            "verify",
             "project_profile", "scan_secrets", "scan_licenses",
             "scan_documentation", "analyze_pr_risk", "detect_frameworks",
             "call_hierarchy", "check_layers",
@@ -360,7 +361,7 @@ class TestToolRegistryIntegration:
         they could hang on partially-loaded module state from
         earlier tests in the suite."""
         from tool_registry import has_tool
-        for name in ["search", "impact", "audit", "task", "structure"]:
+        for name in ["search", "impact", "audit", "task", "structure", "verify"]:
             assert has_tool(name), f"Smart tool '{name}' not in registered dispatch"
 
     def test_tool_names_stay_in_sync_with_dispatch(self):
@@ -405,4 +406,3 @@ class TestToolRegistryIntegration:
         from tool_registry import has_tool
         for name in ["search_code", "find_references", "code_health_score", "analyze_task"]:
             assert has_tool(name), f"Legacy tool '{name}' missing from dispatch"
-

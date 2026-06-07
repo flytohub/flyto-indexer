@@ -134,6 +134,14 @@ def _doc_scanner():
     return doc_scanner
 
 
+def _verify():
+    try:
+        from .. import verify
+    except ImportError:
+        import verify
+    return verify
+
+
 def _pr_analyzer():
     try:
         from .. import pr_analyzer

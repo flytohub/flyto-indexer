@@ -222,6 +222,47 @@ SMART_TOOLS: list = [
 ]
 
 SMART_TOOLS.append({
+    "name": "verify",
+    "title": "Verify Project",
+    "annotations": {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False},
+    "description": (
+        "Run the closed-loop project verification gate. This combines scan/index integrity, "
+        "context lookup, impact graph validation, secret scan, taint scan, documentation score, "
+        "agent-instruction hygiene, and generated-index ignore checks in one call.\n\n"
+        "Use this after AI-generated code changes, before commits, and before merging branches. "
+        "It is intentionally no-external-dependency and local-only. With strict=true, warnings "
+        "are promoted to failures for CI-style gating."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Project root path. Defaults to current working directory.",
+            },
+            "full_scan": {
+                "type": "boolean",
+                "default": False,
+                "description": "If true, rebuild .flyto-index before running checks.",
+            },
+            "query": {
+                "type": "string",
+                "description": "Optional context query to prove context lookup closes.",
+            },
+            "symbol": {
+                "type": "string",
+                "description": "Optional symbol ID to prove impact analysis closes.",
+            },
+            "strict": {
+                "type": "boolean",
+                "default": False,
+                "description": "If true, warnings are treated as failures.",
+            },
+        },
+    },
+})
+
+SMART_TOOLS.append({
     "name": "scan_secrets",
     "title": "Scan Secrets",
     "annotations": {"readOnlyHint": True, "openWorldHint": True},

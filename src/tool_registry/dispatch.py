@@ -10,7 +10,7 @@ from .lazy_imports import (
     _search, _refs, _info, _maint, _quality, _diff, _task,
     _validation, _git_intel, _coverage_intel, _type_contracts,
     _dep_scanner, _profile, _secret_scanner, _license_scanner,
-    _doc_scanner, _pr_analyzer, _framework_detector, _smart,
+    _doc_scanner, _verify, _pr_analyzer, _framework_detector, _smart,
     _layers_mod, _taint_dsl_mod,
 )
 
@@ -70,7 +70,7 @@ _TOOL_NAMES = frozenset({
     "extract_type_schema", "check_api_contracts", "contract_drift",
     "list_dependencies",
     # Smart tools (consolidated)
-    "search", "impact", "audit", "task", "structure",
+    "search", "impact", "audit", "task", "structure", "verify",
     "scan_secrets", "scan_licenses", "scan_documentation",
     "project_profile", "analyze_pr_risk", "detect_frameworks",
     "check_layers", "call_hierarchy",
@@ -347,6 +347,13 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             focus=args.get("focus"),
             symbol_id=args.get("symbol_id"),
             path=args.get("path"),
+        ),
+        "verify": lambda args: _verify().run_verification(
+            project_path=args.get("path") or os.getcwd(),
+            full_scan=args.get("full_scan", False),
+            query=args.get("query"),
+            symbol=args.get("symbol"),
+            strict=args.get("strict", False),
         ),
 
         # Analysis scanners

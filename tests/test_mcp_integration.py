@@ -19,13 +19,14 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-EXPECTED_TOOL_COUNT = 18
+EXPECTED_TOOL_COUNT = 19
 EXPECTED_TOOL_NAMES = sorted([
     "search",
     "impact",
     "audit",
     "task",
     "structure",
+    "verify",
     "project_profile",
     "scan_secrets",
     "scan_licenses",
@@ -432,6 +433,43 @@ class TestToolCalls:
         data = json.loads(content[0]["text"])
         project_names = [p["project"] for p in data.get("projects", [])]
         assert TEST_PROJECT in project_names
+
+    def test_verify_project(self, mcp_server, tmp_path):
+        """verify runs the closed-loop gate through the MCP server."""
+        project = tmp_path / "verify-demo"
+        (project / "src").mkdir(parents=True)
+        (project / ".gitignore").write_text(".flyto-index/\n", encoding="utf-8")
+        (project / "AGENTS.md").write_text(
+            "Use flyto-indexer. Run flyto-index verify before finishing.\n",
+            encoding="utf-8",
+        )
+        (project / "README.md").write_text(
+            "# Verify Demo\n\n## Installation\n\nInstall.\n\n## Usage\n\nRun.\n",
+            encoding="utf-8",
+        )
+        (project / "src" / "app.py").write_text(
+            "def verify_demo():\n"
+            "    return True\n",
+            encoding="utf-8",
+        )
+
+        resp = _call(mcp_server, "tools/call", {
+            "name": "verify",
+            "arguments": {
+                "path": str(project),
+                "full_scan": True,
+                "query": "verify_demo",
+            },
+        })
+
+        assert "error" not in resp, f"Got error: {resp.get('error')}"
+        content = resp["result"]["content"]
+        data = json.loads(content[0]["text"])
+        assert data["pass"] is True
+        checks = {check["name"]: check for check in data["checks"]}
+        assert checks["index_integrity"]["status"] == "pass"
+        assert checks["context_loop"]["status"] == "pass"
+        assert checks["weak_scan_secrets"]["status"] == "pass"
 
 
 class TestErrorHandling:
