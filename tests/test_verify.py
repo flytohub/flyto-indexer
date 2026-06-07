@@ -6,6 +6,7 @@ import subprocess
 import sys
 from argparse import Namespace
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -14,6 +15,7 @@ from src.cli import cmd_verify, cmd_verify_baseline, cmd_verify_workspace
 from src.verify import (
     _check_cross_project_contract,
     _check_mcp_runtime_smoke,
+    _check_single_project_islands,
     format_verification,
     format_workspace_verification,
     render_report,
@@ -153,6 +155,26 @@ def _write_frontend_client(root: Path, endpoint: str):
         "}\n",
         encoding="utf-8",
     )
+
+
+def _run_single_project_island_check(symbols: dict, dependencies: dict | None = None, reverse_index: dict | None = None):
+    index = SimpleNamespace(
+        symbols=symbols,
+        dependencies=dependencies or {},
+        reverse_index=reverse_index or {},
+    )
+    checks = []
+
+    def add_check(name, status, summary, *, metrics=None):
+        checks.append({
+            "name": name,
+            "status": status,
+            "summary": summary,
+            "metrics": metrics or {},
+        })
+
+    _check_single_project_islands(SimpleNamespace(index=index), add_check)
+    return {check["name"]: check for check in checks}
 
 
 def test_run_verification_closes_core_loops(tmp_path):
@@ -383,6 +405,73 @@ def test_cross_project_contract_ignores_frontend_test_fixtures(tmp_path):
     by_name = {check["name"]: check for check in checks}
     assert by_name["cross_project_contract"]["status"] == "pass"
     assert by_name["cross_project_contract"]["metrics"]["unmatched_calls"] == 0
+
+
+def test_single_project_islands_warns_for_unwired_product_component():
+    sid = "demo:src/components/footprint/FootprintPanel.tsx:component:FootprintPanel"
+    checks = _run_single_project_island_check({
+        sid: {
+            "path": "src/components/footprint/FootprintPanel.tsx",
+            "type": "component",
+            "name": "FootprintPanel",
+            "ref_count": 0,
+        }
+    })
+
+    check = checks["single_project_islands"]
+    assert check["status"] == "warn"
+    assert check["metrics"]["island_count"] == 1
+    assert check["metrics"]["island_samples"][0]["reason"] == "no_inbound_or_outbound_edges"
+
+
+def test_single_project_islands_ignores_plain_helpers():
+    sid = "demo:src/utils/math.ts:function:sum"
+    checks = _run_single_project_island_check({
+        sid: {
+            "path": "src/utils/math.ts",
+            "type": "function",
+            "name": "sum",
+            "ref_count": 0,
+        }
+    })
+
+    check = checks["single_project_islands"]
+    assert check["status"] == "pass"
+    assert check["metrics"]["island_count"] == 0
+
+
+def test_single_project_islands_matches_in_repo_api_calls():
+    api_sid = "demo:api/router.go:api:GET /api/v1/footprint"
+    source_sid = "demo:src/lib/engine/client.ts:file:client"
+    checks = _run_single_project_island_check(
+        {
+            api_sid: {
+                "path": "api/router.go",
+                "type": "api",
+                "name": "GET /api/v1/footprint",
+                "metadata": {"method": "GET", "path": "/api/v1/footprint"},
+            },
+            source_sid: {
+                "path": "src/lib/engine/client.ts",
+                "type": "file",
+                "name": "client",
+            },
+        },
+        {
+            "call": {
+                "source": source_sid,
+                "target": "/api/v1/footprint",
+                "type": "api_calls",
+                "metadata": {"method": "GET", "url": "/api/v1/footprint"},
+            }
+        },
+    )
+
+    check = checks["single_project_islands"]
+    assert check["status"] == "pass"
+    assert check["metrics"]["api_definitions"] == 1
+    assert check["metrics"]["api_calls"] == 1
+    assert check["metrics"]["unmatched_api_calls"] == 0
 
 
 def test_cmd_verify_workspace_json(tmp_path):

@@ -68,6 +68,26 @@ _CONTRACT_SURFACE_TERMS = (
     "asset-map", "asset", "compliance", "ctem", "darkweb", "domain", "domains",
     "footprint", "pentest", "report", "reports", "scan", "scoring",
 )
+_SINGLE_PROJECT_ISLAND_TYPES = {
+    "api", "route", "component", "composable", "store",
+}
+_SINGLE_PROJECT_PRODUCT_PARTS = {
+    "app", "apps", "components", "compounds", "domains", "features", "hooks",
+    "lib", "pages", "routes", "router", "routers", "services", "stores",
+    "views",
+}
+_SINGLE_PROJECT_FEATURE_PARTS = {
+    "app", "apps", "compounds", "domains", "features", "pages", "routes",
+    "router", "routers", "stores", "views",
+}
+_SINGLE_PROJECT_ENTRY_PARTS = {
+    "api", "app", "apps", "bin", "cli", "cmd", "commands", "pages", "routes",
+    "router", "routers", "scripts", "server", "views",
+}
+_SINGLE_PROJECT_ENTRY_NAMES = {
+    "__init__", "__main__", "app", "cli", "configure", "handler", "index",
+    "main", "page", "route", "server", "setup",
+}
 
 
 def run_verification(
@@ -124,6 +144,7 @@ def run_verification(
         add_check("scan", "pass", "Existing .flyto-index loaded; scan not requested")
 
     _check_index_integrity(engine, add_check)
+    _check_single_project_islands(engine, add_check)
     _check_context_loop(engine, query, add_check)
     _check_impact_loop(engine, symbol, add_check)
     _check_weak_scanners(root, add_check)
@@ -338,6 +359,156 @@ def _check_index_integrity(engine: IndexEngine, add_check) -> None:
             "missing_reverse_callers": len(reverse_callers_missing),
         },
     )
+
+
+def _check_single_project_islands(engine: IndexEngine, add_check) -> None:
+    index = engine.index
+    symbols = index.symbols or {}
+    dependencies = index.dependencies or {}
+    reverse_index = index.reverse_index or {}
+    inbound: dict[str, set[str]] = {}
+    outbound: dict[str, set[str]] = {}
+    path_outbound: dict[str, set[str]] = {}
+
+    for target, callers in reverse_index.items():
+        for caller in callers:
+            inbound.setdefault(str(target), set()).add(str(caller))
+
+    for dep in dependencies.values():
+        source = _dep_value(dep, "source_id", "source")
+        target = _dep_value(dep, "target_id", "target")
+        metadata = _dep_metadata(dep)
+        resolved = str(metadata.get("resolved_target") or "")
+        targets = [value for value in (target, resolved) if value]
+        for dep_target in targets:
+            outbound.setdefault(source, set()).add(dep_target)
+            inbound.setdefault(dep_target, set()).add(source)
+        source_path = _symbol_path(symbols.get(source))
+        if source_path:
+            for dep_target in targets:
+                path_outbound.setdefault(source_path, set()).add(dep_target)
+
+    islands: list[dict[str, Any]] = []
+    for sid, symbol in symbols.items():
+        path = _symbol_path(symbol)
+        sym_type = _symbol_type(symbol)
+        name = _symbol_name(symbol)
+        if not _is_single_project_candidate(path, sym_type, name):
+            continue
+        is_entry = _is_single_project_entry(path, sym_type, name)
+        inbound_count = len(inbound.get(sid, set()))
+        outbound_count = len(outbound.get(sid, set()) | path_outbound.get(path, set()))
+        ref_count = _symbol_ref_count(symbol)
+        if ref_count:
+            inbound_count = max(inbound_count, ref_count)
+
+        reason = ""
+        if not is_entry and inbound_count == 0 and outbound_count == 0:
+            reason = "no_inbound_or_outbound_edges"
+        elif not is_entry and inbound_count == 0:
+            reason = "no_inbound_edges"
+        elif is_entry and sym_type in {"component", "route"} and outbound_count == 0 and _has_product_surface_signal(path, name):
+            reason = "entry_without_data_or_call_edges"
+
+        if reason:
+            islands.append({
+                "symbol": sid,
+                "type": sym_type,
+                "name": name,
+                "path": path,
+                "reason": reason,
+                "inbound": inbound_count,
+                "outbound": outbound_count,
+            })
+
+    api_defs, api_calls = _extract_single_project_api_contract(symbols, dependencies)
+    unmatched_api_calls = _match_single_project_api_calls(api_defs, api_calls)
+    status = "pass"
+    summary = "No high-confidence single-project islands found"
+    if islands or unmatched_api_calls:
+        status = "warn"
+        summary = "Single-project island signals found"
+
+    add_check(
+        "single_project_islands",
+        status,
+        summary,
+        metrics={
+            "candidate_symbols": sum(
+                1 for symbol in symbols.values()
+                if _is_single_project_candidate(
+                    _symbol_path(symbol), _symbol_type(symbol), _symbol_name(symbol)
+                )
+            ),
+            "island_count": len(islands),
+            "island_samples": islands[:10],
+            "api_definitions": len(api_defs),
+            "api_calls": len(api_calls),
+            "unmatched_api_calls": len(unmatched_api_calls),
+            "unmatched_api_call_samples": _contract_samples(unmatched_api_calls),
+        },
+    )
+
+
+def _extract_single_project_api_contract(symbols: dict[str, Any], dependencies: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    api_defs: list[dict[str, Any]] = []
+    for sid, symbol in symbols.items():
+        if _symbol_type(symbol) != "api":
+            continue
+        metadata = _symbol_metadata(symbol)
+        raw_name = _symbol_name(symbol)
+        method = str(metadata.get("method") or "").upper()
+        route_path = str(metadata.get("path") or metadata.get("url") or "")
+        if not route_path and " " in raw_name:
+            method_part, route_path = raw_name.split(" ", 1)
+            method = method or method_part.upper()
+        if not route_path.startswith("/api/"):
+            continue
+        api_defs.append({
+            "method": method,
+            "path": route_path,
+            "raw": raw_name,
+            "normalized": _normalize_api_path(route_path),
+            "source": _symbol_path(symbol),
+            "symbol": sid,
+        })
+
+    api_calls: list[dict[str, Any]] = []
+    for dep in dependencies.values():
+        if _dep_type(dep) != "api_calls":
+            continue
+        metadata = _dep_metadata(dep)
+        raw = str(metadata.get("url") or _dep_value(dep, "target_id", "target") or "")
+        if not raw.startswith("/api/"):
+            continue
+        source = _dep_value(dep, "source_id", "source")
+        api_calls.append({
+            "method": str(metadata.get("method") or "").upper(),
+            "path": _strip_url_to_api_path(raw),
+            "raw": raw,
+            "normalized": _normalize_api_path(raw),
+            "source": _symbol_id_path(source),
+        })
+
+    return _dedupe_contract_items(api_defs), _dedupe_contract_items(api_calls)
+
+
+def _match_single_project_api_calls(api_defs: list[dict[str, Any]], api_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not api_defs or not api_calls:
+        return []
+    api_keys = {
+        (route.get("method", ""), route.get("normalized", ""))
+        for route in api_defs
+    }
+    api_paths = {route.get("normalized", "") for route in api_defs}
+    unmatched = []
+    for call in api_calls:
+        method = call.get("method", "")
+        normalized = call.get("normalized", "")
+        if (method and (method, normalized) in api_keys) or normalized in api_paths:
+            continue
+        unmatched.append(call)
+    return unmatched
 
 
 def _check_context_loop(engine: IndexEngine, query: str | None, add_check) -> None:
@@ -876,10 +1047,7 @@ def _iter_contract_source_files(root: Path):
     for path in root.rglob("*"):
         if not path.is_file() or path.suffix not in _CONTRACT_SOURCE_EXTENSIONS:
             continue
-        parts = set(path.parts)
-        if parts & _SKIP_WORKSPACE_DIRS or parts & _CONTRACT_SKIP_PARTS:
-            continue
-        if any(path.stem.endswith(suffix) for suffix in _CONTRACT_SKIP_SUFFIXES):
+        if _is_contract_skipped_path(str(path)):
             continue
         yield path
 
@@ -942,6 +1110,111 @@ def _contract_samples(items: list[dict[str, Any]], limit: int = 10) -> list[dict
         }
         for item in items[:limit]
     ]
+
+
+def _symbol_value(symbol: Any, attr: str, key: str | None = None, default: Any = "") -> Any:
+    if symbol is None:
+        return default
+    if isinstance(symbol, dict):
+        return symbol.get(key or attr, default)
+    return getattr(symbol, attr, default)
+
+
+def _symbol_path(symbol: Any) -> str:
+    return str(_symbol_value(symbol, "path", default=""))
+
+
+def _symbol_type(symbol: Any) -> str:
+    value = _symbol_value(symbol, "symbol_type", "type", "")
+    return str(getattr(value, "value", value))
+
+
+def _symbol_name(symbol: Any) -> str:
+    return str(_symbol_value(symbol, "name", default=""))
+
+
+def _symbol_metadata(symbol: Any) -> dict[str, Any]:
+    metadata = _symbol_value(symbol, "metadata", default={})
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _symbol_ref_count(symbol: Any) -> int:
+    value = _symbol_value(symbol, "reference_count", "ref_count", 0)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _dep_value(dep: Any, attr: str, key: str | None = None) -> str:
+    if isinstance(dep, dict):
+        return str(dep.get(key or attr, "") or "")
+    return str(getattr(dep, attr, "") or "")
+
+
+def _dep_type(dep: Any) -> str:
+    value = dep.get("type", "") if isinstance(dep, dict) else getattr(dep, "dep_type", "")
+    return str(getattr(value, "value", value))
+
+
+def _dep_metadata(dep: Any) -> dict[str, Any]:
+    metadata = dep.get("metadata", {}) if isinstance(dep, dict) else getattr(dep, "metadata", {})
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _symbol_id_path(symbol_id: str) -> str:
+    parts = symbol_id.split(":")
+    return parts[1] if len(parts) >= 4 else ""
+
+
+def _is_single_project_candidate(path: str, sym_type: str, name: str) -> bool:
+    if not path or _is_contract_skipped_path(path):
+        return False
+    if sym_type in {"api", "route"}:
+        return True
+    if sym_type in {"component", "composable", "store"}:
+        return _has_single_project_feature_signal(path, name)
+    if sym_type not in {"class", "file", "function", "method"}:
+        return False
+    lowered = f"{path}\n{name}".lower()
+    parts = set(Path(path).parts)
+    has_product_term = any(term in lowered for term in _CONTRACT_SURFACE_TERMS)
+    return has_product_term and bool(parts & _SINGLE_PROJECT_PRODUCT_PARTS)
+
+
+def _has_single_project_feature_signal(path: str, name: str = "") -> bool:
+    lowered = f"{path}\n{name}".lower()
+    if any(term in lowered for term in _CONTRACT_SURFACE_TERMS):
+        return True
+    parts = set(Path(path).parts)
+    return bool(parts & _SINGLE_PROJECT_FEATURE_PARTS)
+
+
+def _has_product_surface_signal(path: str, name: str = "") -> bool:
+    lowered = f"{path}\n{name}".lower()
+    if any(term in lowered for term in _CONTRACT_SURFACE_TERMS):
+        return True
+    parts = set(Path(path).parts)
+    return bool(parts & _SINGLE_PROJECT_PRODUCT_PARTS)
+
+
+def _is_single_project_entry(path: str, sym_type: str, name: str) -> bool:
+    parts = set(Path(path).parts)
+    stem = Path(path).stem.lower()
+    bare_name = name.split(".")[-1].lower()
+    if sym_type in {"api", "route"}:
+        return True
+    if bare_name in _SINGLE_PROJECT_ENTRY_NAMES or stem in _SINGLE_PROJECT_ENTRY_NAMES:
+        return True
+    return bool(parts & _SINGLE_PROJECT_ENTRY_PARTS)
+
+
+def _is_contract_skipped_path(path: str) -> bool:
+    parts = set(Path(path).parts)
+    if parts & _SKIP_WORKSPACE_DIRS or parts & _CONTRACT_SKIP_PARTS:
+        return True
+    stem = Path(path).stem
+    return any(stem.endswith(suffix) for suffix in _CONTRACT_SKIP_SUFFIXES)
 
 
 def _check_agent_hygiene(root: Path, add_check) -> None:
