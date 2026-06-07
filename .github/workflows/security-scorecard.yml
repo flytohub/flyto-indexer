@@ -13,7 +13,7 @@ jobs:
   scorecard:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Fails the job on any critical finding (hardcoded secrets, missing CI).
       # Warn-level findings (no lint, no tests, no security-focused tests) are
