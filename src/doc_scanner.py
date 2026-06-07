@@ -17,7 +17,7 @@ logger = logging.getLogger("flyto-indexer.doc-scanner")
 
 # Directories to skip
 _SKIP_DIRS = frozenset({
-    "node_modules", ".git", "vendor", "__pycache__", "dist", "build",
+    "node_modules", ".git", "vendor", "__pycache__", "dist", "dist-next", "build",
     ".venv", "venv", ".pytest_cache", ".flyto-index", ".flyto",
     ".tox", ".mypy_cache", ".ruff_cache", "target", "out", ".next",
     ".nuxt", ".output", "coverage", ".cache", ".parcel-cache",

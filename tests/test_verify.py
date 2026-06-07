@@ -290,7 +290,12 @@ def _write_dynamic_validation_project(
     workflow.write_text(workflow_text, encoding="utf-8")
 
 
-def _run_single_project_island_check(symbols: dict, dependencies: dict | None = None, reverse_index: dict | None = None):
+def _run_single_project_island_check(
+    symbols: dict,
+    dependencies: dict | None = None,
+    reverse_index: dict | None = None,
+    project_root: Path | None = None,
+):
     index = SimpleNamespace(
         symbols=symbols,
         dependencies=dependencies or {},
@@ -306,7 +311,10 @@ def _run_single_project_island_check(symbols: dict, dependencies: dict | None = 
             "metrics": metrics or {},
         })
 
-    _check_single_project_islands(SimpleNamespace(index=index), add_check)
+    engine = SimpleNamespace(index=index)
+    if project_root is not None:
+        engine.project_root = project_root
+    _check_single_project_islands(engine, add_check)
     return {check["name"]: check for check in checks}
 
 
@@ -662,6 +670,35 @@ def test_single_project_islands_warns_for_unwired_product_component():
     assert check["status"] == "warn"
     assert check["metrics"]["island_count"] == 1
     assert check["metrics"]["island_samples"][0]["reason"] == "no_inbound_or_outbound_edges"
+
+
+def test_single_project_islands_accepts_lazy_imported_component(tmp_path):
+    component = tmp_path / "src" / "components" / "footprint" / "FootprintPanel.tsx"
+    page = tmp_path / "src" / "pages" / "FootprintPage.tsx"
+    component.parent.mkdir(parents=True)
+    page.parent.mkdir(parents=True)
+    component.write_text("export function FootprintPanel() { return null }\n", encoding="utf-8")
+    page.write_text(
+        "const FootprintPanel = lazy(() => "
+        "import('../components/footprint/FootprintPanel').then(m => ({ default: m.FootprintPanel })))\n",
+        encoding="utf-8",
+    )
+    sid = "demo:src/components/footprint/FootprintPanel.tsx:component:FootprintPanel"
+    checks = _run_single_project_island_check(
+        {
+            sid: {
+                "path": "src/components/footprint/FootprintPanel.tsx",
+                "type": "component",
+                "name": "FootprintPanel",
+                "ref_count": 0,
+            },
+        },
+        project_root=tmp_path,
+    )
+
+    check = checks["single_project_islands"]
+    assert check["status"] == "pass"
+    assert check["metrics"]["island_count"] == 0
 
 
 def test_single_project_islands_ignores_plain_helpers():

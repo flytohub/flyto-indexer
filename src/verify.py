@@ -420,6 +420,8 @@ def _check_single_project_islands(engine: IndexEngine, add_check) -> None:
     inbound: dict[str, set[str]] = {}
     outbound: dict[str, set[str]] = {}
     path_outbound: dict[str, set[str]] = {}
+    project_root = getattr(engine, "project_root", None)
+    source_refs = _collect_source_name_references(project_root) if isinstance(project_root, Path) else {}
 
     for target, callers in reverse_index.items():
         for caller in callers:
@@ -452,6 +454,9 @@ def _check_single_project_islands(engine: IndexEngine, add_check) -> None:
         ref_count = _symbol_ref_count(symbol)
         if ref_count:
             inbound_count = max(inbound_count, ref_count)
+        source_ref_count = len(source_refs.get(name, set()) - {path})
+        if source_ref_count:
+            inbound_count = max(inbound_count, source_ref_count)
 
         reason = ""
         if not is_entry and inbound_count == 0 and outbound_count == 0:
@@ -499,6 +504,21 @@ def _check_single_project_islands(engine: IndexEngine, add_check) -> None:
             "unmatched_api_call_samples": _contract_samples(unmatched_api_calls),
         },
     )
+
+
+def _collect_source_name_references(root: Path) -> dict[str, set[str]]:
+    refs: dict[str, set[str]] = {}
+    for path in _iter_contract_source_files(root):
+        if path.name.endswith((".test.ts", ".test.tsx", ".spec.ts", ".spec.tsx")):
+            continue
+        rel = str(path.relative_to(root)).replace("\\", "/")
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for name in set(re.findall(r"\b[A-Z][A-Za-z0-9_]{2,}\b", text)):
+            refs.setdefault(name, set()).add(rel)
+    return refs
 
 
 def _extract_single_project_api_contract(symbols: dict[str, Any], dependencies: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -1690,12 +1710,7 @@ def _is_single_project_candidate(path: str, sym_type: str, name: str) -> bool:
         return True
     if sym_type in {"component", "composable", "store"}:
         return _has_single_project_feature_signal(path, name)
-    if sym_type not in {"class", "file", "function", "method"}:
-        return False
-    lowered = f"{path}\n{name}".lower()
-    parts = set(Path(path).parts)
-    has_product_term = any(term in lowered for term in _CONTRACT_SURFACE_TERMS)
-    return has_product_term and bool(parts & _SINGLE_PROJECT_PRODUCT_PARTS)
+    return False
 
 
 def _has_single_project_feature_signal(path: str, name: str = "") -> bool:
