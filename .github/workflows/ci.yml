@@ -89,7 +89,7 @@ jobs:
           python -m venv /tmp/flyto-wheel-smoke
           /tmp/flyto-wheel-smoke/bin/python -m pip install --no-deps dist/*.whl
           /tmp/flyto-wheel-smoke/bin/flyto-index --help
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-${{ github.sha }}
           path: dist/

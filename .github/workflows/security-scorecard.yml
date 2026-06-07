@@ -26,7 +26,7 @@ jobs:
         if: always()
         run: bash scripts/security_scorecard.sh --json > scorecard.json || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: security-scorecard
