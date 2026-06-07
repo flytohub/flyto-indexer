@@ -23,7 +23,7 @@ exploration and post-change verification.
 | `audit` | Code quality review | Auto-expands weak dimensions (security, complexity, dead code, coverage), git hotspots |
 | `task` | Plan/gate/validate workflow | Untested changes on validation failure |
 | `structure` | Project overview, APIs, dependencies | APIs, categories, index status, contract drift |
-| `verify` | Single-project closed-loop gate | Index integrity, context, impact, weak scans, policy, MCP registry |
+| `verify` | Single-project closed-loop gate | Index integrity, context, impact, weak scans, CI, no-external runtime, change hygiene, policy, MCP registry |
 | `verify_workspace` | Multi-project closed-loop gate | Aggregated verification, changed-only mode, baseline regression gating |
 
 ### Workflow for code changes

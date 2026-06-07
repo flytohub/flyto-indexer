@@ -79,8 +79,8 @@ Restart Claude Code and start using it. Works with any MCP client — Claude Cod
 
 Use `flyto-index verify` as the default gate before an AI agent finishes a code
 change. It runs the local indexer, validates graph integrity, checks context and
-impact loops, and runs the built-in weak scanners without Semgrep, Checkov, or
-network access.
+impact loops, verifies CI/package/working-tree closure, and runs the built-in
+weak scanners without Semgrep, Checkov, or network access.
 
 ```bash
 flyto-index scan . --full
@@ -99,7 +99,8 @@ flyto-index taint . --json --max-results 100
 
 For CI, use `verify --strict` to fail on incomplete graph closure, unresolved
 impact references, high-risk secret findings, high-risk taint flows, missing
-agent instructions, or MCP tool registry drift. Use `--baseline` with
+agent instructions, incomplete CI gates, generated/high-risk changed files,
+runtime dependency drift, or MCP tool registry drift. Use `--baseline` with
 `--regression-only` when a project has known warnings but new AI-generated
 regressions must still be blocked.
 

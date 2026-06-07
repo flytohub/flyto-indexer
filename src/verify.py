@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import html
+import fnmatch
 import subprocess
 import tomllib
 from pathlib import Path
@@ -30,6 +31,33 @@ _SKIP_WORKSPACE_DIRS = {
     "build", "coverage", "__pycache__", ".pytest_cache", ".mypy_cache",
     ".ruff_cache",
 }
+_CI_CANDIDATES = (
+    ".github/workflows/*.yml",
+    ".github/workflows/*.yaml",
+    ".gitlab-ci.yml",
+    "cloudbuild.yaml",
+    "cloudbuild.yml",
+    "Makefile",
+)
+_GENERATED_CHANGE_PATTERNS = (
+    ".flyto-index/*",
+    ".flyto/*",
+    "dist/*",
+    "build/*",
+    "node_modules/*",
+    "__pycache__/*",
+)
+_HIGH_RISK_CHANGE_PATTERNS = (
+    ".env",
+    ".env.*",
+    "*.pem",
+    "*.key",
+    "*.p12",
+    "*.pfx",
+    "*secret*",
+    "*credential*",
+    ".claude/settings.local.json",
+)
 
 
 def run_verification(
@@ -89,6 +117,9 @@ def run_verification(
     _check_context_loop(engine, query, add_check)
     _check_impact_loop(engine, symbol, add_check)
     _check_weak_scanners(root, add_check)
+    _check_no_external_runtime(root, add_check)
+    _check_ci_closed_loop(root, add_check)
+    _check_change_hygiene(root, add_check)
     _check_mcp_registry(root, add_check)
     _check_agent_hygiene(root, add_check)
     _check_policy_budget(root, checks, policy_path)
@@ -399,6 +430,129 @@ def _check_weak_scanners(root: Path, add_check) -> None:
     )
 
 
+def _check_no_external_runtime(root: Path, add_check) -> None:
+    pyproject = root / "pyproject.toml"
+    if not pyproject.exists():
+        add_check("no_external_runtime", "pass", "No Python package runtime contract to enforce")
+        return
+
+    try:
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, OSError) as exc:
+        add_check("no_external_runtime", "fail", f"Cannot parse pyproject.toml: {exc}")
+        return
+
+    project = data.get("project", {})
+    project_name = project.get("name", root.name)
+    dependencies = project.get("dependencies", [])
+    optional = project.get("optional-dependencies", {})
+    if project_name != "flyto-indexer":
+        add_check(
+            "no_external_runtime",
+            "pass",
+            "No-external-runtime contract is scoped to flyto-indexer",
+            metrics={"project": project_name, "dependency_count": len(dependencies)},
+        )
+        return
+
+    _ci_files, ci_text = _read_ci_files(root)
+    lowered_ci = ci_text.lower()
+    has_no_deps_smoke = "--no-deps" in lowered_ci and "flyto-index --help" in lowered_ci
+    has_metadata_assertion = "requires-dist" in lowered_ci and "runtime_requires" in lowered_ci
+
+    problems = []
+    if dependencies:
+        problems.append("runtime dependencies are not empty")
+    if not has_no_deps_smoke:
+        problems.append("CI does not run a no-deps wheel smoke")
+    if not has_metadata_assertion:
+        problems.append("CI does not assert wheel runtime metadata")
+
+    status = "pass"
+    if dependencies:
+        status = "fail"
+    elif problems:
+        status = "warn"
+
+    add_check(
+        "no_external_runtime",
+        status,
+        "flyto-indexer keeps zero runtime dependencies" if not problems else "No-external-runtime guard is incomplete",
+        metrics={
+            "project": project_name,
+            "dependency_count": len(dependencies),
+            "optional_dependency_groups": sorted(optional.keys()) if isinstance(optional, dict) else [],
+            "ci_no_deps_smoke": has_no_deps_smoke,
+            "ci_metadata_assertion": has_metadata_assertion,
+            "problems": problems,
+        },
+    )
+
+
+def _check_ci_closed_loop(root: Path, add_check) -> None:
+    ci_files, ci_text = _read_ci_files(root)
+    if not ci_files:
+        add_check("ci_closed_loop", "warn", "No CI workflow files found")
+        return
+
+    lowered = ci_text.lower()
+    project_name = _pyproject_name(root) or root.name
+    required = {
+        "verify": "flyto-index verify" in lowered or "verify-workspace" in lowered,
+        "tests": any(token in lowered for token in (
+            "pytest", "vitest", "npm test", "npm run test", "pnpm test", "yarn test", "go test",
+        )),
+        "lint": any(token in lowered for token in ("ruff", "mypy", "eslint", "npm run lint", "golangci-lint")),
+        "build": any(token in lowered for token in ("python -m build", "npm run build", "go build", "cargo build")),
+    }
+    if project_name == "flyto-indexer":
+        required.update({
+            "sarif_report": "--report-format sarif" in lowered,
+            "no_deps_wheel": "--no-deps" in lowered and "flyto-index --help" in lowered,
+        })
+
+    missing = sorted(name for name, present in required.items() if not present)
+    add_check(
+        "ci_closed_loop",
+        "pass" if not missing else "warn",
+        "CI runs the verify/test/build loop" if not missing else "CI does not fully close the verify loop",
+        metrics={
+            "files": [str(path.relative_to(root)) for path in ci_files],
+            "required": required,
+            "missing": missing,
+        },
+    )
+
+
+def _check_change_hygiene(root: Path, add_check) -> None:
+    if not (root / ".git").exists():
+        add_check("change_hygiene", "pass", "No git repository; change hygiene not applicable")
+        return
+
+    changed = _git_changed_paths(root)
+    generated = [path for path in changed if _matches_any(path, _GENERATED_CHANGE_PATTERNS)]
+    high_risk = [path for path in changed if _matches_any(path, _HIGH_RISK_CHANGE_PATTERNS)]
+    status = "pass"
+    summary = "No high-risk working tree changes"
+    if generated:
+        status = "fail"
+        summary = "Generated artifacts are tracked in the working tree"
+    elif high_risk:
+        status = "warn"
+        summary = "Working tree includes high-risk config or secret-shaped paths"
+
+    add_check(
+        "change_hygiene",
+        status,
+        summary,
+        metrics={
+            "changed": len(changed),
+            "generated": generated,
+            "high_risk": high_risk,
+        },
+    )
+
+
 def _check_agent_hygiene(root: Path, add_check) -> None:
     instruction_files = [root / "AGENTS.md", root / "CLAUDE.md"]
     present = [path for path in instruction_files if path.exists()]
@@ -538,6 +692,65 @@ def _generated_index_is_ignored(root: Path) -> bool:
         return False
     content = gitignore.read_text(encoding="utf-8", errors="ignore")
     return ".flyto-index/" in content or ".flyto-index" in content
+
+
+def _read_ci_files(root: Path) -> tuple[list[Path], str]:
+    files: list[Path] = []
+    for pattern in _CI_CANDIDATES:
+        files.extend(sorted(root.glob(pattern)))
+    readable = []
+    chunks = []
+    for path in files:
+        if not path.is_file():
+            continue
+        try:
+            chunks.append(path.read_text(encoding="utf-8", errors="ignore"))
+            readable.append(path)
+        except OSError:
+            continue
+    return readable, "\n".join(chunks)
+
+
+def _pyproject_name(root: Path) -> str:
+    pyproject = root / "pyproject.toml"
+    if not pyproject.exists():
+        return ""
+    try:
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, OSError):
+        return ""
+    name = data.get("project", {}).get("name", "")
+    return str(name) if name else ""
+
+
+def _git_changed_paths(root: Path) -> list[str]:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain=v1", "--untracked-files=all"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return []
+    if result.returncode != 0:
+        return []
+
+    paths: list[str] = []
+    for line in result.stdout.splitlines():
+        if len(line) < 4:
+            continue
+        raw_path = line[3:].strip()
+        if " -> " in raw_path:
+            paths.extend(part.strip().replace("\\", "/") for part in raw_path.split(" -> ") if part.strip())
+        elif raw_path:
+            paths.append(raw_path.replace("\\", "/"))
+    return sorted(set(paths))
+
+
+def _matches_any(path: str, patterns: tuple[str, ...]) -> bool:
+    normalized = path.replace("\\", "/")
+    return any(fnmatch.fnmatch(normalized, pattern) for pattern in patterns)
 
 
 def _load_verify_policy(root: Path, policy_path: str | Path | None = None) -> tuple[dict[str, Any], Path | None]:

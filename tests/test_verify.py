@@ -54,6 +54,34 @@ def _write_project(root: Path, *, dependency: str = "", project_name: str = "dem
     )
 
 
+def _write_indexer_ci(root: Path):
+    workflow = root / ".github" / "workflows" / "ci.yml"
+    workflow.parent.mkdir(parents=True, exist_ok=True)
+    workflow.write_text(
+        "name: CI\n"
+        "jobs:\n"
+        "  lint:\n"
+        "    steps:\n"
+        "      - run: ruff check src/ && mypy src/\n"
+        "  test:\n"
+        "    steps:\n"
+        "      - run: pytest tests/\n"
+        "  verify:\n"
+        "    steps:\n"
+        "      - run: flyto-index verify . --full-scan --report /tmp/verify.sarif --report-format sarif --json\n"
+        "  build:\n"
+        "    steps:\n"
+        "      - run: python -m build\n"
+        "      - run: |\n"
+        "          python - <<'PY'\n"
+        "          runtime_requires = []\n"
+        "          assert 'Requires-Dist:'\n"
+        "          PY\n"
+        "      - run: pip install --no-deps dist/*.whl && flyto-index --help\n",
+        encoding="utf-8",
+    )
+
+
 def test_run_verification_closes_core_loops(tmp_path):
     _write_project(tmp_path)
 
@@ -276,6 +304,7 @@ def test_verify_policy_budget_allows_named_warning(tmp_path):
         "  allow_warn:\n"
         "    - agent_hygiene\n"
         "    - docs_coverage\n",
+        "    - ci_closed_loop\n",
         encoding="utf-8",
     )
 
@@ -285,6 +314,51 @@ def test_verify_policy_budget_allows_named_warning(tmp_path):
     assert checks["agent_hygiene"]["status"] == "warn"
     assert checks["policy_budget"]["status"] == "pass"
     assert result["pass"] is True
+
+
+def test_no_external_runtime_and_ci_closed_loop_pass_for_indexer(tmp_path):
+    _write_project(tmp_path, project_name="flyto-indexer")
+    _write_indexer_ci(tmp_path)
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["no_external_runtime"]["status"] == "pass"
+    assert checks["ci_closed_loop"]["status"] == "pass"
+
+
+def test_ci_closed_loop_warns_without_verify(tmp_path):
+    _write_project(tmp_path, project_name="flyto-indexer")
+    workflow = tmp_path / ".github" / "workflows" / "ci.yml"
+    workflow.parent.mkdir(parents=True, exist_ok=True)
+    workflow.write_text(
+        "name: CI\njobs:\n  test:\n    steps:\n      - run: pytest tests/\n",
+        encoding="utf-8",
+    )
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["ci_closed_loop"]["status"] == "warn"
+    assert "verify" in checks["ci_closed_loop"]["metrics"]["missing"]
+
+
+def test_change_hygiene_warns_on_high_risk_paths(tmp_path):
+    _write_project(tmp_path)
+    subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], capture_output=True, check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+        capture_output=True,
+        check=True,
+    )
+    (tmp_path / ".env.production").write_text("TOKEN=\n", encoding="utf-8")
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["change_hygiene"]["status"] == "warn"
+    assert ".env.production" in checks["change_hygiene"]["metrics"]["high_risk"]
 
 
 def test_render_report_formats(tmp_path):
