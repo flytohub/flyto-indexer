@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import html
 import fnmatch
+import hashlib
 import subprocess
 import tomllib
 from pathlib import Path
@@ -22,6 +23,7 @@ from .models import SymbolType
 from .secret_scanner import scan_secrets
 
 _STATUS_RANK = {"pass": 0, "warn": 1, "fail": 2}
+_VERIFY_RESULT_SCHEMA_VERSION = "1"
 _PROJECT_MARKERS = (
     ".git", "pyproject.toml", "package.json", "go.mod", "Cargo.toml",
     "composer.json", "Gemfile", "src", "src-next",
@@ -118,14 +120,16 @@ def run_verification(
     _check_impact_loop(engine, symbol, add_check)
     _check_weak_scanners(root, add_check)
     _check_no_external_runtime(root, add_check)
+    _check_package_integrity(root, add_check)
     _check_ci_closed_loop(root, add_check)
     _check_change_hygiene(root, add_check)
     _check_mcp_registry(root, add_check)
+    _check_mcp_runtime_smoke(root, add_check)
     _check_agent_hygiene(root, add_check)
     _check_policy_budget(root, checks, policy_path)
 
     if baseline_path is not None:
-        pass_override = _check_regression_gate(checks, Path(baseline_path), regression_only)
+        pass_override = _check_regression_gate(root, checks, Path(baseline_path), regression_only)
 
     return _finalize(root, checks, pass_override=pass_override)
 
@@ -489,6 +493,73 @@ def _check_no_external_runtime(root: Path, add_check) -> None:
     )
 
 
+def _check_package_integrity(root: Path, add_check) -> None:
+    pyproject = root / "pyproject.toml"
+    if not pyproject.exists():
+        add_check("package_integrity", "pass", "No Python package manifest to inspect")
+        return
+
+    try:
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, OSError) as exc:
+        add_check("package_integrity", "fail", f"Cannot parse pyproject.toml: {exc}")
+        return
+
+    project = data.get("project", {})
+    project_name = project.get("name", root.name)
+    if project_name != "flyto-indexer":
+        add_check("package_integrity", "pass", "Package integrity contract is scoped to flyto-indexer")
+        return
+
+    tool = data.get("tool", {})
+    hatch = tool.get("hatch", {}) if isinstance(tool, dict) else {}
+    build = hatch.get("build", {}) if isinstance(hatch, dict) else {}
+    targets = build.get("targets", {}) if isinstance(build, dict) else {}
+    wheel = targets.get("wheel", {}) if isinstance(targets, dict) else {}
+    sdist = targets.get("sdist", {}) if isinstance(targets, dict) else {}
+
+    wheel_packages = wheel.get("packages", []) if isinstance(wheel, dict) else []
+    wheel_sources = wheel.get("sources", {}) if isinstance(wheel, dict) else {}
+    force_include = wheel.get("force-include", {}) if isinstance(wheel, dict) else {}
+    sdist_include = sdist.get("include", []) if isinstance(sdist, dict) else []
+    scripts = project.get("scripts", {}) if isinstance(project, dict) else {}
+    license_files = project.get("license-files", []) if isinstance(project, dict) else []
+
+    required = {
+        "hatchling_backend": data.get("build-system", {}).get("build-backend") == "hatchling.build",
+        "wheel_src_package": "src" in wheel_packages,
+        "wheel_src_remap": isinstance(wheel_sources, dict) and wheel_sources.get("src") == "flyto_indexer",
+        "rule_corpus_force_include": isinstance(force_include, dict)
+        and force_include.get("config/rules") == "flyto_indexer/config/rules",
+        "sdist_src": "/src" in sdist_include,
+        "sdist_config": "/config" in sdist_include,
+        "cli_entrypoint": isinstance(scripts, dict)
+        and scripts.get("flyto-index") == "flyto_indexer.cli:main",
+        "license_files_exist": all((root / str(path)).is_file() for path in license_files)
+        and {"LICENSE", "NOTICE"}.issubset({str(path) for path in license_files}),
+    }
+    package_entries = _package_manifest_entries(wheel_packages, wheel_sources, force_include, sdist_include)
+    forbidden_entries = [
+        entry for entry in package_entries
+        if _matches_any(entry, _GENERATED_CHANGE_PATTERNS + _HIGH_RISK_CHANGE_PATTERNS)
+    ]
+    missing = sorted(name for name, present in required.items() if not present)
+    status = "pass"
+    if forbidden_entries or missing:
+        status = "fail"
+    add_check(
+        "package_integrity",
+        status,
+        "Package manifest preserves the install/runtime contract" if status == "pass" else "Package manifest can leak or break runtime artifacts",
+        metrics={
+            "required": required,
+            "missing": missing,
+            "forbidden_entries": forbidden_entries,
+            "entries_checked": len(package_entries),
+        },
+    )
+
+
 def _check_ci_closed_loop(root: Path, add_check) -> None:
     ci_files, ci_text = _read_ci_files(root)
     if not ci_files:
@@ -549,6 +620,60 @@ def _check_change_hygiene(root: Path, add_check) -> None:
             "changed": len(changed),
             "generated": generated,
             "high_risk": high_risk,
+        },
+    )
+
+
+def _check_mcp_runtime_smoke(root: Path, add_check) -> None:
+    if not (root / "src" / "mcp_server.py").exists():
+        add_check("mcp_runtime_smoke", "pass", "No MCP server module to smoke")
+        return
+
+    try:
+        from . import mcp_server
+        from .tool_registry import SMART_TOOLS, SMART_TOOL_NAMES, has_tool
+    except ImportError:
+        try:
+            import mcp_server
+            from tool_registry import SMART_TOOLS, SMART_TOOL_NAMES, has_tool
+        except ImportError as exc:
+            add_check("mcp_runtime_smoke", "fail", f"Cannot import MCP runtime: {exc}")
+            return
+
+    problems = []
+    server_names = {tool.get("name", "") for tool in getattr(mcp_server, "TOOLS", [])}
+    smart_names = {tool.get("name", "") for tool in SMART_TOOLS}
+    if server_names != smart_names:
+        problems.append("server tool list does not match smart tool registry")
+    if set(SMART_TOOL_NAMES) != smart_names:
+        problems.append("SMART_TOOL_NAMES does not match SMART_TOOLS")
+    missing_dispatch = sorted(name for name in smart_names if name and not has_tool(name))
+    if missing_dispatch:
+        problems.append("some smart tools are missing dispatch")
+    protocols = getattr(mcp_server, "SUPPORTED_PROTOCOL_VERSIONS", ())
+    if not protocols:
+        problems.append("no supported protocol versions declared")
+    elif mcp_server.negotiate_protocol_version(protocols[-1]) != protocols[-1]:
+        problems.append("protocol negotiation does not echo supported clients")
+    if not getattr(mcp_server, "RESOURCES", []):
+        problems.append("no MCP resources declared")
+    if not getattr(mcp_server, "PROMPTS", []):
+        problems.append("no MCP prompts declared")
+    impact_prompt = mcp_server._get_prompt("impact-check")
+    if not impact_prompt.get("messages"):
+        problems.append("impact-check prompt cannot be rendered")
+
+    add_check(
+        "mcp_runtime_smoke",
+        "fail" if problems else "pass",
+        "MCP runtime imports and protocol helpers smoke cleanly" if not problems else "MCP runtime smoke found drift",
+        metrics={
+            "tools": len(server_names),
+            "protocol_versions": list(protocols),
+            "resources": len(getattr(mcp_server, "RESOURCES", [])),
+            "prompts": len(getattr(mcp_server, "PROMPTS", [])),
+            "missing_dispatch": missing_dispatch,
+            "problems": problems,
         },
     )
 
@@ -723,6 +848,20 @@ def _pyproject_name(root: Path) -> str:
     return str(name) if name else ""
 
 
+def _package_manifest_entries(*values: Any) -> list[str]:
+    entries: list[str] = []
+    for value in values:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                entries.append(str(key).lstrip("/"))
+                entries.append(str(item).lstrip("/"))
+        elif isinstance(value, list):
+            entries.extend(str(item).lstrip("/") for item in value)
+        elif value:
+            entries.append(str(value).lstrip("/"))
+    return sorted({entry.replace("\\", "/") for entry in entries if entry})
+
+
 def _git_changed_paths(root: Path) -> list[str]:
     try:
         result = subprocess.run(
@@ -839,6 +978,7 @@ def _as_int(value: Any) -> int | None:
 
 
 def _check_regression_gate(
+    root: Path,
     checks: list[dict[str, Any]],
     baseline_path: Path,
     regression_only: bool,
@@ -854,7 +994,14 @@ def _check_regression_gate(
         })
         return False if regression_only else None
 
+    integrity_status, integrity_metrics = _baseline_integrity(root, baseline)
     regressions = _find_status_regressions(checks, baseline)
+    checks.append({
+        "name": "baseline_integrity",
+        "status": integrity_status,
+        "summary": "Baseline metadata matches this project" if integrity_status == "pass" else "Baseline metadata is incomplete or mismatched",
+        "metrics": {"baseline": str(baseline_path), **integrity_metrics},
+    })
     checks.append({
         "name": "regression_gate",
         "status": "fail" if regressions else "pass",
@@ -865,7 +1012,7 @@ def _check_regression_gate(
             "regression_only": regression_only,
         },
     })
-    return not regressions if regression_only else None
+    return not regressions and integrity_status != "fail" if regression_only else None
 
 
 def _load_baseline(path: Path) -> dict[str, Any] | None:
@@ -874,6 +1021,41 @@ def _load_baseline(path: Path) -> dict[str, Any] | None:
     except (OSError, json.JSONDecodeError):
         return None
     return data if isinstance(data, dict) else None
+
+
+def _baseline_integrity(root: Path, baseline: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    metadata = baseline.get("metadata") if isinstance(baseline.get("metadata"), dict) else {}
+    problems: list[str] = []
+    warnings: list[str] = []
+
+    baseline_project = str(baseline.get("project") or "")
+    metadata_project = str(metadata.get("project") or "")
+    if baseline_project and baseline_project != root.name:
+        problems.append("baseline project does not match current project")
+    if metadata_project and metadata_project != root.name:
+        problems.append("baseline metadata project does not match current project")
+    if not metadata:
+        warnings.append("baseline has no metadata")
+    elif metadata.get("schema_version") != _VERIFY_RESULT_SCHEMA_VERSION:
+        warnings.append("baseline schema version is different")
+    if metadata.get("git_dirty") is True:
+        warnings.append("baseline was created from a dirty working tree")
+
+    status = "pass"
+    if problems:
+        status = "fail"
+    elif warnings:
+        status = "warn"
+    return status, {
+        "project": root.name,
+        "baseline_project": baseline_project,
+        "metadata_project": metadata_project,
+        "schema_version": metadata.get("schema_version", ""),
+        "git_head": metadata.get("git_head", ""),
+        "git_dirty": metadata.get("git_dirty"),
+        "problems": problems,
+        "warnings": warnings,
+    }
 
 
 def _find_status_regressions(
@@ -888,7 +1070,7 @@ def _find_status_regressions(
     regressions: list[dict[str, Any]] = []
     for check in current_checks:
         name = check.get("name", "")
-        if name == "regression_gate":
+        if name in {"regression_gate", "baseline_integrity"}:
             continue
         current_status = check.get("status", "fail")
         baseline_status = (baseline_checks.get(name) or {}).get("status")
@@ -1086,6 +1268,45 @@ def _load_index_json(root: Path) -> dict[str, Any]:
         return {}
 
 
+def _verification_metadata(root: Path, checks: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "schema_version": _VERIFY_RESULT_SCHEMA_VERSION,
+        "project": root.name,
+        "git_head": _git_head(root),
+        "git_dirty": bool(_git_changed_paths(root)) if (root / ".git").exists() else None,
+        "check_count": len(checks),
+        "check_fingerprint": _checks_fingerprint(checks),
+    }
+
+
+def _git_head(root: Path) -> str:
+    if not (root / ".git").exists():
+        return ""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return ""
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _checks_fingerprint(checks: list[dict[str, Any]]) -> str:
+    payload = [
+        {
+            "name": check.get("name", ""),
+            "status": check.get("status", ""),
+            "summary": check.get("summary", ""),
+        }
+        for check in checks
+    ]
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
 def _finalize(
     root: Path,
     checks: list[dict[str, Any]],
@@ -1100,5 +1321,6 @@ def _finalize(
         "path": str(root),
         "pass": pass_override if pass_override is not None else summary.get("fail", 0) == 0,
         "summary": summary,
+        "metadata": _verification_metadata(root, checks),
         "checks": checks,
     }

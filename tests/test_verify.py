@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.cli import cmd_verify, cmd_verify_baseline, cmd_verify_workspace
 from src.verify import (
+    _check_mcp_runtime_smoke,
     format_verification,
     format_workspace_verification,
     render_report,
@@ -78,6 +79,34 @@ def _write_indexer_ci(root: Path):
         "          assert 'Requires-Dist:'\n"
         "          PY\n"
         "      - run: pip install --no-deps dist/*.whl && flyto-index --help\n",
+        encoding="utf-8",
+    )
+
+
+def _write_indexer_package_config(root: Path):
+    (root / "LICENSE").write_text("Apache-2.0\n", encoding="utf-8")
+    (root / "NOTICE").write_text("Flyto\n", encoding="utf-8")
+    (root / "config" / "rules").mkdir(parents=True)
+    (root / "config" / "rules" / "demo.yaml").write_text("rules: []\n", encoding="utf-8")
+    (root / "pyproject.toml").write_text(
+        "[build-system]\n"
+        "requires = [\"hatchling\"]\n"
+        "build-backend = \"hatchling.build\"\n\n"
+        "[project]\n"
+        "name = \"flyto-indexer\"\n"
+        "requires-python = \">=3.11\"\n"
+        "dependencies = []\n"
+        "license-files = [\"LICENSE\", \"NOTICE\"]\n\n"
+        "[project.scripts]\n"
+        "flyto-index = \"flyto_indexer.cli:main\"\n\n"
+        "[tool.hatch.build.targets.sdist]\n"
+        "include = [\"/src\", \"/config\"]\n\n"
+        "[tool.hatch.build.targets.wheel]\n"
+        "packages = [\"src\"]\n\n"
+        "[tool.hatch.build.targets.wheel.sources]\n"
+        "\"src\" = \"flyto_indexer\"\n\n"
+        "[tool.hatch.build.targets.wheel.force-include]\n"
+        "\"config/rules\" = \"flyto_indexer/config/rules\"\n",
         encoding="utf-8",
     )
 
@@ -325,6 +354,45 @@ def test_no_external_runtime_and_ci_closed_loop_pass_for_indexer(tmp_path):
     checks = {check["name"]: check for check in result["checks"]}
     assert checks["no_external_runtime"]["status"] == "pass"
     assert checks["ci_closed_loop"]["status"] == "pass"
+
+
+def test_package_integrity_passes_for_indexer_config(tmp_path):
+    _write_project(tmp_path, project_name="flyto-indexer")
+    _write_indexer_ci(tmp_path)
+    _write_indexer_package_config(tmp_path)
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["package_integrity"]["status"] == "pass"
+
+
+def test_baseline_integrity_fails_wrong_project(tmp_path):
+    _write_project(tmp_path)
+    baseline_result = run_verification(tmp_path, full_scan=True)
+    baseline_result["project"] = "other-project"
+    baseline_result["metadata"]["project"] = "other-project"
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(json.dumps(baseline_result, ensure_ascii=False), encoding="utf-8")
+
+    result = run_verification(tmp_path, full_scan=True, baseline_path=baseline, regression_only=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["baseline_integrity"]["status"] == "fail"
+    assert result["pass"] is False
+
+
+def test_mcp_runtime_smoke_passes_for_repo():
+    root = Path(__file__).parent.parent
+    checks = []
+
+    def add_check(name, status, summary, *, metrics=None):
+        checks.append({"name": name, "status": status, "summary": summary, "metrics": metrics or {}})
+
+    _check_mcp_runtime_smoke(root, add_check)
+
+    by_name = {check["name"]: check for check in checks}
+    assert by_name["mcp_runtime_smoke"]["status"] == "pass"
 
 
 def test_ci_closed_loop_warns_without_verify(tmp_path):
