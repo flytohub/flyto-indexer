@@ -67,6 +67,28 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install --upgrade build
       - run: python -m build
+      - name: Verify wheel has no runtime dependencies
+        run: |
+          python - <<'PY'
+          import glob
+          import zipfile
+
+          wheels = glob.glob("dist/*.whl")
+          assert wheels, "no wheel built"
+          with zipfile.ZipFile(wheels[0]) as zf:
+              metadata_name = next(name for name in zf.namelist() if name.endswith(".dist-info/METADATA"))
+              metadata = zf.read(metadata_name).decode()
+          runtime_requires = [
+              line for line in metadata.splitlines()
+              if line.startswith("Requires-Dist:") and "extra ==" not in line
+          ]
+          assert runtime_requires == [], runtime_requires
+          PY
+      - name: No-deps wheel smoke test
+        run: |
+          python -m venv /tmp/flyto-wheel-smoke
+          /tmp/flyto-wheel-smoke/bin/python -m pip install --no-deps dist/*.whl
+          /tmp/flyto-wheel-smoke/bin/flyto-index --help
       - uses: actions/upload-artifact@v4
         with:
           name: dist-${{ github.sha }}

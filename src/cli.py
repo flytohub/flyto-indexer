@@ -292,6 +292,9 @@ def main():
     verify_parser.add_argument("--baseline", help="Baseline JSON result to compare for regression gating")
     verify_parser.add_argument("--regression-only", action="store_true", help="Only fail on checks that regress versus --baseline")
     verify_parser.add_argument("--save-baseline", help="Write the current verification JSON result to this file")
+    verify_parser.add_argument("--policy", help="Path to .flyto-rules.yaml/.json policy file (default: project .flyto-rules.yaml)")
+    verify_parser.add_argument("--report", help="Write a report artifact to this path")
+    verify_parser.add_argument("--report-format", choices=["json", "markdown", "junit", "sarif"], default="json", help="Report artifact format")
     verify_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
 
     # verify-workspace
@@ -309,7 +312,25 @@ def main():
     workspace_parser.add_argument("--strict", action="store_true", help="Treat warnings as failures")
     workspace_parser.add_argument("--baseline-dir", help="Directory containing per-project baseline JSON files named <project>.json")
     workspace_parser.add_argument("--regression-only", action="store_true", help="Only fail projects with regressions versus --baseline-dir")
+    workspace_parser.add_argument("--changed-only", action="store_true", help="Only verify projects with git changes")
+    workspace_parser.add_argument("--base", default="", help="Git base ref for --changed-only, e.g. origin/main")
+    workspace_parser.add_argument("--policy", help="Path to shared verify policy file")
+    workspace_parser.add_argument("--report", help="Write a report artifact to this path")
+    workspace_parser.add_argument("--report-format", choices=["json", "markdown", "junit", "sarif"], default="json", help="Report artifact format")
     workspace_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
+
+    # verify-baseline
+    baseline_parser = subparsers.add_parser(
+        "verify-baseline",
+        help="Create, compare, or update verify baseline JSON",
+        description="Manage verify baselines without adding another MCP tool.",
+    )
+    baseline_parser.add_argument("action", choices=["create", "compare", "update"], help="Baseline action")
+    baseline_parser.add_argument("path", nargs="?", default=".", help="Project root path")
+    baseline_parser.add_argument("--output-dir", default=".flyto-baselines", help="Directory for <project>.json baseline files")
+    baseline_parser.add_argument("--baseline", help="Explicit baseline JSON path for compare")
+    baseline_parser.add_argument("--full-scan", action="store_true", help="Rebuild index before creating/comparing")
+    baseline_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
 
     # pr-risk
     pr_risk_parser = subparsers.add_parser(
@@ -459,6 +480,8 @@ def main():
             result = cmd_verify(args)
         elif args.command == "verify-workspace":
             result = cmd_verify_workspace(args)
+        elif args.command == "verify-baseline":
+            result = cmd_verify_baseline(args)
         elif args.command == "pr-risk":
             result = cmd_pr_risk(args)
         elif args.command == "sbom":
@@ -993,6 +1016,9 @@ def cmd_tools(args):
                 {"name": "--baseline", "type": "string", "required": False, "description": "Baseline JSON result for regression gating"},
                 {"name": "--regression-only", "type": "boolean", "required": False, "default": False, "description": "Only fail on checks that regress versus --baseline"},
                 {"name": "--save-baseline", "type": "string", "required": False, "description": "Write current verification result to this JSON file"},
+                {"name": "--policy", "type": "string", "required": False, "description": "Verify policy file (.flyto-rules.yaml/.json)"},
+                {"name": "--report", "type": "string", "required": False, "description": "Write report artifact to this path"},
+                {"name": "--report-format", "type": "string", "required": False, "default": "json", "description": "Report format: json, markdown, junit, sarif"},
                 {"name": "--json", "type": "boolean", "required": False, "default": False, "description": "Output as JSON"},
             ],
             "outputs": [],
@@ -1014,6 +1040,11 @@ def cmd_tools(args):
                 {"name": "--strict", "type": "boolean", "required": False, "default": False, "description": "Treat warnings as failures"},
                 {"name": "--baseline-dir", "type": "string", "required": False, "description": "Directory with <project>.json baseline files"},
                 {"name": "--regression-only", "type": "boolean", "required": False, "default": False, "description": "Only fail projects that regress versus --baseline-dir"},
+                {"name": "--changed-only", "type": "boolean", "required": False, "default": False, "description": "Only verify projects with git changes"},
+                {"name": "--base", "type": "string", "required": False, "description": "Git base ref for --changed-only"},
+                {"name": "--policy", "type": "string", "required": False, "description": "Shared verify policy file"},
+                {"name": "--report", "type": "string", "required": False, "description": "Write report artifact to this path"},
+                {"name": "--report-format", "type": "string", "required": False, "default": "json", "description": "Report format: json, markdown, junit, sarif"},
                 {"name": "--json", "type": "boolean", "required": False, "default": False, "description": "Output as JSON"},
             ],
             "outputs": [],
@@ -1023,6 +1054,25 @@ def cmd_tools(args):
                 "flyto-index verify-workspace . --baseline-dir .flyto-baselines --regression-only --json",
             ],
             "exit_codes": {"0": "success", "2": "verification failed"},
+        },
+        {
+            "name": "verify-baseline",
+            "summary": "Create, compare, or update verify baseline JSON",
+            "args": [
+                {"name": "action", "type": "string", "required": True, "description": "create, compare, or update"},
+                {"name": "path", "type": "string", "required": False, "default": ".", "description": "Project root path"},
+                {"name": "--output-dir", "type": "string", "required": False, "default": ".flyto-baselines", "description": "Directory for <project>.json baseline files"},
+                {"name": "--baseline", "type": "string", "required": False, "description": "Explicit baseline JSON path for compare"},
+                {"name": "--full-scan", "type": "boolean", "required": False, "default": False, "description": "Rebuild the index before baseline action"},
+                {"name": "--json", "type": "boolean", "required": False, "default": False, "description": "Output as JSON"},
+            ],
+            "outputs": [],
+            "side_effects": ["create/update writes a baseline JSON file"],
+            "examples": [
+                "flyto-index verify-baseline create . --output-dir .flyto-baselines",
+                "flyto-index verify-baseline compare . --baseline .flyto-baselines/flyto-indexer.json",
+            ],
+            "exit_codes": {"0": "success", "2": "regression detected"},
         },
         {
             "name": "outline",
@@ -2185,7 +2235,7 @@ def cmd_check(args):
 
 def cmd_verify(args):
     """Run the no-external-dependency verification gate."""
-    from .verify import format_verification, run_verification
+    from .verify import format_verification, render_report, run_verification
 
     result = run_verification(
         args.path,
@@ -2195,12 +2245,15 @@ def cmd_verify(args):
         strict=args.strict,
         baseline_path=args.baseline,
         regression_only=args.regression_only,
+        policy_path=args.policy,
     )
 
     if getattr(args, "save_baseline", None):
         output_path = Path(args.save_baseline)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    if getattr(args, "report", None):
+        _write_verify_report(args.report, render_report(result, args.report_format))
 
     if hasattr(args, "as_json") and args.as_json:
         return result
@@ -2213,7 +2266,7 @@ def cmd_verify(args):
 
 def cmd_verify_workspace(args):
     """Run verification across a workspace."""
-    from .verify import format_workspace_verification, run_workspace_verification
+    from .verify import format_workspace_verification, render_report, run_workspace_verification
 
     result = run_workspace_verification(
         args.path,
@@ -2222,7 +2275,12 @@ def cmd_verify_workspace(args):
         strict=args.strict,
         baseline_dir=args.baseline_dir,
         regression_only=args.regression_only,
+        changed_only=args.changed_only,
+        base=args.base,
+        policy_path=args.policy,
     )
+    if getattr(args, "report", None):
+        _write_verify_report(args.report, render_report(result, args.report_format))
 
     if hasattr(args, "as_json") and args.as_json:
         return result
@@ -2231,6 +2289,40 @@ def cmd_verify_workspace(args):
     if not result["pass"]:
         sys.exit(2)
     return None
+
+
+def cmd_verify_baseline(args):
+    """Create, compare, or update a verification baseline."""
+    from .verify import run_verification
+
+    project_root = Path(args.path).resolve()
+    baseline_path = Path(args.baseline).resolve() if args.baseline else (
+        Path(args.output_dir).resolve() / f"{project_root.name}.json"
+    )
+    if args.action in {"create", "update"}:
+        result = run_verification(project_root, full_scan=args.full_scan)
+        baseline_path.parent.mkdir(parents=True, exist_ok=True)
+        baseline_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {"ok": True, "action": args.action, "project": project_root.name, "baseline": str(baseline_path)}
+
+    result = run_verification(
+        project_root,
+        full_scan=args.full_scan,
+        baseline_path=baseline_path,
+        regression_only=True,
+    )
+    if hasattr(args, "as_json") and args.as_json:
+        return result
+    if not result["pass"]:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        sys.exit(2)
+    return result
+
+
+def _write_verify_report(path: str, content: str) -> None:
+    report_path = Path(path)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(content, encoding="utf-8")
 
 
 if __name__ == "__main__":

@@ -88,6 +88,9 @@ flyto-index verify . --strict
 flyto-index verify-workspace /Users/chester/flytohub --project flyto-code --project flyto-engine --project flyto-indexer
 flyto-index verify . --save-baseline .flyto-baselines/flyto-indexer.json --json
 flyto-index verify . --baseline .flyto-baselines/flyto-indexer.json --regression-only
+flyto-index verify-workspace . --changed-only --base origin/main
+flyto-index verify . --report verify.sarif --report-format sarif
+flyto-index verify-baseline compare . --baseline .flyto-baselines/flyto-indexer.json
 flyto-index impact MySharedSymbol --path .
 flyto-index context --path . --query "auth routes query keys"
 flyto-index secrets . --json
@@ -99,6 +102,16 @@ impact references, high-risk secret findings, high-risk taint flows, missing
 agent instructions, or MCP tool registry drift. Use `--baseline` with
 `--regression-only` when a project has known warnings but new AI-generated
 regressions must still be blocked.
+
+Project-specific verify budgets live in `.flyto-rules.yaml` under `verify:`.
+This stays stdlib-only; the verifier reads a small no-dependency subset:
+
+```yaml
+verify:
+  allow_warn: [docs_coverage]
+  warn_as_fail: [agent_hygiene, generated_index_ignore, mcp_registry]
+  min_docs_score: 60
+```
 
 <details>
 <summary>Manual setup (other MCP clients)</summary>

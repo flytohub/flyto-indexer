@@ -9,6 +9,7 @@ impact graph, context lookup, and lightweight security scans still close.
 from __future__ import annotations
 
 import json
+import html
 import subprocess
 import tomllib
 from pathlib import Path
@@ -40,6 +41,7 @@ def run_verification(
     strict: bool = False,
     baseline_path: str | Path | None = None,
     regression_only: bool = False,
+    policy_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run the no-external-dependency verification suite."""
     root = Path(project_path).resolve()
@@ -89,6 +91,7 @@ def run_verification(
     _check_weak_scanners(root, add_check)
     _check_mcp_registry(root, add_check)
     _check_agent_hygiene(root, add_check)
+    _check_policy_budget(root, checks, policy_path)
 
     if baseline_path is not None:
         pass_override = _check_regression_gate(checks, Path(baseline_path), regression_only)
@@ -104,6 +107,9 @@ def run_workspace_verification(
     strict: bool = False,
     baseline_dir: str | Path | None = None,
     regression_only: bool = False,
+    changed_only: bool = False,
+    base: str = "",
+    policy_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run verification across multiple projects and aggregate the result."""
     root = Path(workspace_path).resolve()
@@ -114,7 +120,11 @@ def run_workspace_verification(
 
     baseline_root = Path(baseline_dir).resolve() if baseline_dir else None
     results: list[dict[str, Any]] = []
+    skipped_projects: list[str] = []
     for project in projects:
+        if changed_only and not _project_has_changes(project, base):
+            skipped_projects.append(str(project))
+            continue
         baseline_path = baseline_root / f"{project.name}.json" if baseline_root else None
         results.append(run_verification(
             project,
@@ -122,10 +132,12 @@ def run_workspace_verification(
             strict=strict,
             baseline_path=baseline_path,
             regression_only=regression_only,
+            policy_path=policy_path,
         ))
 
     summary = {
         "projects": len(results),
+        "skipped": len(skipped_projects),
         "pass": sum(1 for result in results if result["pass"] and result["summary"].get("warn", 0) == 0),
         "warn": sum(1 for result in results if result["pass"] and result["summary"].get("warn", 0) > 0),
         "fail": sum(1 for result in results if not result["pass"]),
@@ -135,6 +147,7 @@ def run_workspace_verification(
         "path": str(root),
         "pass": summary["fail"] == 0,
         "summary": summary,
+        "skipped_projects": skipped_projects,
         "projects": results,
     }
 
@@ -160,13 +173,28 @@ def format_verification(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def render_report(result: dict[str, Any], report_format: str) -> str:
+    """Render project or workspace verification result as a report artifact."""
+    fmt = report_format.lower()
+    if fmt == "json":
+        return json.dumps(result, ensure_ascii=False, indent=2)
+    if fmt == "markdown":
+        return _render_markdown_report(result)
+    if fmt == "junit":
+        return _render_junit_report(result)
+    if fmt == "sarif":
+        return _render_sarif_report(result)
+    raise ValueError(f"Unsupported report format: {report_format}")
+
+
 def format_workspace_verification(result: dict[str, Any]) -> str:
     """Human-readable workspace verification report."""
     lines = [
         f"Flyto Workspace Verify: {result['workspace']}",
         f"  Path:     {result['path']}",
         f"  Status:   {'PASS' if result['pass'] else 'FAIL'}",
-        f"  Projects: {result['summary']['pass']} pass, {result['summary']['warn']} warn, {result['summary']['fail']} fail",
+        f"  Projects: {result['summary']['pass']} pass, {result['summary']['warn']} warn, "
+        f"{result['summary']['fail']} fail, {result['summary'].get('skipped', 0)} skipped",
         "",
     ]
     for project in result["projects"]:
@@ -378,14 +406,24 @@ def _check_agent_hygiene(root: Path, add_check) -> None:
         add_check("agent_hygiene", "warn", "No AGENTS.md or CLAUDE.md found")
     else:
         combined = "\n".join(path.read_text(encoding="utf-8", errors="ignore") for path in present)
-        mentions_indexer = "flyto-indexer" in combined or "flyto-index" in combined
-        mentions_verify = "verify" in combined or "scan" in combined
-        status = "pass" if mentions_indexer and mentions_verify else "warn"
+        lowered = combined.lower()
+        mentions_indexer = "flyto-indexer" in lowered or "flyto-index" in lowered
+        mentions_pre_change = (
+            "search" in lowered
+            and ("impact" in lowered or "task(action='plan')" in lowered or 'task(action="plan")' in lowered)
+        )
+        mentions_post_verify = "verify" in lowered
+        status = "pass" if mentions_indexer and mentions_pre_change and mentions_post_verify else "warn"
         add_check(
             "agent_hygiene",
             status,
-            "Agent instructions reference indexer gates" if status == "pass" else "Agent instructions exist but do not clearly require indexer gates",
-            metrics={"files": [path.name for path in present]},
+            "Agent instructions require indexer exploration and verification" if status == "pass" else "Agent instructions exist but do not clearly require pre-change exploration and post-change verification",
+            metrics={
+                "files": [path.name for path in present],
+                "mentions_indexer": mentions_indexer,
+                "mentions_pre_change": mentions_pre_change,
+                "mentions_post_verify": mentions_post_verify,
+            },
         )
 
     ignored = _generated_index_is_ignored(root)
@@ -394,6 +432,53 @@ def _check_agent_hygiene(root: Path, add_check) -> None:
         "pass" if ignored else "warn",
         ".flyto-index is ignored" if ignored else ".flyto-index is not ignored",
     )
+
+
+def _check_policy_budget(
+    root: Path,
+    checks: list[dict[str, Any]],
+    policy_path: str | Path | None = None,
+) -> None:
+    policy, source = _load_verify_policy(root, policy_path)
+    if not policy:
+        return
+
+    warn_as_fail = set(_as_list(policy.get("warn_as_fail") or policy.get("fail_on_warn")))
+    allow_warn = set(_as_list(policy.get("allow_warn") or policy.get("allow_warnings")))
+    min_docs_score = _as_int(policy.get("min_docs_score"))
+
+    violations: list[dict[str, Any]] = []
+    for check in checks:
+        name = check.get("name", "")
+        status = check.get("status", "fail")
+        if status == "warn" and ("*" in warn_as_fail or name in warn_as_fail) and name not in allow_warn:
+            violations.append({
+                "check": name,
+                "rule": "warn_as_fail",
+                "status": status,
+            })
+        if name == "docs_coverage" and min_docs_score is not None:
+            score = (check.get("metrics") or {}).get("overall_score", 0)
+            if isinstance(score, (int, float)) and score < min_docs_score:
+                violations.append({
+                    "check": name,
+                    "rule": "min_docs_score",
+                    "score": score,
+                    "minimum": min_docs_score,
+                })
+
+    checks.append({
+        "name": "policy_budget",
+        "status": "fail" if violations else "pass",
+        "summary": "Verify policy budget passed" if not violations else "Verify policy budget failed",
+        "metrics": {
+            "policy": str(source) if source else "",
+            "warn_as_fail": sorted(warn_as_fail),
+            "allow_warn": sorted(allow_warn),
+            "min_docs_score": min_docs_score,
+            "violations": violations,
+        },
+    })
 
 
 def _check_mcp_registry(root: Path, add_check) -> None:
@@ -453,6 +538,91 @@ def _generated_index_is_ignored(root: Path) -> bool:
         return False
     content = gitignore.read_text(encoding="utf-8", errors="ignore")
     return ".flyto-index/" in content or ".flyto-index" in content
+
+
+def _load_verify_policy(root: Path, policy_path: str | Path | None = None) -> tuple[dict[str, Any], Path | None]:
+    candidates = [Path(policy_path).resolve()] if policy_path else [
+        root / ".flyto-rules.yaml",
+        root / ".flyto-rules.yml",
+        root / ".flyto-rules.json",
+    ]
+    for path in candidates:
+        if not path.is_file():
+            continue
+        if path.suffix == ".json":
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return {}, path
+            verify = data.get("verify") if isinstance(data, dict) else None
+            return (verify if isinstance(verify, dict) else {}), path
+        return _parse_verify_yaml_block(path), path
+    return {}, None
+
+
+def _parse_verify_yaml_block(path: Path) -> dict[str, Any]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {}
+    block_indent: int | None = None
+    current_key = ""
+    policy: dict[str, Any] = {}
+    for raw in lines:
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        stripped = raw.strip()
+        if block_indent is None:
+            if stripped == "verify:":
+                block_indent = indent
+            continue
+        if indent <= block_indent:
+            break
+        if stripped.startswith("- ") and current_key:
+            items = policy.setdefault(current_key, [])
+            if isinstance(items, list):
+                items.append(_parse_policy_scalar(stripped[2:].strip()))
+            continue
+        if ":" not in stripped:
+            continue
+        key, value = stripped.split(":", 1)
+        current_key = key.strip()
+        value = value.strip()
+        policy[current_key] = [] if value == "" else _parse_policy_scalar(value)
+    return policy
+
+
+def _parse_policy_scalar(value: str) -> Any:
+    value = value.strip().strip("'\"")
+    if value.lower() in {"true", "false"}:
+        return value.lower() == "true"
+    if value.startswith("[") and value.endswith("]"):
+        inner = value[1:-1].strip()
+        if not inner:
+            return []
+        return [_parse_policy_scalar(part.strip()) for part in inner.split(",")]
+    try:
+        return int(value)
+    except ValueError:
+        return value
+
+
+def _as_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item)]
+    return [str(value)]
+
+
+def _as_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _check_regression_gate(
@@ -546,6 +716,129 @@ def _discover_workspace_projects(root: Path) -> list[Path]:
 
 def _looks_like_project(path: Path) -> bool:
     return any((path / marker).exists() for marker in _PROJECT_MARKERS)
+
+
+def _project_has_changes(project: Path, base: str = "") -> bool:
+    if not (project / ".git").exists():
+        return True
+    commands: list[list[str]]
+    if base:
+        commands = [
+            ["git", "-C", str(project), "diff", "--name-only", f"{base}...HEAD"],
+            ["git", "-C", str(project), "diff", "--name-only", f"{base}..HEAD"],
+            ["git", "-C", str(project), "diff", "--name-only"],
+            ["git", "-C", str(project), "diff", "--cached", "--name-only"],
+            ["git", "-C", str(project), "ls-files", "--others", "--exclude-standard"],
+        ]
+    else:
+        commands = [
+            ["git", "-C", str(project), "diff", "--name-only"],
+            ["git", "-C", str(project), "diff", "--cached", "--name-only"],
+            ["git", "-C", str(project), "ls-files", "--others", "--exclude-standard"],
+        ]
+    saw_valid_git = False
+    for command in commands:
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            return True
+        if result.returncode != 0:
+            continue
+        saw_valid_git = True
+        if result.stdout.strip():
+            return True
+    return not saw_valid_git
+
+
+def _flatten_report_checks(result: dict[str, Any]) -> list[tuple[str, dict[str, Any], str]]:
+    if "projects" not in result:
+        return [(result.get("project", "project"), check, result.get("path", "")) for check in result.get("checks", [])]
+    flattened = []
+    for project in result.get("projects", []):
+        for check in project.get("checks", []):
+            flattened.append((project.get("project", "project"), check, project.get("path", "")))
+    return flattened
+
+
+def _render_markdown_report(result: dict[str, Any]) -> str:
+    title = "Flyto Workspace Verify" if "projects" in result else "Flyto Verify"
+    name = result.get("workspace") or result.get("project") or "project"
+    lines = [
+        f"# {title}: {name}",
+        "",
+        f"- Status: {'PASS' if result.get('pass') else 'FAIL'}",
+        f"- Path: `{result.get('path', '')}`",
+        "",
+        "| Project | Check | Status | Summary |",
+        "|---|---|---|---|",
+    ]
+    for project, check, _path in _flatten_report_checks(result):
+        lines.append(
+            f"| {project} | {check.get('name', '')} | {check.get('status', '')} | "
+            f"{str(check.get('summary', '')).replace('|', '/')} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _render_junit_report(result: dict[str, Any]) -> str:
+    checks = _flatten_report_checks(result)
+    failures = [item for item in checks if item[1].get("status") == "fail"]
+    skipped = [item for item in checks if item[1].get("status") == "warn"]
+    suite_name = html.escape(result.get("workspace") or result.get("project") or "flyto-verify")
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        f'<testsuite name="{suite_name}" tests="{len(checks)}" failures="{len(failures)}" skipped="{len(skipped)}">',
+    ]
+    for project, check, _path in checks:
+        case_name = html.escape(f"{project}.{check.get('name', '')}")
+        lines.append(f'  <testcase classname="flyto.verify" name="{case_name}">')
+        summary = html.escape(str(check.get("summary", "")))
+        if check.get("status") == "fail":
+            lines.append(f'    <failure message="{summary}">{summary}</failure>')
+        elif check.get("status") == "warn":
+            lines.append(f'    <skipped message="{summary}" />')
+        lines.append("  </testcase>")
+    lines.append("</testsuite>")
+    return "\n".join(lines) + "\n"
+
+
+def _render_sarif_report(result: dict[str, Any]) -> str:
+    sarif_results = []
+    rules: dict[str, dict[str, Any]] = {}
+    for project, check, path in _flatten_report_checks(result):
+        status = check.get("status")
+        rule_id = str(check.get("name", "verify"))
+        rules.setdefault(rule_id, {
+            "id": rule_id,
+            "name": rule_id,
+            "shortDescription": {"text": rule_id},
+        })
+        if status not in {"warn", "fail"}:
+            continue
+        sarif_results.append({
+            "ruleId": rule_id,
+            "level": "error" if status == "fail" else "warning",
+            "message": {"text": f"{project}: {check.get('summary', '')}"},
+            "locations": [{
+                "physicalLocation": {
+                    "artifactLocation": {"uri": path or project},
+                },
+            }],
+        })
+    return json.dumps({
+        "version": "2.1.0",
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "runs": [{
+            "tool": {
+                "driver": {
+                    "name": "flyto-indexer",
+                    "informationUri": "https://github.com/flytohub/flyto-indexer",
+                    "rules": list(rules.values()),
+                },
+            },
+            "results": sarif_results,
+        }],
+    }, ensure_ascii=False, indent=2)
 
 
 def _pick_context_query(engine: IndexEngine) -> str:

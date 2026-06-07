@@ -356,6 +356,7 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             strict=args.get("strict", False),
             baseline_path=args.get("baseline"),
             regression_only=args.get("regression_only", False),
+            policy_path=args.get("policy"),
         ),
         "verify_workspace": lambda args: _verify().run_workspace_verification(
             workspace_path=args.get("path") or os.getcwd(),
@@ -364,6 +365,9 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             strict=args.get("strict", False),
             baseline_dir=args.get("baseline_dir"),
             regression_only=args.get("regression_only", False),
+            changed_only=args.get("changed_only", False),
+            base=args.get("base", ""),
+            policy_path=args.get("policy"),
         ),
 
         # Analysis scanners

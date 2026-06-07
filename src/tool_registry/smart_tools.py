@@ -267,6 +267,10 @@ SMART_TOOLS.append({
                 "default": False,
                 "description": "If true with baseline, only newly-worse checks fail the result.",
             },
+            "policy": {
+                "type": "string",
+                "description": "Optional verify policy file. Defaults to the project's .flyto-rules.yaml when present.",
+            },
         },
     },
 })
@@ -313,6 +317,19 @@ SMART_TOOLS.append({
                 "type": "boolean",
                 "default": False,
                 "description": "If true with baseline_dir, only newly-worse checks fail each project.",
+            },
+            "changed_only": {
+                "type": "boolean",
+                "default": False,
+                "description": "If true, only verify projects with git changes.",
+            },
+            "base": {
+                "type": "string",
+                "description": "Git base ref for changed_only, e.g. origin/main.",
+            },
+            "policy": {
+                "type": "string",
+                "description": "Optional shared verify policy file.",
             },
         },
     },

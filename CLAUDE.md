@@ -9,9 +9,12 @@ If `.flyto-index/` does not exist in the project root, run this before using any
 flyto-index scan .
 ```
 
-### 5 Smart Tools (v2.3.0+, current v2.9.0)
+### Smart Tools (v2.11+)
 
-flyto-indexer exposes 5 consolidated tools. Each one auto-enriches results with related data — no need to pick between dozens of granular tools.
+flyto-indexer exposes a small set of consolidated MCP tools. Each one
+auto-enriches results with related data — no need to pick between dozens of
+granular tools. For code changes, keep the loop closed with pre-change
+exploration and post-change verification.
 
 | Tool | When to use | Auto-enrichment |
 |------|------------|-----------------|
@@ -20,13 +23,17 @@ flyto-indexer exposes 5 consolidated tools. Each one auto-enriches results with 
 | `audit` | Code quality review | Auto-expands weak dimensions (security, complexity, dead code, coverage), git hotspots |
 | `task` | Plan/gate/validate workflow | Untested changes on validation failure |
 | `structure` | Project overview, APIs, dependencies | APIs, categories, index status, contract drift |
+| `verify` | Single-project closed-loop gate | Index integrity, context, impact, weak scans, policy, MCP registry |
+| `verify_workspace` | Multi-project closed-loop gate | Aggregated verification, changed-only mode, baseline regression gating |
 
 ### Workflow for code changes
 1. `task(action='plan')` — get risk dimensions, constraints, and execution plan
-2. Follow `execution_plan` steps in order — each step has tool name and pre-filled args
-3. `task(action='gate')` at gate steps — server-side enforcement blocks skipping gates
-4. Respect `constraints.max_files_per_step`
-5. `task(action='validate')` — run linter + tests after making changes
+2. Use `search` and `impact` before editing shared symbols or public APIs
+3. Follow `execution_plan` steps in order — each step has tool name and pre-filled args
+4. `task(action='gate')` at gate steps — server-side enforcement blocks skipping gates
+5. Respect `constraints.max_files_per_step`
+6. `task(action='validate')` — run linter + tests after making changes
+7. Run `verify` or `verify_workspace` before committing or handing off
 
 ### Key features
 - **Smart tools**: 5 intent-based entry points replace 45+ granular tools. Association-based triggering auto-enriches results server-side.

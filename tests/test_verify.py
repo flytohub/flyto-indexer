@@ -10,8 +10,14 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.cli import cmd_verify, cmd_verify_workspace
-from src.verify import format_verification, format_workspace_verification, run_verification, run_workspace_verification
+from src.cli import cmd_verify, cmd_verify_baseline, cmd_verify_workspace
+from src.verify import (
+    format_verification,
+    format_workspace_verification,
+    render_report,
+    run_verification,
+    run_workspace_verification,
+)
 
 
 def _write_project(root: Path, *, dependency: str = "", project_name: str = "demo"):
@@ -25,7 +31,7 @@ def _write_project(root: Path, *, dependency: str = "", project_name: str = "dem
         encoding="utf-8",
     )
     (root / "AGENTS.md").write_text(
-        "Use flyto-indexer. Run flyto-index verify before finishing.\n",
+        "Use flyto-indexer. Run search and impact before edits. Run flyto-index verify before finishing.\n",
         encoding="utf-8",
     )
     (root / ".gitignore").write_text(".flyto-index/\n", encoding="utf-8")
@@ -106,6 +112,9 @@ def test_cmd_verify_json(tmp_path):
         baseline=None,
         regression_only=False,
         save_baseline=None,
+        policy=None,
+        report=None,
+        report_format="json",
         as_json=True,
     ))
 
@@ -125,6 +134,9 @@ def test_cmd_verify_saves_baseline(tmp_path):
         baseline=None,
         regression_only=False,
         save_baseline=str(baseline),
+        policy=None,
+        report=None,
+        report_format="json",
         as_json=True,
     ))
 
@@ -224,8 +236,159 @@ def test_cmd_verify_workspace_json(tmp_path):
         strict=False,
         baseline_dir=None,
         regression_only=False,
+        changed_only=False,
+        base="",
+        policy=None,
+        report=None,
+        report_format="json",
         as_json=True,
     ))
 
     assert result["pass"] is True
     assert result["summary"]["projects"] == 1
+
+
+def test_verify_policy_budget_fails_named_warning(tmp_path):
+    _write_project(tmp_path)
+    (tmp_path / "AGENTS.md").unlink()
+    policy = tmp_path / ".flyto-rules.yaml"
+    policy.write_text(
+        "verify:\n"
+        "  warn_as_fail: [agent_hygiene]\n",
+        encoding="utf-8",
+    )
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["agent_hygiene"]["status"] == "warn"
+    assert checks["policy_budget"]["status"] == "fail"
+    assert result["pass"] is False
+
+
+def test_verify_policy_budget_allows_named_warning(tmp_path):
+    _write_project(tmp_path)
+    (tmp_path / "AGENTS.md").unlink()
+    policy = tmp_path / ".flyto-rules.yaml"
+    policy.write_text(
+        "verify:\n"
+        "  warn_as_fail: ['*']\n"
+        "  allow_warn:\n"
+        "    - agent_hygiene\n"
+        "    - docs_coverage\n",
+        encoding="utf-8",
+    )
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["agent_hygiene"]["status"] == "warn"
+    assert checks["policy_budget"]["status"] == "pass"
+    assert result["pass"] is True
+
+
+def test_render_report_formats(tmp_path):
+    _write_project(tmp_path)
+    result = run_verification(tmp_path, full_scan=True)
+
+    markdown = render_report(result, "markdown")
+    junit = render_report(result, "junit")
+    sarif = render_report(result, "sarif")
+
+    assert "# Flyto Verify" in markdown
+    assert "<testsuite" in junit
+    assert '"version": "2.1.0"' in sarif
+
+
+def test_cmd_verify_writes_report(tmp_path):
+    _write_project(tmp_path)
+    report = tmp_path / "verify.md"
+
+    result = cmd_verify(Namespace(
+        path=str(tmp_path),
+        full_scan=True,
+        query="handle_auth",
+        symbol=None,
+        strict=False,
+        baseline=None,
+        regression_only=False,
+        save_baseline=None,
+        policy=None,
+        report=str(report),
+        report_format="markdown",
+        as_json=True,
+    ))
+
+    assert result["pass"] is True
+    assert "# Flyto Verify" in report.read_text(encoding="utf-8")
+
+
+def test_workspace_changed_only_skips_clean_git_project(tmp_path):
+    project = tmp_path / "project"
+    _write_project(project)
+    subprocess.run(["git", "init", str(project)], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(project), "add", "."], capture_output=True, check=True)
+    subprocess.run(
+        ["git", "-C", str(project), "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+        capture_output=True,
+        check=True,
+    )
+
+    result = run_workspace_verification(
+        tmp_path,
+        project_paths=[project],
+        full_scan=True,
+        changed_only=True,
+    )
+
+    assert result["summary"]["projects"] == 0
+    assert result["summary"]["skipped"] == 1
+
+
+def test_workspace_changed_only_detects_untracked_files(tmp_path):
+    project = tmp_path / "project"
+    _write_project(project)
+    subprocess.run(["git", "init", str(project)], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(project), "add", "."], capture_output=True, check=True)
+    subprocess.run(
+        ["git", "-C", str(project), "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+        capture_output=True,
+        check=True,
+    )
+    (project / "new_module.py").write_text("def handle_new_event():\n    return True\n", encoding="utf-8")
+
+    result = run_workspace_verification(
+        tmp_path,
+        project_paths=[project],
+        full_scan=True,
+        changed_only=True,
+    )
+
+    assert result["summary"]["projects"] == 1
+    assert result["summary"]["skipped"] == 0
+    assert result["projects"][0]["project"] == "project"
+
+
+def test_cmd_verify_baseline_create_and_compare(tmp_path):
+    _write_project(tmp_path)
+    baseline_dir = tmp_path / "baselines"
+
+    created = cmd_verify_baseline(Namespace(
+        action="create",
+        path=str(tmp_path),
+        output_dir=str(baseline_dir),
+        baseline=None,
+        full_scan=True,
+        as_json=True,
+    ))
+    compared = cmd_verify_baseline(Namespace(
+        action="compare",
+        path=str(tmp_path),
+        output_dir=str(baseline_dir),
+        baseline=None,
+        full_scan=True,
+        as_json=True,
+    ))
+
+    assert created["ok"] is True
+    assert compared["pass"] is True
