@@ -14,6 +14,11 @@ try:
 except ImportError:
     from index_store import load_index, get_symbol_content_text
 
+try:
+    from ..safe_xml import safe_parse_xml, UnsafeXMLError
+except ImportError:
+    from safe_xml import safe_parse_xml, UnsafeXMLError
+
 
 # Parse unified diff headers: @@ -start[,count] +start[,count] @@
 _HUNK_HEADER = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
@@ -160,7 +165,7 @@ def _parse_coverage_xml(xml_path: str) -> Dict[str, Set[int]]:
     result: Dict[str, Set[int]] = {}
 
     try:
-        tree = ET.parse(xml_path)
+        tree = safe_parse_xml(xml_path)
         root = tree.getroot()
 
         for cls in root.iter("class"):
@@ -181,7 +186,7 @@ def _parse_coverage_xml(xml_path: str) -> Dict[str, Set[int]]:
             else:
                 result[filename] = lines
 
-    except (ET.ParseError, OSError):
+    except (ET.ParseError, OSError, UnsafeXMLError):
         pass
 
     return result
