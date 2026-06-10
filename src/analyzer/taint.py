@@ -27,6 +27,8 @@ from pathlib import Path
 from .taint_rules import (
     GO_TAINT_PATTERNS,
     JS_TAINT_PATTERNS,
+    NON_UNTRUSTED_SOURCE_MARKERS,
+    REDOS_REGEX_CALLS,
     SANITIZERS,
     SINKS,
     SOURCES,
@@ -519,6 +521,31 @@ class TaintAnalyzer:
             if self._is_subprocess_sink(match_pat):
                 continue
 
+            # ReDoS requires an ACTUAL regex operation. The substring matcher
+            # would otherwise flag look-alikes such as ``store.search(...)`` or
+            # ``vec.compile(...)`` because ``re.search`` is a substring of
+            # ``sto<re.search>`` etc. Gate the redos category on the call's real
+            # dotted name being a known regex entry point.
+            if vuln_type == "redos" and not self._is_real_regex_call(call_str):
+                continue
+
+            # ReDoS sinks also need a non-trivial / dynamic pattern argument.
+            # A regex over a constant literal (or no args) cannot be attacker-
+            # influenced into catastrophic backtracking via the source.
+            if vuln_type == "redos" and not self._redos_pattern_is_dynamic(call):
+                continue
+
+            # path_traversal via os.path.join is only real when an actual
+            # tainted component is a path segment. When every non-source segment
+            # is a string literal (e.g. join(env_path, 'src', 'mcp_server.py'))
+            # there is no attacker-controlled path component to traverse with.
+            if (
+                vuln_type == "path_traversal"
+                and "os.path.join" in match_pat
+                and self._join_has_only_constant_extra_segments(call)
+            ):
+                continue
+
             # Parameterized query detection: execute(sql, params) is safe
             if "execute" in pattern and len(call.args) >= 2:
                 continue
@@ -583,6 +610,71 @@ class TaintAnalyzer:
             "subprocess.call",
             "subprocess.Popen",
         }
+
+    @staticmethod
+    def _is_real_regex_call(call_str: str) -> bool:
+        """True iff the call's dotted func name is an actual regex operation.
+
+        Guards the ``redos`` category against substring look-alikes like
+        ``store.search`` (``re.search`` is a substring of ``sto+re.search``).
+        Matches on the trailing dotted segment so aliased imports such as
+        ``import re as regex`` still resolve via the known-call table, while a
+        bare attribute on an unrelated object (``store.search``) does not.
+        """
+        for known in REDOS_REGEX_CALLS:
+            # Exact full match (e.g. "re.search") ...
+            if call_str == known:
+                return True
+            # ... or the call ends with ".<known-tail>" where the segment
+            # immediately before the tail is the regex module/alias, not an
+            # arbitrary receiver. "re.search" -> require call to end with
+            # "re.search" preceded by a boundary (start or '.').
+            if call_str.endswith(known):
+                prefix = call_str[: -len(known)]
+                if prefix == "" or prefix.endswith("."):
+                    return True
+        return False
+
+    @staticmethod
+    def _redos_pattern_is_dynamic(call: ast.Call) -> bool:
+        """True iff the regex pattern argument is not a constant literal.
+
+        A regex compiled/searched over a string literal (or with no pattern
+        arg at all) cannot be steered into catastrophic backtracking by the
+        tainted *subject* string, so it is not a ReDoS sink. For ``re.sub`` the
+        pattern is still arg 0.
+        """
+        if not call.args:
+            return False
+        pattern_arg = call.args[0]
+        # A plain string/bytes constant pattern is static -> not ReDoS.
+        if isinstance(pattern_arg, ast.Constant) and isinstance(
+            pattern_arg.value, (str, bytes)
+        ):
+            return False
+        return True
+
+    @staticmethod
+    def _join_has_only_constant_extra_segments(call: ast.Call) -> bool:
+        """True iff an os.path.join has >1 arg and every arg after the first is
+        a string literal.
+
+        Shape: ``os.path.join(base, 'src', 'mcp_server.py')``. When the only
+        non-literal component is the base path, there is no separately
+        attacker-controlled path *segment* being appended, so this is not a
+        path-traversal sink. Genuine cases like ``os.path.join(root, user_file)``
+        keep a non-literal extra segment and are NOT suppressed.
+        """
+        if call.keywords:
+            return False
+        if len(call.args) < 2:
+            return False
+        for extra in call.args[1:]:
+            if not (
+                isinstance(extra, ast.Constant) and isinstance(extra.value, str)
+            ):
+                return False
+        return True
 
     def _handle_subprocess_shell_call(
         self,
@@ -711,6 +803,16 @@ class TaintAnalyzer:
         text = _safe_unparse(node)
         if not text:
             return None
+
+        # Operator/interpreter-controlled expressions are not attacker-controlled
+        # sources. This guard runs BEFORE pattern matching so that env vars and
+        # __file__ are never tainted even if a broad/custom source pattern would
+        # otherwise match them (e.g. os.path.join(os.environ[...], 'lit') or
+        # Path(__file__)). Keeps genuine remote sources (request/argv/stdin).
+        for marker in NON_UNTRUSTED_SOURCE_MARKERS:
+            if marker in text:
+                return None
+
         matched = None
         for source in self._sources.get("python", []):
             if source in text:

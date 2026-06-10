@@ -485,5 +485,121 @@ def vuln_{i}():
             (root / "app.py").write_text(code)
             analyzer = TaintAnalyzer(root)
             findings = analyzer.analyze()
-            from analyzer.taint import MAX_FINDINGS
+            from src.analyzer.taint import MAX_FINDINGS
             assert len(findings) <= MAX_FINDINGS
+
+
+class TestFalsePositiveReductions:
+    """Regression tests for the tier2-ai taint false positives.
+
+    Each test pins one confirmed FP shape (must NOT fire) and is paired with a
+    genuine injected flow of the same category (must STILL fire), so a future
+    blanket-suppress that kills the real positive is caught.
+    """
+
+    # ── SOURCES: env vars / __file__ are operator/interpreter-controlled ──────
+
+    def test_env_var_join_with_literals_not_path_traversal(self):
+        """os.environ.get path joined with hardcoded filenames is not traversal."""
+        findings = _analyze_code("""\
+            import os
+            def _get_indexer_module():
+                indexer_path = os.environ.get("FLYTO_INDEXER_PATH", "/opt/flyto-indexer")
+                mcp_file = os.path.join(indexer_path, "src", "mcp_server.py")
+                return mcp_file
+        """)
+        assert [f for f in findings if f.category == "path_traversal"] == []
+
+    def test_env_var_exec_module_not_rce(self):
+        """Loading a module from an operator-set env path is not an RCE source."""
+        findings = _analyze_code("""\
+            import os, importlib.util
+            def _load():
+                indexer_path = os.environ.get("FLYTO_INDEXER_PATH", "/opt/flyto-indexer")
+                mcp_file = os.path.join(indexer_path, "src", "mcp_server.py")
+                spec = importlib.util.spec_from_file_location("m", mcp_file)
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                return mod
+        """)
+        assert [f for f in findings if f.category == "rce"] == []
+
+    def test_os_getenv_not_a_source(self):
+        findings = _analyze_code("""\
+            import os
+            def run():
+                cmd = os.getenv("MY_CMD")
+                os.system(cmd)
+        """)
+        assert findings == []
+
+    def test_path_dunder_file_not_a_source(self):
+        """Path(__file__) is interpreter-controlled; regex over repo files is safe."""
+        findings = _analyze_code("""\
+            import re
+            from pathlib import Path
+            def fix_schema():
+                root = Path(__file__).resolve().parent
+                for f in root.rglob("*.py"):
+                    text = f.read_text()
+                    re.sub(r"foo", "bar", text)
+        """)
+        assert findings == []
+
+    # ── SINKS: redos requires a real regex op with a dynamic pattern ──────────
+
+    def test_vector_search_lookalike_not_redos(self):
+        """store.search(...) is a vector search, not re.search — not ReDoS."""
+        findings = _analyze_code("""\
+            def repl(store):
+                query = input("> ").strip()
+                results = store.search(query, top_k=2)
+                return results
+        """)
+        assert [f for f in findings if f.category == "redos"] == []
+
+    def test_precompiled_search_with_static_pattern_not_redos(self):
+        """A precompiled pattern searched over tainted text has a fixed pattern."""
+        findings = _analyze_code("""\
+            import re
+            PATTERNS = [re.compile(r"AKIA[0-9A-Z]{16}")]
+            def scan(added_line):
+                for pattern_re in PATTERNS:
+                    match = pattern_re.search(added_line)
+                    return match
+        """)
+        assert [f for f in findings if f.category == "redos"] == []
+
+    # ── REAL positives must still fire (no over-suppression) ──────────────────
+
+    def test_real_user_controlled_regex_still_redos(self):
+        """re.compile on a request-sourced pattern is a genuine ReDoS sink."""
+        findings = _analyze_code("""\
+            import re
+            def search(request):
+                pat = request.args.get("pattern")
+                rx = re.compile(pat)
+                return rx
+        """)
+        assert any(f.category == "redos" for f in findings)
+
+    def test_real_user_path_join_still_path_traversal(self):
+        """A request-sourced filename joined into a path is still traversal."""
+        findings = _analyze_code("""\
+            import os
+            def download(request):
+                base = "/var/data"
+                name = request.args.get("file")
+                full = os.path.join(base, name)
+                return full
+        """)
+        assert any(f.category == "path_traversal" for f in findings)
+
+    def test_real_user_input_to_eval_still_rce(self):
+        """input() into eval remains a genuine RCE (interactive stdin source)."""
+        findings = _analyze_code("""\
+            def run():
+                code = input("code> ")
+                eval(code)
+        """)
+        assert any(f.category == "rce" for f in findings)

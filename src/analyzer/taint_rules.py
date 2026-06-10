@@ -26,7 +26,14 @@ SOURCES = {
         "File(",
         "Header(",
         "Cookie(",
-        "Path(",
+        # NOTE: FastAPI's path-parameter marker ``Path(...)`` is intentionally
+        # NOT listed here. As a bare substring it collides with pathlib's
+        # ``Path(__file__)`` / ``Path(some_var)`` construction, which is
+        # operator/interpreter-controlled, not attacker-controlled, and was the
+        # root cause of ReDoS/path-traversal false positives. Genuine FastAPI
+        # path params are still covered by ``Path = fastapi.Path`` usage which
+        # the per-shape allow rules below do not suppress; the remaining
+        # FastAPI markers (Query/Body/Form/...) cover the common surface.
         # Tornado
         "self.get_argument(",
         "self.get_arguments(",
@@ -43,8 +50,14 @@ SOURCES = {
         "request.raw_args",
         # stdlib
         "sys.argv",
-        "os.environ",
         "input(",
+        # NOTE: ``os.environ`` / ``os.getenv`` / ``os.environ.get`` are NOT
+        # listed as untrusted sources. Environment variables are set by the
+        # operator/deployment, not by a remote attacker, so treating them as
+        # untrusted produces false positives (e.g. an operator-set path joined
+        # with hardcoded filenames flagged as path-traversal/RCE). If a specific
+        # project genuinely treats an env var as untrusted, it can opt back in
+        # via the ``taint.sources`` block in .flyto-rules.yaml.
     ],
     "javascript": [
         # Express / Koa / generic
@@ -158,6 +171,48 @@ SOURCES = {
         "session[",
     ],
 }
+
+# Operator / interpreter-controlled expressions that must NEVER be treated as
+# untrusted taint sources, even if a broader source pattern (or a YAML rule)
+# would otherwise match them. These are matched as substrings of the unparsed
+# source expression. Keeping this as an explicit deny-set makes the intent
+# auditable and prevents regressions if the SOURCES lists grow.
+#
+#   - os.environ / os.getenv     -> set by the deployment operator, not a remote
+#                                   attacker. Joining an env path with hardcoded
+#                                   filenames is not path-traversal.
+#   - __file__ / Path(__file__)  -> interpreter-provided path to the running
+#                                   module; bounded, repo-local.
+NON_UNTRUSTED_SOURCE_MARKERS = (
+    "os.environ",
+    "os.getenv",
+    "__file__",
+)
+
+# A "redos" sink is only meaningful when the call is an ACTUAL regex operation.
+# These are the real regex entry points; anything else that happens to contain
+# the substring ``re.search`` / ``re.compile`` (e.g. ``store.search`` /
+# ``core.compile``) is NOT a ReDoS sink. Used by the engine to gate the
+# substring match for the ``redos`` category against the call's dotted name.
+REDOS_REGEX_CALLS = (
+    "re.compile",
+    "re.search",
+    "re.match",
+    "re.fullmatch",
+    "re.sub",
+    "re.subn",
+    "re.findall",
+    "re.finditer",
+    "re.split",
+    "regex.compile",
+    "regex.search",
+    "regex.match",
+    "regex.fullmatch",
+    "regex.sub",
+    "new RegExp",
+    "regexp.Compile",
+    "regexp.MustCompile",
+)
 
 # Sinks: dangerous functions that should not receive tainted data
 # Each entry: (pattern, severity, recommendation)
