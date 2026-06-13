@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.10.3] — 2026-06-13
+
+### Fixed
+- Improved `find_dead_code` precision for MCP audits:
+  - Treat Python registry/dispatch-table callbacks and decorated functions as live.
+  - Treat Go exported symbols and DTO/model/type contracts as public surface, not deletion candidates.
+  - Ignore test, fixture, example, and Semgrep fixture paths for production dead-code cleanup.
+  - Detect same-project type/class references from source text so Go same-package DTOs are not falsely reported.
+- Aligned dead-code filtering across MCP maintenance tools, tag generation, and health scoring.
+
 ## [2.9.0] — 2026-04-20
 
 ### LSP deepening — precision layer on top of the regex scanners

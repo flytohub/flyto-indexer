@@ -3,6 +3,7 @@ Health scoring dimensions — security, complexity, dead code, coverage, docs.
 """
 
 import logging
+import re
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -79,9 +80,35 @@ def _is_dead_symbol(sym: dict, sym_id: str, reverse_index: dict) -> bool:
         return False
     name = sym.get("name", "")
     path = sym.get("path", "")
+    sym_type = sym.get("type", "")
+    exports = sym.get("exports") or []
+    language = (sym.get("language") or "").lower()
+    path_lower = path.replace("\\", "/").lower()
+    ignored_markers = (
+        "/__tests__/", "__tests__/", "/tests/", "tests/", "/test/", "test/",
+        ".test.", ".spec.", "_test.", "/fixtures/", "fixtures/",
+        "/testdata/", "testdata/", ".semgrep/fixtures/", "/examples/", "examples/",
+    )
+    if any(marker in path_lower for marker in ignored_markers):
+        return False
     if name.startswith("_"):
         return False
+    if exports and language == "go":
+        return False
     if path.endswith(".go") and name and name[0].isupper():
+        return False
+    if exports and path_lower.startswith(("scripts/", "bin/", "cmd/", "tools/")):
+        return False
+    if exports and sym_type in ("class", "interface", "type"):
+        parts = set(re.split(r"[/_.-]+", path_lower))
+        contract_markers = {
+            "model", "models", "dto", "schema", "schemas", "type", "types",
+            "contract", "contracts", "interface", "interfaces", "entity",
+            "entities", "row", "rows", "event", "events",
+        }
+        if parts & contract_markers:
+            return False
+    if sym_type in ("interface", "type"):
         return False
     return True
 

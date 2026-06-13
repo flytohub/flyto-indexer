@@ -115,6 +115,42 @@ class TestFindDeadCode:
         dead = _find_dead_code(idx)
         assert sym.id not in dead
 
+    def test_dispatch_table_function_not_dead(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            src = root / "src"
+            src.mkdir()
+            (src / "audit.py").write_text(
+                "def section_circular(files):\n"
+                "    return files\n\n"
+                "SECTIONS = {'circular': section_circular}\n",
+                encoding="utf-8",
+            )
+            idx = ProjectIndex(project="proj", root_path=str(root))
+            sym = _make_symbol(
+                "proj", "src/audit.py", SymbolType.FUNCTION,
+                "section_circular", start=1, end=3,
+            )
+            idx.symbols[sym.id] = sym
+            dead = _find_dead_code(idx)
+            assert sym.id not in dead
+
+    def test_go_exported_model_not_dead(self):
+        idx = ProjectIndex(project="proj", root_path="/tmp")
+        sym = _make_symbol(
+            "proj",
+            "internal/store/models_resource_kernel.go",
+            SymbolType.CLASS,
+            "KernelResource",
+            start=1,
+            end=40,
+            exports=["KernelResource"],
+        )
+        sym.language = "go"
+        idx.symbols[sym.id] = sym
+        dead = _find_dead_code(idx)
+        assert sym.id not in dead
+
 
 class TestGenerateTags:
     """Test generate_tags function."""

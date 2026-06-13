@@ -13,6 +13,8 @@ Philosophy:
 """
 
 import json
+import ast
+import re
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -54,6 +56,11 @@ MIN_LINES = 5
 # Test path patterns.
 TEST_PATH_INDICATORS = ["/test", "/tests/", "/__tests__/", "/spec/"]
 TEST_NAME_PATTERNS = ["test_", ".test.", ".spec.", "_test."]
+IGNORED_DEAD_CODE_PATH_MARKERS = (
+    "/__tests__/", "__tests__/", "/tests/", "tests/", "/test/", "test/",
+    ".test.", ".spec.", "_test.", "/fixtures/", "fixtures/",
+    "/testdata/", "testdata/", ".semgrep/fixtures/", "/examples/", "examples/",
+)
 
 
 def generate_tags(index: ProjectIndex) -> list[dict]:
@@ -202,6 +209,8 @@ def _is_dead_symbol(
     """Check if a single symbol qualifies as dead code."""
     if sym.symbol_type not in SHOULD_BE_REFERENCED:
         return False
+    if _is_ignored_dead_code_path(sym.path):
+        return False
 
     lines = sym.end_line - sym.start_line
     if lines < MIN_LINES:
@@ -220,7 +229,7 @@ def _is_dead_symbol(
         return False
 
     # Exported symbols
-    if sym.exports:
+    if _is_public_contract_symbol(sym):
         return False
 
     # Private methods (convention: _name but not __name)
@@ -257,9 +266,83 @@ def _is_dead_symbol(
     if sym.symbol_type in (SymbolType.CLASS, SymbolType.COMPONENT) and file_basename == sym.name and _is_file_imported(sym, file_basename, index):
         return False
 
+    if _is_decorated_python_symbol(index, sym):
+        return False
+
+    if _has_same_file_bare_reference(index, sym):
+        return False
+
+    if sym.symbol_type in (SymbolType.CLASS, SymbolType.INTERFACE, SymbolType.TYPE):
+        if _project_identifier_count(index, sym.name) > 1:
+            return False
+
     # Final check: reverse_index
     callers = index.reverse_index.get(sym_id, [])
     return not (sym.reference_count > 0 or len(callers) > 0)
+
+
+def _is_public_contract_symbol(sym) -> bool:
+    """True when zero internal refs are not enough evidence for deletion."""
+    # Tag generation keeps the historical conservative behavior: explicitly
+    # exported symbols are public surface, not deletion candidates.
+    return bool(sym.exports)
+
+
+def _source_text(index: ProjectIndex, path: str) -> str:
+    try:
+        root = Path(index.root_path)
+        return (root / path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError, TypeError):
+        return ""
+
+
+def _is_ignored_dead_code_path(path: str) -> bool:
+    normalized = path.replace("\\", "/").lower()
+    return any(marker in normalized for marker in IGNORED_DEAD_CODE_PATH_MARKERS)
+
+
+def _project_identifier_count(index: ProjectIndex, name: str) -> int:
+    if not name:
+        return 0
+    pattern = re.compile(r"\b" + re.escape(name) + r"\b")
+    seen_paths = set()
+    count = 0
+    for sym in index.symbols.values():
+        if sym.path in seen_paths:
+            continue
+        seen_paths.add(sym.path)
+        count += len(pattern.findall(_source_text(index, sym.path)))
+        if count > 1:
+            return count
+    return count
+
+
+def _is_decorated_python_symbol(index: ProjectIndex, sym) -> bool:
+    if not sym.path.endswith(".py") or sym.symbol_type not in (SymbolType.FUNCTION, SymbolType.CLASS):
+        return False
+    text = _source_text(index, sym.path)
+    if not text:
+        return False
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return False
+    for stmt in tree.body:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if stmt.name == sym.name and stmt.decorator_list:
+                return True
+    return False
+
+
+def _has_same_file_bare_reference(index: ProjectIndex, sym) -> bool:
+    bare_name = sym.name.split(".")[-1] if "." in sym.name else sym.name
+    if not bare_name or len(bare_name) <= 2:
+        return False
+    text = _source_text(index, sym.path)
+    if not text:
+        return False
+    pattern = re.compile(r"\b" + re.escape(bare_name) + r"\b")
+    return len(pattern.findall(text)) > 1
 
 
 def _find_dead_code(index: ProjectIndex) -> dict[str, str]:

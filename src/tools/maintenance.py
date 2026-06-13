@@ -1,22 +1,26 @@
 """Maintenance tools — dead code, TODOs, index status, reindex, sessions."""
 
+import ast
 import os
 import re
 from collections import namedtuple
 from datetime import datetime
 from pathlib import Path
 
-ReferenceContext = namedtuple('ReferenceContext', ['names', 'files', 'classes'])
+ReferenceContext = namedtuple(
+    'ReferenceContext',
+    ['names', 'files', 'classes', 'scoped_names', 'decorated', 'name_counts'],
+)
 
 try:
     from ..index_store import (
         INDEX_DIR, load_index, load_project_map, get_symbol_content_text,
-        invalidate_caches, _get_session_store,
+        invalidate_caches, _get_session_store, _discover_index_dirs, _load_single_index,
     )
 except ImportError:
     from index_store import (
         INDEX_DIR, load_index, load_project_map, get_symbol_content_text,
-        invalidate_caches, _get_session_store,
+        invalidate_caches, _get_session_store, _discover_index_dirs, _load_single_index,
     )
 
 try:
@@ -58,16 +62,128 @@ def _build_reference_sets(dependencies):
                         if part[0].isupper():
                             referenced_classes.add(part)
 
-    return ReferenceContext(names=referenced_names, files=imported_files, classes=referenced_classes)
+    return ReferenceContext(
+        names=referenced_names,
+        files=imported_files,
+        classes=referenced_classes,
+        scoped_names=set(),
+        decorated=set(),
+        name_counts={},
+    )
+
+
+def _project_roots(index):
+    """Best-effort project -> root path map for source-level heuristics."""
+    roots = {}
+    project = index.get("project")
+    root_path = index.get("root_path")
+    if project and root_path:
+        roots[str(project)] = Path(root_path)
+
+    # load_index() may merge multiple .flyto-index directories. The merged
+    # payload only preserves one root_path, so inspect each discovered index
+    # when available.
+    try:
+        for index_dir in _discover_index_dirs():
+            single = _load_single_index(index_dir)
+            proj = single.get("project")
+            root = single.get("root_path")
+            if proj and root:
+                roots[str(proj)] = Path(root)
+    except Exception:
+        pass
+    return roots
+
+
+def _read_source_text(project, path, project_roots, cache):
+    key = (project, path)
+    if key in cache:
+        return cache[key]
+    root = project_roots.get(project)
+    if not root:
+        cache[key] = ""
+        return ""
+    try:
+        text = (root / path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        text = ""
+    cache[key] = text
+    return text
+
+
+def _module_level_python_refs(text):
+    """Return names referenced at module scope and decorated function names.
+
+    Registry/dispatch tables often hold callbacks in module-level dicts:
+    ``SECTIONS = {"x": section_x}``. A pure call graph misses that because
+    the function is never called syntactically. Decorated functions are also
+    live through the decorator registry even when their name appears only in
+    the ``def`` statement.
+    """
+    names = set()
+    decorated = set()
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return names, decorated
+
+    for stmt in tree.body:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if getattr(stmt, "decorator_list", None):
+                decorated.add(stmt.name)
+            continue
+        for node in ast.walk(stmt):
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+                names.add(node.id)
+    return names, decorated
+
+
+def _build_source_reference_sets(index, symbols):
+    project_roots = _project_roots(index)
+    source_cache = {}
+    scoped_names = set()
+    decorated = set()
+    name_counts = {}
+    seen_files = set()
+
+    for sym_id, sym in symbols.items():
+        project = sym_id.split(":")[0] if ":" in sym_id else sym.get("project", "")
+        path = sym.get("path", "")
+        if not project or not path or (project, path) in seen_files:
+            continue
+        seen_files.add((project, path))
+        text = _read_source_text(project, path, project_roots, source_cache)
+        if not text:
+            continue
+        for match in re.finditer(r"\b[A-Za-z_][A-Za-z0-9_]*\b", text):
+            name = match.group(0)
+            name_counts[(project, name)] = name_counts.get((project, name), 0) + 1
+        if path.endswith(".py"):
+            names, decorated_names = _module_level_python_refs(text)
+            scoped_names.update((project, path, name) for name in names)
+            decorated.update((project, path, name) for name in decorated_names)
+
+    return scoped_names, decorated, name_counts, project_roots, source_cache
 
 
 def _has_same_file_reference(sym_id, sym_name, sym_project, sym_path,
-                             symbols, _same_file_content_cache):
+                             symbols, _same_file_content_cache,
+                             project_roots=None, source_text_cache=None):
     """Check for dict/list dispatch patterns: the symbol name may
     appear as a bare reference (dict value, list element, callback
     assignment) inside another symbol in the same file."""
     bare_name = sym_name.split(".")[-1] if "." in sym_name else sym_name
     if bare_name and len(bare_name) > 2:
+        name_pat = re.compile(r'\b' + re.escape(bare_name) + r'\b')
+        if project_roots is not None and source_text_cache is not None:
+            text = _read_source_text(sym_project, sym_path, project_roots, source_text_cache)
+            # One occurrence is usually the definition itself. Two or more
+            # means module-level registry, callback table, test fixture list,
+            # or another local reference. Treat as live; dead-code output should
+            # be high-confidence, not aggressive.
+            if text and len(name_pat.findall(text)) > 1:
+                return True
+
         file_key = f"{sym_project}:{sym_path}"
         if file_key not in _same_file_content_cache:
             parts = []
@@ -79,7 +195,6 @@ def _has_same_file_reference(sym_id, sym_name, sym_project, sym_path,
                         parts.append((other_id, text))
             _same_file_content_cache[file_key] = parts
 
-        name_pat = re.compile(r'\b' + re.escape(bare_name) + r'\b')
         for other_id, text in _same_file_content_cache[file_key]:
             if other_id == sym_id:
                 continue
@@ -110,9 +225,60 @@ _LIFECYCLE_METHODS = {
 }
 
 
-def _is_excluded_by_name(sym_type, sym_name, sym_path):
+_PUBLIC_CONTRACT_PATH_MARKERS = (
+    "model", "models", "dto", "schema", "schemas", "type", "types",
+    "contract", "contracts", "interface", "interfaces", "entity",
+    "entities", "row", "rows", "event", "events",
+)
+
+_IGNORED_DEAD_CODE_PATH_MARKERS = (
+    "/__tests__/", "__tests__/", "/tests/", "tests/", "/test/", "test/",
+    ".test.", ".spec.", "_test.", "/fixtures/", "fixtures/",
+    "/testdata/", "testdata/", ".semgrep/fixtures/", "/examples/", "examples/",
+)
+
+
+def _is_ignored_dead_code_path(sym_path):
+    path = sym_path.replace("\\", "/").lower()
+    return any(marker in path for marker in _IGNORED_DEAD_CODE_PATH_MARKERS)
+
+
+def _is_public_contract_symbol(sym_type, sym_name, sym_path, sym):
+    """Return True for symbols whose zero internal refs do not imply dead code."""
+    exports = sym.get("exports") or []
+    if not exports:
+        return False
+
+    language = (sym.get("language") or "").lower()
+    path_lower = sym_path.lower()
+
+    # Go's uppercase identifiers are package API. They may be consumed via
+    # interfaces, SQL scan destinations, JSON reflection, or external packages;
+    # reporting them as removable from local ref_count=0 is unsafe.
+    if language == "go":
+        return True
+
+    # Scripts are frequently invoked from shell/CI and callback registries.
+    if path_lower.startswith(("scripts/", "bin/", "cmd/", "tools/")):
+        return True
+
+    # DTO/model/type files are data contracts. Reflection, serializers, SQL
+    # scanners, and generated clients often use them without direct call edges.
+    if sym_type in {"class", "interface", "type"}:
+        parts = re.split(r"[/_.-]+", path_lower)
+        if any(marker in parts for marker in _PUBLIC_CONTRACT_PATH_MARKERS):
+            return True
+
+    return False
+
+
+def _is_excluded_by_name(sym_type, sym_name, sym_path, sym=None):
     """Check if symbol should be excluded from dead code detection by name/type."""
+    if _is_ignored_dead_code_path(sym_path):
+        return True
     if sym_type not in _SHOULD_BE_REFERENCED:
+        return True
+    if sym and _is_public_contract_symbol(sym_type, sym_name, sym_path, sym):
         return True
     if any(p in sym_name for p in _ENTRY_POINT_PATTERNS):
         return True
@@ -125,10 +291,18 @@ def _is_excluded_by_name(sym_type, sym_name, sym_path):
     return False
 
 
-def _is_referenced_by_context(sym_type, sym_name, sym_path, ref_ctx):
+def _is_referenced_by_context(sym_type, sym_name, sym_project, sym_path, ref_ctx):
     """Check if symbol is referenced via names, classes, or file imports."""
     if sym_name in ref_ctx.names:
         return True
+    if (sym_project, sym_path, sym_name) in ref_ctx.scoped_names:
+        return True
+    if (sym_project, sym_path, sym_name) in ref_ctx.decorated:
+        return True
+    if sym_type in {"class", "interface", "type"}:
+        bare_name = sym_name.split(".")[-1] if "." in sym_name else sym_name
+        if ref_ctx.name_counts.get((sym_project, bare_name), 0) > 1:
+            return True
 
     if sym_type == "method" and "." in sym_name:
         method_only = sym_name.split(".")[-1]
@@ -175,22 +349,24 @@ def _is_imported_component(sym_type, sym_name, sym_path, dependencies):
 
 
 def _is_potentially_dead(sym_id, sym, ref_ctx, dependencies, symbols,
-                         _same_file_content_cache):
+                         _same_file_content_cache,
+                         project_roots=None, source_text_cache=None):
     """Return True if the symbol should be considered dead code."""
     sym_type = sym.get("type", "")
     sym_name = sym.get("name", "")
     sym_project = sym_id.split(":")[0] if ":" in sym_id else ""
     sym_path = sym.get("path", "")
 
-    if _is_excluded_by_name(sym_type, sym_name, sym_path):
+    if _is_excluded_by_name(sym_type, sym_name, sym_path, sym):
         return False
-    if _is_referenced_by_context(sym_type, sym_name, sym_path, ref_ctx):
+    if _is_referenced_by_context(sym_type, sym_name, sym_project, sym_path, ref_ctx):
         return False
     if _is_imported_component(sym_type, sym_name, sym_path, dependencies):
         return False
 
     return not _has_same_file_reference(sym_id, sym_name, sym_project, sym_path,
-                                        symbols, _same_file_content_cache)
+                                        symbols, _same_file_content_cache,
+                                        project_roots, source_text_cache)
 
 
 def _format_dead_code_result(dead_code: list) -> dict:
@@ -218,7 +394,7 @@ def _format_dead_code_result(dead_code: list) -> dict:
         "by_project": {k: len(v) for k, v in by_project.items()},
         "dead_symbols": dead_code[:20],
         "top_20": dead_code[:20],
-        "suggestion": f"Found {len(dead_code)} unreferenced symbols, {total_dead_lines} total lines of code that can be considered for removal.",
+        "suggestion": f"Found {len(dead_code)} high-confidence unreferenced symbols, {total_dead_lines} total lines of code that can be considered for removal.",
         "next_action": next_action,
     }
 
@@ -230,6 +406,12 @@ def find_dead_code(project=None, symbol_type=None, min_lines=5):
     dependencies = index.get("dependencies", {})
 
     ref_ctx = _build_reference_sets(dependencies)
+    scoped_names, decorated, name_counts, project_roots, source_text_cache = _build_source_reference_sets(index, symbols)
+    ref_ctx = ref_ctx._replace(
+        scoped_names=scoped_names,
+        decorated=decorated,
+        name_counts=name_counts,
+    )
 
     dead_code = []
     _same_file_content_cache = {}
@@ -255,7 +437,8 @@ def find_dead_code(project=None, symbol_type=None, min_lines=5):
             continue
 
         if not _is_potentially_dead(sym_id, sym, ref_ctx, dependencies, symbols,
-                                    _same_file_content_cache):
+                                    _same_file_content_cache,
+                                    project_roots, source_text_cache):
             continue
 
         dead_code.append({
