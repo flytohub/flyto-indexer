@@ -800,6 +800,25 @@ class TestScannerCompleteness:
                 f"{[(f.pattern_name, f.masked_value) for f in findings]}"
             )
 
+    def test_secret_scanner_skips_runtime_templates(self):
+        """Runtime template references are variables, not committed secrets."""
+        from secret_scanner import scan_secrets
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "workflow.yaml"
+            test_file.write_text(
+                'password: "{{password}}"\n'
+                'secret: "${RUNTIME_SECRET}"\n'
+                'api_token: "${{ secrets.FLYTO_TOKEN }}"\n',
+                encoding="utf-8",
+            )
+            result = scan_secrets(tmpdir)
+            findings = getattr(result, "findings", result)
+            assert len(findings) == 0, (
+                f"Runtime templates incorrectly flagged as secrets: "
+                f"{[(f.pattern_name, f.masked_value) for f in findings]}"
+            )
+
     def test_secret_scanner_skips_empty_env_expansion_defaults(self):
         """Compose-style ${SECRET:-} references are variable names, not leaked values."""
         from secret_scanner import scan_secrets

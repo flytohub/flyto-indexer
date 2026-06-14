@@ -207,6 +207,16 @@ def _is_scanner_rule_definition(rel_path: str, line: str) -> bool:
     return False
 
 
+_TEMPLATE_SECRET_REFERENCE = re.compile(
+    r"(\{\{\s*[\w.\-]+\s*\}\}|\$\{\{\s*[\w.\-]+\s*\}\}|\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\})"
+)
+
+
+def _is_template_secret_reference(line: str) -> bool:
+    """Skip runtime template references such as {{password}} or ${{ secrets.KEY }}."""
+    return bool(_TEMPLATE_SECRET_REFERENCE.search(line))
+
+
 def _load_git_ignored_paths(project_path: Path) -> set[str]:
     """Return gitignored, untracked paths so local secrets do not fail repo scans."""
     try:
@@ -313,6 +323,9 @@ def scan_secrets(project_path: str | Path) -> SecretScanResult:
 
                         # Skip if line contains example/placeholder indicators
                         if _EXAMPLE_INDICATORS.search(line):
+                            continue
+
+                        if _is_template_secret_reference(line):
                             continue
 
                         if _is_scanner_rule_definition(rel_path, line):
