@@ -646,6 +646,16 @@ def _check_impact_loop(engine: IndexEngine, symbol: str | None, add_check) -> No
 
 def _check_weak_scanners(root: Path, add_check) -> None:
     secrets = scan_secrets(root)
+    secret_samples = [
+        {
+            "file": finding.file,
+            "line": finding.line,
+            "pattern": finding.pattern,
+            "severity": finding.severity,
+            "masked_value": finding.masked_value,
+        }
+        for finding in secrets.findings[:10]
+    ]
     secret_status = "pass"
     if secrets.critical or secrets.high:
         secret_status = "fail"
@@ -661,6 +671,7 @@ def _check_weak_scanners(root: Path, add_check) -> None:
             "critical": secrets.critical,
             "high": secrets.high,
             "medium": secrets.medium,
+            "samples": secret_samples,
         },
     )
 
@@ -674,6 +685,18 @@ def _check_weak_scanners(root: Path, add_check) -> None:
             flow for flow in unsanitized
             if flow.severity in {"critical", "high"}
         ]
+        taint_samples = []
+        for flow in high_risk[:10]:
+            item = flow.to_dict()
+            taint_samples.append({
+                "source_file": item.get("source_file"),
+                "source_line": item.get("source_line"),
+                "sink_file": item.get("sink_file"),
+                "sink_line": item.get("sink_line"),
+                "severity": item.get("severity"),
+                "category": item.get("category"),
+                "recommendation": item.get("recommendation"),
+            })
         add_check(
             "weak_scan_taint",
             "fail" if high_risk else "pass",
@@ -684,6 +707,7 @@ def _check_weak_scanners(root: Path, add_check) -> None:
                 "unsanitized": len(unsanitized),
                 "high_risk": len(high_risk),
                 "sanitized": taint.sanitized_flows,
+                "samples": taint_samples,
             },
         )
     except (OSError, ValueError, RuntimeError) as exc:

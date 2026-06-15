@@ -365,6 +365,25 @@ def test_run_verification_allows_dependencies_for_other_projects(tmp_path):
     assert checks["runtime_dependencies"]["metrics"]["dependency_count"] == 1
 
 
+def test_run_verification_includes_redacted_security_samples(tmp_path):
+    _write_project(tmp_path)
+    (tmp_path / "src" / "settings.py").write_text(
+        'AWS_ACCESS_KEY_ID = "AKIA1234567890ABCDEF"\n',
+        encoding="utf-8",
+    )
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    secrets = checks["weak_scan_secrets"]
+    assert secrets["status"] == "fail"
+    samples = secrets["metrics"]["samples"]
+    assert samples
+    assert samples[0]["file"] == "src/settings.py"
+    assert samples[0]["masked_value"].endswith("***")
+    assert "AKIA1234567890ABCDEF" not in json.dumps(samples)
+
+
 def test_format_verification_includes_summary(tmp_path):
     _write_project(tmp_path)
     result = run_verification(tmp_path, full_scan=True)

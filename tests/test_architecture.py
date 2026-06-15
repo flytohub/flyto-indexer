@@ -819,6 +819,42 @@ class TestScannerCompleteness:
                 f"{[(f.pattern_name, f.masked_value) for f in findings]}"
             )
 
+    def test_secret_scanner_skips_ui_secret_metadata_literals(self):
+        """Secret-shaped UI schema constants are labels/types, not credentials."""
+        from secret_scanner import scan_secrets
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "bindingTypes.js"
+            test_file.write_text(
+                "export const INPUT_TYPES = Object.freeze({\n"
+                "  PASSWORD: 'password',\n"
+                "  SECRET_TEXT: 'secret',\n"
+                "})\n"
+                "export const ENDPOINTS = {\n"
+                "  CHANGE_PASSWORD: '/auth/change-password',\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            result = scan_secrets(tmpdir)
+            findings = getattr(result, "findings", result)
+            assert len(findings) == 0, (
+                f"UI metadata literals incorrectly flagged as secrets: {findings}"
+            )
+
+    def test_secret_scanner_still_flags_real_hardcoded_password(self):
+        """False-positive suppression must not hide real credential literals."""
+        from secret_scanner import scan_secrets
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "settings.py"
+            test_file.write_text(
+                'PASSWORD = "correctHorseBatteryStaple2026"\n',
+                encoding="utf-8",
+            )
+            result = scan_secrets(tmpdir)
+            findings = getattr(result, "findings", result)
+            assert any(f.pattern in {"generic_secret", "password"} for f in findings)
+
     def test_secret_scanner_skips_empty_env_expansion_defaults(self):
         """Compose-style ${SECRET:-} references are variable names, not leaked values."""
         from secret_scanner import scan_secrets
@@ -1085,6 +1121,39 @@ class TestTaintAnalysis:
             # JS uses regex fallback — may or may not detect depending on pattern
             # At minimum, the analyzer should not crash
             assert isinstance(result.taint_flows, list)
+
+    def test_taint_skips_generated_virtualenv_runtime_js(self):
+        """Vendored/generated virtualenv files must not fail project taint scans."""
+        from analyzer.taint import TaintAnalyzer
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            generated = (
+                Path(tmpdir)
+                / "src"
+                / "ui"
+                / "web"
+                / "backend"
+                / ".venv311"
+                / "lib"
+                / "python3.11"
+                / "site-packages"
+                / "playwright"
+                / "driver"
+                / "package"
+                / "lib"
+                / "vite"
+                / "report.js"
+            )
+            generated.parent.mkdir(parents=True)
+            generated.write_text(
+                "const userInput = req.query.name;\n"
+                "document.getElementById('output').innerHTML = userInput;\n",
+                encoding="utf-8",
+            )
+
+            result = TaintAnalyzer(Path(tmpdir), index={}).analyze_full()
+            unsanitized = [f for f in result.taint_flows if not f.sanitized]
+            assert unsanitized == []
 
     def test_int_sanitizer_breaks_taint(self):
         """int() conversion must break the taint chain (type sanitizer)."""

@@ -43,7 +43,8 @@ MAX_CALLERS = 2000
 MAX_CROSS_DEPTH = 6
 SKIP_DIR_PATTERNS = re.compile(
     r"(?:^|/)(?:test|tests|__tests__|mock|fixture|node_modules|__pycache__|"
-    r"\.git|dist|dist-next|build|\.venv|venv|\.nuxt|\.output|coverage)(?:/|$)|"
+    r"\.git|dist|dist-next|build|\.venv[^/]*|venv[^/]*|site-packages|"
+    r"\.nuxt|\.output|coverage)(?:/|$)|"
     r"(?:^|/)[^/]*(?:_test\.go|_test\.py|\.test\.[jt]sx?|\.spec\.[jt]sx?)$"
 )
 
@@ -920,6 +921,8 @@ class TaintAnalyzer:
         # for quick lookup
         dangerous_by_name: dict[str, list[tuple[str, str, list]]] = defaultdict(list)
         for (file_path, func_name), param_info_list in self._dangerous_functions.items():
+            if SKIP_DIR_PATTERNS.search(file_path.replace("\\", "/")):
+                continue
             dangerous_by_name[func_name].append((file_path, func_name, param_info_list))
 
         # Strategy 1: Use index dependencies (call graph)
@@ -1038,6 +1041,8 @@ class TaintAnalyzer:
 
         # Try AST cache first, then read from disk
         tree = self._ast_cache.get(caller_file)
+        if SKIP_DIR_PATTERNS.search(caller_file.replace("\\", "/")):
+            return
         if tree is None:
             caller_path = self.project_root / caller_file
             if not caller_path.is_file():
@@ -1196,6 +1201,8 @@ class TaintAnalyzer:
         param_info_list: list[tuple[int, str, str, str, str]],
     ):
         """Parse a caller file and check if tainted data is passed at dangerous param positions."""
+        if SKIP_DIR_PATTERNS.search(caller_file.replace("\\", "/")):
+            return
         caller_path = self.project_root / caller_file
         if not caller_path.is_file():
             return

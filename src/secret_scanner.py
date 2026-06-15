@@ -211,10 +211,59 @@ _TEMPLATE_SECRET_REFERENCE = re.compile(
     r"(\{\{\s*[\w.\-]+\s*\}\}|\$\{\{\s*[\w.\-]+\s*\}\}|\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\})"
 )
 
+_NON_SECRET_LITERAL_VALUES = frozenset({
+    "pass",
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "text",
+    "hidden",
+})
+
+_UI_SECRET_SHAPED_ASSIGNMENT = re.compile(
+    r"""(?ix)
+    ^\s*
+    (?:export\s+const\s+)?
+    [A-Z0-9_]*(?:PASSWORD|PASSWD|PWD|SECRET)[A-Z0-9_]*
+    \s*[:=]\s*
+    (?P<quote>['"])(?P<value>[^'"]+)(?P=quote)
+    \s*,?
+    (?:\s*//.*)?$
+    """
+)
+
 
 def _is_template_secret_reference(line: str) -> bool:
     """Skip runtime template references such as {{password}} or ${{ secrets.KEY }}."""
     return bool(_TEMPLATE_SECRET_REFERENCE.search(line))
+
+
+def _is_secret_shaped_metadata_literal(pattern_name: str, line: str) -> bool:
+    """Skip UI/schema metadata that names a secret field but stores no secret.
+
+    Many frontend schemas use secret-shaped field labels or password-change
+    route names. Those are field/widget identifiers, not credentials. Keep this
+    narrow so real credential literals assigned to password-like names still
+    fail.
+    """
+    if pattern_name not in {"generic_secret", "password", "secret"}:
+        return False
+
+    lower_line = line.lower()
+    if any(fp in lower_line for fp in (
+        'type="password"', "type='password'", "type: 'password'",
+        'type: "password"', "inputtype", "password_field",
+        "password_input", "form.password", "v-model", "formdata",
+        "/auth", "/login", "/password", "/reset",
+        "bg-", "text-", "border-", "ring-",
+    )):
+        return True
+
+    match = _UI_SECRET_SHAPED_ASSIGNMENT.match(line)
+    if not match:
+        return False
+    return match.group("value").strip().lower() in _NON_SECRET_LITERAL_VALUES
 
 
 def _load_git_ignored_paths(project_path: Path) -> set[str]:
@@ -334,16 +383,8 @@ def scan_secrets(project_path: str | Path) -> SecretScanResult:
                         if re.search(r"\$\{[A-Z0-9_]*(?:SECRET|TOKEN|KEY)[A-Z0-9_]*:-\}", line):
                             continue
 
-                        # Skip HTML input type="password" and similar false positives
-                        if pattern_name == "password":
-                            lower_line = line.lower()
-                            if any(fp in lower_line for fp in (
-                                'type="password"', "type='password'", "type: 'password'",
-                                'type: "password"', "inputtype", "password_field",
-                                "password_input", "form.password", "v-model", "formdata",
-                                "/auth", "/login", "/password", "/reset",
-                            )):
-                                continue
+                        if _is_secret_shaped_metadata_literal(pattern_name, line):
+                            continue
 
                         # Skip Dockerfile/CI example connection strings
                         if pattern_name == "database_url":
