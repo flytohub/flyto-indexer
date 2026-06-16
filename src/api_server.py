@@ -370,7 +370,8 @@ class APIHandler(BaseHTTPRequestHandler):
 
     def _get_cors_origin(self) -> str | None:
         """Return the request Origin if it is in the allowed set, else None."""
-        origin = self.headers.get("Origin", "")
+        # Strip CR/LF before header lookup to prevent HTTP response splitting.
+        origin = self.headers.get("Origin", "").replace("\r", "").replace("\n", "")
         if origin in _ALLOWED_ORIGINS:
             return origin
         return None
