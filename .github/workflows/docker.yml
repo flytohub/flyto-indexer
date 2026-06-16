@@ -11,6 +11,7 @@ on:
 permissions:
   contents: read
   packages: write
+  security-events: write
 
 jobs:
   build:
@@ -36,3 +37,20 @@ jobs:
           docker run --rm --entrypoint semgrep  flyto-indexer:${{ github.sha }} --version
           docker run --rm --entrypoint checkov  flyto-indexer:${{ github.sha }} --version
           docker run --rm --entrypoint cat      flyto-indexer:${{ github.sha }} /app/NOTICE | head -n 5
+
+      - name: Scan container image with Trivy
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8  # v0.36.0
+        with:
+          image-ref: flyto-indexer:${{ github.sha }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@c35d1b164463ee62a100735382aaaa525c5d3496  # codeql-bundle-v2.25.6
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
