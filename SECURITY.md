@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability in Flyto Indexer, please report it responsibly.
 
-**Email:** security@flyto2.net
+**Email:** security@flyto2.com
 
 Please include:
 - Description of the vulnerability
