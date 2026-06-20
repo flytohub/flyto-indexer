@@ -1686,9 +1686,12 @@ def _strip_url_to_api_path(raw: str) -> str:
 
 def _normalize_api_path(raw: str) -> str:
     path = _strip_url_to_api_path(raw)
+    path = re.sub(r"\$\{[^}/]*$", "{param}", path)
     path = re.sub(r"\$\{[^}]+\}", "{param}", path)
     path = re.sub(r"\{[^}/]+\}", "{param}", path)
+    path = re.sub(r"\[[^]/]+\]", "{param}", path)
     path = re.sub(r":[A-Za-z_][A-Za-z0-9_]*", "{param}", path)
+    path = re.sub(r"(?<=/)\*(?=/|$)", "{param}", path)
     path = re.sub(r"/+", "/", path).rstrip("/")
     return path or "/"
 

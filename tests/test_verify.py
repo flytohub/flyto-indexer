@@ -19,6 +19,7 @@ from src.verify import (
     _check_mcp_runtime_smoke,
     _check_product_loop_closure,
     _check_single_project_islands,
+    _normalize_api_path,
     format_verification,
     format_workspace_verification,
     render_report,
@@ -531,6 +532,40 @@ def test_cross_project_contract_matches_frontend_to_backend(tmp_path):
     by_name = {check["name"]: check for check in checks}
     assert by_name["cross_project_contract"]["status"] == "pass"
     assert by_name["cross_project_contract"]["metrics"]["matched_calls"] == 1
+
+
+def test_cross_project_contract_matches_company_scope_org_template(tmp_path):
+    frontend = tmp_path / "frontend"
+    backend = tmp_path / "backend"
+    _write_frontend_client(frontend, "/api/v1/code/orgs/${orgId}/footprint/company-scope")
+    _write_backend_index(backend, [("GET", "/api/v1/code/orgs/{id}/footprint/company-scope")])
+    checks = []
+
+    _check_cross_project_contract([frontend, backend], checks)
+
+    by_name = {check["name"]: check for check in checks}
+    assert by_name["cross_project_contract"]["status"] == "pass"
+    assert by_name["cross_project_contract"]["metrics"]["matched_calls"] == 1
+
+
+def test_cross_project_contract_matches_router_template_variants(tmp_path):
+    frontend = tmp_path / "frontend"
+    backend = tmp_path / "backend"
+    _write_frontend_client(frontend, "/api/v1/code/orgs/${orgId}/footprint/repos/[repoId]/files/*")
+    _write_backend_index(backend, [("GET", "/api/v1/code/orgs/{id}/footprint/repos/:repoId/files/{path}")])
+    checks = []
+
+    _check_cross_project_contract([frontend, backend], checks)
+
+    by_name = {check["name"]: check for check in checks}
+    assert by_name["cross_project_contract"]["status"] == "pass"
+    assert by_name["cross_project_contract"]["metrics"]["matched_calls"] == 1
+
+
+def test_normalize_api_path_handles_router_template_variants():
+    assert _normalize_api_path("/api/v1/code/orgs/${orgId") == "/api/v1/code/orgs/{param}"
+    assert _normalize_api_path("/api/v1/code/repos/[repoId]/files/*") == "/api/v1/code/repos/{param}/files/{param}"
+    assert _normalize_api_path("/api/v1/code/repos/:repoId/files/{path}") == "/api/v1/code/repos/{param}/files/{param}"
 
 
 def test_cross_project_contract_warns_for_unmatched_frontend_call(tmp_path):
