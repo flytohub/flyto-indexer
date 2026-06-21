@@ -319,6 +319,38 @@ def main():
     workspace_parser.add_argument("--report-format", choices=["json", "markdown", "junit", "sarif"], default="json", help="Report artifact format")
     workspace_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
 
+    # flyto2-product-gate
+    flyto2_parser = subparsers.add_parser(
+        "flyto2-product-gate",
+        help="Check Flyto2 product-line registry, memory structure, and health targets",
+        description=(
+            "Workspace-level release guard for the Flyto2 five-product-line model. "
+            "Checks every discovered git repo against the manifest, validates project "
+            "memory/handoff structure, and optionally gates health grades from an audit snapshot."
+        ),
+    )
+    flyto2_parser.add_argument("path", nargs="?", default=".", help="Workspace root path")
+    flyto2_parser.add_argument("--manifest", help="Product-line manifest JSON (default: packaged Flyto2 manifest)")
+    flyto2_parser.add_argument("--health-report", help="Health report JSON keyed by repo name")
+    flyto2_parser.add_argument("--skip-health", action="store_true", help="Only check product-line and memory structure")
+    flyto2_parser.add_argument("--relaxed-memory", action="store_true", help="Report missing memory files as warnings instead of blockers")
+    flyto2_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
+
+    # flyto2-memory-bootstrap
+    memory_parser = subparsers.add_parser(
+        "flyto2-memory-bootstrap",
+        help="Create missing Flyto2 project-memory files from the product manifest",
+        description=(
+            "Scaffold missing AGENTS/CLAUDE/project memory, workflow docs, "
+            "and handoff registry files without overwriting existing files."
+        ),
+    )
+    memory_parser.add_argument("path", nargs="?", default=".", help="Workspace root path")
+    memory_parser.add_argument("--manifest", help="Product-line manifest JSON (default: packaged Flyto2 manifest)")
+    memory_parser.add_argument("--apply", action="store_true", help="Write missing files. Default is dry-run.")
+    memory_parser.add_argument("--include-deprecated", action="store_true", help="Also bootstrap deprecated repos")
+    memory_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
+
     # verify-baseline
     baseline_parser = subparsers.add_parser(
         "verify-baseline",
@@ -480,6 +512,10 @@ def main():
             result = cmd_verify(args)
         elif args.command == "verify-workspace":
             result = cmd_verify_workspace(args)
+        elif args.command == "flyto2-product-gate":
+            result = cmd_flyto2_product_gate(args)
+        elif args.command == "flyto2-memory-bootstrap":
+            result = cmd_flyto2_memory_bootstrap(args)
         elif args.command == "verify-baseline":
             result = cmd_verify_baseline(args)
         elif args.command == "pr-risk":
@@ -1054,6 +1090,43 @@ def cmd_tools(args):
                 "flyto-index verify-workspace . --baseline-dir .flyto-baselines --regression-only --json",
             ],
             "exit_codes": {"0": "success", "2": "verification failed"},
+        },
+        {
+            "name": "flyto2-product-gate",
+            "summary": "Check Flyto2 five-product-line mapping, repo memory, and health targets",
+            "args": [
+                {"name": "path", "type": "string", "required": False, "default": ".", "description": "Workspace root path"},
+                {"name": "--manifest", "type": "string", "required": False, "description": "Product-line manifest JSON"},
+                {"name": "--health-report", "type": "string", "required": False, "description": "Health report JSON keyed by repo name"},
+                {"name": "--skip-health", "type": "boolean", "required": False, "default": False, "description": "Only check product-line and memory structure"},
+                {"name": "--relaxed-memory", "type": "boolean", "required": False, "default": False, "description": "Report missing memory files as warnings"},
+                {"name": "--json", "type": "boolean", "required": False, "default": False, "description": "Output as JSON"},
+            ],
+            "outputs": [],
+            "side_effects": [],
+            "examples": [
+                "flyto-index flyto2-product-gate /Users/chester/flytohub --health-report config/flyto2/health-baseline-2026-06-21.json",
+                "flyto-index flyto2-product-gate . --skip-health --json",
+            ],
+            "exit_codes": {"0": "success", "2": "product gate failed"},
+        },
+        {
+            "name": "flyto2-memory-bootstrap",
+            "summary": "Create missing Flyto2 project-memory files from the manifest",
+            "args": [
+                {"name": "path", "type": "string", "required": False, "default": ".", "description": "Workspace root path"},
+                {"name": "--manifest", "type": "string", "required": False, "description": "Product-line manifest JSON"},
+                {"name": "--apply", "type": "boolean", "required": False, "default": False, "description": "Write missing files. Default is dry-run"},
+                {"name": "--include-deprecated", "type": "boolean", "required": False, "default": False, "description": "Also bootstrap deprecated repos"},
+                {"name": "--json", "type": "boolean", "required": False, "default": False, "description": "Output as JSON"},
+            ],
+            "outputs": ["project memory files", "workflow docs", "handoff registry"],
+            "side_effects": ["writes missing markdown files when --apply is set"],
+            "examples": [
+                "flyto-index flyto2-memory-bootstrap /Users/chester/flytohub",
+                "flyto-index flyto2-memory-bootstrap /Users/chester/flytohub --apply",
+            ],
+            "exit_codes": {"0": "success", "2": "workspace/bootstrap failed"},
         },
         {
             "name": "verify-baseline",
@@ -2287,6 +2360,62 @@ def cmd_verify_workspace(args):
 
     print(format_workspace_verification(result))
     if not result["pass"]:
+        sys.exit(2)
+    return None
+
+
+def cmd_flyto2_product_gate(args):
+    """Run the Flyto2 product-line and health release gate."""
+    from .flyto2_product_gate import (
+        DEFAULT_MANIFEST,
+        ProductGateOptions,
+        format_product_gate,
+        run_product_gate,
+    )
+
+    manifest = Path(args.manifest).resolve() if args.manifest else DEFAULT_MANIFEST
+    health_report = Path(args.health_report).resolve() if args.health_report else None
+    result = run_product_gate(
+        ProductGateOptions(
+            workspace=Path(args.path).resolve(),
+            manifest_path=manifest,
+            health_report_path=health_report,
+            skip_health=args.skip_health,
+            strict_memory=not args.relaxed_memory,
+        )
+    )
+    if hasattr(args, "as_json") and args.as_json:
+        return result
+
+    print(format_product_gate(result))
+    if not result["ok"]:
+        sys.exit(2)
+    return None
+
+
+def cmd_flyto2_memory_bootstrap(args):
+    """Create missing project-memory files from the Flyto2 manifest."""
+    from .flyto2_memory_bootstrap import (
+        DEFAULT_MANIFEST,
+        MemoryBootstrapOptions,
+        format_memory_bootstrap,
+        run_memory_bootstrap,
+    )
+
+    manifest = Path(args.manifest).resolve() if args.manifest else DEFAULT_MANIFEST
+    result = run_memory_bootstrap(
+        MemoryBootstrapOptions(
+            workspace=Path(args.path).resolve(),
+            manifest_path=manifest,
+            apply=args.apply,
+            include_deprecated=args.include_deprecated,
+        )
+    )
+    if hasattr(args, "as_json") and args.as_json:
+        return result
+
+    print(format_memory_bootstrap(result))
+    if not result["ok"]:
         sys.exit(2)
     return None
 

@@ -65,6 +65,7 @@ packages = ["src"]
 # scanners silently report 0 findings on known-bad fixtures.
 [tool.hatch.build.targets.wheel.force-include]
 "config/rules" = "flyto_indexer/config/rules"
+"config/flyto2" = "flyto_indexer/config/flyto2"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

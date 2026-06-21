@@ -91,6 +91,8 @@ flyto-index verify . --baseline .flyto-baselines/flyto-indexer.json --regression
 flyto-index verify-workspace . --changed-only --base origin/main
 flyto-index verify . --report verify.sarif --report-format sarif
 flyto-index verify-baseline compare . --baseline .flyto-baselines/flyto-indexer.json
+flyto-index flyto2-product-gate /Users/chester/flytohub --health-report config/flyto2/health-baseline-2026-06-21.json
+flyto-index flyto2-memory-bootstrap /Users/chester/flytohub --apply
 flyto-index impact MySharedSymbol --path .
 flyto-index context --path . --query "auth routes query keys"
 flyto-index secrets . --json
@@ -103,6 +105,12 @@ agent instructions, incomplete CI gates, generated/high-risk changed files,
 runtime dependency drift, package manifest drift, suspicious baselines, or MCP
 tool/runtime drift. Use `--baseline` with `--regression-only` when a project has
 known warnings but new AI-generated regressions must still be blocked.
+
+Use `flyto2-product-gate` for the Flyto2 workspace release gate. It validates
+the five product lines, repo classification, project memory, and health targets
+before a release can be considered production-ready.
+Use `flyto2-memory-bootstrap` to create missing project-memory, workflow, and
+handoff files from the same manifest without overwriting existing files.
 
 Project-specific verify budgets live in `.flyto-rules.yaml` under `verify:`.
 This stays stdlib-only; the verifier reads a small no-dependency subset:

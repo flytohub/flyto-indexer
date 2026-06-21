@@ -1,0 +1,61 @@
+{
+  "generated_at": "2026-06-21T13:45:00Z",
+  "source": "flyto-indexer audit focus=all during Flyto2 workspace convergence",
+  "repos": {
+    "flyto-core": {
+      "score": 78,
+      "grade": "C",
+      "reasons": ["complexity: 960/4282 high-complexity functions"]
+    },
+    "flyto-cloud": {
+      "score": 82,
+      "grade": "B",
+      "reasons": ["complexity remains weakest, but current score meets core B gate"]
+    },
+    "flyto-code": {
+      "score": 81,
+      "grade": "B",
+      "reasons": ["documentation remains weakest, but current score meets core B gate"]
+    },
+    "flyto-engine": {
+      "score": 81,
+      "grade": "B",
+      "reasons": ["complexity remains weakest, but current score meets core B gate"]
+    },
+    "flyto-ai": {
+      "score": 77,
+      "grade": "C",
+      "reasons": ["complexity: 173/737 high-complexity functions"]
+    },
+    "flyto-indexer": {
+      "score": 75,
+      "grade": "C",
+      "reasons": ["complexity: 523/1435 high-complexity functions"]
+    },
+    "flyto-landing-page": {
+      "score": 86,
+      "grade": "B",
+      "reasons": ["documentation remains weakest, but current score meets public B gate"]
+    },
+    "flyto-docs": {
+      "score": 96,
+      "grade": "A",
+      "reasons": ["generate-docs.py rendering helpers extracted; complexity reduced to 1/22 functions"]
+    },
+    "flyto-blog": {
+      "score": 99,
+      "grade": "A",
+      "reasons": ["dead_code false positive resolved for VitePress markdown component usage"]
+    },
+    "flyto-console": {
+      "score": 76,
+      "grade": "C",
+      "reasons": ["documentation: 557/2543 symbols documented"]
+    },
+    "flyto-cortex": {
+      "score": 80,
+      "grade": "B",
+      "reasons": ["documentation remains weakest, but current score meets B"]
+    }
+  }
+}

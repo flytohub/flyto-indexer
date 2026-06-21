@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Added `flyto2-product-gate` to validate the Flyto2 workspace product-line
+  registry, repo classification, project memory completeness, and health
+  targets before release readiness review.
+- Added `flyto2-memory-bootstrap` to scaffold missing project-memory files,
+  workflow docs, and handoff registries from the Flyto2 manifest without
+  overwriting existing repo notes.
+- Added the Flyto2 product-line manifest and 2026-06-21 health baseline used by
+  the new gate.
+
+### Fixed
+- Dead-code detection now treats VitePress markdown component tags such as
+  `<BlogHero />` as live component references.
+
 ## [2.10.3] — 2026-06-13
 
 ### Fixed

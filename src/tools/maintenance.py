@@ -12,6 +12,8 @@ ReferenceContext = namedtuple(
     ['names', 'files', 'classes', 'scoped_names', 'decorated', 'name_counts'],
 )
 
+_MARKDOWN_COMPONENT_TAG_RE = re.compile(r"<([A-Z][A-Za-z0-9]*)\b")
+
 try:
     from ..index_store import (
         INDEX_DIR, load_index, load_project_map, get_symbol_content_text,
@@ -163,7 +165,43 @@ def _build_source_reference_sets(index, symbols):
             scoped_names.update((project, path, name) for name in names)
             decorated.update((project, path, name) for name in decorated_names)
 
+    for project, root in project_roots.items():
+        for markdown_path in _iter_markdown_content_files(root):
+            try:
+                text = markdown_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            rel_path = markdown_path.relative_to(root).as_posix()
+            if (project, rel_path) in seen_files:
+                continue
+            for match in _MARKDOWN_COMPONENT_TAG_RE.finditer(text):
+                name = match.group(1)
+                name_counts[(project, name)] = name_counts.get((project, name), 0) + 1
+
     return scoped_names, decorated, name_counts, project_roots, source_cache
+
+
+def _iter_markdown_content_files(root):
+    """Yield markdown content files that can reference framework components."""
+    ignored_parts = {
+        ".git",
+        ".flyto",
+        ".flyto-index",
+        "node_modules",
+        "dist",
+        "build",
+        "out",
+        ".next",
+    }
+    try:
+        candidates = root.rglob("*.md")
+    except OSError:
+        return
+    for candidate in candidates:
+        rel_parts = set(candidate.relative_to(root).parts)
+        if rel_parts & ignored_parts:
+            continue
+        yield candidate
 
 
 def _has_same_file_reference(sym_id, sym_name, sym_project, sym_path,
@@ -302,6 +340,10 @@ def _is_referenced_by_context(sym_type, sym_name, sym_project, sym_path, ref_ctx
     if sym_type in {"class", "interface", "type"}:
         bare_name = sym_name.split(".")[-1] if "." in sym_name else sym_name
         if ref_ctx.name_counts.get((sym_project, bare_name), 0) > 1:
+            return True
+    if sym_type == "component":
+        bare_name = sym_name.split(".")[-1] if "." in sym_name else sym_name
+        if ref_ctx.name_counts.get((sym_project, bare_name), 0) > 0:
             return True
 
     if sym_type == "method" and "." in sym_name:

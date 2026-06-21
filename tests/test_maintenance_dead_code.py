@@ -136,6 +136,36 @@ def test_fixture_symbol_is_not_dead(monkeypatch, tmp_path):
     assert result["total_dead"] == 0
 
 
+def test_vitepress_markdown_component_usage_is_not_dead(monkeypatch, tmp_path):
+    theme = tmp_path / ".vitepress" / "theme"
+    theme.mkdir(parents=True)
+    (theme / "BlogHero.vue").write_text(
+        "<template><section>Blog</section></template>\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "index.md").write_text(
+        "---\nlayout: page\n---\n\n<BlogHero />\n",
+        encoding="utf-8",
+    )
+    sid = "proj:.vitepress/theme/BlogHero.vue:component:BlogHero"
+    index = _index(tmp_path, {
+        sid: _symbol(
+            "proj",
+            ".vitepress/theme/BlogHero.vue",
+            "component",
+            "BlogHero",
+            start=1,
+            end=20,
+            language="vue",
+        ),
+    })
+
+    monkeypatch.setattr(maintenance, "load_index", lambda: index)
+    result = maintenance.find_dead_code(project="proj", min_lines=1)
+
+    assert result["total_dead"] == 0
+
+
 def test_go_type_referenced_from_same_project_source_is_not_dead(monkeypatch, tmp_path):
     model = tmp_path / "internal" / "autofix" / "rules" / "cve_bump.go"
     parser = tmp_path / "internal" / "autofix" / "rules" / "cve_bump_parsers.go"
