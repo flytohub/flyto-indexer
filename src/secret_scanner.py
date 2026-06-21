@@ -201,6 +201,14 @@ _COMMENT_LOW_SIGNAL_PATTERNS = frozenset({
     "secret",
 })
 
+_DOC_EXAMPLE_SECRET_PATTERNS = frozenset({
+    "database_url",
+    "password",
+    "secret",
+    "api_key",
+    "api_token",
+})
+
 _GIT_ROOT_CACHE: dict[str, Path | None] = {}
 _GIT_TRACKED_CACHE: dict[str, bool] = {}
 
@@ -394,17 +402,8 @@ def _load_git_ignored_paths(project_path: Path) -> set[str]:
     return {path for path in result.stdout.split("\0") if path}
 
 
-def scan_secrets(project_path: str | Path) -> SecretScanResult:
-    """
-    Scan a project directory for hardcoded secrets.
-
-    Args:
-        project_path: Root directory to scan.
-
-    Returns:
-        SecretScanResult with all findings.
-    """
-    # Load patterns from YAML (with hardcoded fallback)
+def _load_secret_patterns_to_use():
+    """Load configured secret patterns with the built-in fallback."""
     try:
         from .rule_loader import get_secret_patterns
     except ImportError:
@@ -412,19 +411,13 @@ def scan_secrets(project_path: str | Path) -> SecretScanResult:
 
     yaml_patterns = get_secret_patterns()
     if yaml_patterns:
-        # Use YAML patterns instead of hardcoded
-        patterns_to_use = [(pid, regex, sev) for pid, regex, sev in yaml_patterns]
-    else:
-        # Fallback to hardcoded SECRET_PATTERNS + _SEVERITY_MAP
-        patterns_to_use = [(pid, regex, _SEVERITY_MAP.get(pid, "medium")) for pid, regex in SECRET_PATTERNS]
+        return [(pid, regex, sev) for pid, regex, sev in yaml_patterns]
+    return [(pid, regex, _SEVERITY_MAP.get(pid, "medium")) for pid, regex in SECRET_PATTERNS]
 
-    project_path = Path(project_path).resolve()
-    findings: list[SecretFinding] = []
-    files_scanned = 0
-    git_ignored_paths = _load_git_ignored_paths(project_path)
 
+def _iter_secret_scan_inputs(project_path: Path, git_ignored_paths: set[str]):
+    """Yield text files that should participate in secret scanning."""
     for dirpath, dirnames, filenames in os.walk(project_path):
-        # Filter skip dirs in-place
         dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
 
         for fname in filenames:
@@ -441,86 +434,110 @@ def scan_secrets(project_path: str | Path) -> SecretScanResult:
             if rel_path in git_ignored_paths:
                 continue
 
-            # Try to read as text
             try:
                 content = file_path.read_text(encoding="utf-8", errors="ignore")
             except (OSError, UnicodeDecodeError):
                 continue
 
-            # Skip large files (> 1MB)
             if len(content) > 1_048_576:
                 continue
 
-            files_scanned += 1
+            yield fname, rel_path, content
 
-            is_doc = _is_doc_file(fname, rel_path)
 
-            for line_num, line in enumerate(content.splitlines(), start=1):
-                # Skip comment-only lines in source files
-                stripped = line.strip()
-                is_comment_only = (
-                    stripped.startswith("//")
-                    or stripped.startswith("#")
-                    or stripped.startswith("*")
-                )
+def _matched_secret_text(match: re.Match) -> str:
+    """Return the captured secret value when a pattern exposes one."""
+    if match.lastindex:
+        return match.group(match.lastindex)
+    return match.group(0)
 
-                for pattern_name, pattern_re, pattern_severity in patterns_to_use:
-                    if is_comment_only and pattern_name in _COMMENT_LOW_SIGNAL_PATTERNS:
-                        continue
 
-                    # Skip generic patterns in doc files — they're examples
-                    if is_doc and pattern_name in ("database_url", "password", "secret", "api_key", "api_token"):
-                        continue
+def _is_database_url_example(pattern_name: str, line: str) -> bool:
+    """Return True for Dockerfile/CI example connection strings."""
+    if pattern_name != "database_url":
+        return False
+    lower_line = line.lower()
+    return any(fp in lower_line for fp in (
+        "user:pass", "user:password", "username:password",
+        "flyto:flyto", "postgres:postgres", "root:root",
+        "example", "localhost:5432/test", "env ",
+    ))
 
-                    match = pattern_re.search(line)
-                    if match:
-                        matched_text = match.group(0)
-                        if match.lastindex:
-                            matched_text = match.group(match.lastindex)
 
-                        if matched_text in _KNOWN_FAKE_SECRET_VALUES:
-                            continue
+def _should_skip_secret_match(pattern_name: str, rel_path: str, line: str, matched_text: str) -> bool:
+    """Apply contextual false-positive filters after a secret regex matched."""
+    if matched_text in _KNOWN_FAKE_SECRET_VALUES:
+        return True
+    if _EXAMPLE_INDICATORS.search(line):
+        return True
+    if _is_template_secret_reference(line):
+        return True
+    if _is_scanner_rule_definition(rel_path, line):
+        return True
+    if _is_secret_pattern_description(pattern_name, line):
+        return True
+    if re.search(r"\$\{[A-Z0-9_]*(?:SECRET|TOKEN|KEY)[A-Z0-9_]*:-\}", line):
+        return True
+    if _is_secret_shaped_metadata_literal(pattern_name, line):
+        return True
+    if _is_public_firebase_client_config(pattern_name, rel_path, line):
+        return True
+    return _is_database_url_example(pattern_name, line)
 
-                        # Skip if line contains example/placeholder indicators
-                        if _EXAMPLE_INDICATORS.search(line):
-                            continue
 
-                        if _is_template_secret_reference(line):
-                            continue
+def _line_secret_findings(rel_path: str, line_num: int, line: str, is_doc: bool, patterns_to_use):
+    """Yield secret findings detected on one line."""
+    stripped = line.strip()
+    is_comment_only = (
+        stripped.startswith("//")
+        or stripped.startswith("#")
+        or stripped.startswith("*")
+    )
 
-                        if _is_scanner_rule_definition(rel_path, line):
-                            continue
+    for pattern_name, pattern_re, pattern_severity in patterns_to_use:
+        if is_comment_only and pattern_name in _COMMENT_LOW_SIGNAL_PATTERNS:
+            continue
+        if is_doc and pattern_name in _DOC_EXAMPLE_SECRET_PATTERNS:
+            continue
 
-                        if _is_secret_pattern_description(pattern_name, line):
-                            continue
+        match = pattern_re.search(line)
+        if not match:
+            continue
 
-                        if re.search(r"\$\{[A-Z0-9_]*(?:SECRET|TOKEN|KEY)[A-Z0-9_]*:-\}", line):
-                            continue
+        matched_text = _matched_secret_text(match)
+        if _should_skip_secret_match(pattern_name, rel_path, line, matched_text):
+            continue
 
-                        if _is_secret_shaped_metadata_literal(pattern_name, line):
-                            continue
+        yield SecretFinding(
+            file=rel_path,
+            line=line_num,
+            pattern=pattern_name,
+            severity=pattern_severity,
+            masked_value=_mask_value(matched_text),
+        )
 
-                        if _is_public_firebase_client_config(pattern_name, rel_path, line):
-                            continue
 
-                        # Skip Dockerfile/CI example connection strings
-                        if pattern_name == "database_url":
-                            lower_line = line.lower()
-                            if any(fp in lower_line for fp in (
-                                "user:pass", "user:password", "username:password",
-                                "flyto:flyto", "postgres:postgres", "root:root",
-                                "example", "localhost:5432/test", "env ",
-                            )):
-                                continue
+def scan_secrets(project_path: str | Path) -> SecretScanResult:
+    """
+    Scan a project directory for hardcoded secrets.
 
-                        severity = pattern_severity
-                        findings.append(SecretFinding(
-                            file=rel_path,
-                            line=line_num,
-                            pattern=pattern_name,
-                            severity=severity,
-                            masked_value=_mask_value(matched_text),
-                        ))
+    Args:
+        project_path: Root directory to scan.
+
+    Returns:
+        SecretScanResult with all findings.
+    """
+    patterns_to_use = _load_secret_patterns_to_use()
+    project_path = Path(project_path).resolve()
+    findings: list[SecretFinding] = []
+    files_scanned = 0
+    git_ignored_paths = _load_git_ignored_paths(project_path)
+
+    for fname, rel_path, content in _iter_secret_scan_inputs(project_path, git_ignored_paths):
+        files_scanned += 1
+        is_doc = _is_doc_file(fname, rel_path)
+        for line_num, line in enumerate(content.splitlines(), start=1):
+            findings.extend(_line_secret_findings(rel_path, line_num, line, is_doc, patterns_to_use))
 
     # Count by severity
     critical = sum(1 for f in findings if f.severity == "critical")
