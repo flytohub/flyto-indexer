@@ -486,7 +486,7 @@ class TestIncrementalScan:
 
         # Initial incremental scan (saves manifest so delete is detectable)
         engine.scan(incremental=True)
-        assert any("Calculator" == s.name for s in engine.index.symbols.values())
+        assert any(s.name == "Calculator" for s in engine.index.symbols.values())
 
         # Delete the file
         (project_dir / "remove.py").unlink()

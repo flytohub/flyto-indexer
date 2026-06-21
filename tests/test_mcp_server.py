@@ -473,12 +473,12 @@ class TestLoadIndex:
         """When no index file exists, load_index should return {}."""
         mcp_server._index_cache = None
         index_store._cache_generation = 0.0  # allow reload
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)), \
-                 patch.object(index_store, "_discover_index_dirs", return_value=[Path(tmpdir)]):
-                # No index.json or index.json.gz in tmpdir
-                result = load_index()
-                assert result == {}
+        with tempfile.TemporaryDirectory() as tmpdir, \
+             patch.object(index_store, "INDEX_DIR", Path(tmpdir)), \
+             patch.object(index_store, "_discover_index_dirs", return_value=[Path(tmpdir)]):
+            # No index.json or index.json.gz in tmpdir
+            result = load_index()
+            assert result == {}
 
     def test_cache_behavior(self):
         """Second call should return cached data without re-reading."""
@@ -531,10 +531,10 @@ class TestLoadProjectMap:
 
     def test_missing_file_returns_empty_dict(self):
         """When no PROJECT_MAP file exists, should return {}."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
-                result = load_project_map()
-                assert result == {}
+        with tempfile.TemporaryDirectory() as tmpdir, \
+             patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
+            result = load_project_map()
+            assert result == {}
 
     def test_plain_json_loading(self):
         """Should load plain PROJECT_MAP.json."""
@@ -574,10 +574,10 @@ class TestLoadContentFile:
         """When content.jsonl does not exist, should return empty dict."""
         mcp_server._content_cache = {}
         mcp_server._content_loaded = False
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
-                result = load_content_file()
-                assert result == {}
+        with tempfile.TemporaryDirectory() as tmpdir, \
+             patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
+            result = load_content_file()
+            assert result == {}
 
     def test_valid_content_file(self):
         """Should parse each line as a JSON record with id and content."""

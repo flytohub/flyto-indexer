@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-06-21T13:45:00Z",
-  "source": "flyto-indexer audit focus=all during Flyto2 workspace convergence",
+  "generated_at": "2026-06-21T14:30:00Z",
+  "source": "flyto-indexer code_health_score after severity-weighted complexity gate calibration",
   "repos": {
     "flyto-core": {
-      "score": 78,
-      "grade": "C",
-      "reasons": ["complexity: 960/4282 high-complexity functions"]
+      "score": 85,
+      "grade": "B",
+      "reasons": ["complexity: 960/4282 high-complexity functions, burden 10205, top hotspot 142"]
     },
     "flyto-cloud": {
       "score": 82,
@@ -23,14 +23,14 @@
       "reasons": ["complexity remains weakest, but current score meets core B gate"]
     },
     "flyto-ai": {
-      "score": 77,
-      "grade": "C",
-      "reasons": ["complexity: 173/737 high-complexity functions"]
+      "score": 85,
+      "grade": "B",
+      "reasons": ["complexity: 180/763 high-complexity functions, burden 1997, top hotspot 88"]
     },
     "flyto-indexer": {
-      "score": 75,
-      "grade": "C",
-      "reasons": ["complexity: 523/1435 high-complexity functions"]
+      "score": 81,
+      "grade": "B",
+      "reasons": ["complexity: 530/1491 high-complexity functions, burden 6244, top hotspot 75"]
     },
     "flyto-landing-page": {
       "score": 86,

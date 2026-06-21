@@ -78,7 +78,8 @@ class TestIndexerToolNames:
         from tool_registry import SMART_TOOLS
         mcp_names = {t["name"] for t in MCP_TOOLS}
         smart_names = {t["name"] for t in SMART_TOOLS}
-        assert INDEXER_TOOL_NAMES == mcp_names | smart_names
+        expected_names = mcp_names | smart_names
+        assert expected_names == INDEXER_TOOL_NAMES
 
     def test_contains_core_tools(self):
         assert "search_code" in INDEXER_TOOL_NAMES

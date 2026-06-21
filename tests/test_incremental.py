@@ -89,7 +89,7 @@ class TestBM25UpdateDocs:
         orig_n = built_index.N
         orig_ids = list(built_index.doc_ids)
         built_index.update_docs(removed_ids=set(), added_docs={})
-        assert built_index.N == orig_n
+        assert orig_n == built_index.N
         assert built_index.doc_ids == orig_ids
 
     def test_remove_all_then_add(self):

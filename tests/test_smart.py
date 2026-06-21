@@ -345,7 +345,7 @@ class TestToolRegistryIntegration:
     def test_smart_tools_in_registry(self):
         from tool_registry import SMART_TOOLS, SMART_TOOL_NAMES
         assert len(SMART_TOOLS) == 20
-        assert SMART_TOOL_NAMES == {
+        expected_names = {
             "search", "impact", "audit", "task", "structure",
             "verify", "verify_workspace",
             "project_profile", "scan_secrets", "scan_licenses",
@@ -354,6 +354,7 @@ class TestToolRegistryIntegration:
             "add_layer", "add_taint_source", "add_taint_sink",
             "add_taint_sanitizer", "list_taint_rules",
         }
+        assert expected_names == SMART_TOOL_NAMES
 
     def test_smart_tools_in_dispatch(self):
         """Verify smart tools are registered. Uses has_tool() not
@@ -372,7 +373,8 @@ class TestToolRegistryIntegration:
         is partially loaded), we AST-parse the source of execute_tool
         and pull the dict keys directly. Pure lexical check, sub-100ms.
         """
-        import ast, inspect
+        import ast
+        import inspect
         from tool_registry import _TOOL_NAMES, execute_tool
 
         src = inspect.getsource(execute_tool)

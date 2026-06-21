@@ -28,6 +28,15 @@ The health baseline is a release-control artifact. A core repo below the target
 grade is a P1 production blocker until the score is raised or the exception is
 documented in the release handoff.
 
+Complexity health is severity-weighted. The baseline records:
+
+- high-complexity function density (`score >= 5`)
+- cumulative complexity burden
+- the top hotspot score
+
+This keeps dense complexity and severe god functions visible without treating a
+barely-over-threshold helper as equivalent to the worst production hotspot.
+
 ## CLI
 
 ```bash

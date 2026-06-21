@@ -188,6 +188,29 @@ def find_duplicates(
     }
 
 
+def _health_complexity_score(
+    *,
+    func_count: int,
+    complex_count: int,
+    complexity_burden: int,
+    max_complexity_score: int,
+) -> int:
+    """Score health complexity using density, total severity, and top hotspot.
+
+    A binary "score >= 5" ratio made a 5-point helper as expensive as a
+    100-point god function. The health gate needs to track both how many
+    functions crossed the threshold and how severe the crossed functions are.
+    """
+    if func_count <= 0:
+        return 25
+
+    complex_ratio = complex_count / func_count
+    severity_density = complexity_burden / max(func_count * 20, 1)
+    top_hotspot = min(max_complexity_score, 100) / 100
+    penalty = round((complex_ratio * 35) + (severity_density * 15) + (top_hotspot * 5))
+    return max(0, 25 - min(25, penalty))
+
+
 def security_scan(
     project: str = None,
     severity: str = None,
@@ -530,6 +553,8 @@ def code_health_score(project: str = None) -> dict:
     # 1. Complexity score (0-25): composite score (lines + depth + params + branches)
     func_count = 0
     complex_count = 0
+    complexity_burden = 0
+    max_complexity_score = 0
     for sym_id, sym in symbols.items():
         if sym.get("type") not in ("function", "method"):
             continue
@@ -582,12 +607,15 @@ def code_health_score(project: str = None) -> dict:
             score += (branches - 10)
         if score >= 5:
             complex_count += 1
+            complexity_burden += score
+            max_complexity_score = max(max_complexity_score, score)
 
-    if func_count > 0:
-        complexity_ratio = complex_count / func_count
-        complexity_score = max(0, 25 - int(complexity_ratio * 100))
-    else:
-        complexity_score = 25
+    complexity_score = _health_complexity_score(
+        func_count=func_count,
+        complex_count=complex_count,
+        complexity_burden=complexity_burden,
+        max_complexity_score=max_complexity_score,
+    )
 
     # 2. Dead code score (0-25): penalty for unreferenced symbols
     # Lazy import to avoid circular dependency
@@ -669,7 +697,10 @@ def code_health_score(project: str = None) -> dict:
         "breakdown": {
             "complexity": {
                 "score": complexity_score, "max": 25,
-                "detail": f"{complex_count}/{func_count} functions with high composite complexity (score >= 5)",
+                "detail": (
+                    f"{complex_count}/{func_count} functions with high composite complexity "
+                    f"(score >= 5, burden {complexity_burden}, top hotspot {max_complexity_score})"
+                ),
             },
             "dead_code": {
                 "score": dead_score, "max": 25,

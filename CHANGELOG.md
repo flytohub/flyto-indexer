@@ -12,9 +12,19 @@
 - Added the Flyto2 product-line manifest and 2026-06-21 health baseline used by
   the new gate.
 
+### Changed
+- Updated `code_health_score` complexity scoring to combine high-complexity
+  function density, cumulative severity burden, and the top hotspot score
+  instead of treating every `score >= 5` function as equal.
+- Recalibrated the Flyto2 health baseline for `flyto-ai`, `flyto-core`, and
+  `flyto-indexer` using the severity-weighted complexity gate while preserving
+  complex-function counts, burden, and top-hotspot evidence in the reasons.
+
 ### Fixed
 - Dead-code detection now treats VitePress markdown component tags such as
   `<BlogHero />` as live component references.
+- Cleaned existing test-suite lint violations so `ruff check src tests` can run
+  as a full release gate.
 
 ## [2.10.3] — 2026-06-13
 

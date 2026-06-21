@@ -301,20 +301,20 @@ class TestLockNotHeldOnError:
             raise RuntimeError("boom")
 
         with patch.object(index_store, "load_index", return_value=fake_index), \
-             patch("index_store.FileWatcher", FakeWatcher, create=True):
+             patch("index_store.FileWatcher", FakeWatcher, create=True), \
+             patch.dict("sys.modules", {}), \
+             patch("index_store._perform_live_reindex_unlocked", exploding_reindex, create=True):
             # Patch the watcher import inside the function
-            with patch.dict("sys.modules", {}):
-                # We need to mock the import path used by _maybe_auto_reindex
-                import importlib
-                with patch("index_store._perform_live_reindex_unlocked", exploding_reindex, create=True):
-                    # Use a simpler approach: just mock the import
-                    mock_module = MagicMock()
-                    mock_module._perform_live_reindex_unlocked = exploding_reindex
-                    with patch.dict("sys.modules", {"tools.maintenance": mock_module}):
-                        with patch("builtins.__import__", side_effect=ImportError("force fallback")):
-                            # The function catches OSError/RuntimeError, so it won't propagate
-                            # but the lock should still be released
-                            pass
+            # We need to mock the import path used by _maybe_auto_reindex
+            import importlib
+            # Use a simpler approach: just mock the import
+            mock_module = MagicMock()
+            mock_module._perform_live_reindex_unlocked = exploding_reindex
+            with patch.dict("sys.modules", {"tools.maintenance": mock_module}), \
+                 patch("builtins.__import__", side_effect=ImportError("force fallback")):
+                # The function catches OSError/RuntimeError, so it won't propagate
+                # but the lock should still be released
+                pass
 
         # Simpler test: directly verify lock release in _maybe_auto_reindex
         # by calling it with a watcher that raises

@@ -6,6 +6,9 @@
   handoff work.
 - The repository already provides CLI and MCP-oriented code intelligence used by
   Flyto audits.
+- Flyto2 core health gating now uses severity-weighted complexity scoring; the
+  2026-06-21 baseline records count, burden, and top-hotspot evidence for
+  continued refactoring.
 - CI covers lint, tests, verify, build, and no-dependency wheel smoke.
 
 ## Release Blockers

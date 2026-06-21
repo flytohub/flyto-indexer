@@ -1,5 +1,15 @@
 # Decisions
 
+## 2026-06-21 - Health complexity is severity-weighted
+
+Decision: score the health complexity dimension from high-complexity function
+density, cumulative complexity burden, and top-hotspot severity instead of only
+counting functions above the `score >= 5` threshold.
+
+Reason: Flyto2 release gating must keep pressure on severe god functions and
+dense complexity, while avoiding a misleading fail state where a barely-over
+threshold helper has the same impact as a multi-hundred-line hotspot.
+
 ## 2026-06-21 - Flyto2 product lines are gate-controlled
 
 Decision: keep the Flyto2 five-line product model in a manifest and fail the

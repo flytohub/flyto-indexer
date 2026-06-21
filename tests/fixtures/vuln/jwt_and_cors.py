@@ -3,6 +3,9 @@ import jwt
 from flask import Flask
 from flask_cors import CORS
 
+token = "fixture-token"
+key = "fixture-key"
+
 # JWT alg none + verify False
 claims = jwt.decode(token, key, algorithms=['none'])  # JWT_ALG_NONE
 unsafe = jwt.decode(token, verify=False)              # JWT_VERIFY_FALSE
