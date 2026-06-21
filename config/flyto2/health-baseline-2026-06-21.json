@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-06-21T14:30:00Z",
-  "source": "flyto-indexer code_health_score after severity-weighted complexity gate calibration",
+  "generated_at": "2026-06-21T15:30:00Z",
+  "source": "flyto-indexer code_health_score after severity-weighted complexity gate calibration and non-core snapshot closure",
   "repos": {
     "flyto-core": {
       "score": 85,
@@ -56,6 +56,74 @@
       "score": 80,
       "grade": "B",
       "reasons": ["documentation remains weakest, but current score meets B"]
+    },
+    "flyto-admin": {
+      "score": 90,
+      "grade": "A",
+      "reasons": ["complexity: 10/564 high-complexity functions, burden 174, top hotspot 59"]
+    },
+    "flyto-app": {
+      "score": null,
+      "grade": "N/A",
+      "exempt": true,
+      "reasons": ["Deprecated Flutter shell; Dart symbols are not indexed by flyto-indexer health scoring."]
+    },
+    "flyto-blueprint": {
+      "score": 90,
+      "grade": "A",
+      "reasons": ["complexity: 21/87 high-complexity functions, burden 142, top hotspot 15"]
+    },
+    "flyto-data": {
+      "score": 84,
+      "grade": "B",
+      "reasons": ["complexity: 31/264 high-complexity functions, burden 407, top hotspot 61"]
+    },
+    "flyto-design-tokens": {
+      "score": 90,
+      "grade": "A",
+      "reasons": ["complexity: 0/1 high-complexity functions, burden 0, top hotspot 0"]
+    },
+    "flyto-evolution-log": {
+      "score": null,
+      "grade": "N/A",
+      "exempt": true,
+      "reasons": ["Docs/history tooling repo with no indexed runtime symbols; gated by project memory and git hygiene."]
+    },
+    "flyto-i18n": {
+      "score": 76,
+      "grade": "C",
+      "reasons": ["complexity: 45/89 high-complexity functions, burden 537, top hotspot 35"]
+    },
+    "flyto-modules-pro": {
+      "score": 76,
+      "grade": "C",
+      "reasons": ["complexity: 90/175 high-complexity functions, burden 932, top hotspot 46"]
+    },
+    "flyto-plugins-js": {
+      "score": 84,
+      "grade": "B",
+      "reasons": ["complexity: 3/12 high-complexity functions, burden 51, top hotspot 20"]
+    },
+    "flyto-pro": {
+      "score": 87,
+      "grade": "B",
+      "reasons": ["complexity: 1419/7868 high-complexity functions, burden 13170, top hotspot 154"]
+    },
+    "flyto-pro-core": {
+      "score": 93,
+      "grade": "A",
+      "reasons": ["complexity: 121/882 high-complexity functions, burden 1019, top hotspot 30"]
+    },
+    "flyto-vscode": {
+      "score": 75,
+      "grade": "C",
+      "reasons": ["complexity: 29/132 high-complexity functions, burden 560, top hotspot 63"]
+    },
+    "flyto2": {
+      "score": null,
+      "grade": "N/A",
+      "exempt": true,
+      "reasons": ["Deprecated no-code legacy shell; gated by project memory, security policy, and secret scan."]
     }
   }
 }

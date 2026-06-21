@@ -164,3 +164,73 @@ def test_product_gate_blocks_missing_memory_for_active_repo(tmp_path):
 
     assert result["ok"] is False
     assert any(item["code"] == "memory_incomplete" and item["repo"] == "flyto-cloud" for item in result["blockers"])
+
+
+def test_product_gate_allows_non_core_health_exemption(tmp_path):
+    _repo(tmp_path, "flyto-core")
+    _repo(tmp_path, "flyto-cloud")
+    manifest = tmp_path / "manifest.json"
+    health = tmp_path / "health.json"
+    _manifest(manifest)
+    health.write_text(
+        json.dumps(
+            {
+                "repos": {
+                    "flyto-core": {"grade": "B", "score": 80},
+                    "flyto-cloud": {
+                        "grade": "N/A",
+                        "score": None,
+                        "exempt": True,
+                        "reasons": ["No indexed symbols; docs-only repo."],
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_product_gate(
+        ProductGateOptions(
+            workspace=tmp_path,
+            manifest_path=manifest,
+            health_report_path=health,
+        )
+    )
+
+    assert result["ok"] is True
+    assert not result["warnings"]
+
+
+def test_product_gate_blocks_core_health_exemption(tmp_path):
+    _repo(tmp_path, "flyto-core")
+    _repo(tmp_path, "flyto-cloud")
+    manifest = tmp_path / "manifest.json"
+    health = tmp_path / "health.json"
+    _manifest(manifest)
+    health.write_text(
+        json.dumps(
+            {
+                "repos": {
+                    "flyto-core": {
+                        "grade": "N/A",
+                        "score": None,
+                        "exempt": True,
+                        "reasons": ["Core repos must not be exempt."],
+                    },
+                    "flyto-cloud": {"grade": "B", "score": 82},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_product_gate(
+        ProductGateOptions(
+            workspace=tmp_path,
+            manifest_path=manifest,
+            health_report_path=health,
+        )
+    )
+
+    assert result["ok"] is False
+    assert any(item["code"] == "core_health_exempt" for item in result["blockers"])

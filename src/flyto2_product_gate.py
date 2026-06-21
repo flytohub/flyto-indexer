@@ -75,6 +75,10 @@ def _health_for_repo(health: dict[str, Any], repo_name: str) -> dict[str, Any] |
     return item if isinstance(item, dict) else None
 
 
+def _is_health_exempt(health_item: dict[str, Any] | None) -> bool:
+    return bool(health_item and health_item.get("exempt") is True)
+
+
 def _line_coverage(manifest: dict[str, Any]) -> dict[str, list[str]]:
     lines = {key: [] for key in manifest.get("product_lines", {})}
     for repo_name, spec in manifest.get("repos", {}).items():
@@ -176,6 +180,13 @@ def run_product_gate(options: ProductGateOptions) -> dict[str, Any]:
                         "repo": repo_name,
                         "code": "health_missing",
                         "message": "No health report entry; health target was not evaluated.",
+                    })
+            elif _is_health_exempt(health_item):
+                if spec.get("core"):
+                    blockers.append({
+                        "repo": repo_name,
+                        "code": "core_health_exempt",
+                        "message": "Core repos cannot be exempt from health release gating.",
                     })
             elif not _grade_meets(str(health_item.get("grade", "")), target_grade):
                 severity = "P1" if spec.get("core") else "P2"

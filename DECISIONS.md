@@ -10,6 +10,16 @@ Reason: Flyto2 release gating must keep pressure on severe god functions and
 dense complexity, while avoiding a misleading fail state where a barely-over
 threshold helper has the same impact as a multi-hundred-line hotspot.
 
+## 2026-06-21 - Non-core health exemptions must be explicit
+
+Decision: allow non-core repos to carry an explicit health baseline exemption
+when they have no indexed runtime symbols or use an unsupported analyzer
+language, but block exemptions for core repos.
+
+Reason: docs-only, deprecated, or unsupported-language repos should not create
+permanent missing-health warnings, while core Flyto2 repos must remain covered
+by a real score.
+
 ## 2026-06-21 - Flyto2 product lines are gate-controlled
 
 Decision: keep the Flyto2 five-line product model in a manifest and fail the

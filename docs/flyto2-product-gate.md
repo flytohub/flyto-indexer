@@ -37,6 +37,11 @@ Complexity health is severity-weighted. The baseline records:
 This keeps dense complexity and severe god functions visible without treating a
 barely-over-threshold helper as equivalent to the worst production hotspot.
 
+Non-core repos may be marked with `"exempt": true` in the health baseline when
+the repo has no indexed runtime symbols or the current analyzer does not support
+its implementation language. Core repos cannot be exempt; a core exemption is a
+release blocker.
+
 ## CLI
 
 ```bash

@@ -19,6 +19,8 @@
 - Recalibrated the Flyto2 health baseline for `flyto-ai`, `flyto-core`, and
   `flyto-indexer` using the severity-weighted complexity gate while preserving
   complex-function counts, burden, and top-hotspot evidence in the reasons.
+- Added explicit non-core health exemptions for docs-only, no-symbol, or
+  unsupported-language repos while keeping core repo exemptions blocked.
 
 ### Fixed
 - Dead-code detection now treats VitePress markdown component tags such as
