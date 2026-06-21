@@ -129,7 +129,9 @@ def _is_test_file(rel_path: str) -> bool:
     """Check if a file is a test file."""
     base = os.path.basename(rel_path).lower()
     parts = rel_path.lower().split(os.sep)
-    if any(p in ("tests", "test", "__tests__", "spec", "specs", "fixtures") for p in parts):
+    if any(p in ("tests", "test", "__tests__", "__mocks__", "spec", "specs", "fixtures") for p in parts):
+        return True
+    if any("mock" in p for p in parts):
         return True
     if (base.startswith("test_") or base.endswith("_test.py")
             or base.endswith(".test.ts") or base.endswith(".test.js")
@@ -139,8 +141,22 @@ def _is_test_file(rel_path: str) -> bool:
     return False
 
 
+def _has_skipped_path_part(rel_path: str) -> bool:
+    """Return True when any path segment is generated or dependency-managed."""
+    parts = rel_path.replace("\\", "/").split("/")
+    for part in parts:
+        lower = part.lower()
+        if lower in _SKIP_DIRS:
+            return True
+        if lower.startswith((".venv", "venv")):
+            return True
+    return False
+
+
 def _should_skip_file(fname: str, rel_path: str) -> bool:
     """Check if a file should be skipped."""
+    if _has_skipped_path_part(rel_path):
+        return True
     if fname in _SKIP_FILES:
         return True
     _, ext = os.path.splitext(fname)
@@ -185,6 +201,79 @@ _COMMENT_LOW_SIGNAL_PATTERNS = frozenset({
     "secret",
 })
 
+_GIT_ROOT_CACHE: dict[str, Path | None] = {}
+_GIT_TRACKED_CACHE: dict[str, bool] = {}
+
+
+def _git_root_for(path: Path) -> Path | None:
+    """Return the containing git root for path, with process-level caching."""
+    key = str(path)
+    if key in _GIT_ROOT_CACHE:
+        return _GIT_ROOT_CACHE[key]
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        _GIT_ROOT_CACHE[key] = None
+        return None
+    if result.returncode != 0:
+        _GIT_ROOT_CACHE[key] = None
+        return None
+    root = Path(result.stdout.strip()).resolve()
+    _GIT_ROOT_CACHE[key] = root
+    return root
+
+
+def _is_tracked_by_git(file_path: Path) -> bool:
+    """Return True if file_path is tracked by its nearest git repository."""
+    root = _git_root_for(file_path.parent.resolve())
+    if not root:
+        return False
+    try:
+        rel_path = file_path.resolve().relative_to(root).as_posix()
+    except ValueError:
+        return False
+    cache_key = f"{root}:{rel_path}"
+    if cache_key in _GIT_TRACKED_CACHE:
+        return _GIT_TRACKED_CACHE[cache_key]
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "--error-unmatch", "--", rel_path],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        _GIT_TRACKED_CACHE[cache_key] = False
+        return False
+    tracked = result.returncode == 0
+    _GIT_TRACKED_CACHE[cache_key] = tracked
+    return tracked
+
+
+def _is_untracked_env_file(file_path: Path, fname: str) -> bool:
+    """Skip local env files unless they are checked into git."""
+    if fname != ".env" and not fname.startswith(".env."):
+        return False
+    return not _is_tracked_by_git(file_path)
+
+
+def _is_public_firebase_client_config(pattern_name: str, rel_path: str, line: str) -> bool:
+    """Skip public Firebase client identifiers that are not server secrets."""
+    if pattern_name not in {"gcp_api_key", "google_api", "firebase_key", "generic_api_key"}:
+        return False
+    normalized = rel_path.replace("\\", "/").lower()
+    basename = normalized.rsplit("/", 1)[-1]
+    if basename in {"google-services.json", "googleservice-info.plist", "firebase_options.dart"}:
+        return True
+    if normalized.endswith("lib/firebase.ts") and "apikey" in line.lower():
+        return True
+    return False
+
 
 def _mask_value(match_text: str) -> str:
     """Mask a secret value, showing first 4 chars."""
@@ -196,15 +285,34 @@ def _mask_value(match_text: str) -> str:
 def _is_scanner_rule_definition(rel_path: str, line: str) -> bool:
     """Skip regex/rule definitions that describe secrets rather than contain them."""
     normalized = rel_path.replace("\\", "/")
+    basename = normalized.rsplit("/", 1)[-1]
     if normalized.startswith("config/rules/"):
         return True
-    if normalized in {".gitleaks.toml", ".secrets.baseline"}:
+    if basename in {".gitleaks.toml", ".secrets.baseline"}:
         return True
     if normalized.endswith(("secret_scanner.py", "analyzer/security.py", "rule_loader.py")):
         lower = line.lower()
         if "re.compile" in lower or "re.search" in lower or "pattern" in lower:
             return True
     return False
+
+
+def _is_secret_pattern_description(pattern_name: str, line: str) -> bool:
+    """Skip prose that names a detector pattern without embedding a credential."""
+    if pattern_name != "private_key":
+        return False
+    lower = line.lower()
+    if "-----begin" not in lower or "private key-----" not in lower:
+        return False
+    return any(marker in lower for marker in (
+        "_value_patterns",
+        "pattern",
+        "regex",
+        "redact",
+        "scanner",
+        "detect",
+        "misses",
+    ))
 
 
 _TEMPLATE_SECRET_REFERENCE = re.compile(
@@ -257,6 +365,7 @@ def _is_secret_shaped_metadata_literal(pattern_name: str, line: str) -> bool:
         "password_input", "form.password", "v-model", "formdata",
         "/auth", "/login", "/password", "/reset",
         "bg-", "text-", "border-", "ring-",
+        "hardcoded_secret", "move secrets to", "vulnerabilitytype.",
     )):
         return True
 
@@ -327,6 +436,8 @@ def scan_secrets(project_path: str | Path) -> SecretScanResult:
 
             if _should_skip_file(fname, rel_path):
                 continue
+            if _is_untracked_env_file(file_path, fname):
+                continue
             if rel_path in git_ignored_paths:
                 continue
 
@@ -380,10 +491,16 @@ def scan_secrets(project_path: str | Path) -> SecretScanResult:
                         if _is_scanner_rule_definition(rel_path, line):
                             continue
 
+                        if _is_secret_pattern_description(pattern_name, line):
+                            continue
+
                         if re.search(r"\$\{[A-Z0-9_]*(?:SECRET|TOKEN|KEY)[A-Z0-9_]*:-\}", line):
                             continue
 
                         if _is_secret_shaped_metadata_literal(pattern_name, line):
+                            continue
+
+                        if _is_public_firebase_client_config(pattern_name, rel_path, line):
                             continue
 
                         # Skip Dockerfile/CI example connection strings
