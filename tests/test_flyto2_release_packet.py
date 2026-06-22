@@ -1,12 +1,16 @@
 import json
 from pathlib import Path
 import sys
+from datetime import datetime, timezone
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.flyto2_release_packet import (
     ReleasePacketOptions,
     format_release_packet,
+    parse_run_start,
     run_release_packet,
 )
 
@@ -163,6 +167,33 @@ def _all_required_evidence(root: Path) -> None:
         _touch(root, evidence_path)
 
 
+def _all_fresh_evidence(root: Path, *, generated_at: str = "2026-06-22T01:00:00+00:00") -> Path:
+    evidence_dir = root / "reports" / "fresh"
+    for evidence_path in [
+        "workspace-matrix.json",
+        "workspace-matrix.md",
+        "architecture-map.md",
+        "billing-entitlement.md",
+        "rbac-tenant-isolation.md",
+        "state-machine.md",
+        "enterprise-airgap.md",
+        "geo-ai-crawler.md",
+        "i18n.md",
+        "security-performance.md",
+        "browser-smoke.json",
+        "browser-smoke.md",
+        "release-packet.json",
+        "release-packet.md",
+    ]:
+        file_path = evidence_dir / evidence_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        if file_path.suffix == ".json":
+            file_path.write_text(json.dumps({"generated_at": generated_at}), encoding="utf-8")
+        else:
+            file_path.write_text("fresh evidence\n", encoding="utf-8")
+    return evidence_dir
+
+
 def test_release_packet_passes_when_gate_and_evidence_are_complete(tmp_path):
     _repo(tmp_path, "flyto-core")
     _repo(tmp_path, "flyto-ai")
@@ -185,6 +216,62 @@ def test_release_packet_passes_when_gate_and_evidence_are_complete(tmp_path):
     assert result["p0_blockers"] == []
     assert result["p1_before_production"] == []
     assert "workspace_inventory" in {item["id"] for item in result["deliverables"]}
+
+
+def test_release_packet_requires_fresh_evidence_when_requested(tmp_path):
+    _repo(tmp_path, "flyto-core")
+    _repo(tmp_path, "flyto-ai")
+    _all_required_evidence(tmp_path)
+    manifest = tmp_path / "manifest.json"
+    health = tmp_path / "health.json"
+    _manifest(manifest)
+    _health(health)
+
+    result = run_release_packet(
+        ReleasePacketOptions(
+            workspace=tmp_path,
+            manifest_path=manifest,
+            health_report_path=health,
+            fresh_evidence_dir=tmp_path / "reports" / "missing",
+            require_fresh=True,
+        )
+    )
+
+    assert result["verdict"] == "READY_FOR_CONTROLLED_BETA"
+    by_id = {item["id"]: item for item in result["deliverables"]}
+    assert by_id["release_readiness_verdict"]["status"] == "pass"
+    assert by_id["workspace_inventory"]["status"] == "needs_fresh_evidence"
+    assert result["p1_before_production"]
+
+
+def test_release_packet_accepts_fresh_evidence_after_run_start(tmp_path):
+    _repo(tmp_path, "flyto-core")
+    _repo(tmp_path, "flyto-ai")
+    _all_required_evidence(tmp_path)
+    evidence_dir = _all_fresh_evidence(tmp_path)
+    manifest = tmp_path / "manifest.json"
+    health = tmp_path / "health.json"
+    _manifest(manifest)
+    _health(health)
+
+    result = run_release_packet(
+        ReleasePacketOptions(
+            workspace=tmp_path,
+            manifest_path=manifest,
+            health_report_path=health,
+            fresh_evidence_dir=evidence_dir,
+            require_fresh=True,
+            run_start=datetime(2026, 6, 22, 0, 0, tzinfo=timezone.utc),
+        )
+    )
+
+    assert result["verdict"] == "READY_FOR_CONTROLLED_PRODUCTION"
+    assert result["p1_before_production"] == []
+
+
+def test_parse_run_start_rejects_invalid_timestamp():
+    with pytest.raises(ValueError):
+        parse_run_start("not-a-timestamp")
 
 
 def test_release_packet_marks_missing_required_evidence_as_p1(tmp_path):

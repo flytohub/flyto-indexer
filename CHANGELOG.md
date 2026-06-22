@@ -11,6 +11,8 @@
   overwriting existing repo notes.
 - Added `flyto2-release-packet` to generate an evidence-backed Flyto2 workspace
   inventory, deliverable matrix, residual blocker list, and readiness verdict.
+- Added fresh evidence enforcement to `flyto2-release-packet` through
+  `--fresh-evidence-dir`, `--require-fresh`, and `--run-start`.
 - Added the Flyto2 product-line manifest and 2026-06-21 health baseline used by
   the new gate.
 

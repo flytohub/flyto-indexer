@@ -351,6 +351,9 @@ def main():
     release_packet_parser.add_argument("--health-report", help="Health report JSON keyed by repo name")
     release_packet_parser.add_argument("--skip-health", action="store_true", help="Skip health baseline gating")
     release_packet_parser.add_argument("--relaxed-memory", action="store_true", help="Report missing memory files as warnings instead of blockers")
+    release_packet_parser.add_argument("--fresh-evidence-dir", help="Directory containing fresh run artifacts for release deliverables")
+    release_packet_parser.add_argument("--require-fresh", action="store_true", help="Require fresh run artifacts for every release deliverable")
+    release_packet_parser.add_argument("--run-start", help="ISO timestamp; fresh evidence must be generated at or after this time")
     release_packet_parser.add_argument("--report", help="Write a report artifact to this path")
     release_packet_parser.add_argument("--report-format", choices=["json", "markdown"], default="json", help="Report artifact format")
     release_packet_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
@@ -1140,6 +1143,9 @@ def cmd_tools(args):
                 {"name": "--health-report", "type": "string", "required": False, "description": "Health report JSON keyed by repo name"},
                 {"name": "--skip-health", "type": "boolean", "required": False, "default": False, "description": "Skip health baseline gating"},
                 {"name": "--relaxed-memory", "type": "boolean", "required": False, "default": False, "description": "Report missing memory files as warnings"},
+                {"name": "--fresh-evidence-dir", "type": "string", "required": False, "description": "Directory containing fresh run artifacts"},
+                {"name": "--require-fresh", "type": "boolean", "required": False, "default": False, "description": "Require fresh run artifacts for every deliverable"},
+                {"name": "--run-start", "type": "string", "required": False, "description": "ISO timestamp; evidence must be at or after this time"},
                 {"name": "--report", "type": "string", "required": False, "description": "Write report artifact to this path"},
                 {"name": "--report-format", "type": "string", "required": False, "default": "json", "description": "Report format: json or markdown"},
                 {"name": "--json", "type": "boolean", "required": False, "default": False, "description": "Output as JSON"},
@@ -1149,6 +1155,7 @@ def cmd_tools(args):
             "examples": [
                 "flyto-index flyto2-release-packet /Users/chester/flytohub --health-report config/flyto2/health-baseline-2026-06-21.json",
                 "flyto-index flyto2-release-packet . --report reports/flyto2-release-packet.md --report-format markdown",
+                "flyto-index flyto2-release-packet /Users/chester/flytohub --fresh-evidence-dir reports/flyto2-9h-2026-06-22 --require-fresh --run-start 2026-06-22T00:00:00+08:00",
             ],
             "exit_codes": {"0": "success or controlled beta residuals", "2": "blocked for production"},
         },
@@ -2441,11 +2448,13 @@ def cmd_flyto2_release_packet(args):
         DEFAULT_MANIFEST,
         ReleasePacketOptions,
         format_release_packet,
+        parse_run_start,
         run_release_packet,
     )
 
     manifest = Path(args.manifest).resolve() if args.manifest else DEFAULT_MANIFEST
     health_report = Path(args.health_report).resolve() if args.health_report else None
+    fresh_evidence_dir = Path(args.fresh_evidence_dir).resolve() if args.fresh_evidence_dir else None
     result = run_release_packet(
         ReleasePacketOptions(
             workspace=Path(args.path).resolve(),
@@ -2453,6 +2462,9 @@ def cmd_flyto2_release_packet(args):
             health_report_path=health_report,
             skip_health=args.skip_health,
             strict_memory=not args.relaxed_memory,
+            fresh_evidence_dir=fresh_evidence_dir,
+            require_fresh=args.require_fresh,
+            run_start=parse_run_start(args.run_start),
         )
     )
     if args.report:

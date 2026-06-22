@@ -8,9 +8,9 @@ turning audit intent into a false release claim.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
 from pathlib import Path
-import re
 import subprocess
 from typing import Any
 
@@ -30,6 +30,9 @@ class ReleasePacketOptions:
     health_report_path: Path | None = None
     skip_health: bool = False
     strict_memory: bool = True
+    fresh_evidence_dir: Path | None = None
+    require_fresh: bool = False
+    run_start: datetime | None = None
 
 
 def _run_git(repo: Path, *args: str) -> str:
@@ -183,6 +186,85 @@ def _evidence(paths: list[str], workspace: Path) -> list[dict[str, Any]]:
     return [{"path": path, "exists": _path_exists(workspace, path)} for path in paths]
 
 
+def _parse_iso_datetime(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def parse_run_start(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    parsed = _parse_iso_datetime(value)
+    if parsed is None:
+        raise ValueError(f"invalid ISO timestamp for run start: {value}")
+    return parsed
+
+
+def _file_mtime(path: Path) -> datetime | None:
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+    except OSError:
+        return None
+
+
+def _metadata_timestamp(path: Path) -> datetime | None:
+    if path.suffix.lower() != ".json":
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    for key in ("run_started_at", "generated_at", "created_at", "completed_at"):
+        value = data.get(key)
+        if isinstance(value, str):
+            parsed = _parse_iso_datetime(value)
+            if parsed:
+                return parsed
+    return None
+
+
+def _fresh_evidence(paths: list[str], evidence_dir: Path | None, run_start: datetime | None) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    for relative in paths:
+        if evidence_dir is None:
+            results.append({
+                "path": relative,
+                "exists": False,
+                "fresh": False,
+                "reason": "fresh evidence directory was not provided",
+            })
+            continue
+        path = evidence_dir / relative
+        exists = path.exists()
+        timestamp = _metadata_timestamp(path) if exists else None
+        timestamp_source = "metadata"
+        if timestamp is None and exists:
+            timestamp = _file_mtime(path)
+            timestamp_source = "mtime"
+        fresh = bool(exists and (run_start is None or (timestamp is not None and timestamp >= run_start)))
+        reason = ""
+        if not exists:
+            reason = "missing"
+        elif run_start is not None and not fresh:
+            reason = "stale"
+        results.append({
+            "path": relative,
+            "exists": exists,
+            "fresh": fresh,
+            "timestamp": timestamp.isoformat() if timestamp else "",
+            "timestamp_source": timestamp_source if timestamp else "",
+            "reason": reason,
+        })
+    return results
+
+
 def _deliverable_specs() -> list[dict[str, Any]]:
     return [
         {
@@ -191,6 +273,7 @@ def _deliverable_specs() -> list[dict[str, Any]]:
             "severity": "P1",
             "required": [],
             "packet_generated": True,
+            "fresh": ["workspace-matrix.json", "workspace-matrix.md"],
         },
         {
             "id": "architecture_dependency_map",
@@ -204,6 +287,7 @@ def _deliverable_specs() -> list[dict[str, Any]]:
                 "flyto-indexer/docs/architecture-map.md",
                 "flyto-ai/docs/architecture-map.md",
             ],
+            "fresh": ["architecture-map.md"],
         },
         {
             "id": "billing_entitlement_audit",
@@ -215,6 +299,7 @@ def _deliverable_specs() -> list[dict[str, Any]]:
                 "flyto-engine/api/handlers_capabilities_rbac_test.go",
                 "flyto-engine/internal/billing/billing_test.go",
             ],
+            "fresh": ["billing-entitlement.md"],
         },
         {
             "id": "rbac_tenant_isolation_audit",
@@ -225,6 +310,7 @@ def _deliverable_specs() -> list[dict[str, Any]]:
                 "flyto-engine/internal/store/rbac_cross_org_resolver_test.go",
                 "flyto-engine/internal/store/sql_code_entitlement_guard_test.go",
             ],
+            "fresh": ["rbac-tenant-isolation.md"],
         },
         {
             "id": "product_state_machine_audit",
@@ -235,6 +321,7 @@ def _deliverable_specs() -> list[dict[str, Any]]:
                 "flyto-code/src-next/components/atoms/__tests__/GatedButton.test.tsx",
                 "flyto-code/scripts/audit-data-readiness-boundaries.mjs",
             ],
+            "fresh": ["state-machine.md"],
         },
         {
             "id": "enterprise_airgap_open_core_audit",
@@ -246,6 +333,7 @@ def _deliverable_specs() -> list[dict[str, Any]]:
                 "flyto-code/docs/open-core/airgap-update-security.md",
                 "flyto-engine/connectors/profiles/airgap.json",
             ],
+            "fresh": ["enterprise-airgap.md"],
         },
         {
             "id": "geo_aeo_seo_ai_crawler_audit",
@@ -257,6 +345,7 @@ def _deliverable_specs() -> list[dict[str, Any]]:
                 "flyto-landing-page/public/llms.txt",
                 "flyto-landing-page/public/llms-full.txt",
             ],
+            "fresh": ["geo-ai-crawler.md"],
         },
         {
             "id": "i18n_multilingual_audit",
@@ -269,6 +358,7 @@ def _deliverable_specs() -> list[dict[str, Any]]:
                 "flyto-cloud/scripts/check-i18n.py",
                 "flyto-landing-page/.github/workflows/i18n-drift.yml",
             ],
+            "fresh": ["i18n.md"],
         },
         {
             "id": "security_performance_cicd_audit",
@@ -280,6 +370,7 @@ def _deliverable_specs() -> list[dict[str, Any]]:
                 "flyto-engine/.github/workflows/ci.yml",
                 "flyto-landing-page/.github/workflows/ci.yml",
             ],
+            "fresh": ["security-performance.md"],
         },
         {
             "id": "e2e_browser_smoke_matrix",
@@ -290,6 +381,7 @@ def _deliverable_specs() -> list[dict[str, Any]]:
                 "flyto-core/src/recipes/flyto2-ui-smoke.yaml",
                 "_audits/flyto2-ui-smoke-2026-06-18.json",
             ],
+            "fresh": ["browser-smoke.json", "browser-smoke.md"],
         },
         {
             "id": "release_readiness_verdict",
@@ -297,11 +389,16 @@ def _deliverable_specs() -> list[dict[str, Any]]:
             "severity": "P0",
             "required": [],
             "product_gate_required": True,
+            "fresh": [],
         },
     ]
 
 
-def _audit_deliverables(workspace: Path, product_gate: dict[str, Any]) -> list[dict[str, Any]]:
+def _audit_deliverables(
+    workspace: Path,
+    product_gate: dict[str, Any],
+    options: ReleasePacketOptions,
+) -> list[dict[str, Any]]:
     deliverables: list[dict[str, Any]] = []
     for spec in _deliverable_specs():
         required = list(spec.get("required", []))
@@ -315,6 +412,14 @@ def _audit_deliverables(workspace: Path, product_gate: dict[str, Any]) -> list[d
             missing = []
         else:
             status = "pass" if not missing else "needs_evidence"
+        fresh = _fresh_evidence(
+            list(spec.get("fresh", [])),
+            options.fresh_evidence_dir.resolve() if options.fresh_evidence_dir else None,
+            options.run_start,
+        )
+        stale_or_missing_fresh = [item["path"] for item in fresh if not item["fresh"]]
+        if status == "pass" and options.require_fresh and stale_or_missing_fresh:
+            status = "needs_fresh_evidence"
         deliverables.append({
             "id": spec["id"],
             "title": spec["title"],
@@ -322,6 +427,8 @@ def _audit_deliverables(workspace: Path, product_gate: dict[str, Any]) -> list[d
             "status": status,
             "evidence": evidence,
             "missing_evidence": missing,
+            "fresh_evidence": fresh,
+            "missing_fresh_evidence": stale_or_missing_fresh,
         })
     return deliverables
 
@@ -336,6 +443,7 @@ def _residuals(deliverables: list[dict[str, Any]], product_gate: dict[str, Any],
                 "status": item["status"],
                 "message": f"{item['title']} lacks required evidence.",
                 "missing_evidence": item["missing_evidence"],
+                "missing_fresh_evidence": item.get("missing_fresh_evidence", []),
             })
     for blocker in product_gate.get("blockers", []):
         residuals.append({
@@ -386,7 +494,7 @@ def run_release_packet(options: ReleasePacketOptions) -> dict[str, Any]:
             continue
         inventory[repo_name] = _repo_inventory(repo_name, repo_path, gate_repo)
 
-    deliverables = _audit_deliverables(workspace, product_gate)
+    deliverables = _audit_deliverables(workspace, product_gate, options)
     residuals = _residuals(deliverables, product_gate, inventory)
     p0 = [item for item in residuals if item.get("severity") == "P0"]
     p1 = [item for item in residuals if item.get("severity") == "P1"]
@@ -402,6 +510,9 @@ def run_release_packet(options: ReleasePacketOptions) -> dict[str, Any]:
         "workspace": str(workspace),
         "repo_count": len(inventory),
         "manifest_repo_count": len(manifest.get("repos", {})),
+        "fresh_evidence_dir": str(options.fresh_evidence_dir.resolve()) if options.fresh_evidence_dir else "",
+        "require_fresh": options.require_fresh,
+        "run_start": options.run_start.isoformat() if options.run_start else "",
         "product_gate_verdict": product_gate.get("verdict"),
         "verdict": verdict,
         "product_lines": manifest.get("product_lines", {}),
@@ -445,6 +556,8 @@ def format_release_packet(result: dict[str, Any]) -> str:
         lines.append(f"- {item['id']}: {item['status']} ({item['severity']})")
         if item["missing_evidence"]:
             lines.append(f"  missing: {', '.join(item['missing_evidence'])}")
+        if item.get("missing_fresh_evidence"):
+            lines.append(f"  missing fresh: {', '.join(item['missing_fresh_evidence'])}")
 
     lines.extend(["", "## P0 blockers"])
     if result["p0_blockers"]:

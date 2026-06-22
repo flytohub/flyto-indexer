@@ -11,6 +11,17 @@ Reason: the Flyto2 workspace goal requires many artifacts beyond a green build.
 The release packet keeps those artifacts machine-checkable and prevents agents
 from claiming readiness when a required audit or smoke evidence file is missing.
 
+## 2026-06-22 - Fresh evidence is separate from source evidence
+
+Decision: `flyto2-release-packet` distinguishes source evidence from fresh run
+evidence. Source evidence proves a guard/test/doc exists; `--require-fresh`
+requires this run's artifacts to exist and be generated at or after
+`--run-start`.
+
+Reason: long Flyto2 convergence work must not reuse stale smoke screenshots,
+old audit JSON, or previously generated release packets as proof that the
+current nine-hour validation actually ran.
+
 ## 2026-06-21 - Health complexity is severity-weighted
 
 Decision: score the health complexity dimension from high-complexity function

@@ -11,7 +11,8 @@
   continued refactoring.
 - `flyto2-release-packet` now aggregates product gate output, git inventory,
   health baseline evidence, required release deliverables, and residual P0/P1
-  evidence gaps for the Flyto2 workspace.
+  evidence gaps for the Flyto2 workspace. It can also require fresh run
+  artifacts with `--fresh-evidence-dir`, `--require-fresh`, and `--run-start`.
 - CI covers lint, tests, verify, build, and no-dependency wheel smoke.
 
 ## Release Blockers
@@ -32,3 +33,4 @@
 | Verify | `flyto-index verify . --full-scan --strict --json` | Self-verification |
 | Build | `python -m build` | Package integrity |
 | Flyto2 release packet | `python -m src.cli flyto2-release-packet /Users/chester/flytohub --health-report config/flyto2/health-baseline-2026-06-21.json --json` | Workspace inventory, deliverables, blockers, readiness verdict |
+| Flyto2 fresh packet | `python -m src.cli flyto2-release-packet /Users/chester/flytohub --health-report config/flyto2/health-baseline-2026-06-21.json --fresh-evidence-dir reports/flyto2-9h-2026-06-22 --require-fresh --run-start <iso8601> --json` | Nine-hour fresh evidence gate |
