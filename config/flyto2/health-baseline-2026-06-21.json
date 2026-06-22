@@ -95,9 +95,9 @@
       "reasons": ["2026-06-22 reverse audit: sync/add-locale tooling refactored; complexity 40/92 high-complexity functions, burden 424, top hotspot 21"]
     },
     "flyto-modules-pro": {
-      "score": 76,
-      "grade": "C",
-      "reasons": ["complexity: 90/175 high-complexity functions, burden 932, top hotspot 46"]
+      "score": 80,
+      "grade": "B",
+      "reasons": ["2026-06-22 reverse audit: enterprise LDAP, SAML metadata, Azure OCR, and map-reduce reducers refactored with guard tests; complexity 88/196 high-complexity functions, burden 829, top hotspot 22"]
     },
     "flyto-plugins-js": {
       "score": 84,

@@ -13,6 +13,8 @@
   2026-06-22 reverse audit reduced its tooling complexity burden.
 - The same baseline now records `flyto-vscode` at B after the reverse audit
   reduced webview payload complexity and improved getter documentation.
+- The same baseline now records `flyto-modules-pro` at B after the reverse
+  audit reduced enterprise/auth, OCR, and reducer complexity with guard tests.
 - `flyto2-release-packet` now aggregates product gate output, git inventory,
   health baseline evidence, required release deliverables, and residual P0/P1
   evidence gaps for the Flyto2 workspace. It can also require fresh run
