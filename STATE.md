@@ -9,6 +9,8 @@
 - Flyto2 core health gating now uses severity-weighted complexity scoring; the
   2026-06-21 baseline records count, burden, and top-hotspot evidence for
   continued refactoring.
+- The 2026-06-21 health baseline now records `flyto-i18n` at B after the
+  2026-06-22 reverse audit reduced its tooling complexity burden.
 - `flyto2-release-packet` now aggregates product gate output, git inventory,
   health baseline evidence, required release deliverables, and residual P0/P1
   evidence gaps for the Flyto2 workspace. It can also require fresh run

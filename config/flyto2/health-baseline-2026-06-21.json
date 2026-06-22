@@ -90,9 +90,9 @@
       "reasons": ["Docs/history tooling repo with no indexed runtime symbols; gated by project memory and git hygiene."]
     },
     "flyto-i18n": {
-      "score": 76,
-      "grade": "C",
-      "reasons": ["complexity: 45/89 high-complexity functions, burden 537, top hotspot 35"]
+      "score": 80,
+      "grade": "B",
+      "reasons": ["2026-06-22 reverse audit: sync/add-locale tooling refactored; complexity 40/92 high-complexity functions, burden 424, top hotspot 21"]
     },
     "flyto-modules-pro": {
       "score": 76,

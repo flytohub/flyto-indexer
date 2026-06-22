@@ -23,6 +23,9 @@
 - Recalibrated the Flyto2 health baseline for `flyto-ai`, `flyto-core`, and
   `flyto-indexer` using the severity-weighted complexity gate while preserving
   complex-function counts, burden, and top-hotspot evidence in the reasons.
+- Lifted the Flyto2 health baseline for `flyto-i18n` from C to B after the
+  2026-06-22 reverse audit refactored sync/add-locale tooling and rebuilt the
+  index.
 - Added explicit non-core health exemptions for docs-only, no-symbol, or
   unsupported-language repos while keeping core repo exemptions blocked.
 
