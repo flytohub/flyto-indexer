@@ -247,15 +247,83 @@ def _metadata_timestamp(path: Path) -> datetime | None:
     return None
 
 
-def _fresh_evidence(paths: list[str], evidence_dir: Path | None, run_start: datetime | None) -> list[dict[str, Any]]:
+def _validate_product_verification_contract(path: Path) -> tuple[bool, list[str]]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, [f"invalid JSON: {exc}"]
+    if not isinstance(data, dict):
+        return False, ["root must be an object"]
+
+    errors: list[str] = []
+    if data.get("contract") != "warroom.product_verification.v1":
+        errors.append("contract must be warroom.product_verification.v1")
+
+    site_graph = data.get("site_graph")
+    if not isinstance(site_graph, dict):
+        errors.append("site_graph must be an object")
+        site_graph = {}
+    intents = site_graph.get("intents")
+    if not isinstance(intents, (list, dict)) or len(intents) == 0:
+        errors.append("site_graph.intents must be non-empty")
+    state_graph = site_graph.get("state_graph")
+    if not isinstance(state_graph, dict) or len(state_graph) == 0:
+        errors.append("site_graph.state_graph must be non-empty")
+
+    scores = data.get("scores")
+    if not isinstance(scores, dict):
+        errors.append("scores must be an object")
+        scores = {}
+    for key in (
+        "observed_coverage",
+        "reachable_coverage",
+        "api_ui_consistency",
+        "business_logic_confidence",
+    ):
+        value = scores.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            errors.append(f"scores.{key} must be numeric")
+
+    p0_findings = data.get("p0_findings")
+    if isinstance(p0_findings, bool) or not isinstance(p0_findings, int) or p0_findings != 0:
+        errors.append("p0_findings must be integer 0")
+
+    return not errors, errors
+
+
+def _fresh_contract_status(relative: str, path: Path, contract: str | None) -> dict[str, Any]:
+    if not contract:
+        return {}
+    if contract == "warroom.product_verification.v1":
+        valid, errors = _validate_product_verification_contract(path)
+        return {
+            "contract": contract,
+            "contract_valid": valid,
+            "contract_errors": errors,
+        }
+    return {
+        "contract": contract,
+        "contract_valid": False,
+        "contract_errors": [f"unknown fresh evidence contract for {relative}: {contract}"],
+    }
+
+
+def _fresh_evidence(
+    paths: list[str],
+    evidence_dir: Path | None,
+    run_start: datetime | None,
+    contracts: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     for relative in paths:
+        contract = (contracts or {}).get(relative)
         if evidence_dir is None:
             results.append({
                 "path": relative,
                 "exists": False,
                 "fresh": False,
                 "reason": "fresh evidence directory was not provided",
+                **({"contract": contract, "contract_valid": False} if contract else {}),
             })
             continue
         path = evidence_dir / relative
@@ -265,10 +333,18 @@ def _fresh_evidence(paths: list[str], evidence_dir: Path | None, run_start: date
         if timestamp is None and exists:
             timestamp = _file_mtime(path)
             timestamp_source = "mtime"
-        fresh = bool(exists and (run_start is None or (timestamp is not None and timestamp >= run_start)))
+        contract_status = _fresh_contract_status(relative, path, contract) if exists else {}
+        contract_valid = contract_status.get("contract_valid", True)
+        fresh = bool(
+            exists
+            and contract_valid
+            and (run_start is None or (timestamp is not None and timestamp >= run_start))
+        )
         reason = ""
         if not exists:
             reason = "missing"
+        elif not contract_valid:
+            reason = "invalid_contract"
         elif run_start is not None and not fresh:
             reason = "stale"
         results.append({
@@ -278,6 +354,7 @@ def _fresh_evidence(paths: list[str], evidence_dir: Path | None, run_start: date
             "timestamp": timestamp.isoformat() if timestamp else "",
             "timestamp_source": timestamp_source if timestamp else "",
             "reason": reason,
+            **contract_status,
         })
     return results
 
@@ -339,6 +416,27 @@ def _deliverable_specs() -> list[dict[str, Any]]:
                 "flyto-code/scripts/audit-data-readiness-boundaries.mjs",
             ],
             "fresh": ["state-machine.md"],
+        },
+        {
+            "id": "deterministic_product_verification",
+            "title": "Deterministic Product Verification gate",
+            "severity": "P1",
+            "required": [
+                "flyto-core/src/recipes/warroom-deterministic-audit.yaml",
+                "flyto-core/tests/modules/test_warroom_modules.py",
+                "flyto-engine/api/handlers_warroom_verification.go",
+                "flyto-engine/api/handlers_workflow_test.go",
+                "flyto-engine/internal/permission/capabilities_commercial_test.go",
+                "flyto-code/src-next/components/compounds/product-verification/ProductVerificationView.tsx",
+                "flyto-code/src-next/lib/engine/code/warroomVerification.ts",
+                "flyto-cloud/src/ui/web/backend/data/recipe_bundles/flyto2-warroom-smoke.yaml",
+                "flyto-cloud/src/ui/web/backend/tests/unit/test_recipe_bundles.py",
+                "flyto-cloud/docs/warroom-recipe-bundle-closure.md",
+            ],
+            "fresh": ["product-verification.json", "product-verification.md"],
+            "fresh_contracts": {
+                "product-verification.json": "warroom.product_verification.v1",
+            },
         },
         {
             "id": "enterprise_airgap_open_core_audit",
@@ -433,6 +531,7 @@ def _audit_deliverables(
             list(spec.get("fresh", [])),
             options.fresh_evidence_dir.resolve() if options.fresh_evidence_dir else None,
             options.run_start,
+            dict(spec.get("fresh_contracts", {})),
         )
         stale_or_missing_fresh = [item["path"] for item in fresh if not item["fresh"]]
         if status == "pass" and options.require_fresh and stale_or_missing_fresh:

@@ -1,5 +1,16 @@
 # Decisions
 
+## 2026-06-23 - Product Verification must be release evidence
+
+Decision: make deterministic Product Verification a first-class release-packet
+deliverable and require fresh `product-verification.json` to satisfy the
+`warroom.product_verification.v1` contract before release confidence can be
+claimed.
+
+Reason: Warroom is not just a UI or a score. It must prove that Flyto2 can
+produce a replayable intent/state graph, coverage and business-logic confidence
+signals, and zero P0 deterministic findings from local evidence.
+
 ## 2026-06-23 - Release readiness is evidence-first, not score-first
 
 Decision: treat Flyto2 health scores as minimum hygiene signals and move the

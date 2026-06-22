@@ -22,6 +22,10 @@
 - Flyto2 release readiness is now evidence-first: health grades are minimum
   hygiene signals, while the final verdict depends on product-line, deployment,
   security, visibility, and operability evidence gates.
+- The release packet now treats deterministic Product Verification as its own
+  evidence gate. Fresh `product-verification.json` must prove the
+  `warroom.product_verification.v1` contract with intent graph, state graph,
+  coverage/confidence scores, and zero P0 findings.
 - CI covers lint, tests, verify, build, and no-dependency wheel smoke.
 
 ## Release Blockers

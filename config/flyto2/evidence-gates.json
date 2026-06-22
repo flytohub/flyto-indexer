@@ -17,8 +17,8 @@
       "category": "product_line",
       "severity": "P1",
       "product_lines": ["cloud_apps_automation"],
-      "deliverables": ["workspace_inventory", "architecture_dependency_map", "product_state_machine_audit", "e2e_browser_smoke_matrix"],
-      "confidence": "No-code automation readiness is supported by workspace inventory, architecture mapping, state-machine guards, and browser smoke evidence."
+      "deliverables": ["workspace_inventory", "architecture_dependency_map", "product_state_machine_audit", "deterministic_product_verification", "e2e_browser_smoke_matrix"],
+      "confidence": "No-code automation readiness is supported by workspace inventory, architecture mapping, state-machine guards, deterministic product verification, and browser smoke evidence."
     },
     {
       "id": "security_product",
@@ -26,8 +26,8 @@
       "category": "product_line",
       "severity": "P1",
       "product_lines": ["security"],
-      "deliverables": ["billing_entitlement_audit", "rbac_tenant_isolation_audit", "product_state_machine_audit", "security_performance_cicd_audit"],
-      "confidence": "Security readiness is supported by entitlement/RBAC, tenant isolation, state-machine, and security/CI evidence."
+      "deliverables": ["billing_entitlement_audit", "rbac_tenant_isolation_audit", "product_state_machine_audit", "deterministic_product_verification", "security_performance_cicd_audit"],
+      "confidence": "Security readiness is supported by entitlement/RBAC, tenant isolation, state-machine, deterministic product verification, and security/CI evidence."
     },
     {
       "id": "data_product_reservation",
@@ -44,8 +44,8 @@
       "category": "product_line",
       "severity": "P1",
       "product_lines": ["zero_person_agent"],
-      "deliverables": ["architecture_dependency_map", "product_state_machine_audit", "e2e_browser_smoke_matrix", "security_performance_cicd_audit"],
-      "confidence": "Agent OS readiness is supported by runtime architecture, state handling, browser smoke, and security/operability evidence."
+      "deliverables": ["architecture_dependency_map", "product_state_machine_audit", "deterministic_product_verification", "e2e_browser_smoke_matrix", "security_performance_cicd_audit"],
+      "confidence": "Agent OS readiness is supported by runtime architecture, state handling, deterministic product verification, browser smoke, and security/operability evidence."
     },
     {
       "id": "big_data_intelligence",
@@ -80,8 +80,8 @@
       "category": "operability",
       "severity": "P0",
       "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"],
-      "deliverables": ["release_readiness_verdict", "workspace_inventory", "security_performance_cicd_audit"],
-      "confidence": "Production release confidence requires a passing product gate, clean inventory, and CI/security evidence."
+      "deliverables": ["release_readiness_verdict", "workspace_inventory", "deterministic_product_verification", "security_performance_cicd_audit"],
+      "confidence": "Production release confidence requires a passing product gate, clean inventory, deterministic product verification, and CI/security evidence."
     }
   ]
 }

@@ -16,6 +16,7 @@ credentials.
   - billing + entitlement audit
   - RBAC / tenant isolation audit
   - product state machine audit
+  - deterministic Product Verification gate
   - enterprise / airgap / open-core audit
   - GEO / AEO / SEO / AI crawler audit
   - i18n / multilingual audit
@@ -44,6 +45,13 @@ python -m src.cli flyto2-release-packet /Users/chester/flytohub \
   --json
 ```
 
+For a local dry-run Product Verification artifact:
+
+```bash
+python scripts/write_product_verification_evidence.py \
+  /Users/chester/flytohub/reports/flyto2-9h-2026-06-22
+```
+
 ## Verdict Semantics
 
 - `BLOCKED_FOR_PRODUCTION`: product gate blocker, dirty repo, remote mismatch, or
@@ -70,6 +78,8 @@ Required fresh artifact names:
 - `billing-entitlement.md`
 - `rbac-tenant-isolation.md`
 - `state-machine.md`
+- `product-verification.json`
+- `product-verification.md`
 - `enterprise-airgap.md`
 - `geo-ai-crawler.md`
 - `i18n.md`
@@ -80,3 +90,16 @@ Required fresh artifact names:
 If `--run-start` is supplied, JSON artifacts can prove freshness through
 `run_started_at`, `generated_at`, `created_at`, or `completed_at`; otherwise
 file modification time is used.
+
+`product-verification.json` has an additional deterministic contract. It must
+declare `contract = "warroom.product_verification.v1"`, include non-empty
+`site_graph.intents` and `site_graph.state_graph`, include numeric coverage and
+confidence scores, and report `p0_findings = 0`. This keeps Product Verification
+from becoming a checkbox: the release packet needs evidence that the
+Flyto2 Warroom loop produced an intent/state graph and no P0 deterministic
+findings for that run.
+
+The helper `scripts/write_product_verification_evidence.py` writes local
+dry-run artifacts for this contract. It is intentionally labeled
+`local_dry_run` and does not prove authenticated staging, payment live-mode, or
+enterprise deployment drills.

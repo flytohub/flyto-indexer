@@ -143,6 +143,16 @@ def _all_required_evidence(root: Path) -> None:
         "flyto-code/src-next/configs/__tests__/navigationFeatureCheck.test.ts",
         "flyto-code/src-next/components/atoms/__tests__/GatedButton.test.tsx",
         "flyto-code/scripts/audit-data-readiness-boundaries.mjs",
+        "flyto-core/src/recipes/warroom-deterministic-audit.yaml",
+        "flyto-core/tests/modules/test_warroom_modules.py",
+        "flyto-engine/api/handlers_warroom_verification.go",
+        "flyto-engine/api/handlers_workflow_test.go",
+        "flyto-engine/internal/permission/capabilities_commercial_test.go",
+        "flyto-code/src-next/components/compounds/product-verification/ProductVerificationView.tsx",
+        "flyto-code/src-next/lib/engine/code/warroomVerification.ts",
+        "flyto-cloud/src/ui/web/backend/data/recipe_bundles/flyto2-warroom-smoke.yaml",
+        "flyto-cloud/src/ui/web/backend/tests/unit/test_recipe_bundles.py",
+        "flyto-cloud/docs/warroom-recipe-bundle-closure.md",
         "flyto-code/scripts/audit-enterprise-airgap.mjs",
         "flyto-code/nginx.enterprise-airgap.conf",
         "flyto-code/docs/open-core/airgap-update-security.md",
@@ -180,6 +190,8 @@ def _all_fresh_evidence(root: Path, *, generated_at: str = "2026-06-22T01:00:00+
         "geo-ai-crawler.md",
         "i18n.md",
         "security-performance.md",
+        "product-verification.json",
+        "product-verification.md",
         "browser-smoke.json",
         "browser-smoke.md",
         "release-packet.json",
@@ -187,7 +199,28 @@ def _all_fresh_evidence(root: Path, *, generated_at: str = "2026-06-22T01:00:00+
     ]:
         file_path = evidence_dir / evidence_path
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        if file_path.suffix == ".json":
+        if evidence_path == "product-verification.json":
+            file_path.write_text(
+                json.dumps(
+                    {
+                        "contract": "warroom.product_verification.v1",
+                        "generated_at": generated_at,
+                        "p0_findings": 0,
+                        "site_graph": {
+                            "intents": [{"id": "create_project", "label": "Create Project"}],
+                            "state_graph": {"states": ["loading", "resolved_data"]},
+                        },
+                        "scores": {
+                            "observed_coverage": 0.91,
+                            "reachable_coverage": 0.82,
+                            "api_ui_consistency": 1.0,
+                            "business_logic_confidence": 0.94,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+        elif file_path.suffix == ".json":
             file_path.write_text(json.dumps({"generated_at": generated_at}), encoding="utf-8")
         else:
             file_path.write_text("fresh evidence\n", encoding="utf-8")
@@ -272,6 +305,54 @@ def test_release_packet_accepts_fresh_evidence_after_run_start(tmp_path):
 
     assert result["verdict"] == "READY_FOR_CONTROLLED_PRODUCTION"
     assert result["p1_before_production"] == []
+    by_id = {item["id"]: item for item in result["deliverables"]}
+    product_fresh = {
+        item["path"]: item for item in by_id["deterministic_product_verification"]["fresh_evidence"]
+    }
+    assert product_fresh["product-verification.json"]["contract_valid"] is True
+
+
+def test_release_packet_rejects_invalid_product_verification_contract(tmp_path):
+    _repo(tmp_path, "flyto-core")
+    _repo(tmp_path, "flyto-ai")
+    _all_required_evidence(tmp_path)
+    evidence_dir = _all_fresh_evidence(tmp_path)
+    (evidence_dir / "product-verification.json").write_text(
+        json.dumps(
+            {
+                "contract": "warroom.product_verification.v1",
+                "generated_at": "2026-06-22T01:00:00+00:00",
+                "p0_findings": 1,
+                "site_graph": {"intents": [], "state_graph": {}},
+                "scores": {"observed_coverage": 1.0},
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "manifest.json"
+    health = tmp_path / "health.json"
+    _manifest(manifest)
+    _health(health)
+
+    result = run_release_packet(
+        ReleasePacketOptions(
+            workspace=tmp_path,
+            manifest_path=manifest,
+            health_report_path=health,
+            fresh_evidence_dir=evidence_dir,
+            require_fresh=True,
+            run_start=datetime(2026, 6, 22, 0, 0, tzinfo=timezone.utc),
+        )
+    )
+
+    assert result["verdict"] == "BLOCKED_FOR_PRODUCTION"
+    by_id = {item["id"]: item for item in result["deliverables"]}
+    product_verification = by_id["deterministic_product_verification"]
+    assert product_verification["status"] == "needs_fresh_evidence"
+    product_fresh = {item["path"]: item for item in product_verification["fresh_evidence"]}
+    assert product_fresh["product-verification.json"]["reason"] == "invalid_contract"
+    assert product_fresh["product-verification.json"]["contract_valid"] is False
+    assert "p0_findings must be integer 0" in product_fresh["product-verification.json"]["contract_errors"]
 
 
 def test_parse_run_start_rejects_invalid_timestamp():

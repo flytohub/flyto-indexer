@@ -18,6 +18,11 @@
 - Added the Flyto2 evidence gate manifest and `--evidence-gates` release-packet
   option so product readiness is judged by product-line, deployment, security,
   visibility, and operability proof instead of health score alone.
+- Added the `deterministic_product_verification` release-packet deliverable and
+  `warroom.product_verification.v1` fresh evidence contract for Product
+  Verification / Warroom runs.
+- Added `scripts/write_product_verification_evidence.py` for local dry-run
+  Product Verification release artifacts.
 
 ### Changed
 - Updated `code_health_score` complexity scoring to combine high-complexity
@@ -41,6 +46,9 @@
   evidence now blocks production readiness even when all repo scores are high,
   and non-core score regressions are warnings unless product evidence depends on
   that repo.
+- Extended Flyto2 product-line and release-operation gates so Cloud/Apps,
+  Security, Zero-person Agent, and release operations depend on deterministic
+  Product Verification evidence.
 
 ### Fixed
 - Dead-code detection now treats VitePress markdown component tags such as
