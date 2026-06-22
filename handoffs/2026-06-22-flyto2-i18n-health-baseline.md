@@ -1,11 +1,11 @@
-# Flyto2 i18n Health Baseline Lift
+# Flyto2 Non-core Health Baseline Lift
 
 Date: 2026-06-22 Asia/Taipei
 
 ## Context
 
-The reverse convergence loop found `flyto-i18n` still listed as C in the
-Flyto2 health baseline even after a fresh local refactor and full index rebuild.
+The reverse convergence loop found non-core repos still listed as C in the
+Flyto2 health baseline after fresh local refactors and full index rebuilds.
 
 ## Change
 
@@ -13,6 +13,9 @@ Flyto2 health baseline even after a fresh local refactor and full index rebuild.
   from `76/C` to `80/B`.
 - The new reason cites the fresh audit evidence:
   `40/92 high-complexity functions`, burden `424`, top hotspot `21`.
+- Updated `flyto-vscode` from `75/C` to `80/B`.
+- The new reason cites the fresh audit evidence:
+  `22/135 high-complexity functions`, burden `325`, top hotspot `54`.
 - No other repo baseline entry was changed.
 
 ## Verification
@@ -20,10 +23,13 @@ Flyto2 health baseline even after a fresh local refactor and full index rebuild.
 ```text
 /opt/homebrew/bin/python3.11 -m src.cli scan /Users/chester/flytohub/flyto-i18n --full
 MCP flyto-indexer audit(project="flyto-i18n", focus="complexity")
+/opt/homebrew/bin/python3.11 -m src.cli scan /Users/chester/flytohub/flyto-vscode --full
+MCP flyto-indexer audit(project="flyto-vscode", focus="all")
 ```
 
 The corresponding source/tooling change lives in the `flyto-i18n` handoff:
 
 ```text
 handoffs/2026-06-22-sync-tooling-complexity-guard.md
+handoffs/2026-06-22-chat-styles-complexity-guard.md
 ```

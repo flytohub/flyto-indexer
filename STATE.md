@@ -11,6 +11,8 @@
   continued refactoring.
 - The 2026-06-21 health baseline now records `flyto-i18n` at B after the
   2026-06-22 reverse audit reduced its tooling complexity burden.
+- The same baseline now records `flyto-vscode` at B after the reverse audit
+  reduced webview payload complexity and improved getter documentation.
 - `flyto2-release-packet` now aggregates product gate output, git inventory,
   health baseline evidence, required release deliverables, and residual P0/P1
   evidence gaps for the Flyto2 workspace. It can also require fresh run

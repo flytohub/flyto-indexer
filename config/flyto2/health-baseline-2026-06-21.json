@@ -115,9 +115,9 @@
       "reasons": ["complexity: 121/882 high-complexity functions, burden 1019, top hotspot 30"]
     },
     "flyto-vscode": {
-      "score": 75,
-      "grade": "C",
-      "reasons": ["complexity: 29/132 high-complexity functions, burden 560, top hotspot 63"]
+      "score": 80,
+      "grade": "B",
+      "reasons": ["2026-06-22 reverse audit: webview payload getters refactored and documented; complexity 22/135 high-complexity functions, burden 325, top hotspot 54"]
     },
     "flyto2": {
       "score": null,
