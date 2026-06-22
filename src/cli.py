@@ -336,6 +336,25 @@ def main():
     flyto2_parser.add_argument("--relaxed-memory", action="store_true", help="Report missing memory files as warnings instead of blockers")
     flyto2_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
 
+    # flyto2-release-packet
+    release_packet_parser = subparsers.add_parser(
+        "flyto2-release-packet",
+        help="Generate an evidence-backed Flyto2 workspace release packet",
+        description=(
+            "Aggregates the Flyto2 product gate, git inventory, health baseline, "
+            "required release deliverable evidence, and residual blocker/P1 lists "
+            "without using network access or credentials."
+        ),
+    )
+    release_packet_parser.add_argument("path", nargs="?", default=".", help="Workspace root path")
+    release_packet_parser.add_argument("--manifest", help="Product-line manifest JSON (default: packaged Flyto2 manifest)")
+    release_packet_parser.add_argument("--health-report", help="Health report JSON keyed by repo name")
+    release_packet_parser.add_argument("--skip-health", action="store_true", help="Skip health baseline gating")
+    release_packet_parser.add_argument("--relaxed-memory", action="store_true", help="Report missing memory files as warnings instead of blockers")
+    release_packet_parser.add_argument("--report", help="Write a report artifact to this path")
+    release_packet_parser.add_argument("--report-format", choices=["json", "markdown"], default="json", help="Report artifact format")
+    release_packet_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
+
     # flyto2-memory-bootstrap
     memory_parser = subparsers.add_parser(
         "flyto2-memory-bootstrap",
@@ -514,6 +533,8 @@ def main():
             result = cmd_verify_workspace(args)
         elif args.command == "flyto2-product-gate":
             result = cmd_flyto2_product_gate(args)
+        elif args.command == "flyto2-release-packet":
+            result = cmd_flyto2_release_packet(args)
         elif args.command == "flyto2-memory-bootstrap":
             result = cmd_flyto2_memory_bootstrap(args)
         elif args.command == "verify-baseline":
@@ -1109,6 +1130,27 @@ def cmd_tools(args):
                 "flyto-index flyto2-product-gate . --skip-health --json",
             ],
             "exit_codes": {"0": "success", "2": "product gate failed"},
+        },
+        {
+            "name": "flyto2-release-packet",
+            "summary": "Generate an evidence-backed Flyto2 release readiness packet",
+            "args": [
+                {"name": "path", "type": "string", "required": False, "default": ".", "description": "Workspace root path"},
+                {"name": "--manifest", "type": "string", "required": False, "description": "Product-line manifest JSON"},
+                {"name": "--health-report", "type": "string", "required": False, "description": "Health report JSON keyed by repo name"},
+                {"name": "--skip-health", "type": "boolean", "required": False, "default": False, "description": "Skip health baseline gating"},
+                {"name": "--relaxed-memory", "type": "boolean", "required": False, "default": False, "description": "Report missing memory files as warnings"},
+                {"name": "--report", "type": "string", "required": False, "description": "Write report artifact to this path"},
+                {"name": "--report-format", "type": "string", "required": False, "default": "json", "description": "Report format: json or markdown"},
+                {"name": "--json", "type": "boolean", "required": False, "default": False, "description": "Output as JSON"},
+            ],
+            "outputs": ["workspace inventory", "deliverable evidence matrix", "residual blocker list"],
+            "side_effects": ["writes --report path when requested"],
+            "examples": [
+                "flyto-index flyto2-release-packet /Users/chester/flytohub --health-report config/flyto2/health-baseline-2026-06-21.json",
+                "flyto-index flyto2-release-packet . --report reports/flyto2-release-packet.md --report-format markdown",
+            ],
+            "exit_codes": {"0": "success or controlled beta residuals", "2": "blocked for production"},
         },
         {
             "name": "flyto2-memory-bootstrap",
@@ -2389,6 +2431,43 @@ def cmd_flyto2_product_gate(args):
 
     print(format_product_gate(result))
     if not result["ok"]:
+        sys.exit(2)
+    return None
+
+
+def cmd_flyto2_release_packet(args):
+    """Generate the evidence-backed Flyto2 release packet."""
+    from .flyto2_release_packet import (
+        DEFAULT_MANIFEST,
+        ReleasePacketOptions,
+        format_release_packet,
+        run_release_packet,
+    )
+
+    manifest = Path(args.manifest).resolve() if args.manifest else DEFAULT_MANIFEST
+    health_report = Path(args.health_report).resolve() if args.health_report else None
+    result = run_release_packet(
+        ReleasePacketOptions(
+            workspace=Path(args.path).resolve(),
+            manifest_path=manifest,
+            health_report_path=health_report,
+            skip_health=args.skip_health,
+            strict_memory=not args.relaxed_memory,
+        )
+    )
+    if args.report:
+        report_path = Path(args.report).resolve()
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        if args.report_format == "markdown":
+            report_path.write_text(format_release_packet(result) + "\n", encoding="utf-8")
+        else:
+            report_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    if hasattr(args, "as_json") and args.as_json:
+        return result
+
+    print(format_release_packet(result))
+    if result["verdict"] == "BLOCKED_FOR_PRODUCTION":
         sys.exit(2)
     return None
 

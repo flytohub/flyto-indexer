@@ -1,5 +1,16 @@
 # Decisions
 
+## 2026-06-22 - Release readiness must be evidence-backed
+
+Decision: add `flyto2-release-packet` as a deterministic local CLI that
+aggregates product gate results, git inventory, required release deliverable
+evidence, P0 blockers, P1 before-production gaps, and a conservative release
+verdict.
+
+Reason: the Flyto2 workspace goal requires many artifacts beyond a green build.
+The release packet keeps those artifacts machine-checkable and prevents agents
+from claiming readiness when a required audit or smoke evidence file is missing.
+
 ## 2026-06-21 - Health complexity is severity-weighted
 
 Decision: score the health complexity dimension from high-complexity function
