@@ -234,3 +234,28 @@ def test_product_gate_blocks_core_health_exemption(tmp_path):
 
     assert result["ok"] is False
     assert any(item["code"] == "core_health_exempt" for item in result["blockers"])
+
+
+def test_product_gate_treats_non_core_health_regression_as_warning(tmp_path):
+    _repo(tmp_path, "flyto-core")
+    _repo(tmp_path, "flyto-cloud")
+    manifest = tmp_path / "manifest.json"
+    health = tmp_path / "health.json"
+    _manifest(manifest)
+    health.write_text(
+        json.dumps({"repos": {"flyto-core": {"grade": "B", "score": 80}, "flyto-cloud": {"grade": "C", "score": 72}}}),
+        encoding="utf-8",
+    )
+
+    result = run_product_gate(
+        ProductGateOptions(
+            workspace=tmp_path,
+            manifest_path=manifest,
+            health_report_path=health,
+        )
+    )
+
+    assert result["ok"] is True
+    assert result["verdict"] == "READY_FOR_CONTROLLED_PRODUCTION"
+    assert any(item["code"] == "health_below_target" and item["severity"] == "P2" for item in result["warnings"])
+    assert result["repos"]["flyto-cloud"]["health_signal"]["role"] == "minimum_hygiene_signal"

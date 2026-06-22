@@ -23,10 +23,26 @@ from .flyto2_product_gate import (
 )
 
 
+def _default_evidence_gates_path() -> Path:
+    package_dir = Path(__file__).resolve().parent
+    candidates = [
+        package_dir.parent / "config" / "flyto2" / "evidence-gates.json",
+        package_dir / "config" / "flyto2" / "evidence-gates.json",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+DEFAULT_EVIDENCE_GATES = _default_evidence_gates_path()
+
+
 @dataclass(frozen=True)
 class ReleasePacketOptions:
     workspace: Path
     manifest_path: Path = DEFAULT_MANIFEST
+    evidence_gate_path: Path = DEFAULT_EVIDENCE_GATES
     health_report_path: Path | None = None
     skip_health: bool = False
     strict_memory: bool = True
@@ -174,6 +190,7 @@ def _repo_inventory(repo_name: str, repo_path: Path, gate_repo: dict[str, Any]) 
         "core": bool(gate_repo.get("core")),
         "product_lines": list(gate_repo.get("product_lines", [])),
         "health": gate_repo.get("health"),
+        "health_signal": gate_repo.get("health_signal"),
         "memory": gate_repo.get("memory"),
     }
 
@@ -433,7 +450,130 @@ def _audit_deliverables(
     return deliverables
 
 
-def _residuals(deliverables: list[dict[str, Any]], product_gate: dict[str, Any], inventory: dict[str, Any]) -> list[dict[str, Any]]:
+def _load_evidence_gate_config(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {
+            "health_signal_policy": _default_health_signal_policy(),
+            "gates": [],
+        }
+    data = _load_json(path)
+    if not isinstance(data.get("gates", []), list):
+        raise ValueError(f"invalid evidence gate config: {path}")
+    if "health_signal_policy" not in data:
+        data["health_signal_policy"] = _default_health_signal_policy()
+    return data
+
+
+def _default_health_signal_policy() -> dict[str, Any]:
+    return {
+        "label": "minimum hygiene signal",
+        "summary": "Health grades are triage signals for code hygiene. They do not prove product readiness.",
+        "limitations": [
+            "Health scores do not prove real user workflow quality.",
+            "Health scores do not prove enterprise deployment readiness.",
+            "Health scores do not prove security control effectiveness beyond the scanned checks.",
+            "Health scores do not prove market positioning, AI citation, or customer trust.",
+        ],
+    }
+
+
+def _health_signal_summary(inventory: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
+    repos: dict[str, Any] = {}
+    for name, repo in sorted(inventory.items()):
+        signal = repo.get("health_signal") or {}
+        health = repo.get("health") or {}
+        repos[name] = {
+            "score": signal.get("score", health.get("score")),
+            "grade": signal.get("grade", health.get("grade", "N/A")),
+            "target_grade": signal.get("target_grade"),
+            "role": signal.get("role", "minimum_hygiene_signal"),
+            "core": repo.get("core", False),
+            "status": repo.get("status", ""),
+        }
+    return {
+        "label": policy.get("label", "minimum hygiene signal"),
+        "summary": policy.get("summary", ""),
+        "limitations": list(policy.get("limitations", [])),
+        "repos": repos,
+    }
+
+
+def _evaluate_evidence_gates(
+    config: dict[str, Any],
+    deliverables: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    by_id = {item["id"]: item for item in deliverables}
+    gates: list[dict[str, Any]] = []
+    for spec in config.get("gates", []):
+        deliverable_ids = list(spec.get("deliverables", []))
+        missing_deliverables: list[str] = []
+        missing_evidence: list[str] = []
+        missing_fresh: list[str] = []
+        for deliverable_id in deliverable_ids:
+            deliverable = by_id.get(deliverable_id)
+            if not deliverable:
+                missing_deliverables.append(deliverable_id)
+                continue
+            if deliverable.get("status") != "pass":
+                missing_deliverables.append(deliverable_id)
+                missing_evidence.extend(deliverable.get("missing_evidence", []))
+                missing_fresh.extend(deliverable.get("missing_fresh_evidence", []))
+
+        gates.append({
+            "id": spec["id"],
+            "title": spec.get("title", spec["id"]),
+            "category": spec.get("category", "release"),
+            "severity": spec.get("severity", "P1"),
+            "product_lines": list(spec.get("product_lines", [])),
+            "deliverables": deliverable_ids,
+            "status": "pass" if not missing_deliverables and not missing_evidence and not missing_fresh else "not_proven",
+            "confidence": spec.get("confidence", ""),
+            "missing_deliverables": missing_deliverables,
+            "missing_evidence": sorted(set(missing_evidence)),
+            "missing_fresh_evidence": sorted(set(missing_fresh)),
+        })
+    return gates
+
+
+def _confidence_basis(evidence_gates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": gate["id"],
+            "title": gate["title"],
+            "category": gate["category"],
+            "severity": gate["severity"],
+            "product_lines": gate["product_lines"],
+            "deliverables": gate["deliverables"],
+            "basis": gate["confidence"],
+        }
+        for gate in evidence_gates
+        if gate["status"] == "pass"
+    ]
+
+
+def _not_proven(evidence_gates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": gate["id"],
+            "title": gate["title"],
+            "category": gate["category"],
+            "severity": gate["severity"],
+            "product_lines": gate["product_lines"],
+            "missing_deliverables": gate["missing_deliverables"],
+            "missing_evidence": gate["missing_evidence"],
+            "missing_fresh_evidence": gate["missing_fresh_evidence"],
+        }
+        for gate in evidence_gates
+        if gate["status"] != "pass"
+    ]
+
+
+def _residuals(
+    deliverables: list[dict[str, Any]],
+    evidence_gates: list[dict[str, Any]],
+    product_gate: dict[str, Any],
+    inventory: dict[str, Any],
+) -> list[dict[str, Any]]:
     residuals: list[dict[str, Any]] = []
     for item in deliverables:
         if item["status"] != "pass":
@@ -444,6 +584,17 @@ def _residuals(deliverables: list[dict[str, Any]], product_gate: dict[str, Any],
                 "message": f"{item['title']} lacks required evidence.",
                 "missing_evidence": item["missing_evidence"],
                 "missing_fresh_evidence": item.get("missing_fresh_evidence", []),
+            })
+    for gate in evidence_gates:
+        if gate["status"] != "pass":
+            residuals.append({
+                "id": f"evidence_gate:{gate['id']}",
+                "severity": gate["severity"],
+                "status": gate["status"],
+                "message": f"{gate['title']} is not proven by required evidence.",
+                "missing_deliverables": gate["missing_deliverables"],
+                "missing_evidence": gate["missing_evidence"],
+                "missing_fresh_evidence": gate["missing_fresh_evidence"],
             })
     for blocker in product_gate.get("blockers", []):
         residuals.append({
@@ -477,6 +628,7 @@ def _residuals(deliverables: list[dict[str, Any]], product_gate: dict[str, Any],
 def run_release_packet(options: ReleasePacketOptions) -> dict[str, Any]:
     workspace = options.workspace.resolve()
     manifest = _load_json(options.manifest_path)
+    evidence_config = _load_evidence_gate_config(options.evidence_gate_path)
     product_gate = run_product_gate(
         ProductGateOptions(
             workspace=workspace,
@@ -495,30 +647,39 @@ def run_release_packet(options: ReleasePacketOptions) -> dict[str, Any]:
         inventory[repo_name] = _repo_inventory(repo_name, repo_path, gate_repo)
 
     deliverables = _audit_deliverables(workspace, product_gate, options)
-    residuals = _residuals(deliverables, product_gate, inventory)
+    evidence_gates = _evaluate_evidence_gates(evidence_config, deliverables)
+    residuals = _residuals(deliverables, evidence_gates, product_gate, inventory)
     p0 = [item for item in residuals if item.get("severity") == "P0"]
     p1 = [item for item in residuals if item.get("severity") == "P1"]
-    if p0 or product_gate.get("blockers"):
+    p2 = [item for item in residuals if item.get("severity") == "P2"]
+    if p0 or p1 or product_gate.get("blockers"):
         verdict = "BLOCKED_FOR_PRODUCTION"
-    elif p1:
+    elif p2:
         verdict = "READY_FOR_CONTROLLED_BETA"
     else:
         verdict = "READY_FOR_CONTROLLED_PRODUCTION"
+    health_policy = evidence_config.get("health_signal_policy", _default_health_signal_policy())
 
     return {
         "product_name": manifest.get("product_name", "Flyto2"),
         "workspace": str(workspace),
         "repo_count": len(inventory),
         "manifest_repo_count": len(manifest.get("repos", {})),
+        "evidence_gate_config": str(options.evidence_gate_path.resolve()) if options.evidence_gate_path else "",
         "fresh_evidence_dir": str(options.fresh_evidence_dir.resolve()) if options.fresh_evidence_dir else "",
         "require_fresh": options.require_fresh,
         "run_start": options.run_start.isoformat() if options.run_start else "",
         "product_gate_verdict": product_gate.get("verdict"),
         "verdict": verdict,
+        "health_signal": _health_signal_summary(inventory, health_policy),
+        "score_limitations": list(health_policy.get("limitations", [])),
         "product_lines": manifest.get("product_lines", {}),
         "product_line_coverage": product_gate.get("product_line_coverage", {}),
         "inventory": inventory,
         "deliverables": deliverables,
+        "evidence_gates": evidence_gates,
+        "confidence_basis": _confidence_basis(evidence_gates),
+        "not_proven": _not_proven(evidence_gates),
         "residuals": residuals,
         "p0_blockers": p0,
         "p1_before_production": p1,
@@ -541,14 +702,25 @@ def format_release_packet(result: dict[str, Any]) -> str:
         label = result["product_lines"].get(line_name, {}).get("label", line_name)
         lines.append(f"- {label}: {', '.join(repos) if repos else '(none)'}")
 
+    lines.extend(["", "## Health Signal"])
+    health_signal = result.get("health_signal", {})
+    lines.append(f"- Role: {health_signal.get('label', 'minimum hygiene signal')}")
+    summary = health_signal.get("summary")
+    if summary:
+        lines.append(f"- Meaning: {summary}")
+
+    lines.extend(["", "## Score Limitations"])
+    for limitation in result.get("score_limitations", []):
+        lines.append(f"- {limitation}")
+
     lines.extend(["", "## Workspace inventory"])
     for name, repo in result["inventory"].items():
         dirty = len(repo["dirty_files"])
-        health = repo.get("health") or {}
-        grade = health.get("grade", "N/A")
+        signal = repo.get("health_signal") or repo.get("health") or {}
+        grade = signal.get("grade", "N/A")
         lines.append(
             f"- {name}: {repo['status']}, branch={repo['branch'] or 'unknown'}, "
-            f"grade={grade}, dirty={dirty}, role={repo['role']}"
+            f"health_signal={grade}, dirty={dirty}, role={repo['role']}"
         )
 
     lines.extend(["", "## Deliverables"])
@@ -558,6 +730,28 @@ def format_release_packet(result: dict[str, Any]) -> str:
             lines.append(f"  missing: {', '.join(item['missing_evidence'])}")
         if item.get("missing_fresh_evidence"):
             lines.append(f"  missing fresh: {', '.join(item['missing_fresh_evidence'])}")
+
+    lines.extend(["", "## Evidence gates"])
+    for gate in result.get("evidence_gates", []):
+        lines.append(f"- {gate['id']}: {gate['status']} ({gate['severity']})")
+        if gate.get("missing_deliverables"):
+            lines.append(f"  missing deliverables: {', '.join(gate['missing_deliverables'])}")
+
+    lines.extend(["", "## Confidence basis"])
+    if result.get("confidence_basis"):
+        for item in result["confidence_basis"]:
+            lines.append(f"- {item['id']}: {item['basis']}")
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "## Not proven"])
+    if result.get("not_proven"):
+        for item in result["not_proven"]:
+            missing = item.get("missing_deliverables") or []
+            suffix = f" Missing deliverables: {', '.join(missing)}" if missing else ""
+            lines.append(f"- {item['id']}: {item['title']}.{suffix}")
+    else:
+        lines.append("- none")
 
     lines.extend(["", "## P0 blockers"])
     if result["p0_blockers"]:

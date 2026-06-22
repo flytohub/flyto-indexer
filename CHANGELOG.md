@@ -15,6 +15,9 @@
   `--fresh-evidence-dir`, `--require-fresh`, and `--run-start`.
 - Added the Flyto2 product-line manifest and 2026-06-21 health baseline used by
   the new gate.
+- Added the Flyto2 evidence gate manifest and `--evidence-gates` release-packet
+  option so product readiness is judged by product-line, deployment, security,
+  visibility, and operability proof instead of health score alone.
 
 ### Changed
 - Updated `code_health_score` complexity scoring to combine high-complexity
@@ -34,6 +37,10 @@
   OCR, and map-reduce reducer hotspots with guard tests.
 - Added explicit non-core health exemptions for docs-only, no-symbol, or
   unsupported-language repos while keeping core repo exemptions blocked.
+- Reframed Flyto2 health grades as minimum hygiene signals. Missing P0/P1
+  evidence now blocks production readiness even when all repo scores are high,
+  and non-core score regressions are warnings unless product evidence depends on
+  that repo.
 
 ### Fixed
 - Dead-code detection now treats VitePress markdown component tags such as

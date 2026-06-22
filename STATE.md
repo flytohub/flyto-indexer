@@ -19,6 +19,9 @@
   health baseline evidence, required release deliverables, and residual P0/P1
   evidence gaps for the Flyto2 workspace. It can also require fresh run
   artifacts with `--fresh-evidence-dir`, `--require-fresh`, and `--run-start`.
+- Flyto2 release readiness is now evidence-first: health grades are minimum
+  hygiene signals, while the final verdict depends on product-line, deployment,
+  security, visibility, and operability evidence gates.
 - CI covers lint, tests, verify, build, and no-dependency wheel smoke.
 
 ## Release Blockers

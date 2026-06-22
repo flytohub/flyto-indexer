@@ -1,5 +1,16 @@
 # Decisions
 
+## 2026-06-23 - Release readiness is evidence-first, not score-first
+
+Decision: treat Flyto2 health scores as minimum hygiene signals and move the
+final release verdict to explicit evidence gates covering product lines,
+deployment, security, GEO/i18n visibility, and operations.
+
+Reason: a high static-analysis score can show that a repo is cleaner, but it
+does not prove user workflows, enterprise deployment, security controls,
+product positioning, or AI/search visibility. Production readiness must be
+grounded in concrete evidence artifacts and fresh validation, not score chasing.
+
 ## 2026-06-22 - Release readiness must be evidence-backed
 
 Decision: add `flyto2-release-packet` as a deterministic local CLI that

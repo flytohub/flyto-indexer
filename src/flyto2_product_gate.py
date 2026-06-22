@@ -165,36 +165,44 @@ def run_product_gate(options: ProductGateOptions) -> dict[str, Any]:
         if not options.skip_health:
             health_item = _health_for_repo(health, repo_name)
             report["health"] = health_item
+            report["health_signal"] = {
+                "role": "minimum_hygiene_signal",
+                "score": health_item.get("score") if health_item else None,
+                "grade": health_item.get("grade") if health_item else None,
+                "reasons": health_item.get("reasons", []) if health_item else [],
+            }
             target_grade = str(spec.get("health_target") or "C")
             if spec.get("core"):
                 target_grade = str(manifest.get("health_targets", {}).get("core_min_grade", target_grade))
+            report["health_signal"]["target_grade"] = target_grade
             if health_item is None:
                 if spec.get("core"):
                     blockers.append({
                         "repo": repo_name,
                         "code": "core_health_missing",
-                        "message": "Core repo needs a health report entry for release gating.",
+                        "message": "Core repo needs a minimum hygiene health report entry for release gating.",
                     })
                 else:
                     warnings.append({
                         "repo": repo_name,
                         "code": "health_missing",
-                        "message": "No health report entry; health target was not evaluated.",
+                        "message": "No health report entry; minimum hygiene target was not evaluated.",
                     })
             elif _is_health_exempt(health_item):
                 if spec.get("core"):
                     blockers.append({
                         "repo": repo_name,
                         "code": "core_health_exempt",
-                        "message": "Core repos cannot be exempt from health release gating.",
+                        "message": "Core repos cannot be exempt from minimum hygiene release gating.",
                     })
             elif not _grade_meets(str(health_item.get("grade", "")), target_grade):
                 severity = "P1" if spec.get("core") else "P2"
-                blockers.append({
+                target = blockers if spec.get("core") else warnings
+                target.append({
                     "repo": repo_name,
                     "code": "health_below_target",
                     "severity": severity,
-                    "message": f"Health grade {health_item.get('grade')} is below target {target_grade}.",
+                    "message": f"Minimum hygiene grade {health_item.get('grade')} is below target {target_grade}.",
                     "score": health_item.get("score"),
                     "target": target_grade,
                     "reasons": health_item.get("reasons", []),

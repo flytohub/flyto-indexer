@@ -348,6 +348,7 @@ def main():
     )
     release_packet_parser.add_argument("path", nargs="?", default=".", help="Workspace root path")
     release_packet_parser.add_argument("--manifest", help="Product-line manifest JSON (default: packaged Flyto2 manifest)")
+    release_packet_parser.add_argument("--evidence-gates", help="Evidence gate JSON (default: packaged Flyto2 evidence gates)")
     release_packet_parser.add_argument("--health-report", help="Health report JSON keyed by repo name")
     release_packet_parser.add_argument("--skip-health", action="store_true", help="Skip health baseline gating")
     release_packet_parser.add_argument("--relaxed-memory", action="store_true", help="Report missing memory files as warnings instead of blockers")
@@ -1121,6 +1122,7 @@ def cmd_tools(args):
             "args": [
                 {"name": "path", "type": "string", "required": False, "default": ".", "description": "Workspace root path"},
                 {"name": "--manifest", "type": "string", "required": False, "description": "Product-line manifest JSON"},
+                {"name": "--evidence-gates", "type": "string", "required": False, "description": "Evidence gate JSON"},
                 {"name": "--health-report", "type": "string", "required": False, "description": "Health report JSON keyed by repo name"},
                 {"name": "--skip-health", "type": "boolean", "required": False, "default": False, "description": "Only check product-line and memory structure"},
                 {"name": "--relaxed-memory", "type": "boolean", "required": False, "default": False, "description": "Report missing memory files as warnings"},
@@ -2446,6 +2448,7 @@ def cmd_flyto2_release_packet(args):
     """Generate the evidence-backed Flyto2 release packet."""
     from .flyto2_release_packet import (
         DEFAULT_MANIFEST,
+        DEFAULT_EVIDENCE_GATES,
         ReleasePacketOptions,
         format_release_packet,
         parse_run_start,
@@ -2453,12 +2456,14 @@ def cmd_flyto2_release_packet(args):
     )
 
     manifest = Path(args.manifest).resolve() if args.manifest else DEFAULT_MANIFEST
+    evidence_gates = Path(args.evidence_gates).resolve() if args.evidence_gates else DEFAULT_EVIDENCE_GATES
     health_report = Path(args.health_report).resolve() if args.health_report else None
     fresh_evidence_dir = Path(args.fresh_evidence_dir).resolve() if args.fresh_evidence_dir else None
     result = run_release_packet(
         ReleasePacketOptions(
             workspace=Path(args.path).resolve(),
             manifest_path=manifest,
+            evidence_gate_path=evidence_gates,
             health_report_path=health_report,
             skip_health=args.skip_health,
             strict_memory=not args.relaxed_memory,

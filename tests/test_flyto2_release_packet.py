@@ -216,6 +216,10 @@ def test_release_packet_passes_when_gate_and_evidence_are_complete(tmp_path):
     assert result["p0_blockers"] == []
     assert result["p1_before_production"] == []
     assert "workspace_inventory" in {item["id"] for item in result["deliverables"]}
+    assert result["health_signal"]["label"] == "minimum hygiene signal"
+    assert result["score_limitations"]
+    assert result["confidence_basis"]
+    assert result["not_proven"] == []
 
 
 def test_release_packet_requires_fresh_evidence_when_requested(tmp_path):
@@ -237,11 +241,12 @@ def test_release_packet_requires_fresh_evidence_when_requested(tmp_path):
         )
     )
 
-    assert result["verdict"] == "READY_FOR_CONTROLLED_BETA"
+    assert result["verdict"] == "BLOCKED_FOR_PRODUCTION"
     by_id = {item["id"]: item for item in result["deliverables"]}
     assert by_id["release_readiness_verdict"]["status"] == "pass"
     assert by_id["workspace_inventory"]["status"] == "needs_fresh_evidence"
     assert result["p1_before_production"]
+    assert result["not_proven"]
 
 
 def test_release_packet_accepts_fresh_evidence_after_run_start(tmp_path):
@@ -292,9 +297,44 @@ def test_release_packet_marks_missing_required_evidence_as_p1(tmp_path):
         )
     )
 
-    assert result["verdict"] == "READY_FOR_CONTROLLED_BETA"
+    assert result["verdict"] == "BLOCKED_FOR_PRODUCTION"
     p1 = {item["id"]: item for item in result["p1_before_production"]}
     assert "architecture_dependency_map" in p1
     assert "flyto-ai/docs/architecture-map.md" in p1["architecture_dependency_map"]["missing_evidence"]
+    assert any(item["id"] == "cloud_apps_automation" for item in result["not_proven"])
     markdown = format_release_packet(result)
-    assert "READY_FOR_CONTROLLED_BETA" in markdown
+    assert "BLOCKED_FOR_PRODUCTION" in markdown
+    assert "## Score Limitations" in markdown
+    assert "## Not proven" in markdown
+
+
+def test_release_packet_blocks_high_score_workspace_without_product_evidence(tmp_path):
+    _repo(tmp_path, "flyto-core")
+    _repo(tmp_path, "flyto-ai")
+    manifest = tmp_path / "manifest.json"
+    health = tmp_path / "health.json"
+    _manifest(manifest)
+    health.write_text(
+        json.dumps(
+            {
+                "repos": {
+                    "flyto-core": {"grade": "A", "score": 98},
+                    "flyto-ai": {"grade": "A", "score": 97},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_release_packet(
+        ReleasePacketOptions(
+            workspace=tmp_path,
+            manifest_path=manifest,
+            health_report_path=health,
+        )
+    )
+
+    assert result["verdict"] == "BLOCKED_FOR_PRODUCTION"
+    assert result["health_signal"]["repos"]["flyto-core"]["grade"] == "A"
+    assert result["p1_before_production"]
+    assert result["not_proven"]
