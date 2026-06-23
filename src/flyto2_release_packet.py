@@ -328,15 +328,52 @@ def _validate_public_site_verification_contract(path: Path) -> tuple[bool, list[
     return not errors, errors
 
 
+def _fresh_finding_counts(path: Path) -> dict[str, int]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+
+    counts: dict[str, int] = {}
+    for severity in ("p0", "p1", "p2"):
+        key = f"{severity}_findings"
+        value = data.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            counts[severity.upper()] = value
+
+    findings = data.get("findings")
+    if isinstance(findings, list):
+        inferred: dict[str, int] = {}
+        for item in findings:
+            if not isinstance(item, dict):
+                continue
+            severity = str(item.get("severity") or "").upper()
+            if severity in {"P0", "P1", "P2"}:
+                inferred[severity] = inferred.get(severity, 0) + 1
+        for severity, count in inferred.items():
+            counts.setdefault(severity, count)
+    return counts
+
+
 def _fresh_contract_status(relative: str, path: Path, contract: str | None) -> dict[str, Any]:
     if not contract:
         return {}
+    finding_counts = _fresh_finding_counts(path)
+    blocking_findings = [
+        {"severity": severity, "count": count}
+        for severity, count in sorted(finding_counts.items())
+        if severity in {"P0", "P1"} and count > 0
+    ]
     if contract == "warroom.product_verification.v1":
         valid, errors = _validate_product_verification_contract(path)
         return {
             "contract": contract,
             "contract_valid": valid,
             "contract_errors": errors,
+            "contract_finding_counts": finding_counts,
+            "contract_blocking_findings": blocking_findings,
         }
     if contract == "flyto2.public_site_verification.v1":
         valid, errors = _validate_public_site_verification_contract(path)
@@ -344,11 +381,15 @@ def _fresh_contract_status(relative: str, path: Path, contract: str | None) -> d
             "contract": contract,
             "contract_valid": valid,
             "contract_errors": errors,
+            "contract_finding_counts": finding_counts,
+            "contract_blocking_findings": blocking_findings,
         }
     return {
         "contract": contract,
         "contract_valid": False,
         "contract_errors": [f"unknown fresh evidence contract for {relative}: {contract}"],
+        "contract_finding_counts": finding_counts,
+        "contract_blocking_findings": blocking_findings,
     }
 
 
@@ -379,9 +420,11 @@ def _fresh_evidence(
             timestamp_source = "mtime"
         contract_status = _fresh_contract_status(relative, path, contract) if exists else {}
         contract_valid = contract_status.get("contract_valid", True)
+        contract_blocking_findings = contract_status.get("contract_blocking_findings") or []
         fresh = bool(
             exists
             and contract_valid
+            and not contract_blocking_findings
             and (run_start is None or (timestamp is not None and timestamp >= run_start))
         )
         reason = ""
@@ -389,6 +432,8 @@ def _fresh_evidence(
             reason = "missing"
         elif not contract_valid:
             reason = "invalid_contract"
+        elif contract_blocking_findings:
+            reason = "blocking_findings"
         elif run_start is not None and not fresh:
             reason = "stale"
         results.append({

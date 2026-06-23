@@ -57,6 +57,10 @@
   from static SEO documentation.
 
 ### Fixed
+- Fresh release evidence contracts now propagate P0/P1 findings into the
+  release packet. Schema-valid public-site evidence with AI crawler P1 findings
+  is now marked `blocking_findings` instead of being accepted as production
+  proof.
 - Dead-code detection now treats VitePress markdown component tags such as
   `<BlogHero />` as live component references.
 - Cleaned existing test-suite lint violations so `ruff check src tests` can run

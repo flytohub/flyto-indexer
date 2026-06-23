@@ -26,6 +26,10 @@
   evidence gate. Fresh `product-verification.json` must prove the
   `warroom.product_verification.v1` contract with intent graph, state graph,
   coverage/confidence scores, and zero P0 findings.
+- Fresh release evidence contracts now treat P0/P1 findings as readiness
+  blockers even when the artifact schema is valid. This prevents live
+  public-site issues, such as AI crawler edge blocks, from being hidden behind
+  a passing evidence shape.
 - CI covers lint, tests, verify, build, and no-dependency wheel smoke.
 
 ## Release Blockers

@@ -1,5 +1,16 @@
 # Decisions
 
+## 2026-06-23 - Fresh release evidence findings must block readiness
+
+Decision: fresh release evidence contracts now propagate P0/P1 finding counts
+into the release packet. A schema-valid artifact with P1 findings is not fresh
+production proof and is reported with `reason=blocking_findings`.
+
+Reason: a public-site or Product Verification artifact can be structurally
+valid while still proving a live release blocker, such as AI crawler traffic
+being blocked at the edge. Release readiness must not convert a valid evidence
+shape into a false production pass.
+
 ## 2026-06-23 - Product Verification must be release evidence
 
 Decision: make deterministic Product Verification a first-class release-packet

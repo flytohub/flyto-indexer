@@ -447,6 +447,53 @@ def test_release_packet_rejects_invalid_public_site_verification_contract(tmp_pa
     assert "dns_matrix must be a non-empty list" in public_fresh["public-site-verification.json"]["contract_errors"]
 
 
+def test_release_packet_blocks_public_site_p1_findings(tmp_path):
+    _repo(tmp_path, "flyto-core")
+    _repo(tmp_path, "flyto-ai")
+    _all_required_evidence(tmp_path)
+    evidence_dir = _all_fresh_evidence(tmp_path)
+    public_site = evidence_dir / "public-site-verification.json"
+    data = json.loads(public_site.read_text(encoding="utf-8"))
+    data["p1_findings"] = 1
+    data["findings"] = [
+        {
+            "severity": "P1",
+            "code": "ai_crawler_blocked",
+            "message": "AI/search crawler route unavailable: Claude-User /",
+        }
+    ]
+    public_site.write_text(json.dumps(data), encoding="utf-8")
+    manifest = tmp_path / "manifest.json"
+    health = tmp_path / "health.json"
+    _manifest(manifest)
+    _health(health)
+
+    result = run_release_packet(
+        ReleasePacketOptions(
+            workspace=tmp_path,
+            manifest_path=manifest,
+            health_report_path=health,
+            fresh_evidence_dir=evidence_dir,
+            require_fresh=True,
+            run_start=datetime(2026, 6, 22, 0, 0, tzinfo=timezone.utc),
+        )
+    )
+
+    assert result["verdict"] == "BLOCKED_FOR_PRODUCTION"
+    by_id = {item["id"]: item for item in result["deliverables"]}
+    public_deliverable = by_id["public_site_verification"]
+    assert public_deliverable["status"] == "needs_fresh_evidence"
+    public_fresh = {item["path"]: item for item in public_deliverable["fresh_evidence"]}
+    assert public_fresh["public-site-verification.json"]["reason"] == "blocking_findings"
+    assert public_fresh["public-site-verification.json"]["contract_valid"] is True
+    assert public_fresh["public-site-verification.json"]["contract_finding_counts"]["P1"] == 1
+    assert public_fresh["public-site-verification.json"]["contract_blocking_findings"] == [
+        {"severity": "P1", "count": 1}
+    ]
+    p1 = {item["id"]: item for item in result["p1_before_production"]}
+    assert "public_site_verification" in p1
+
+
 def test_parse_run_start_rejects_invalid_timestamp():
     with pytest.raises(ValueError):
         parse_run_start("not-a-timestamp")
