@@ -46,7 +46,7 @@ Latest generated artifact:
 Current result:
 
 - P0: 0
-- P1: 9
+- P1: 8
 - Public route readiness: 0.938
 - SEO/GEO readiness: 0.889
 - Browser render readiness: 1.0
@@ -54,6 +54,6 @@ Current result:
 Remaining P1s:
 
 - `/api-docs/` live 404
-- `ChatGPT-User`, `ClaudeBot`, `Claude-SearchBot`, `Claude-User`,
-  `Claude-Web`, `PerplexityBot`, and `Perplexity-User` receive 403
+- `ChatGPT-User`, `Claude-SearchBot`, `Claude-User`, `Claude-Web`,
+  `PerplexityBot`, and `Perplexity-User` receive 403
 - OpenGraph metadata is missing in the live probe

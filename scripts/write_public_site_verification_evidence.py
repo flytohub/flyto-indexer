@@ -69,6 +69,11 @@ CRAWLER_USER_AGENTS = [
     "Perplexity-User",
 ]
 
+TRAINING_USER_AGENTS = {
+    "GPTBot",
+    "ClaudeBot",
+}
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -210,6 +215,8 @@ def evaluate(data: dict[str, Any]) -> dict[str, Any]:
     for item in data["route_matrix"]:
         path = str(item.get("path") or "/")
         if item.get("ok") is False or item.get("timed_out") or item.get("error"):
+            if item.get("user_agent") in TRAINING_USER_AGENTS:
+                continue
             if item.get("user_agent") in CRAWLER_USER_AGENTS[1:]:
                 findings.append(finding("P1", "ai_crawler_blocked", f"AI/search crawler route unavailable: {item.get('user_agent')} {path}", evidence=item))
             else:
