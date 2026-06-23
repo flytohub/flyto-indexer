@@ -23,6 +23,9 @@
   Verification / Warroom runs.
 - Added `scripts/write_product_verification_evidence.py` for local dry-run
   Product Verification release artifacts.
+- Added the `public_site_verification` release-packet deliverable,
+  `flyto2.public_site_verification.v1` fresh evidence contract, and live public
+  site evidence helper for DNS/TLS/route/browser/SEO-GEO proof.
 
 ### Changed
 - Updated `code_health_score` complexity scoring to combine high-complexity
@@ -49,6 +52,9 @@
 - Extended Flyto2 product-line and release-operation gates so Cloud/Apps,
   Security, Zero-person Agent, and release operations depend on deterministic
   Product Verification evidence.
+- Extended visibility, Big Data / Intelligence, and release-operation gates so
+  public `flyto2.com` reachability and AI crawler evidence are judged separately
+  from static SEO documentation.
 
 ### Fixed
 - Dead-code detection now treats VitePress markdown component tags such as

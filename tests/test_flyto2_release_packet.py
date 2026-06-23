@@ -161,6 +161,10 @@ def _all_required_evidence(root: Path) -> None:
         "flyto-landing-page/docs/geo-log-analysis.md",
         "flyto-landing-page/public/llms.txt",
         "flyto-landing-page/public/llms-full.txt",
+        "flyto-core/src/core/modules/atomic/warroom/public_site.py",
+        "flyto-core/src/recipes/flyto2-public-site-verification.yaml",
+        "flyto-landing-page/scripts/audit-public-site-contract.mjs",
+        "flyto-landing-page/public/robots.txt",
         "flyto-code/docs/I18N_AUDIT_SUMMARY.md",
         "flyto-code/scripts/check-i18n.py",
         "flyto-engine/scripts/check-i18n-keys.py",
@@ -192,6 +196,8 @@ def _all_fresh_evidence(root: Path, *, generated_at: str = "2026-06-22T01:00:00+
         "security-performance.md",
         "product-verification.json",
         "product-verification.md",
+        "public-site-verification.json",
+        "public-site-verification.md",
         "browser-smoke.json",
         "browser-smoke.md",
         "release-packet.json",
@@ -215,6 +221,44 @@ def _all_fresh_evidence(root: Path, *, generated_at: str = "2026-06-22T01:00:00+
                             "reachable_coverage": 0.82,
                             "api_ui_consistency": 1.0,
                             "business_logic_confidence": 0.94,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+        elif evidence_path == "public-site-verification.json":
+            file_path.write_text(
+                json.dumps(
+                    {
+                        "contract": "flyto2.public_site_verification.v1",
+                        "generated_at": generated_at,
+                        "p0_findings": 0,
+                        "p1_findings": 0,
+                        "dns_matrix": [{"host": "flyto2.com", "family": "ipv4", "ok": True}],
+                        "tls_matrix": [{"host": "flyto2.com", "ok": True}],
+                        "route_matrix": [
+                            {"path": "/", "status": 200, "final_status": 200, "ok": True},
+                            {"path": "/robots.txt", "status": 200, "final_status": 200, "ok": True},
+                            {"path": "/sitemap.xml", "status": 200, "final_status": 200, "ok": True},
+                            {"path": "/llms.txt", "status": 200, "final_status": 200, "ok": True},
+                            {"path": "/llms-full.txt", "status": 200, "final_status": 200, "ok": True},
+                        ],
+                        "browser_matrix": [{"path": "/", "status": "ok", "ok": True}],
+                        "seo_geo_matrix": {
+                            "title": True,
+                            "meta_description": True,
+                            "canonical": True,
+                            "open_graph": True,
+                            "structured_data": True,
+                            "llms_txt": True,
+                            "sitemap": True,
+                            "robots": True,
+                            "server_rendered_content": True,
+                        },
+                        "scores": {
+                            "public_route_readiness": 1.0,
+                            "seo_geo_readiness": 1.0,
+                            "browser_render_readiness": 1.0,
                         },
                     }
                 ),
@@ -353,6 +397,54 @@ def test_release_packet_rejects_invalid_product_verification_contract(tmp_path):
     assert product_fresh["product-verification.json"]["reason"] == "invalid_contract"
     assert product_fresh["product-verification.json"]["contract_valid"] is False
     assert "p0_findings must be integer 0" in product_fresh["product-verification.json"]["contract_errors"]
+
+
+def test_release_packet_rejects_invalid_public_site_verification_contract(tmp_path):
+    _repo(tmp_path, "flyto-core")
+    _repo(tmp_path, "flyto-ai")
+    _all_required_evidence(tmp_path)
+    evidence_dir = _all_fresh_evidence(tmp_path)
+    (evidence_dir / "public-site-verification.json").write_text(
+        json.dumps(
+            {
+                "contract": "flyto2.public_site_verification.v1",
+                "generated_at": "2026-06-22T01:00:00+00:00",
+                "p0_findings": 1,
+                "dns_matrix": [],
+                "tls_matrix": [],
+                "route_matrix": [],
+                "browser_matrix": [],
+                "seo_geo_matrix": {},
+                "scores": {"public_route_readiness": 0.0},
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "manifest.json"
+    health = tmp_path / "health.json"
+    _manifest(manifest)
+    _health(health)
+
+    result = run_release_packet(
+        ReleasePacketOptions(
+            workspace=tmp_path,
+            manifest_path=manifest,
+            health_report_path=health,
+            fresh_evidence_dir=evidence_dir,
+            require_fresh=True,
+            run_start=datetime(2026, 6, 22, 0, 0, tzinfo=timezone.utc),
+        )
+    )
+
+    assert result["verdict"] == "BLOCKED_FOR_PRODUCTION"
+    by_id = {item["id"]: item for item in result["deliverables"]}
+    public_site = by_id["public_site_verification"]
+    assert public_site["status"] == "needs_fresh_evidence"
+    public_fresh = {item["path"]: item for item in public_site["fresh_evidence"]}
+    assert public_fresh["public-site-verification.json"]["reason"] == "invalid_contract"
+    assert public_fresh["public-site-verification.json"]["contract_valid"] is False
+    assert "p0_findings must be integer 0" in public_fresh["public-site-verification.json"]["contract_errors"]
+    assert "dns_matrix must be a non-empty list" in public_fresh["public-site-verification.json"]["contract_errors"]
 
 
 def test_parse_run_start_rejects_invalid_timestamp():

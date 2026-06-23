@@ -53,8 +53,8 @@
       "category": "product_line",
       "severity": "P1",
       "product_lines": ["big_data_intelligence"],
-      "deliverables": ["geo_aeo_seo_ai_crawler_audit", "architecture_dependency_map", "security_performance_cicd_audit"],
-      "confidence": "Intelligence readiness is supported by GEO/AI crawler evidence, architecture mapping, and security/performance evidence."
+      "deliverables": ["geo_aeo_seo_ai_crawler_audit", "public_site_verification", "architecture_dependency_map", "security_performance_cicd_audit"],
+      "confidence": "Intelligence readiness is supported by GEO/AI crawler evidence, public-site reachability verification, architecture mapping, and security/performance evidence."
     },
     {
       "id": "enterprise_deployment",
@@ -71,8 +71,8 @@
       "category": "visibility",
       "severity": "P1",
       "product_lines": ["big_data_intelligence", "cloud_apps_automation", "security"],
-      "deliverables": ["geo_aeo_seo_ai_crawler_audit", "i18n_multilingual_audit"],
-      "confidence": "AI/search visibility confidence requires crawler/GEO evidence and multilingual/i18n evidence."
+      "deliverables": ["geo_aeo_seo_ai_crawler_audit", "public_site_verification", "i18n_multilingual_audit"],
+      "confidence": "AI/search visibility confidence requires crawler/GEO evidence, public-site route/browser verification, and multilingual/i18n evidence."
     },
     {
       "id": "release_operations",
@@ -80,8 +80,8 @@
       "category": "operability",
       "severity": "P0",
       "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"],
-      "deliverables": ["release_readiness_verdict", "workspace_inventory", "deterministic_product_verification", "security_performance_cicd_audit"],
-      "confidence": "Production release confidence requires a passing product gate, clean inventory, deterministic product verification, and CI/security evidence."
+      "deliverables": ["release_readiness_verdict", "workspace_inventory", "deterministic_product_verification", "public_site_verification", "security_performance_cicd_audit"],
+      "confidence": "Production release confidence requires a passing product gate, clean inventory, deterministic product verification, public-site verification, and CI/security evidence."
     }
   ]
 }

@@ -291,11 +291,55 @@ def _validate_product_verification_contract(path: Path) -> tuple[bool, list[str]
     return not errors, errors
 
 
+def _validate_public_site_verification_contract(path: Path) -> tuple[bool, list[str]]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, [f"invalid JSON: {exc}"]
+    if not isinstance(data, dict):
+        return False, ["root must be an object"]
+
+    errors: list[str] = []
+    if data.get("contract") != "flyto2.public_site_verification.v1":
+        errors.append("contract must be flyto2.public_site_verification.v1")
+
+    p0_findings = data.get("p0_findings")
+    if isinstance(p0_findings, bool) or not isinstance(p0_findings, int) or p0_findings != 0:
+        errors.append("p0_findings must be integer 0")
+
+    for key in ("dns_matrix", "tls_matrix", "route_matrix", "browser_matrix"):
+        value = data.get(key)
+        if not isinstance(value, list) or len(value) == 0:
+            errors.append(f"{key} must be a non-empty list")
+
+    seo_geo_matrix = data.get("seo_geo_matrix")
+    if not isinstance(seo_geo_matrix, dict) or len(seo_geo_matrix) == 0:
+        errors.append("seo_geo_matrix must be a non-empty object")
+
+    scores = data.get("scores")
+    if not isinstance(scores, dict):
+        errors.append("scores must be an object")
+        scores = {}
+    for key in ("public_route_readiness", "seo_geo_readiness", "browser_render_readiness"):
+        value = scores.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            errors.append(f"scores.{key} must be numeric")
+
+    return not errors, errors
+
+
 def _fresh_contract_status(relative: str, path: Path, contract: str | None) -> dict[str, Any]:
     if not contract:
         return {}
     if contract == "warroom.product_verification.v1":
         valid, errors = _validate_product_verification_contract(path)
+        return {
+            "contract": contract,
+            "contract_valid": valid,
+            "contract_errors": errors,
+        }
+    if contract == "flyto2.public_site_verification.v1":
+        valid, errors = _validate_public_site_verification_contract(path)
         return {
             "contract": contract,
             "contract_valid": valid,
@@ -461,6 +505,25 @@ def _deliverable_specs() -> list[dict[str, Any]]:
                 "flyto-landing-page/public/llms-full.txt",
             ],
             "fresh": ["geo-ai-crawler.md"],
+        },
+        {
+            "id": "public_site_verification",
+            "title": "Public site DNS / route / browser verification",
+            "severity": "P1",
+            "required": [
+                "flyto-core/src/core/modules/atomic/warroom/public_site.py",
+                "flyto-core/src/recipes/flyto2-public-site-verification.yaml",
+                "flyto-core/tests/modules/test_warroom_modules.py",
+                "flyto-landing-page/scripts/audit-public-site-contract.mjs",
+                "flyto-landing-page/scripts/audit-public-geo-routes.mjs",
+                "flyto-landing-page/public/robots.txt",
+                "flyto-landing-page/public/llms.txt",
+                "flyto-landing-page/public/llms-full.txt",
+            ],
+            "fresh": ["public-site-verification.json", "public-site-verification.md"],
+            "fresh_contracts": {
+                "public-site-verification.json": "flyto2.public_site_verification.v1",
+            },
         },
         {
             "id": "i18n_multilingual_audit",

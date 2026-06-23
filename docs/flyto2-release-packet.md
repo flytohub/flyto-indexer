@@ -19,6 +19,7 @@ credentials.
   - deterministic Product Verification gate
   - enterprise / airgap / open-core audit
   - GEO / AEO / SEO / AI crawler audit
+  - public site DNS / route / browser verification
   - i18n / multilingual audit
   - security / performance / CI/CD audit
   - E2E browser smoke matrix
@@ -52,6 +53,20 @@ python scripts/write_product_verification_evidence.py \
   /Users/chester/flytohub/reports/flyto2-9h-2026-06-22
 ```
 
+For public `flyto2.com` verification evidence:
+
+```bash
+python scripts/write_public_site_verification_evidence.py \
+  /Users/chester/flytohub/reports/flyto2-9h-2026-06-22 \
+  --base-url https://flyto2.com \
+  --browser-status ok
+```
+
+Use `--fixture-pass` only for tests and contract validation fixtures. A release
+run should use live probes plus independent browser proof from `flyto-core` or
+Playwright. If browser proof is not supplied, the helper writes
+`p0_findings > 0` by design.
+
 ## Verdict Semantics
 
 - `BLOCKED_FOR_PRODUCTION`: product gate blocker, dirty repo, remote mismatch, or
@@ -82,6 +97,8 @@ Required fresh artifact names:
 - `product-verification.md`
 - `enterprise-airgap.md`
 - `geo-ai-crawler.md`
+- `public-site-verification.json`
+- `public-site-verification.md`
 - `i18n.md`
 - `security-performance.md`
 - `browser-smoke.json`
@@ -103,3 +120,11 @@ The helper `scripts/write_product_verification_evidence.py` writes local
 dry-run artifacts for this contract. It is intentionally labeled
 `local_dry_run` and does not prove authenticated staging, payment live-mode, or
 enterprise deployment drills.
+
+`public-site-verification.json` has a separate deterministic contract. It must
+declare `contract = "flyto2.public_site_verification.v1"`, include non-empty
+`dns_matrix`, `tls_matrix`, `route_matrix`, `browser_matrix`, and
+`seo_geo_matrix`, include numeric public route / SEO-GEO / browser readiness
+scores, and report `p0_findings = 0`. P1 findings such as AI crawler blocking,
+missing OpenGraph, or a non-critical route 404 remain visible in the packet
+without being downgraded into a false production pass claim.
