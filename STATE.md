@@ -30,6 +30,10 @@
   blockers even when the artifact schema is valid. This prevents live
   public-site issues, such as AI crawler edge blocks, from being hidden behind
   a passing evidence shape.
+- `scripts/write_continuous_release_evidence.py` can now generate fresh digest
+  artifacts for the remaining release-packet deliverables from current local
+  source evidence, while leaving contract artifacts such as Product
+  Verification and public-site verification responsible for their own findings.
 - CI covers lint, tests, verify, build, and no-dependency wheel smoke.
 
 ## Release Blockers

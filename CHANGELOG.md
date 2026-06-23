@@ -26,6 +26,10 @@
 - Added the `public_site_verification` release-packet deliverable,
   `flyto2.public_site_verification.v1` fresh evidence contract, and live public
   site evidence helper for DNS/TLS/route/browser/SEO-GEO proof.
+- Added `scripts/write_continuous_release_evidence.py` to turn current local
+  release-packet source evidence into fresh workspace, architecture, billing,
+  RBAC, state-machine, enterprise, GEO, i18n, security, and browser-smoke digest
+  artifacts without hiding P0/P1 findings from contract artifacts.
 
 ### Changed
 - Updated `code_health_score` complexity scoring to combine high-complexity
