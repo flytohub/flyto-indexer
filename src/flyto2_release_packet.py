@@ -336,6 +336,43 @@ def _validate_public_site_verification_contract(path: Path) -> tuple[bool, list[
     return not errors, errors
 
 
+def _validate_github_actions_workflows(workflows: Any, prefix: str) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(workflows, list) or len(workflows) == 0:
+        return [f"{prefix} must be a non-empty list"]
+
+    for index, workflow in enumerate(workflows):
+        if not isinstance(workflow, dict):
+            errors.append(f"{prefix}[{index}] must be an object")
+            continue
+        if workflow.get("ok") is not True:
+            errors.append(f"{prefix}[{index}].ok must be true")
+        if workflow.get("status") != "completed":
+            errors.append(f"{prefix}[{index}].status must be completed")
+        if workflow.get("conclusion") != "success":
+            errors.append(f"{prefix}[{index}].conclusion must be success")
+        jobs = workflow.get("jobs")
+        if not isinstance(jobs, list) or len(jobs) == 0:
+            errors.append(f"{prefix}[{index}].jobs must be a non-empty list")
+            continue
+        successful_jobs = 0
+        for job_index, job in enumerate(jobs):
+            if not isinstance(job, dict):
+                errors.append(f"{prefix}[{index}].jobs[{job_index}] must be an object")
+                continue
+            status = job.get("status")
+            conclusion = job.get("conclusion")
+            if status != "completed":
+                errors.append(f"{prefix}[{index}].jobs[{job_index}].status must be completed")
+            if conclusion == "success":
+                successful_jobs += 1
+            elif conclusion in {"action_required", "cancelled", "failure", "startup_failure", "timed_out"}:
+                errors.append(f"{prefix}[{index}].jobs[{job_index}].conclusion must not be {conclusion}")
+        if successful_jobs == 0:
+            errors.append(f"{prefix}[{index}].jobs must include at least one successful job")
+    return errors
+
+
 def _validate_github_actions_startup_contract(path: Path) -> tuple[bool, list[str]]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -345,38 +382,41 @@ def _validate_github_actions_startup_contract(path: Path) -> tuple[bool, list[st
         return False, ["root must be an object"]
 
     errors: list[str] = []
-    if data.get("schema") != "flyto-code.github-actions-startup-audit.v1":
-        errors.append("schema must be flyto-code.github-actions-startup-audit.v1")
+    schema = data.get("schema")
+    if schema not in {
+        "flyto-code.github-actions-startup-audit.v1",
+        "flyto.workspace-github-actions-startup-audit.v1",
+    }:
+        errors.append(
+            "schema must be flyto-code.github-actions-startup-audit.v1 "
+            "or flyto.workspace-github-actions-startup-audit.v1"
+        )
     if data.get("ok") is not True:
         errors.append("ok must be true")
 
-    workflows = data.get("workflows")
-    if not isinstance(workflows, list) or len(workflows) == 0:
-        errors.append("workflows must be a non-empty list")
-        workflows = []
-
-    for index, workflow in enumerate(workflows):
-        if not isinstance(workflow, dict):
-            errors.append(f"workflows[{index}] must be an object")
-            continue
-        if workflow.get("ok") is not True:
-            errors.append(f"workflows[{index}].ok must be true")
-        if workflow.get("status") != "completed":
-            errors.append(f"workflows[{index}].status must be completed")
-        if workflow.get("conclusion") != "success":
-            errors.append(f"workflows[{index}].conclusion must be success")
-        jobs = workflow.get("jobs")
-        if not isinstance(jobs, list) or len(jobs) == 0:
-            errors.append(f"workflows[{index}].jobs must be a non-empty list")
-            continue
-        for job_index, job in enumerate(jobs):
-            if not isinstance(job, dict):
-                errors.append(f"workflows[{index}].jobs[{job_index}] must be an object")
+    if schema == "flyto.workspace-github-actions-startup-audit.v1":
+        repositories = data.get("repositories")
+        if not isinstance(repositories, list) or len(repositories) == 0:
+            errors.append("repositories must be a non-empty list")
+            repositories = []
+        for repo_index, repository in enumerate(repositories):
+            if not isinstance(repository, dict):
+                errors.append(f"repositories[{repo_index}] must be an object")
                 continue
-            if job.get("status") != "completed":
-                errors.append(f"workflows[{index}].jobs[{job_index}].status must be completed")
-            if job.get("conclusion") != "success":
-                errors.append(f"workflows[{index}].jobs[{job_index}].conclusion must be success")
+            if not isinstance(repository.get("repo"), str) or not repository.get("repo"):
+                errors.append(f"repositories[{repo_index}].repo must be a non-empty string")
+            if not isinstance(repository.get("head"), str) or not repository.get("head"):
+                errors.append(f"repositories[{repo_index}].head must be a non-empty string")
+            if repository.get("ok") is not True:
+                errors.append(f"repositories[{repo_index}].ok must be true")
+            errors.extend(
+                _validate_github_actions_workflows(
+                    repository.get("workflows"),
+                    f"repositories[{repo_index}].workflows",
+                )
+            )
+    else:
+        errors.extend(_validate_github_actions_workflows(data.get("workflows"), "workflows"))
 
     return not errors, errors
 
@@ -662,9 +702,13 @@ def _deliverable_specs() -> list[dict[str, Any]]:
             "title": "GitHub Actions startup / green CI",
             "severity": "P0",
             "required": [
+                "flyto-indexer/scripts/audit_github_actions_startup.py",
                 "flyto-code/scripts/audit-github-actions-startup.mjs",
                 "flyto-code/.github/workflows/ci.yml",
                 "flyto-code/.github/workflows/actions-startup-probe.yml",
+                "flyto-engine/.github/workflows/ci.yml",
+                "flyto-core/.github/workflows/ci.yml",
+                "flyto-indexer/.github/workflows/ci.yml",
             ],
             "fresh": ["github-actions-startup.json"],
             "fresh_contracts": {

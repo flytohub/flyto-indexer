@@ -2,6 +2,7 @@
 
 | Date | Topic | File | Status |
 | --- | --- | --- | --- |
+| 2026-06-24 | Workspace GitHub Actions startup release gate | `2026-06-24-workspace-github-actions-startup-gate.md` | Active |
 | 2026-06-23 | Fresh release evidence findings gate | `2026-06-23-fresh-evidence-findings-gate.md` | Active |
 | 2026-06-23 | Public site release gate | `2026-06-23-public-site-release-gate.md` | Active |
 | 2026-06-23 | Flyto2 Product Verification release gate | `2026-06-23-flyto2-product-verification-release-gate.md` | Active |

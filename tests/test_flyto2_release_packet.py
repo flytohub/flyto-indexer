@@ -172,9 +172,12 @@ def _all_required_evidence(root: Path) -> None:
         "flyto-landing-page/.github/workflows/i18n-drift.yml",
         "flyto-indexer/src/verify.py",
         "flyto-code/.github/workflows/ci.yml",
+        "flyto-indexer/scripts/audit_github_actions_startup.py",
         "flyto-code/scripts/audit-github-actions-startup.mjs",
         "flyto-code/.github/workflows/actions-startup-probe.yml",
         "flyto-engine/.github/workflows/ci.yml",
+        "flyto-core/.github/workflows/ci.yml",
+        "flyto-indexer/.github/workflows/ci.yml",
         "flyto-landing-page/.github/workflows/ci.yml",
         "flyto-code/reports/closed-loop-audit/ui-all-routes-dom-smoke.json",
         "flyto-core/src/recipes/flyto2-ui-smoke.yaml",
@@ -271,28 +274,39 @@ def _all_fresh_evidence(root: Path, *, generated_at: str = "2026-06-22T01:00:00+
             file_path.write_text(
                 json.dumps(
                     {
-                        "schema": "flyto-code.github-actions-startup-audit.v1",
-                        "generatedAt": generated_at,
-                        "repo": "flytohub/flyto-code",
-                        "head": "0000000000000000000000000000000000000000",
-                        "requiredWorkflows": ["CI"],
+                        "schema": "flyto.workspace-github-actions-startup-audit.v1",
+                        "generated_at": generated_at,
                         "ok": True,
-                        "workflows": [
+                        "repositories": [
                             {
-                                "workflow": "CI",
-                                "id": 123,
-                                "status": "completed",
-                                "conclusion": "success",
-                                "jobs": [
+                                "repo": "flytohub/flyto-code",
+                                "head": "0000000000000000000000000000000000000000",
+                                "requiredWorkflows": ["CI"],
+                                "ok": True,
+                                "workflows": [
                                     {
-                                        "name": "ci",
+                                        "workflow": "CI",
+                                        "id": 123,
                                         "status": "completed",
                                         "conclusion": "success",
+                                        "jobs": [
+                                            {
+                                                "name": "ci",
+                                                "status": "completed",
+                                                "conclusion": "success",
+                                            }
+                                        ],
+                                        "ok": True,
                                     }
                                 ],
-                                "ok": True,
                             }
                         ],
+                        "summary": {
+                            "repo_count": 1,
+                            "workflow_count": 1,
+                            "failure_count": 0,
+                            "failures": [],
+                        },
                     }
                 ),
                 encoding="utf-8",
@@ -535,24 +549,34 @@ def test_release_packet_blocks_github_actions_startup_failure(tmp_path):
     (evidence_dir / "github-actions-startup.json").write_text(
         json.dumps(
             {
-                "schema": "flyto-code.github-actions-startup-audit.v1",
-                "generatedAt": "2026-06-22T01:00:00+00:00",
-                "repo": "flytohub/flyto-code",
-                "head": "0000000000000000000000000000000000000000",
-                "requiredWorkflows": ["CI"],
+                "schema": "flyto.workspace-github-actions-startup-audit.v1",
+                "generated_at": "2026-06-22T01:00:00+00:00",
                 "ok": False,
-                "failure": "CI: no_jobs_created",
-                "workflows": [
+                "repositories": [
                     {
-                        "workflow": "CI",
-                        "id": 28072960830,
-                        "status": "completed",
-                        "conclusion": "startup_failure",
-                        "jobs": [],
+                        "repo": "flytohub/flyto-code",
+                        "head": "0000000000000000000000000000000000000000",
+                        "requiredWorkflows": ["CI"],
                         "ok": False,
-                        "reason": "no_jobs_created",
+                        "workflows": [
+                            {
+                                "workflow": "CI",
+                                "id": 28072960830,
+                                "status": "completed",
+                                "conclusion": "startup_failure",
+                                "jobs": [],
+                                "ok": False,
+                                "reason": "no_jobs_created",
+                            }
+                        ],
                     }
                 ],
+                "summary": {
+                    "repo_count": 1,
+                    "workflow_count": 1,
+                    "failure_count": 1,
+                    "failures": ["flytohub/flyto-code/CI: no_jobs_created"],
+                },
             }
         ),
         encoding="utf-8",
@@ -582,8 +606,9 @@ def test_release_packet_blocks_github_actions_startup_failure(tmp_path):
     assert startup["reason"] == "invalid_contract"
     assert startup["contract_valid"] is False
     assert "ok must be true" in startup["contract_errors"]
-    assert "workflows[0].jobs must be a non-empty list" in startup["contract_errors"]
-    assert "workflows[0].conclusion must be success" in startup["contract_errors"]
+    assert "repositories[0].ok must be true" in startup["contract_errors"]
+    assert "repositories[0].workflows[0].jobs must be a non-empty list" in startup["contract_errors"]
+    assert "repositories[0].workflows[0].conclusion must be success" in startup["contract_errors"]
     p0 = {item["id"]: item for item in result["p0_blockers"]}
     assert "github_actions_startup" in p0
     not_proven = {item["id"]: item for item in result["not_proven"]}

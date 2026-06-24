@@ -1,5 +1,20 @@
 # Decisions
 
+## 2026-06-24 - Remote CI startup is workspace release evidence
+
+Decision: GitHub Actions startup evidence is now a workspace-level fresh
+release contract. `github-actions-startup.json` may use the legacy
+single-repo `flyto-code.github-actions-startup-audit.v1` shape or the
+workspace `flyto.workspace-github-actions-startup-audit.v1` shape, but it must
+prove required workflows completed successfully, created jobs, and include at
+least one successful job per workflow.
+
+Reason: local tests and source evidence cannot prove that GitHub actually
+accepted a workflow, assigned a runner, created jobs, and produced green remote
+CI. Flyto2 release operations must fail closed when workflows report
+`startup_failure`, have no jobs, have no runner/log evidence, or have missing
+runs for the current core-repo HEAD.
+
 ## 2026-06-23 - Fresh release evidence findings must block readiness
 
 Decision: fresh release evidence contracts now propagate P0/P1 finding counts

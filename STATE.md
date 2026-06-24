@@ -30,6 +30,10 @@
   blockers even when the artifact schema is valid. This prevents live
   public-site issues, such as AI crawler edge blocks, from being hidden behind
   a passing evidence shape.
+- GitHub Actions startup is now a workspace-level P0 fresh release contract.
+  `scripts/audit_github_actions_startup.py` writes real remote CI metadata for
+  core repositories; release packets block when required workflows are missing,
+  fail, report `startup_failure`, or create no jobs.
 - `scripts/write_continuous_release_evidence.py` can now generate fresh digest
   artifacts for the remaining release-packet deliverables from current local
   source evidence, while leaving contract artifacts such as Product
@@ -42,6 +46,11 @@
 - Cross-repo production readiness still depends on remote CI stability in
   sibling Flyto repositories and on continued proof that indexer analysis stays
   local-first.
+- As of the 2026-06-24 workspace audit, required GitHub Actions workflows are
+  not green across core repos. Observed blockers include `startup_failure`,
+  missing runs for current HEAD, failed jobs with no successful job, and
+  no-job workflow runs. Do not claim release completion until a fresh
+  `github-actions-startup.json` contract reports `ok=true`.
 
 ## Verification Matrix
 
@@ -55,3 +64,4 @@
 | Build | `python -m build` | Package integrity |
 | Flyto2 release packet | `python -m src.cli flyto2-release-packet /Users/chester/flytohub --health-report config/flyto2/health-baseline-2026-06-21.json --json` | Workspace inventory, deliverables, blockers, readiness verdict |
 | Flyto2 fresh packet | `python -m src.cli flyto2-release-packet /Users/chester/flytohub --health-report config/flyto2/health-baseline-2026-06-21.json --fresh-evidence-dir reports/flyto2-9h-2026-06-22 --require-fresh --run-start <iso8601> --json` | Nine-hour fresh evidence gate |
+| GitHub Actions startup | `python scripts/audit_github_actions_startup.py --workspace /Users/chester/flytohub --output /tmp/github-actions-startup.json --soft` | Core repo remote CI startup, job creation, and green workflow proof |
