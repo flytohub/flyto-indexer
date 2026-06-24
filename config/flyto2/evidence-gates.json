@@ -26,8 +26,8 @@
       "category": "product_line",
       "severity": "P1",
       "product_lines": ["security"],
-      "deliverables": ["billing_entitlement_audit", "rbac_tenant_isolation_audit", "product_state_machine_audit", "deterministic_product_verification", "security_performance_cicd_audit"],
-      "confidence": "Security readiness is supported by entitlement/RBAC, tenant isolation, state-machine, deterministic product verification, and security/CI evidence."
+      "deliverables": ["billing_entitlement_audit", "rbac_tenant_isolation_audit", "product_state_machine_audit", "deterministic_product_verification", "security_performance_cicd_audit", "github_actions_startup"],
+      "confidence": "Security readiness is supported by entitlement/RBAC, tenant isolation, state-machine, deterministic product verification, security/CI evidence, and proof that required GitHub Actions workflows started, created jobs, and passed."
     },
     {
       "id": "data_product_reservation",
@@ -62,8 +62,8 @@
       "category": "deployment",
       "severity": "P1",
       "product_lines": ["security", "cloud_apps_automation"],
-      "deliverables": ["enterprise_airgap_open_core_audit", "security_performance_cicd_audit"],
-      "confidence": "Enterprise readiness requires airgap/open-core boundary evidence and CI/security evidence."
+      "deliverables": ["enterprise_airgap_open_core_audit", "security_performance_cicd_audit", "github_actions_startup"],
+      "confidence": "Enterprise readiness requires airgap/open-core boundary evidence, CI/security evidence, and proof that required GitHub Actions workflows started, created jobs, and passed."
     },
     {
       "id": "global_visibility",
@@ -80,8 +80,8 @@
       "category": "operability",
       "severity": "P0",
       "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"],
-      "deliverables": ["release_readiness_verdict", "workspace_inventory", "deterministic_product_verification", "public_site_verification", "security_performance_cicd_audit"],
-      "confidence": "Production release confidence requires a passing product gate, clean inventory, deterministic product verification, public-site verification, and CI/security evidence."
+      "deliverables": ["release_readiness_verdict", "workspace_inventory", "deterministic_product_verification", "public_site_verification", "security_performance_cicd_audit", "github_actions_startup"],
+      "confidence": "Production release confidence requires a passing product gate, clean inventory, deterministic product verification, public-site verification, CI/security evidence, and proof that required GitHub Actions workflows started, created jobs, and passed."
     }
   ]
 }

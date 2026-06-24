@@ -172,6 +172,8 @@ def _all_required_evidence(root: Path) -> None:
         "flyto-landing-page/.github/workflows/i18n-drift.yml",
         "flyto-indexer/src/verify.py",
         "flyto-code/.github/workflows/ci.yml",
+        "flyto-code/scripts/audit-github-actions-startup.mjs",
+        "flyto-code/.github/workflows/actions-startup-probe.yml",
         "flyto-engine/.github/workflows/ci.yml",
         "flyto-landing-page/.github/workflows/ci.yml",
         "flyto-code/reports/closed-loop-audit/ui-all-routes-dom-smoke.json",
@@ -200,6 +202,7 @@ def _all_fresh_evidence(root: Path, *, generated_at: str = "2026-06-22T01:00:00+
         "public-site-verification.md",
         "browser-smoke.json",
         "browser-smoke.md",
+        "github-actions-startup.json",
         "release-packet.json",
         "release-packet.md",
     ]:
@@ -260,6 +263,36 @@ def _all_fresh_evidence(root: Path, *, generated_at: str = "2026-06-22T01:00:00+
                             "seo_geo_readiness": 1.0,
                             "browser_render_readiness": 1.0,
                         },
+                    }
+                ),
+                encoding="utf-8",
+            )
+        elif evidence_path == "github-actions-startup.json":
+            file_path.write_text(
+                json.dumps(
+                    {
+                        "schema": "flyto-code.github-actions-startup-audit.v1",
+                        "generatedAt": generated_at,
+                        "repo": "flytohub/flyto-code",
+                        "head": "0000000000000000000000000000000000000000",
+                        "requiredWorkflows": ["CI"],
+                        "ok": True,
+                        "workflows": [
+                            {
+                                "workflow": "CI",
+                                "id": 123,
+                                "status": "completed",
+                                "conclusion": "success",
+                                "jobs": [
+                                    {
+                                        "name": "ci",
+                                        "status": "completed",
+                                        "conclusion": "success",
+                                    }
+                                ],
+                                "ok": True,
+                            }
+                        ],
                     }
                 ),
                 encoding="utf-8",
@@ -492,6 +525,69 @@ def test_release_packet_blocks_public_site_p1_findings(tmp_path):
     ]
     p1 = {item["id"]: item for item in result["p1_before_production"]}
     assert "public_site_verification" in p1
+
+
+def test_release_packet_blocks_github_actions_startup_failure(tmp_path):
+    _repo(tmp_path, "flyto-core")
+    _repo(tmp_path, "flyto-ai")
+    _all_required_evidence(tmp_path)
+    evidence_dir = _all_fresh_evidence(tmp_path)
+    (evidence_dir / "github-actions-startup.json").write_text(
+        json.dumps(
+            {
+                "schema": "flyto-code.github-actions-startup-audit.v1",
+                "generatedAt": "2026-06-22T01:00:00+00:00",
+                "repo": "flytohub/flyto-code",
+                "head": "0000000000000000000000000000000000000000",
+                "requiredWorkflows": ["CI"],
+                "ok": False,
+                "failure": "CI: no_jobs_created",
+                "workflows": [
+                    {
+                        "workflow": "CI",
+                        "id": 28072960830,
+                        "status": "completed",
+                        "conclusion": "startup_failure",
+                        "jobs": [],
+                        "ok": False,
+                        "reason": "no_jobs_created",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "manifest.json"
+    health = tmp_path / "health.json"
+    _manifest(manifest)
+    _health(health)
+
+    result = run_release_packet(
+        ReleasePacketOptions(
+            workspace=tmp_path,
+            manifest_path=manifest,
+            health_report_path=health,
+            fresh_evidence_dir=evidence_dir,
+            require_fresh=True,
+            run_start=datetime(2026, 6, 22, 0, 0, tzinfo=timezone.utc),
+        )
+    )
+
+    assert result["verdict"] == "BLOCKED_FOR_PRODUCTION"
+    by_id = {item["id"]: item for item in result["deliverables"]}
+    github_actions = by_id["github_actions_startup"]
+    assert github_actions["status"] == "needs_fresh_evidence"
+    fresh = {item["path"]: item for item in github_actions["fresh_evidence"]}
+    startup = fresh["github-actions-startup.json"]
+    assert startup["reason"] == "invalid_contract"
+    assert startup["contract_valid"] is False
+    assert "ok must be true" in startup["contract_errors"]
+    assert "workflows[0].jobs must be a non-empty list" in startup["contract_errors"]
+    assert "workflows[0].conclusion must be success" in startup["contract_errors"]
+    p0 = {item["id"]: item for item in result["p0_blockers"]}
+    assert "github_actions_startup" in p0
+    not_proven = {item["id"]: item for item in result["not_proven"]}
+    assert "release_operations" in not_proven
 
 
 def test_parse_run_start_rejects_invalid_timestamp():

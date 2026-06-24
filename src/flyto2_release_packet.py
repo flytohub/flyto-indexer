@@ -238,7 +238,15 @@ def _metadata_timestamp(path: Path) -> datetime | None:
         return None
     if not isinstance(data, dict):
         return None
-    for key in ("run_started_at", "generated_at", "created_at", "completed_at"):
+    for key in (
+        "run_started_at",
+        "generated_at",
+        "generatedAt",
+        "created_at",
+        "createdAt",
+        "completed_at",
+        "completedAt",
+    ):
         value = data.get(key)
         if isinstance(value, str):
             parsed = _parse_iso_datetime(value)
@@ -328,6 +336,51 @@ def _validate_public_site_verification_contract(path: Path) -> tuple[bool, list[
     return not errors, errors
 
 
+def _validate_github_actions_startup_contract(path: Path) -> tuple[bool, list[str]]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, [f"invalid JSON: {exc}"]
+    if not isinstance(data, dict):
+        return False, ["root must be an object"]
+
+    errors: list[str] = []
+    if data.get("schema") != "flyto-code.github-actions-startup-audit.v1":
+        errors.append("schema must be flyto-code.github-actions-startup-audit.v1")
+    if data.get("ok") is not True:
+        errors.append("ok must be true")
+
+    workflows = data.get("workflows")
+    if not isinstance(workflows, list) or len(workflows) == 0:
+        errors.append("workflows must be a non-empty list")
+        workflows = []
+
+    for index, workflow in enumerate(workflows):
+        if not isinstance(workflow, dict):
+            errors.append(f"workflows[{index}] must be an object")
+            continue
+        if workflow.get("ok") is not True:
+            errors.append(f"workflows[{index}].ok must be true")
+        if workflow.get("status") != "completed":
+            errors.append(f"workflows[{index}].status must be completed")
+        if workflow.get("conclusion") != "success":
+            errors.append(f"workflows[{index}].conclusion must be success")
+        jobs = workflow.get("jobs")
+        if not isinstance(jobs, list) or len(jobs) == 0:
+            errors.append(f"workflows[{index}].jobs must be a non-empty list")
+            continue
+        for job_index, job in enumerate(jobs):
+            if not isinstance(job, dict):
+                errors.append(f"workflows[{index}].jobs[{job_index}] must be an object")
+                continue
+            if job.get("status") != "completed":
+                errors.append(f"workflows[{index}].jobs[{job_index}].status must be completed")
+            if job.get("conclusion") != "success":
+                errors.append(f"workflows[{index}].jobs[{job_index}].conclusion must be success")
+
+    return not errors, errors
+
+
 def _fresh_finding_counts(path: Path) -> dict[str, int]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -377,6 +430,15 @@ def _fresh_contract_status(relative: str, path: Path, contract: str | None) -> d
         }
     if contract == "flyto2.public_site_verification.v1":
         valid, errors = _validate_public_site_verification_contract(path)
+        return {
+            "contract": contract,
+            "contract_valid": valid,
+            "contract_errors": errors,
+            "contract_finding_counts": finding_counts,
+            "contract_blocking_findings": blocking_findings,
+        }
+    if contract == "flyto.github_actions_startup.v1":
+        valid, errors = _validate_github_actions_startup_contract(path)
         return {
             "contract": contract,
             "contract_valid": valid,
@@ -594,6 +656,20 @@ def _deliverable_specs() -> list[dict[str, Any]]:
                 "flyto-landing-page/.github/workflows/ci.yml",
             ],
             "fresh": ["security-performance.md"],
+        },
+        {
+            "id": "github_actions_startup",
+            "title": "GitHub Actions startup / green CI",
+            "severity": "P0",
+            "required": [
+                "flyto-code/scripts/audit-github-actions-startup.mjs",
+                "flyto-code/.github/workflows/ci.yml",
+                "flyto-code/.github/workflows/actions-startup-probe.yml",
+            ],
+            "fresh": ["github-actions-startup.json"],
+            "fresh_contracts": {
+                "github-actions-startup.json": "flyto.github_actions_startup.v1",
+            },
         },
         {
             "id": "e2e_browser_smoke_matrix",
