@@ -379,7 +379,7 @@ class APIHandler(BaseHTTPRequestHandler):
     def _send_cors_headers(self):
         origin = self._get_cors_origin()
         if origin:
-            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Origin", origin)  # codeql[py/http-response-splitting] - origin is allowlist-validated and CR/LF-stripped in _get_cors_origin
             self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
