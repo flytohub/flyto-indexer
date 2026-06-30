@@ -1249,6 +1249,7 @@ ee-sim-logs:
 
 audit:
 \tpython3 install/scripts/audit-release-tree.py .
+\tpython3 scripts/audit-ce-boundary.py .
 \tpython3 scripts/audit-github-protection.py .
 
 preflight:
@@ -1817,6 +1818,7 @@ REQUIRED = [
     ".github/pull_request_template.md",
     ".github/workflows/ci.yml",
     "scripts/audit-github-protection.py",
+    "scripts/audit-ce-boundary.py",
 ]
 
 PRIVATE_GLOBS = [
@@ -2082,10 +2084,13 @@ Run this before publishing:
 
 ```sh
 python3 install/scripts/audit-release-tree.py .
+python3 scripts/audit-ce-boundary.py .
 ```
 
 The audit fails if private engine paths escape, CE compose references EE image
-coordinates, or generated files contain secret-like values.
+coordinates, generated files contain secret-like values, CE runtime config ships
+default analytics/phone-home keys, or the public docs lose their CE Preview and
+edition-boundary markers.
 
 This is technical containment, not a substitute for license, trademark, image
 signing, SBOM, and release provenance. A production release should publish signed
@@ -2293,53 +2298,111 @@ enforces it.
         "docs/docker-hub-overview.md",
         """# Docker Hub Repository Overview
 
-```markdown
-# Flyto2 Warroom CE
+````markdown
+# Flyto2 Warroom CE Preview
 
 Flyto2 Warroom CE is the self-hosted community edition of Flyto2 Warroom, an
 open-core security operations platform for code, cloud, container, runtime,
 external attack surface, evidence, and compliance workflows.
 
+This is a CE Preview release for local labs, evaluators, security teams, and
+open-source users who want to run the Warroom stack on their own Docker host.
+
 ## Links
 
 - Website: https://flyto2.com
 - GitHub: https://github.com/flytohub/flyto-warroom
+- Install docs: https://github.com/flytohub/flyto-warroom/blob/main/docs/local-install.md
+- Security policy: https://github.com/flytohub/flyto-warroom/blob/main/SECURITY.md
 
 ## Images
 
 This repository publishes Flyto2 Warroom CE services as separate tags:
 
-- `engine-ce`
-- `worker-ce`
-- `code-ce`
-- `runner-ce`
-- `verification-ce`
-- `brand-vision-ce`
-- `pdf-ce`
+- `engine-ce` - backend API and security workflow engine
+- `worker-ce` - background worker
+- `code-ce` - web UI
+- `runner-ce` - automation and browser runner service
+- `verification-ce` - product verification service
+- `brand-vision-ce` - brand/image analysis helper
+- `pdf-ce` - report PDF service
 
-## Verify
+Versioned tags are also published for reproducible installs, for example:
+
+- `engine-ce-20260630-84db98a`
+- `code-ce-20260630-84db98a`
+
+## Quick Start
+
+Recommended install path is Docker Compose from the GitHub repository:
 
 ```sh
 git clone https://github.com/flytohub/flyto-warroom.git
-python flyto-warroom/install/scripts/verify-docker-images.py --manifest flyto-warroom/OPEN_CORE_MANIFEST.json
-```
+cd flyto-warroom
 
-## Install
-
-Use the Docker Compose files and setup helper in the GitHub repository:
-
-```sh
-python3 install/scripts/setup-ce.py
-make verify-images
+python3 install/scripts/setup-ce.py --email admin@example.com
 make preflight
+make verify-images
 make ce-up
 ```
 
-## Security
+Open the UI:
 
-CE local auth is password-based. Official publisher accounts use 2FA and access
-tokens. Forks and modified builds must not imply official Flyto2 endorsement.
+```txt
+http://localhost:8088
 ```
+
+The setup script writes `install/.env`, generates local secrets, and stores only
+a password hash for the initial admin account.
+
+## Default Ports
+
+- UI: `8088`
+- Engine API: `8080`
+- Postgres: `5432`
+- Runner: `8090`
+- Verification: `8344`
+- Brand Vision: `8095`
+
+Ports can be changed in `install/.env`.
+
+## Privacy
+
+Flyto2 Warroom CE does not enable product telemetry by default.
+
+The CE Docker install does not ship a default Sentry, PostHog, Segment,
+Amplitude, GA, or GTM key. Runtime telemetry endpoints are for your own
+self-hosted security/runtime data and are stored in your own Flyto2 Warroom
+instance.
+
+## Edition Model
+
+Community Edition includes the self-hosted open-core Warroom stack.
+
+Enterprise features such as hosted SaaS control plane, enterprise
+SSO/SAML/SCIM, commercial threat intelligence, advanced entitlement controls,
+managed runner fleets, airgap packaging, and enterprise support are separate
+commercial offerings.
+
+## Architecture Note
+
+This image set is currently published as linux/arm64 images from the local
+release pipeline. Check GitHub release notes and image digests before production
+use. linux/amd64 and multi-arch publishing should be enabled before a broader
+public launch.
+
+## Verify Image Digests
+
+```sh
+git clone https://github.com/flytohub/flyto-warroom.git
+python3 flyto-warroom/install/scripts/verify-docker-images.py --manifest flyto-warroom/OPEN_CORE_MANIFEST.json
+```
+
+## License
+
+See the GitHub repository for license, trademark, contribution, and security
+details.
+````
 """,
     )
     write_text(
@@ -2640,6 +2703,7 @@ Describe the product problem and the scope of this change.
 - [ ] I kept Flyto2 trademarks and official release names reserved for upstream builds.
 - [ ] I understand accepted CE changes may be imported into the private Flyto2 source workspace and commercial releases.
 - [ ] I ran `python install/scripts/audit-release-tree.py .` or explained why it is not applicable.
+- [ ] I ran `python scripts/audit-ce-boundary.py .` for CE privacy/moat-sensitive changes.
 - [ ] I included tests, contract checks, or installer evidence for behavior changes.
 - [ ] My commits include `Signed-off-by:` lines, or I certify the same DCO statement in this PR.
 
@@ -2695,6 +2759,7 @@ REQUIRED_MARKERS = {
     ],
     ".github/pull_request_template.md": [
         "private image coordinates",
+        "audit-ce-boundary.py",
         "Signed-off-by:",
         "commercial releases",
     ],
@@ -2702,8 +2767,14 @@ REQUIRED_MARKERS = {
         "release-audit",
         "governance-audit",
         "docker-image-audit",
+        "Audit CE moat and privacy boundary",
         "Audit GitHub protection files",
         "Export upstream patch preview",
+    ],
+    "scripts/audit-ce-boundary.py": [
+        "CE_CONTROL_FILES",
+        "POSTHOG",
+        "Flyto2 Warroom CE Preview",
     ],
 }
 
@@ -2719,6 +2790,133 @@ def main() -> int:
         for marker in markers:
             if marker not in text:
                 blockers.append(f"{rel} missing marker: {marker}")
+    if blockers:
+        for blocker in blockers:
+            print("BLOCKED: " + blocker, file=sys.stderr)
+        return 2
+    print("ok")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+''',
+    )
+    write_text(
+        "scripts/audit-ce-boundary.py",
+        '''#!/usr/bin/env python3
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+
+ROOT = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
+
+CE_CONTROL_FILES = [
+    "Makefile",
+    "install/.env.ce.example",
+    "install/docker-compose.ce.yml",
+    "install/scripts/build-local-images.sh",
+    "install/scripts/preflight.py",
+    "install/scripts/setup-ce.py",
+    "packages/flyto-code/.env.example",
+    ".github/workflows/ci.yml",
+]
+
+REQUIRED_FILES = [
+    "docs/docker-hub-overview.md",
+    "docs/code-protection.md",
+    "docs/official-builds.md",
+    "TRADEMARK.md",
+    "GOVERNANCE.md",
+]
+
+DENIED_CONTROL_PATTERNS = [
+    (re.compile(r"VITE_SENTRY_DSN\\s*=\\s*\\S+"), "CE must not ship a default Sentry DSN"),
+    (re.compile(r"SENTRY_AUTH_TOKEN\\s*=\\s*\\S+"), "CE must not ship a Sentry auth token"),
+    (re.compile(r"POSTHOG", re.IGNORECASE), "CE must not ship PostHog configuration"),
+    (re.compile(r"SEGMENT_(WRITE_)?KEY", re.IGNORECASE), "CE must not ship Segment configuration"),
+    (re.compile(r"AMPLITUDE(_API)?_KEY", re.IGNORECASE), "CE must not ship Amplitude configuration"),
+    (re.compile(r"GA_MEASUREMENT|GOOGLE_ANALYTICS|GTM_ID", re.IGNORECASE), "CE must not ship GA/GTM configuration"),
+    (re.compile(r"FLYTO_CE_TELEMETRY|INSTALL_PING|PHONE_HOME", re.IGNORECASE), "CE telemetry must not be enabled implicitly"),
+    (re.compile(r"https?://(api\\.)?flyto2\\.com/(telemetry|install|usage|events)", re.IGNORECASE), "CE must not phone home to Flyto2 telemetry endpoints"),
+    (re.compile(r"ghcr\\.io/.+-ee", re.IGNORECASE), "CE must not reference enterprise images"),
+    (re.compile(r"flyto2-warroom-[a-z-]+-ee", re.IGNORECASE), "CE must not reference enterprise image tags"),
+]
+
+DENIED_TREE_PATTERNS = [
+    "packages/flyto-contracts/internal",
+    "packages/flyto-contracts/cmd",
+    "packages/flyto-contracts/api/handlers_",
+    "packages/flyto-code/.env.production",
+    "packages/flyto-code/.env.local",
+]
+
+REQUIRED_MARKERS = {
+    "docs/docker-hub-overview.md": [
+        "Flyto2 Warroom CE Preview",
+        "does not enable product telemetry by default",
+        "Recommended install path is Docker Compose",
+        "currently published as linux/arm64 images",
+    ],
+    "docs/code-protection.md": [
+        "open-core release protects private code by construction",
+        "audit-ce-boundary.py",
+    ],
+    "docs/official-builds.md": [
+        "Official Images",
+        "Forks may rebuild CE under their own names",
+    ],
+    "TRADEMARK.md": [
+        "Modified Distributions",
+        "official Flyto2 build",
+    ],
+    "GOVERNANCE.md": [
+        "private Flyto2 source workspace",
+        "community edition is public",
+    ],
+}
+
+
+def read(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return ""
+
+
+def main() -> int:
+    blockers: list[str] = []
+
+    for rel in REQUIRED_FILES + CE_CONTROL_FILES:
+        if not (ROOT / rel).exists():
+            blockers.append(f"missing required CE boundary file: {rel}")
+
+    for rel in CE_CONTROL_FILES:
+        path = ROOT / rel
+        if not path.exists():
+            continue
+        body = read(path)
+        for pattern, reason in DENIED_CONTROL_PATTERNS:
+            if pattern.search(body):
+                blockers.append(f"{rel}: {reason}")
+
+    for denied in DENIED_TREE_PATTERNS:
+        matches = list(ROOT.glob(denied + "*"))
+        if matches:
+            blockers.append(f"private path escaped into CE tree: {denied}")
+
+    for rel, markers in REQUIRED_MARKERS.items():
+        path = ROOT / rel
+        if not path.exists():
+            continue
+        body = read(path)
+        for marker in markers:
+            if marker not in body:
+                blockers.append(f"{rel} missing CE boundary marker: {marker}")
+
     if blockers:
         for blocker in blockers:
             print("BLOCKED: " + blocker, file=sys.stderr)
@@ -2751,6 +2949,8 @@ jobs:
           python-version: "3.11"
       - name: Audit GitHub protection files
         run: python scripts/audit-github-protection.py .
+      - name: Audit CE moat and privacy boundary
+        run: python scripts/audit-ce-boundary.py .
 
   release-audit:
     runs-on: ubuntu-latest
@@ -2761,6 +2961,8 @@ jobs:
           python-version: "3.11"
       - name: Audit generated release boundary
         run: python install/scripts/audit-release-tree.py .
+      - name: Audit CE moat and privacy boundary
+        run: python scripts/audit-ce-boundary.py .
       - name: Validate public contracts
         run: |
           python packages/flyto-contracts/conformance/validate.py runner-callback packages/flyto-contracts/examples/runner-callback.json
@@ -2836,6 +3038,7 @@ def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, 
         ".github/pull_request_template.md",
         ".github/workflows/ci.yml",
         "scripts/audit-github-protection.py",
+        "scripts/audit-ce-boundary.py",
     ]
     missing = [rel for rel in required if not (root / rel).exists()]
     if missing:

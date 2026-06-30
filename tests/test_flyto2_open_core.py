@@ -341,6 +341,7 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert (output / ".github/CODEOWNERS").exists()
     assert (output / ".github/pull_request_template.md").exists()
     assert (output / "scripts/audit-github-protection.py").exists()
+    assert (output / "scripts/audit-ce-boundary.py").exists()
     assert (output / "packages/flyto-code/src-next/lib/env.ts").exists()
     assert (output / "packages/flyto-code/LICENSE").exists()
     assert (output / "packages/flyto-code/.env.example").exists()
@@ -352,6 +353,7 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     makefile = (output / "Makefile").read_text(encoding="utf-8")
     assert "docker-compose" in makefile
     assert "docker compose version" in makefile
+    assert "python3 scripts/audit-ce-boundary.py ." in makefile
     assert "python3 scripts/audit-github-protection.py ." in makefile
     assert "python3 install/scripts/setup-ce.py" in makefile
     assert "python3 install/scripts/preflight.py --env $(ENV_CE)" in makefile
@@ -414,10 +416,17 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     ci = (output / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "governance-audit" in ci
     assert "docker-image-audit" in ci
+    assert "Audit CE moat and privacy boundary" in ci
+    assert "python scripts/audit-ce-boundary.py ." in ci
     assert "python scripts/audit-github-protection.py ." in ci
     account_security = (output / "docs/account-security.md").read_text(encoding="utf-8")
     assert "Official publisher accounts must use 2FA" in account_security
     assert "CE local JWT auth is password-based" in account_security
+    docker_overview = (output / "docs/docker-hub-overview.md").read_text(encoding="utf-8")
+    assert "Flyto2 Warroom CE Preview" in docker_overview
+    assert "does not enable product telemetry by default" in docker_overview
+    assert "Recommended install path is Docker Compose" in docker_overview
+    assert "currently published as linux/arm64 images" in docker_overview
 
     ee_compose = (output / "install/docker-compose.ee-sim.yml").read_text(encoding="utf-8")
     assert 'FLYTO_EDITION: "enterprise_airgap"' in ee_compose
@@ -451,6 +460,27 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
         capture_output=True,
     )
     assert github_audit.returncode == 0, github_audit.stderr
+
+    ce_boundary_audit = subprocess.run(
+        [sys.executable, str(output / "scripts/audit-ce-boundary.py"), str(output)],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert ce_boundary_audit.returncode == 0, ce_boundary_audit.stderr
+
+    poisoned_ce_env = output / "install/.env.ce.example"
+    original_ce_env = poisoned_ce_env.read_text(encoding="utf-8")
+    poisoned_ce_env.write_text(original_ce_env + "POSTHOG_PROJECT_API_KEY=phc_test\n", encoding="utf-8")
+    poisoned_boundary_audit = subprocess.run(
+        [sys.executable, str(output / "scripts/audit-ce-boundary.py"), str(output)],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert poisoned_boundary_audit.returncode == 2
+    assert "PostHog" in poisoned_boundary_audit.stderr
+    poisoned_ce_env.write_text(original_ce_env, encoding="utf-8")
 
     setup = subprocess.run(
         [
