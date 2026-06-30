@@ -197,6 +197,15 @@ def _contract_manifest(path: Path, *, internal_target: bool = False) -> None:
                         "brand_vision": "brand-vision-ce",
                         "pdf": "pdf-ce",
                     },
+                    "public_image_digests": {
+                        "engine": "sha256:4f6e7911e9fffc795b09e61d04206e37c6a5e3316dff1d61032d8cc0626b2527",
+                        "worker": "sha256:4f6e7911e9fffc795b09e61d04206e37c6a5e3316dff1d61032d8cc0626b2527",
+                        "frontend": "sha256:de8537658a123398c837ef72078a6c1370728e8add464ab9257d157caf694175",
+                        "runner": "sha256:239744f8753365b4e82f08628a9964aa6364ce8d37823f92ad83dcf915d75774",
+                        "verification": "sha256:ae3f5da8571eb1ee877ec4baf8c0e430f91ff73a878f8e2eeb9b07aae0eb8a90",
+                        "brand_vision": "sha256:f83f2a3b3c3e3de9313077646c57c769d9ca303746d1d02312d808cbab5074ad",
+                        "pdf": "sha256:f428b27543a1745b2b9586260964f8bb2687e877aaf3a7491134c8a4d40e0889",
+                    },
                 },
                 "packages": [
                     {
@@ -315,12 +324,17 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert (output / "install/.env.ee-sim.example").exists()
     assert (output / "install/scripts/audit-release-tree.py").exists()
     assert (output / "install/scripts/hash-local-password.py").exists()
+    assert (output / "install/scripts/setup-ce.py").exists()
+    assert (output / "install/scripts/preflight.py").exists()
+    assert (output / "install/scripts/verify-docker-images.py").exists()
     assert (output / "install/scripts/mint-ee-sim-jwt.py").exists()
     assert (output / "docs/local-install.md").exists()
     assert (output / "docs/enterprise-simulation.md").exists()
     assert (output / "docs/code-protection.md").exists()
     assert (output / "docs/official-builds.md").exists()
     assert (output / "docs/github-hardening.md").exists()
+    assert (output / "docs/account-security.md").exists()
+    assert (output / "docs/docker-hub-overview.md").exists()
     assert (output / "TRADEMARK.md").exists()
     assert (output / "SECURITY.md").exists()
     assert (output / "GOVERNANCE.md").exists()
@@ -339,6 +353,9 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert "docker-compose" in makefile
     assert "docker compose version" in makefile
     assert "python3 scripts/audit-github-protection.py ." in makefile
+    assert "python3 install/scripts/setup-ce.py" in makefile
+    assert "python3 install/scripts/preflight.py --env $(ENV_CE)" in makefile
+    assert "python3 install/scripts/verify-docker-images.py" in makefile
     build_script = (output / "install/scripts/build-local-images.sh").read_text(encoding="utf-8")
     assert 'docker tag "$ENGINE_IMAGE:$ENGINE_TAG" "$WORKER_IMAGE:$WORKER_TAG"' in build_script
     assert "Dockerfile.worker" not in build_script
@@ -388,7 +405,11 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert "@ChesterHsu" in codeowners
     ci = (output / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "governance-audit" in ci
+    assert "docker-image-audit" in ci
     assert "python scripts/audit-github-protection.py ." in ci
+    account_security = (output / "docs/account-security.md").read_text(encoding="utf-8")
+    assert "Official publisher accounts must use 2FA" in account_security
+    assert "CE local JWT auth is password-based" in account_security
 
     ee_compose = (output / "install/docker-compose.ee-sim.yml").read_text(encoding="utf-8")
     assert 'FLYTO_EDITION: "enterprise_airgap"' in ee_compose
@@ -422,6 +443,59 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
         capture_output=True,
     )
     assert github_audit.returncode == 0, github_audit.stderr
+
+    setup = subprocess.run(
+        [
+            sys.executable,
+            str(output / "install/scripts/setup-ce.py"),
+            "--email",
+            "admin@example.test",
+            "--password-stdin",
+            "--force",
+        ],
+        input="StrongPassw0rd!\n",
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert setup.returncode == 0, setup.stderr
+    generated_env = (output / "install/.env").read_text(encoding="utf-8")
+    assert "FLYTO_LOCAL_AUTH_EMAIL=admin@example.test" in generated_env
+    assert "StrongPassw0rd!" not in generated_env
+    assert "POSTGRES_PASSWORD=change-me-local-only" not in generated_env
+
+    preflight = subprocess.run(
+        [
+            sys.executable,
+            str(output / "install/scripts/preflight.py"),
+            "--env",
+            str(output / "install/.env"),
+            "--skip-compose",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert preflight.returncode == 0, preflight.stderr
+
+    image_check = subprocess.run(
+        [
+            sys.executable,
+            str(output / "install/scripts/verify-docker-images.py"),
+            "--manifest",
+            str(output / "OPEN_CORE_MANIFEST.json"),
+            "--dry-run",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert image_check.returncode == 0, image_check.stderr
+    assert (
+        "engine docker.io/chesterhsu/flyto-warroom:engine-ce "
+        "expected=sha256:4f6e7911e9fffc795b09e61d04206e37c6a5e3316dff1d61032d8cc0626b2527"
+    ) in image_check.stdout
+    assert "frontend docker.io/chesterhsu/flyto-warroom:code-ce" in image_check.stdout
 
 
 def test_warroom_enterprise_sim_jwt_helper_mints_access_token(tmp_path):

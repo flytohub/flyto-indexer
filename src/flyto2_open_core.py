@@ -1211,7 +1211,10 @@ DOCKER_COMPOSE ?= $(shell if docker compose version >/dev/null 2>&1; then printf
 COMPOSE_CE = $(DOCKER_COMPOSE) --env-file $(ENV_CE) -f install/docker-compose.ce.yml
 COMPOSE_EE_SIM = $(DOCKER_COMPOSE) --env-file $(ENV_EE_SIM) -f install/docker-compose.ce.yml -f install/docker-compose.ee-sim.yml
 
-.PHONY: ce-up ce-down ce-logs ce-ps ce-reset-db ee-sim-up ee-sim-down ee-sim-logs audit build-local-images
+.PHONY: setup-ce preflight verify-images ce-up ce-down ce-logs ce-ps ce-reset-db ee-sim-up ee-sim-down ee-sim-logs audit build-local-images
+
+setup-ce:
+\tpython3 install/scripts/setup-ce.py
 
 ce-up:
 \t$(COMPOSE_CE) up -d
@@ -1241,6 +1244,12 @@ ee-sim-logs:
 audit:
 \tpython3 install/scripts/audit-release-tree.py .
 \tpython3 scripts/audit-github-protection.py .
+
+preflight:
+\tpython3 install/scripts/preflight.py --env $(ENV_CE)
+
+verify-images:
+\tpython3 install/scripts/verify-docker-images.py
 
 build-local-images:
 \tsh install/scripts/build-local-images.sh /Users/chester/flytohub
@@ -1370,6 +1379,341 @@ if __name__ == "__main__":
 ''',
     )
     write_text(
+        "install/scripts/setup-ce.py",
+        '''#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import getpass
+import hashlib
+import os
+from pathlib import Path
+import re
+import secrets
+import stat
+import sys
+
+
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_EXAMPLE = ROOT / "install/.env.ce.example"
+DEFAULT_OUTPUT = ROOT / "install/.env"
+EMAIL_RE = re.compile(r"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
+
+SECRET_KEYS = {
+    "POSTGRES_PASSWORD": lambda: secrets.token_urlsafe(32),
+    "FLYTO_LOCAL_AUTH_JWT_SECRET": lambda: secrets.token_urlsafe(48),
+    "FLYTO_RUNNER_SECRET": lambda: secrets.token_urlsafe(48),
+    "FLYTO_VERIFICATION_SECRET": lambda: secrets.token_urlsafe(48),
+    "FLYTO_MASTER_KEY": lambda: secrets.token_urlsafe(48),
+}
+
+
+def parse_env(path: Path) -> list[tuple[str, str | None]]:
+    entries: list[tuple[str, str | None]] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        if not raw or raw.startswith("#") or "=" not in raw:
+            entries.append((raw, None))
+            continue
+        key, value = raw.split("=", 1)
+        entries.append((key, value))
+    return entries
+
+
+def render_env(entries: list[tuple[str, str | None]], updates: dict[str, str]) -> str:
+    lines: list[str] = []
+    seen: set[str] = set()
+    for key, value in entries:
+        if value is None:
+            lines.append(key)
+            continue
+        seen.add(key)
+        lines.append(f"{key}={updates.get(key, value)}")
+    for key, value in updates.items():
+        if key not in seen:
+            lines.append(f"{key}={value}")
+    return "\\n".join(lines).rstrip() + "\\n"
+
+
+def read_password(args: argparse.Namespace) -> str:
+    if args.password_stdin:
+        password = sys.stdin.readline().rstrip("\\n")
+        if not password:
+            raise SystemExit("password from stdin is empty")
+        return password
+    password = getpass.getpass("Initial admin password: ")
+    confirm = getpass.getpass("Confirm initial admin password: ")
+    if password != confirm:
+        raise SystemExit("passwords do not match")
+    return password
+
+
+def validate_password(password: str) -> None:
+    problems: list[str] = []
+    if len(password) < 14:
+        problems.append("at least 14 characters")
+    if password.lower() == password or password.upper() == password:
+        problems.append("mixed case")
+    if not any(ch.isdigit() for ch in password):
+        problems.append("a digit")
+    if not any(not ch.isalnum() for ch in password):
+        problems.append("a symbol")
+    if problems:
+        raise SystemExit("password must include " + ", ".join(problems))
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Create a secure Flyto2 Warroom CE install/.env")
+    parser.add_argument("--example", default=str(DEFAULT_EXAMPLE))
+    parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
+    parser.add_argument("--email", default="")
+    parser.add_argument("--display-name", default="Local Admin")
+    parser.add_argument("--password-stdin", action="store_true")
+    parser.add_argument("--force", action="store_true")
+    args = parser.parse_args()
+
+    example = Path(args.example)
+    output = Path(args.output)
+    if not example.exists():
+        raise SystemExit(f"missing example env: {example}")
+    if output.exists() and not args.force:
+        raise SystemExit(f"{output} already exists; pass --force to replace it")
+
+    email = args.email.strip() or input("Initial admin email: ").strip()
+    if not EMAIL_RE.match(email):
+        raise SystemExit("initial admin email is invalid")
+    password = read_password(args)
+    validate_password(password)
+
+    updates = {key: factory() for key, factory in SECRET_KEYS.items()}
+    updates.update({
+        "FLYTO_LOCAL_AUTH_EMAIL": email,
+        "FLYTO_LOCAL_AUTH_DISPLAY_NAME": args.display_name,
+        "FLYTO_LOCAL_AUTH_PASSWORD_SHA256": hashlib.sha256(password.encode("utf-8")).hexdigest(),
+    })
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(render_env(parse_env(example), updates), encoding="utf-8")
+    os.chmod(output, stat.S_IRUSR | stat.S_IWUSR)
+    print(f"wrote {output}")
+    print(f"initial admin email: {email}")
+    print("initial admin password was not stored; only SHA-256 hash was written")
+    print("next: make preflight && make ce-up")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+''',
+    )
+    write_text(
+        "install/scripts/verify-docker-images.py",
+        f'''#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import subprocess
+import sys
+
+
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_MANIFEST = ROOT / "OPEN_CORE_MANIFEST.json"
+
+
+def service_images(manifest_path: Path) -> list[tuple[str, str, str]]:
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    release = payload.get("release", {{}})
+    images = release.get("public_images", {{}})
+    tags = release.get("public_image_tags", {{}})
+    digests = release.get("public_image_digests", {{}})
+    default_repo = release.get("public_image_repository", "{_WARROOM_DEFAULT_IMAGE_REPOSITORY}")
+    defaults = {{
+        "engine": "engine-ce",
+        "worker": "worker-ce",
+        "frontend": "code-ce",
+        "runner": "runner-ce",
+        "verification": "verification-ce",
+        "brand_vision": "brand-vision-ce",
+        "pdf": "pdf-ce",
+    }}
+    result: list[tuple[str, str, str]] = []
+    for service, default_tag in defaults.items():
+        repo = images.get(service, default_repo)
+        tag = tags.get(service, default_tag)
+        result.append((service, f"{{repo}}:{{tag}}", digests.get(service, "")))
+    return result
+
+
+def run(cmd: list[str], *, timeout: int) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, text=True, capture_output=True, timeout=timeout, check=False)
+
+
+def descriptor_digest(payload: object) -> str:
+    if isinstance(payload, dict):
+        descriptor = payload.get("Descriptor")
+        if isinstance(descriptor, dict) and isinstance(descriptor.get("digest"), str):
+            return descriptor["digest"]
+        if isinstance(payload.get("schemaVersion"), int):
+            return ""
+    if isinstance(payload, list) and len(payload) == 1:
+        return descriptor_digest(payload[0])
+    return ""
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Verify Flyto2 Warroom CE Docker Hub image tags and digests")
+    parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST))
+    parser.add_argument("--pull", action="store_true", help="also docker pull every image")
+    parser.add_argument("--dry-run", action="store_true", help="print images without contacting Docker Hub")
+    parser.add_argument("--timeout", type=int, default=120)
+    args = parser.parse_args()
+
+    manifest = Path(args.manifest)
+    blockers: list[str] = []
+    for service, image, expected_digest in service_images(manifest):
+        suffix = f" expected={{expected_digest}}" if expected_digest else ""
+        print(f"{{service}} {{image}}{{suffix}}")
+        if args.dry_run:
+            continue
+        inspected = run(["docker", "manifest", "inspect", "--verbose", image], timeout=args.timeout)
+        if inspected.returncode != 0:
+            blockers.append(f"manifest inspect failed for {{image}}: {{inspected.stderr.strip() or inspected.stdout.strip()}}")
+            continue
+        try:
+            parsed = json.loads(inspected.stdout)
+        except json.JSONDecodeError:
+            blockers.append(f"manifest inspect returned non-json output for {{image}}")
+            continue
+        actual_digest = descriptor_digest(parsed)
+        if expected_digest:
+            if actual_digest != expected_digest:
+                blockers.append(
+                    f"digest mismatch for {{image}}: expected {{expected_digest}}, got {{actual_digest or 'missing'}}"
+                )
+        elif not actual_digest:
+            blockers.append(f"manifest descriptor digest missing for {{image}}")
+        if args.pull:
+            pulled = run(["docker", "pull", image], timeout=args.timeout * 3)
+            if pulled.returncode != 0:
+                blockers.append(f"docker pull failed for {{image}}: {{pulled.stderr.strip() or pulled.stdout.strip()}}")
+    if blockers:
+        for blocker in blockers:
+            print("BLOCKED: " + blocker, file=sys.stderr)
+        return 2
+    print("ok")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+''',
+    )
+    write_text(
+        "install/scripts/preflight.py",
+        '''#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import os
+from pathlib import Path
+import shutil
+import stat
+import subprocess
+import sys
+
+
+ROOT = Path(__file__).resolve().parents[2]
+REQUIRED_NON_EMPTY = [
+    "POSTGRES_PASSWORD",
+    "FLYTO_LOCAL_AUTH_EMAIL",
+    "FLYTO_LOCAL_AUTH_PASSWORD_SHA256",
+    "FLYTO_LOCAL_AUTH_JWT_SECRET",
+    "FLYTO_RUNNER_SECRET",
+    "FLYTO_VERIFICATION_SECRET",
+    "FLYTO_MASTER_KEY",
+]
+
+
+def parse_env(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        if not raw or raw.startswith("#") or "=" not in raw:
+            continue
+        key, value = raw.split("=", 1)
+        values[key] = value
+    return values
+
+
+def compose_command() -> list[str] | None:
+    if shutil.which("docker-compose"):
+        return ["docker-compose"]
+    if shutil.which("docker"):
+        probe = subprocess.run(["docker", "compose", "version"], capture_output=True, text=True, check=False)
+        if probe.returncode == 0:
+            return ["docker", "compose"]
+    return None
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Preflight a Flyto2 Warroom CE local install")
+    parser.add_argument("--env", default=str(ROOT / "install/.env"))
+    parser.add_argument("--skip-compose", action="store_true")
+    args = parser.parse_args()
+
+    env_path = Path(args.env)
+    blockers: list[str] = []
+    warnings: list[str] = []
+    if not env_path.exists():
+        blockers.append(f"missing env file: {env_path}; run python3 install/scripts/setup-ce.py")
+    else:
+        values = parse_env(env_path)
+        for key in REQUIRED_NON_EMPTY:
+            if not values.get(key):
+                blockers.append(f"{key} is empty in {env_path}")
+        if values.get("POSTGRES_PASSWORD") == "change-me-local-only":
+            blockers.append("POSTGRES_PASSWORD still uses the example placeholder")
+        if values.get("FLYTO_LOCAL_AUTH_EMAIL") == "local-admin@example.invalid":
+            blockers.append("FLYTO_LOCAL_AUTH_EMAIL still uses the example placeholder")
+        mode = stat.S_IMODE(env_path.stat().st_mode)
+        if mode & (stat.S_IRWXG | stat.S_IRWXO):
+            blockers.append(f"{env_path} permissions must be 0600 or stricter")
+    compose = None
+    if not args.skip_compose:
+        if shutil.which("docker") is None:
+            blockers.append("docker is not installed or not on PATH")
+        compose = compose_command()
+        if compose is None:
+            blockers.append("docker compose or docker-compose is not installed")
+    if not blockers and not args.skip_compose and compose is not None:
+        cmd = [
+            *compose,
+            "--env-file",
+            str(env_path),
+            "-f",
+            str(ROOT / "install/docker-compose.ce.yml"),
+            "config",
+            "--images",
+        ]
+        result = subprocess.run(cmd, text=True, capture_output=True, check=False)
+        if result.returncode != 0:
+            blockers.append(result.stderr.strip() or result.stdout.strip() or "docker compose config failed")
+    if warnings:
+        for warning in warnings:
+            print("WARN: " + warning, file=sys.stderr)
+    if blockers:
+        for blocker in blockers:
+            print("BLOCKED: " + blocker, file=sys.stderr)
+        return 2
+    print("ok")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+''',
+    )
+    write_text(
         "install/scripts/mint-ee-sim-jwt.py",
         '''#!/usr/bin/env python3
 import argparse
@@ -1441,12 +1785,17 @@ REQUIRED = [
     "install/.env.ce.example",
     "install/.env.ee-sim.example",
     "install/scripts/hash-local-password.py",
+    "install/scripts/setup-ce.py",
+    "install/scripts/preflight.py",
+    "install/scripts/verify-docker-images.py",
     "install/scripts/mint-ee-sim-jwt.py",
     "docs/local-install.md",
     "docs/enterprise-simulation.md",
     "docs/code-protection.md",
     "docs/official-builds.md",
     "docs/github-hardening.md",
+    "docs/account-security.md",
+    "docs/docker-hub-overview.md",
     "TRADEMARK.md",
     "SECURITY.md",
     "GOVERNANCE.md",
@@ -1587,21 +1936,19 @@ the same tags locally from the private workspace before starting compose.
 ## Start CE Locally
 
 ```sh
-cp /tmp/flyto2-warroom-ce/install/.env.ce.example /tmp/flyto2-warroom-ce/install/.env
-python3 /tmp/flyto2-warroom-ce/install/scripts/hash-local-password.py
-openssl rand -base64 48
-openssl rand -base64 48
-openssl rand -base64 48
-openssl rand -base64 48
+python3 /tmp/flyto2-warroom-ce/install/scripts/setup-ce.py
+make -C /tmp/flyto2-warroom-ce verify-images
+make -C /tmp/flyto2-warroom-ce preflight
 ```
 
-Paste the generated values into `install/.env`:
+`setup-ce.py` prompts for the initial admin email and password, writes only the
+password SHA-256 hash, generates local-only Postgres/JWT/runner/verification
+secrets, and writes `install/.env` with owner-only permissions.
 
-- first `openssl` output -> `FLYTO_LOCAL_AUTH_JWT_SECRET`
-- second `openssl` output -> `FLYTO_RUNNER_SECRET`
-- third `openssl` output -> `FLYTO_VERIFICATION_SECRET`
-- fourth `openssl` output -> `FLYTO_MASTER_KEY`
-- password hash output -> `FLYTO_LOCAL_AUTH_PASSWORD_SHA256`
+`verify-images` checks that every public Docker Hub service tag in
+`OPEN_CORE_MANIFEST.json` has a valid manifest and matches the published digest.
+`preflight` verifies that local secrets are not blank/placeholders and that
+compose can resolve the final image set.
 
 Then start the stack:
 
@@ -1614,9 +1961,14 @@ Open:
 - Frontend: `http://localhost:8088`
 - Engine health: `http://localhost:8080/health`
 
-Sign in with the `FLYTO_LOCAL_AUTH_EMAIL` value and the password used by
-`hash-local-password.py`. CE uses engine-issued local JWTs; it does not require
+Sign in with the initial admin email and password provided to `setup-ce.py`.
+CE uses engine-issued local JWTs; it does not require
 Firebase and it does not use dev auth.
+
+CE local JWT auth is password-based. Do not claim or advertise local TOTP/2FA
+unless the backend login flow actually enforces it. For production deployments
+that require 2FA, place Flyto2 behind an identity provider or use an edition
+that supports enterprise SSO/MFA enforcement.
 
 ## Reset The Database
 
@@ -1868,10 +2220,112 @@ An official release should include:
 - Docker image digests for every service tag;
 - SBOM/provenance/signature evidence when the release pipeline supports it.
 
+Before publishing or announcing a release, run:
+
+```sh
+python install/scripts/verify-docker-images.py
+```
+
+This verifies every service tag and expected digest declared in
+`OPEN_CORE_MANIFEST.json` against Docker Hub. Use `--pull` for a stricter pull
+test.
+
 ## Forks
 
 Forks may rebuild CE under their own names. Forks may not use Flyto2 trademarks,
 official tags, or official release channels for modified images.
+""",
+    )
+    write_text(
+        "docs/account-security.md",
+        """# Account Security And 2FA
+
+Flyto2 Warroom CE separates three different account/security concerns.
+
+## Maintainer Accounts
+
+Official publisher accounts must use 2FA:
+
+- GitHub maintainers must enable 2FA and use protected branches.
+- Docker Hub publishers must enable 2FA.
+- Docker Hub pushes should use access tokens, not an account password.
+- Tokens should be scoped to publishing and rotated after maintainer changes.
+
+Do not store Docker Hub, GitHub, cloud, or customer credentials in this repo,
+compose files, issue comments, screenshots, or release notes.
+
+## Self-Hosted CE Initial Admin
+
+CE local auth uses an initial admin email/password configured in `install/.env`.
+Run:
+
+```sh
+python3 install/scripts/setup-ce.py
+```
+
+The script writes only the password SHA-256 hash and generates local-only
+secrets. It does not store the plaintext password.
+
+## 2FA Boundary
+
+CE local JWT auth is password-based. It does not pretend to enforce TOTP/2FA.
+For deployments that require 2FA, put Flyto2 behind an identity provider or use
+an edition with enterprise SSO/MFA enforcement. This is intentional: a security
+product should not advertise a second factor unless the backend gate actually
+enforces it.
+""",
+    )
+    write_text(
+        "docs/docker-hub-overview.md",
+        """# Docker Hub Repository Overview
+
+```markdown
+# Flyto2 Warroom CE
+
+Flyto2 Warroom CE is the self-hosted community edition of Flyto2 Warroom, an
+open-core security operations platform for code, cloud, container, runtime,
+external attack surface, evidence, and compliance workflows.
+
+## Links
+
+- Website: https://flyto2.com
+- GitHub: https://github.com/flytohub/flyto-warroom
+
+## Images
+
+This repository publishes Flyto2 Warroom CE services as separate tags:
+
+- `engine-ce`
+- `worker-ce`
+- `code-ce`
+- `runner-ce`
+- `verification-ce`
+- `brand-vision-ce`
+- `pdf-ce`
+
+## Verify
+
+```sh
+git clone https://github.com/flytohub/flyto-warroom.git
+python flyto-warroom/install/scripts/verify-docker-images.py --manifest flyto-warroom/OPEN_CORE_MANIFEST.json
+```
+
+## Install
+
+Use the Docker Compose files and setup helper in the GitHub repository:
+
+```sh
+python3 install/scripts/setup-ce.py
+make verify-images
+make preflight
+make ce-up
+```
+
+## Security
+
+CE local auth is password-based. Official publisher accounts use 2FA and access
+tokens. Forks and modified builds must not imply official Flyto2 endorsement.
+```
 """,
     )
     write_text(
@@ -1888,7 +2342,8 @@ Recommended repository settings for `flytohub/flyto-warroom`:
 - require conversation resolution;
 - require linear history;
 - block force pushes and branch deletion;
-- require the `release-audit` and `governance-audit` status checks;
+- require the `release-audit`, `governance-audit`, and `docker-image-audit`
+  status checks;
 - restrict release publishing to maintainer-owned GitHub Actions.
 
 The repository also carries file-level guardrails:
@@ -2212,7 +2667,12 @@ REQUIRED_MARKERS = {
     ],
     "docs/github-hardening.md": [
         "require pull requests before merging",
-        "require the `release-audit` and `governance-audit` status checks",
+        "docker-image-audit",
+    ],
+    "docs/account-security.md": [
+        "Official publisher accounts must use 2FA",
+        "Docker Hub pushes should use access tokens",
+        "CE local JWT auth is password-based",
     ],
     ".github/CODEOWNERS": [
         "@ChesterHsu",
@@ -2227,6 +2687,7 @@ REQUIRED_MARKERS = {
     ".github/workflows/ci.yml": [
         "release-audit",
         "governance-audit",
+        "docker-image-audit",
         "Audit GitHub protection files",
         "Export upstream patch preview",
     ],
@@ -2310,6 +2771,16 @@ jobs:
         run: |
           git fetch origin main
           python scripts/export-upstream-patches.py --base origin/main --output upstream-patches
+
+  docker-image-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify Docker Hub manifests
+        run: python install/scripts/verify-docker-images.py
 """,
     )
     return written
@@ -2333,12 +2804,17 @@ def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, 
         "install/.env.ee-sim.example",
         "install/scripts/audit-release-tree.py",
         "install/scripts/hash-local-password.py",
+        "install/scripts/setup-ce.py",
+        "install/scripts/preflight.py",
+        "install/scripts/verify-docker-images.py",
         "install/scripts/mint-ee-sim-jwt.py",
         "docs/local-install.md",
         "docs/enterprise-simulation.md",
         "docs/code-protection.md",
         "docs/official-builds.md",
         "docs/github-hardening.md",
+        "docs/account-security.md",
+        "docs/docker-hub-overview.md",
         "TRADEMARK.md",
         "SECURITY.md",
         "GOVERNANCE.md",
