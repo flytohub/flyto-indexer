@@ -52,8 +52,30 @@ The generated release tree also contains:
   enterprise-sim tokens.
 - `install/scripts/audit-release-tree.py`: fail-closed release audit for
   private path leaks, CE/private image mixing, and secret-like generated values.
-- `docs/local-install.md`, `docs/enterprise-simulation.md`, and
-  `docs/code-protection.md`: operator instructions shipped with the package.
+- `docs/local-install.md`, `docs/enterprise-simulation.md`,
+  `docs/enterprise-cloud-bridge.md`, and `docs/code-protection.md`: operator
+  and edition-boundary instructions shipped with the package.
+
+## Enterprise Cloud Bridge
+
+CE is intended to be useful without Flyto Cloud. Higher-tier features should be
+attached through a documented Enterprise Cloud Bridge rather than by publishing
+private backend source.
+
+The bridge contract is:
+
+1. CE keeps the local database, local UI, local auth, local evidence timeline,
+   and public contracts.
+2. Enterprise entitlements unlock premium actions through capability snapshots.
+3. Premium jobs are sent as signed, minimal requests to Flyto Cloud or private
+   Enterprise services.
+4. Results return as signed evidence events and artifacts.
+5. Any entitlement, permission, connector, cloud, or signature failure fails
+   closed with an explicit reason.
+
+This lets public users run the Warroom baseline while preserving commercial
+value in threat-intel datasets, managed runner fleets, live remediation,
+enterprise identity, airgap packaging, support, and AI proposal workflows.
 
 ## Kept Closed
 
@@ -65,8 +87,8 @@ The generated release tree also contains:
   correlation datasets.
 - Cloud/container/runtime live remediation orchestration and customer connector
   credential paths.
-- Flyto Cloud multi-tenant SaaS control plane, runner fleet control, and hosted
-  telemetry.
+- Flyto Cloud Enterprise Bridge services, entitlement signer, managed job
+  execution plane, and hosted SaaS control plane.
 - AutoFix promotion, approval, rollback orchestration, and commercial AI
   proposal workflows.
 - Hosted SaaS-only frontend configuration, private preview credentials, and

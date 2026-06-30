@@ -1217,7 +1217,7 @@ DOCKER_COMPOSE ?= $(shell if docker compose version >/dev/null 2>&1; then printf
 COMPOSE_CE = $(DOCKER_COMPOSE) --env-file $(ENV_CE) -f install/docker-compose.ce.yml
 COMPOSE_EE_SIM = $(DOCKER_COMPOSE) --env-file $(ENV_EE_SIM) -f install/docker-compose.ce.yml -f install/docker-compose.ee-sim.yml
 
-.PHONY: setup-ce preflight verify-images ce-up ce-down ce-logs ce-ps ce-reset-db ee-sim-up ee-sim-down ee-sim-logs audit build-local-images
+.PHONY: setup-ce preflight verify verify-images ce-up ce-down ce-logs ce-ps ce-reset-db ee-sim-up ee-sim-down ee-sim-logs audit build-local-images
 
 setup-ce:
 \tpython3 install/scripts/setup-ce.py
@@ -1251,6 +1251,9 @@ audit:
 \tpython3 install/scripts/audit-release-tree.py .
 \tpython3 scripts/audit-ce-boundary.py .
 \tpython3 scripts/audit-github-protection.py .
+
+verify: audit
+\tpython3 install/scripts/verify-docker-images.py --dry-run
 
 preflight:
 \tpython3 install/scripts/preflight.py --env $(ENV_CE)
@@ -1806,6 +1809,7 @@ REQUIRED = [
     "install/scripts/mint-ee-sim-jwt.py",
     "docs/local-install.md",
     "docs/enterprise-simulation.md",
+    "docs/enterprise-cloud-bridge.md",
     "docs/code-protection.md",
     "docs/official-builds.md",
     "docs/github-hardening.md",
@@ -1814,6 +1818,7 @@ REQUIRED = [
     "TRADEMARK.md",
     "SECURITY.md",
     "GOVERNANCE.md",
+    "AGENTS.md",
     ".github/CODEOWNERS",
     ".github/pull_request_template.md",
     ".github/workflows/ci.yml",
@@ -1986,6 +1991,16 @@ unless the backend login flow actually enforces it. For production deployments
 that require 2FA, place Flyto2 behind an identity provider or use an edition
 that supports enterprise SSO/MFA enforcement.
 
+## Use Higher-Tier Capabilities
+
+CE can run without a Flyto Cloud account. If an Enterprise license or cloud
+entitlement is configured later, premium features should appear through the same
+local UI and evidence timeline. The local engine should check capability,
+license, role, connector, and evidence-signature gates before accepting premium
+results.
+
+See `docs/enterprise-cloud-bridge.md` for the intended bridge model.
+
 ## Reset The Database
 
 ```sh
@@ -2064,6 +2079,88 @@ composition only.
 """,
     )
     write_text(
+        "docs/enterprise-cloud-bridge.md",
+        """# Flyto2 Enterprise Cloud Bridge
+
+Flyto2 Warroom CE is designed to be useful on its own, while higher-value
+commercial capabilities can be delivered by Flyto Cloud without publishing the
+private implementation code.
+
+The bridge model is simple:
+
+1. Run Warroom CE on your own host.
+2. Add an Enterprise license or cloud entitlement token.
+3. CE asks Flyto Cloud only for explicitly enabled premium jobs.
+4. Flyto Cloud returns signed results, evidence, and status events.
+5. The local Warroom stores the outcome in its own timeline, evidence pack, and
+   audit trail.
+
+CE must keep working when the bridge is not configured. Premium actions must fail closed.
+When the bridge, entitlement, role, connector, or evidence-signature checks do
+not pass, they should stay visible as gated capabilities, not hidden fail-open
+paths.
+
+## What Stays Local
+
+- Projects, local users, local JWT auth, local database, and local evidence.
+- Code intelligence through `flyto-indexer`.
+- YAML workflows and deterministic verification through `flyto-core`.
+- Self-hosted UI, reports, score views, asset views, scheduler ledger, and
+  evidence timeline.
+- User-provided API keys and connector credentials unless the user explicitly
+  chooses a cloud-executed premium job.
+
+## What Can Be Cloud-Backed
+
+| Capability | CE baseline | Enterprise Cloud Bridge |
+| --- | --- | --- |
+| Code security | Local SAST/SCA/secrets/IaC/reachability and deterministic AutoFix rules | AI-assisted proposals, approval bundles, promotion/rollback orchestration |
+| CTEM and external attack surface | Local inventory, posture, evidence, issue lifecycle | Commercial enrichment, external correlation, managed continuous monitoring |
+| Darkweb and threat intelligence | Public/feed-backed lookups where configured | Stealer logs, leak datasets, phishing feeds, actor/malware/ransomware intelligence |
+| DAST and automated security testing | Local runner and authorized scans | Managed runner fleet, scale-out browser execution, enterprise-safe dispatch |
+| Red team workflows | Local planning, authorization records, evidence timeline | Managed campaigns, advanced replay, signed operator approvals |
+| Cloud/container/runtime/VM | Posture views, local definitions, local evidence | Live remediation, managed connector execution, runtime and cloud fix orchestration |
+| AI governance | Deterministic fallback, local audit events, provider visibility | Quota, provider routing, commercial model workflows, proposal review gates |
+| Enterprise controls | Local roles, capabilities, release audit | SSO/SAML/SCIM, offline license, legal hold, airgap packages, support SLAs |
+
+## Request Lifecycle
+
+Premium requests should follow the same contract across modules:
+
+1. The UI asks the local engine for a capability snapshot.
+2. The local engine checks org, role, edition, license, and action permission.
+3. If the action is premium, the engine creates a signed bridge request with the
+   minimum required metadata.
+4. Flyto Cloud validates entitlement and executes the premium job.
+5. Results return as signed evidence events, artifacts, and status updates.
+6. The local engine records the evidence and refreshes the UI through the normal
+   SSE/cache invalidation path.
+
+If entitlement validation, network access, signing, or result verification fails,
+the action must fail closed with a clear reason. The local product should show
+which gate failed: missing license, unsupported edition, denied role, expired
+token, connector error, cloud service unavailable, or evidence signature failure.
+
+## Product Boundary
+
+Do not market CE as fully open-source Enterprise. The correct promise is:
+
+> CE is the self-hosted open-core Warroom. Enterprise unlocks cloud-backed
+> intelligence, managed remediation, fleet execution, enterprise identity,
+> governance, and support.
+
+This keeps the public project useful, encourages community contributions, and
+protects the commercial moat.
+
+## Airgap Alternative
+
+Customers that cannot call Flyto Cloud need an Enterprise offline or airgap
+edition. That path should use signed offline licenses, private enterprise
+images, private update bundles, and customer-controlled deployment evidence
+instead of the cloud bridge.
+""",
+    )
+    write_text(
         "docs/code-protection.md",
         """# Flyto2 Warroom Code Protection
 
@@ -2075,10 +2172,24 @@ The open-core release protects private code by construction:
   remediation orchestration are not copied.
 - `flyto-contracts` exposes OpenAPI, capabilities, schemas, examples, and SDK
   stubs instead of raw engine source.
+- Enterprise Cloud Bridge integration must use public API contracts, capability
+  snapshots, signed job requests, and signed evidence return paths.
 - CE compose only references public image coordinates or maintainer-overridden
   local CE image names.
 - EE simulation is an override file. It can enable enterprise gates locally, but
   it does not include enterprise implementation source.
+
+## Upgrade Boundary
+
+It is acceptable for CE to show premium actions, disabled states, and clear
+upgrade reasons. It is not acceptable for CE to include private datasets,
+private connector credentials, proprietary remediation workers, enterprise
+billing logic, or private control-plane source.
+
+Premium actions must fail closed. If the user has no entitlement, the connector
+is invalid, the cloud bridge is unavailable, or the returned evidence signature
+does not verify, CE should record a clear denial/error instead of pretending the
+operation succeeded.
 
 Run this before publishing:
 
@@ -2171,9 +2282,19 @@ audit is intentionally fail-closed for secret-like values and private paths.
         """# Flyto2 Warroom CE Governance
 
 Flyto2 Warroom CE follows an open-core model similar to mature enterprise
-projects: the community edition is public, installable, and patchable; enterprise
-implementations, hosted control plane code, customer data connectors, and
-commercial remediation workflows remain private.
+projects: the community edition is public, installable, patchable, and useful;
+enterprise implementations, hosted control plane code, customer data connectors,
+commercial datasets, and premium remediation workflows remain private.
+
+## Product Rule
+
+CE should be strong enough for users to install, inspect, evaluate, and improve.
+Enterprise should be the natural upgrade path for teams that need commercial
+intelligence, managed execution, live remediation, identity governance, airgap
+delivery, support, or compliance controls.
+
+Do not describe CE as "fully open-source Enterprise." The accurate model is
+open-core CE plus Enterprise Cloud Bridge and private Enterprise editions.
 
 ## Source Of Truth
 
@@ -2181,6 +2302,9 @@ This repository is a generated CE distribution. The private Flyto2 workspace is
 the source of truth for implementation. Public PRs are reviewed here, converted
 into upstream patch bundles, applied to the source workspace, tested there, and
 then re-exported back into this repository.
+
+Accepted community changes should improve Flyto2 itself, not only this mirror.
+That keeps the public project and commercial product aligned.
 
 ## Required Checks
 
@@ -2208,6 +2332,52 @@ Signed-off-by: Your Name <you@example.com>
 
 Generated files should not become a permanent fork. If a change belongs to a
 source package or contract, apply it upstream and regenerate this repo.
+
+Enterprise features may be surfaced in CE only through public capabilities,
+public contracts, signed evidence, documented cloud bridge calls, or clearly
+gated UI states. They must not import private implementation paths.
+""",
+    )
+    write_text(
+        "AGENTS.md",
+        """# Agent Instructions
+
+This repository is a generated Flyto2 Warroom CE mirror. Do not treat it as the
+private Flyto2 source of truth.
+
+## Before Changes
+
+- Identify whether the change belongs to `flyto-core`, `flyto-indexer`,
+  `flyto-i18n`, `flyto-code`, `flyto-contracts`, or generated release files.
+- Prefer `flyto-indexer` search, impact, audit, and verify workflows for code
+  exploration when the tool is available.
+- If a generated file needs a lasting change, update the source package or the
+  exporter template first, then regenerate this repository.
+
+## Safety
+
+- Do not commit credentials, customer data, private image coordinates, private
+  connector secrets, or enterprise-only implementation details.
+- Keep Enterprise features connected only through public capabilities, public
+  API/evidence contracts, signed bridge requests, and gated UI states.
+- Premium paths must fail closed when entitlement, permission, connector, cloud,
+  or evidence-signature checks fail.
+
+## After Changes
+
+Run the relevant verification before committing:
+
+```sh
+make audit
+python3 install/scripts/verify-docker-images.py --dry-run
+```
+
+If you change the embedded exporter, also run its lint and tests:
+
+```sh
+python -m ruff check packages/flyto-indexer/src/flyto2_open_core.py packages/flyto-indexer/tests/test_flyto2_open_core.py
+python -m pytest packages/flyto-indexer/tests/test_flyto2_open_core.py -q
+```
 """,
     )
     write_text(
@@ -2228,6 +2398,10 @@ Flyto2 Warroom CE treats source, images, and release evidence as one chain.
 The official CE image repository and per-service tags are declared in
 `OPEN_CORE_MANIFEST.json`. A modified distribution must use different image
 names and must not imply that it is an official Flyto2 build.
+
+Official CE images are runnable distribution artifacts. They do not mean the
+private `flyto-engine` implementation, Enterprise datasets, Enterprise
+remediation workers, or Flyto Cloud control plane source have been published.
 
 ## Release Evidence
 
@@ -2253,6 +2427,10 @@ test.
 
 Forks may rebuild CE under their own names. Forks may not use Flyto2 trademarks,
 official tags, or official release channels for modified images.
+
+Enterprise Cloud Bridge compatibility must be described as compatibility, not as
+official entitlement. Only Flyto-issued entitlements can unlock Flyto Cloud
+premium services.
 """,
     )
     write_text(
@@ -2301,18 +2479,20 @@ enforces it.
 ````markdown
 # Flyto2 Warroom CE Preview
 
-Flyto2 Warroom CE is the self-hosted community edition of Flyto2 Warroom, an
-open-core security operations platform for code, cloud, container, runtime,
-external attack surface, evidence, and compliance workflows.
+Flyto2 Warroom CE is the self-hosted open-core edition of Flyto2 Warroom: a
+local security operations cockpit for code security, external attack surface,
+cloud/container/runtime posture, automated security testing, evidence, scoring,
+and compliance workflows.
 
-This is a CE Preview release for local labs, evaluators, security teams, and
-open-source users who want to run the Warroom stack on their own Docker host.
+This is a CE Preview for local labs, evaluators, security teams, and
+open-source users who want to run Warroom on their own Docker host.
 
 ## Links
 
 - Website: https://flyto2.com
 - GitHub: https://github.com/flytohub/flyto-warroom
 - Install docs: https://github.com/flytohub/flyto-warroom/blob/main/docs/local-install.md
+- Enterprise bridge: https://github.com/flytohub/flyto-warroom/blob/main/docs/enterprise-cloud-bridge.md
 - Security policy: https://github.com/flytohub/flyto-warroom/blob/main/SECURITY.md
 
 ## Images
@@ -2334,7 +2514,7 @@ Versioned tags are also published for reproducible installs, for example:
 
 ## Quick Start
 
-Recommended install path is Docker Compose from the GitHub repository:
+Recommended install path is Docker Compose from GitHub:
 
 ```sh
 git clone https://github.com/flytohub/flyto-warroom.git
@@ -2354,6 +2534,31 @@ http://localhost:8088
 
 The setup script writes `install/.env`, generates local secrets, and stores only
 a password hash for the initial admin account.
+
+## What CE Includes
+
+- Local Warroom UI with local JWT auth, no Firebase requirement.
+- CE engine, worker, runner, verification, brand-vision, PDF, and Postgres
+  services.
+- Public frontend source, i18n packages, local code intelligence, YAML runtime,
+  public API/capability/evidence contracts, and installer scripts.
+- Baseline workflows for code security, CTEM/external posture, automated
+  security testing, evidence, reports, score views, and compliance surfaces.
+
+## Enterprise Path
+
+CE is not a full Enterprise source release. Premium capabilities can be attached
+through Flyto2 Enterprise Cloud Bridge:
+
+- commercial darkweb/threat-intel datasets and correlation;
+- managed DAST/browser runner fleet and red team execution;
+- cloud/container/runtime/VM live remediation orchestration;
+- commercial AI proposal workflows, approval, promotion, and rollback bundles;
+- SSO/SAML/SCIM, offline license, airgap packaging, legal hold, and support
+  controls.
+
+Premium actions should fail closed when entitlement, permission, connector,
+signature, or cloud validation fails.
 
 ## Default Ports
 
@@ -2377,12 +2582,10 @@ instance.
 
 ## Edition Model
 
-Community Edition includes the self-hosted open-core Warroom stack.
-
-Enterprise features such as hosted SaaS control plane, enterprise
-SSO/SAML/SCIM, commercial threat intelligence, advanced entitlement controls,
-managed runner fleets, airgap packaging, and enterprise support are separate
-commercial offerings.
+Community Edition includes the self-hosted open-core Warroom stack. Enterprise
+features are separate commercial offerings and are exposed through documented
+capabilities, contracts, signed evidence, private images, or Flyto Cloud
+services.
 
 ## Architecture Note
 
@@ -2434,6 +2637,8 @@ The repository also carries file-level guardrails:
     write_text(
         ".gitignore",
         """.DS_Store
+.flyto/
+.flyto-index/
 .env
 .env.*
 !install/.env.ce.example
@@ -2738,6 +2943,16 @@ REQUIRED_MARKERS = {
         "Contributor Certificate",
         "private Flyto2 source workspace",
     ],
+    "AGENTS.md": [
+        "generated Flyto2 Warroom CE mirror",
+        "flyto-indexer",
+        "After Changes",
+    ],
+    "docs/enterprise-cloud-bridge.md": [
+        "Enterprise Cloud Bridge",
+        "Premium actions must fail closed",
+        "Airgap Alternative",
+    ],
     "docs/official-builds.md": [
         "Official Images",
         "OPEN_CORE_MANIFEST.json",
@@ -2828,6 +3043,7 @@ CE_CONTROL_FILES = [
 REQUIRED_FILES = [
     "docs/docker-hub-overview.md",
     "docs/code-protection.md",
+    "docs/enterprise-cloud-bridge.md",
     "docs/official-builds.md",
     "TRADEMARK.md",
     "GOVERNANCE.md",
@@ -2863,7 +3079,14 @@ REQUIRED_MARKERS = {
     ],
     "docs/code-protection.md": [
         "open-core release protects private code by construction",
+        "Enterprise Cloud Bridge integration",
         "audit-ce-boundary.py",
+    ],
+    "docs/enterprise-cloud-bridge.md": [
+        "Flyto2 Enterprise Cloud Bridge",
+        "What Can Be Cloud-Backed",
+        "Premium requests should follow the same contract",
+        "Airgap Alternative",
     ],
     "docs/official-builds.md": [
         "Official Images",
@@ -2959,6 +3182,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install Python lint and test tooling
+        run: python -m pip install ruff pytest
+      - name: Lint embedded exporter
+        run: python -m ruff check packages/flyto-indexer/src/flyto2_open_core.py packages/flyto-indexer/tests/test_flyto2_open_core.py
+      - name: Test embedded exporter
+        working-directory: packages/flyto-indexer
+        run: python -m pytest tests/test_flyto2_open_core.py -q
+      - name: Verify embedded indexer package
+        working-directory: packages/flyto-indexer
+        run: python -m src.cli verify . --full-scan --json
+      - name: Verify release audit target
+        run: make verify
       - name: Audit generated release boundary
         run: python install/scripts/audit-release-tree.py .
       - name: Audit CE moat and privacy boundary
@@ -3026,6 +3261,7 @@ def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, 
         "install/scripts/mint-ee-sim-jwt.py",
         "docs/local-install.md",
         "docs/enterprise-simulation.md",
+        "docs/enterprise-cloud-bridge.md",
         "docs/code-protection.md",
         "docs/official-builds.md",
         "docs/github-hardening.md",
@@ -3034,6 +3270,7 @@ def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, 
         "TRADEMARK.md",
         "SECURITY.md",
         "GOVERNANCE.md",
+        "AGENTS.md",
         ".github/CODEOWNERS",
         ".github/pull_request_template.md",
         ".github/workflows/ci.yml",
@@ -3279,10 +3516,69 @@ def format_open_core_audit(result: dict[str, Any]) -> str:
 
 def format_open_core_export(manifest: dict[str, Any]) -> str:
     lines = [
-        f"# {manifest['package_name']}",
+        "# Flyto2 Warroom CE",
         "",
-        "This tree was generated from the Flyto2 workspace by the deterministic open-core exporter.",
-        "Do not edit generated copies directly; change the source repo and rerun the exporter.",
+        "Flyto2 Warroom CE is the self-hosted open-core distribution of Flyto2",
+        "Warroom. It gives teams a local security operations cockpit for code,",
+        "external attack surface, cloud/container/runtime posture, automated",
+        "security testing, evidence, scoring, and compliance workflows.",
+        "",
+        "CE is not a source dump of the private Flyto2 backend. It is a generated",
+        "community distribution with public frontend/source packages, public",
+        "contracts, local installers, and runnable CE service images.",
+        "",
+        "## Architecture",
+        "",
+        "Warroom CE is split into visible product surfaces and replaceable service",
+        "contracts:",
+        "",
+        "- `flyto-code` provides the React/Vite cockpit and capability-gated UI.",
+        "- `flyto-contracts` provides public OpenAPI, capability, scanner, runner,",
+        "  evidence, audit, and product-verification contracts.",
+        "- `flyto-core` provides YAML workflows, browser automation, deterministic",
+        "  verification, and module/runtime SDKs.",
+        "- `flyto-indexer` provides local code intelligence, dependency, taint,",
+        "  SBOM, impact, and release-evidence analysis.",
+        "- Docker Compose wires CE images and Postgres into a local self-hosted",
+        "  stack.",
+        "",
+        "## What You Can Run",
+        "",
+        "- A local Warroom UI with local JWT auth.",
+        "- Engine, worker, runner, verification, brand-vision, PDF, and Postgres",
+        "  services through Docker Compose.",
+        "- Local code intelligence through `flyto-indexer`.",
+        "- YAML workflows and deterministic verification through `flyto-core`.",
+        "- Capability-gated product surfaces for CTEM, code security, automated",
+        "  testing, red team workflows, cloud/container/runtime posture, evidence,",
+        "  reports, scoring, and compliance.",
+        "",
+        "## Install",
+        "",
+        "```sh",
+        "git clone https://github.com/flytohub/flyto-warroom.git",
+        "cd flyto-warroom",
+        "python3 install/scripts/setup-ce.py --email admin@example.com",
+        "make preflight",
+        "make verify-images",
+        "make ce-up",
+        "```",
+        "",
+        "Open `http://localhost:8088` and sign in with the local admin account",
+        "created by `setup-ce.py`.",
+        "",
+        "## CE And Enterprise",
+        "",
+        "CE is designed to be useful without calling Flyto Cloud. Higher-value",
+        "Enterprise capabilities can be attached through the Enterprise Cloud",
+        "Bridge: CE keeps the local database, UI, evidence timeline, and audit trail;",
+        "Flyto Cloud provides entitled premium services such as commercial threat",
+        "intelligence, managed runner fleets, live remediation orchestration,",
+        "enterprise identity, and commercial AI proposal workflows.",
+        "",
+        "Premium actions must fail closed when a license, entitlement, permission,",
+        "connector, signature, or cloud service check fails. See",
+        "`docs/enterprise-cloud-bridge.md`.",
         "",
         "## Packages",
     ]
@@ -3298,8 +3594,53 @@ def format_open_core_export(manifest: dict[str, Any]) -> str:
             "- `install/scripts/audit-release-tree.py`: fail-closed release audit.",
             "- `docs/local-install.md`: local startup and reset steps.",
             "- `docs/enterprise-simulation.md`: enterprise JWT simulation steps.",
+            "- `docs/enterprise-cloud-bridge.md`: premium cloud bridge model.",
         ])
-    lines.extend(["", "## Kept Closed"])
+    lines.extend([
+        "",
+        "## Kept Closed",
+        "",
+        "The following areas are intentionally not published as CE source:",
+    ])
     for boundary in manifest.get("closed_source_boundaries", []):
         lines.append(f"- {boundary}")
+    lines.extend([
+        "",
+        "## Contributing Back",
+        "",
+        "This repository is generated from the Flyto2 source workspace. Public PRs",
+        "are reviewed here, converted into upstream patch bundles, applied to the",
+        "source repos, tested, and re-exported. This keeps CE and the commercial",
+        "product aligned instead of creating two unrelated projects.",
+        "",
+        "Run before opening release-sensitive PRs:",
+        "",
+        "```sh",
+        "python3 install/scripts/audit-release-tree.py .",
+        "python3 scripts/audit-ce-boundary.py .",
+        "```",
+        "",
+        "## Testing And Verification",
+        "",
+        "The generated tree includes fail-closed release checks:",
+        "",
+        "- `make verify` runs release audits and Docker image digest dry-run.",
+        "- `make audit` runs release, CE boundary, and GitHub protection audits.",
+        "- `make verify-images` checks the public Docker image coordinates and",
+        "  expected digests in `OPEN_CORE_MANIFEST.json`.",
+        "- GitHub Actions run governance, release, frontend build, contract, and",
+        "  Docker image audit jobs.",
+        "",
+        "## Security",
+        "",
+        "Report vulnerabilities privately. Do not submit credentials, customer",
+        "data, private image coordinates, production tokens, private keys, or",
+        "enterprise-only implementation details. See `SECURITY.md` and",
+        "`docs/code-protection.md`.",
+        "",
+        "## License",
+        "",
+        "Each package keeps its own license. Root installer, workflow, and generated",
+        "documentation files are Apache-2.0. See `LICENSES.md`.",
+    ])
     return "\n".join(lines) + "\n"

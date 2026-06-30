@@ -80,7 +80,7 @@
     "enterprise SSO/SAML/SCIM, legal hold, airgap installers, deployment edition internals",
     "darkweb, stealer-log, phishing-feed, commercial threat-intel, and proprietary correlation datasets",
     "cloud/container/runtime live remediation orchestration and customer connector credentials",
-    "Flyto Cloud multi-tenant SaaS control plane, runner fleet control, and hosted telemetry",
+    "Flyto Cloud Enterprise Bridge services, entitlement signer, managed job execution plane, and hosted SaaS control plane",
     "AutoFix promotion, approval, rollback orchestration, and commercial AI proposal workflows",
     "hosted SaaS-only frontend configuration, private preview credentials, and enterprise image publishing metadata"
   ],

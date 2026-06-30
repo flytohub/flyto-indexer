@@ -330,6 +330,7 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert (output / "install/scripts/mint-ee-sim-jwt.py").exists()
     assert (output / "docs/local-install.md").exists()
     assert (output / "docs/enterprise-simulation.md").exists()
+    assert (output / "docs/enterprise-cloud-bridge.md").exists()
     assert (output / "docs/code-protection.md").exists()
     assert (output / "docs/official-builds.md").exists()
     assert (output / "docs/github-hardening.md").exists()
@@ -338,6 +339,7 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert (output / "TRADEMARK.md").exists()
     assert (output / "SECURITY.md").exists()
     assert (output / "GOVERNANCE.md").exists()
+    assert (output / "AGENTS.md").exists()
     assert (output / ".github/CODEOWNERS").exists()
     assert (output / ".github/pull_request_template.md").exists()
     assert (output / "scripts/audit-github-protection.py").exists()
@@ -355,6 +357,8 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert "docker compose version" in makefile
     assert "python3 scripts/audit-ce-boundary.py ." in makefile
     assert "python3 scripts/audit-github-protection.py ." in makefile
+    assert "verify: audit" in makefile
+    assert "python3 install/scripts/verify-docker-images.py --dry-run" in makefile
     assert "python3 install/scripts/setup-ce.py" in makefile
     assert "python3 install/scripts/preflight.py --env $(ENV_CE)" in makefile
     assert "python3 install/scripts/verify-docker-images.py" in makefile
@@ -411,6 +415,12 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert "Modified Distributions" in trademark
     governance = (output / "GOVERNANCE.md").read_text(encoding="utf-8")
     assert "private Flyto2 source workspace" in governance
+    assert "Enterprise Cloud Bridge" in governance
+    assert "fully open-source Enterprise" in governance
+    agents = (output / "AGENTS.md").read_text(encoding="utf-8")
+    assert "generated Flyto2 Warroom CE mirror" in agents
+    assert "flyto-indexer" in agents
+    assert "After Changes" in agents
     codeowners = (output / ".github/CODEOWNERS").read_text(encoding="utf-8")
     assert "@ChesterHsu" in codeowners
     ci = (output / ".github/workflows/ci.yml").read_text(encoding="utf-8")
@@ -426,7 +436,13 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert "Flyto2 Warroom CE Preview" in docker_overview
     assert "does not enable product telemetry by default" in docker_overview
     assert "Recommended install path is Docker Compose" in docker_overview
+    assert "What CE Includes" in docker_overview
+    assert "Enterprise Path" in docker_overview
     assert "currently published as linux/arm64 images" in docker_overview
+    bridge = (output / "docs/enterprise-cloud-bridge.md").read_text(encoding="utf-8")
+    assert "Flyto2 Enterprise Cloud Bridge" in bridge
+    assert "Premium actions must fail closed" in bridge
+    assert "What Can Be Cloud-Backed" in bridge
 
     ee_compose = (output / "install/docker-compose.ee-sim.yml").read_text(encoding="utf-8")
     assert 'FLYTO_EDITION: "enterprise_airgap"' in ee_compose
