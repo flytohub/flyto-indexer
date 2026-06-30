@@ -30,8 +30,10 @@ The first generated community package contains:
 - `flyto-indexer`: local-first source indexing, dependency/taint/security
   analysis, SBOM, release evidence gates, CLI/MCP adapters.
 - `flyto-i18n`: shared locale source and generated distribution files.
-- `flyto-engine-contracts`: OpenAPI/capability/scheduler/product-verification
-  contract source, not the hosted enterprise control plane.
+- `flyto-contracts`: generated public protocol package containing OpenAPI,
+  capability catalog, JSON Schemas, examples, conformance helper, and lightweight
+  SDK stubs. It is generated from private engine sources without exporting raw
+  Go `internal/**` paths.
 
 ## Kept Closed
 
@@ -56,3 +58,15 @@ The generated community tree is not source of truth. Fix source repos first,
 rerun the exporter, and review the generated diff. This keeps private Flyto2
 development and OSS publication mergeable without a parallel hand-maintained
 fork.
+
+## Contract Package Rule
+
+`flyto-contracts` is not a partial engine dump. The exporter maps selected
+private source files into public locations, for example:
+
+- `api/openapi.yaml` -> `openapi/flyto-engine.openapi.yaml`
+- `internal/permission/capabilities.yaml` -> `capabilities/capabilities.yaml`
+
+It then generates protocol-facing schemas, examples, conformance checks, and
+SDK type stubs. Export targets matching `internal/**`, `cmd/**`, or private
+handler paths fail closed.

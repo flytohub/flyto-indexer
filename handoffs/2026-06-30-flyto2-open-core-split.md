@@ -15,6 +15,9 @@ Added a deterministic open-core audit/export path for Flyto2.
 - `python -m src.cli flyto2-open-core-export <workspace> --output <empty-dir>`
   writes a generated `flyto2-community` tree with `OPEN_CORE_MANIFEST.json`,
   README, and `packages/<name>/...` copies.
+- Contract packages may use mapped export targets and generated protocol
+  artifacts, so private source paths can become public schemas/examples without
+  leaking raw engine internals.
 - The generated tree is explicitly not source of truth. Change private source
   first, rerun the exporter, and review the generated artifact.
 
@@ -24,8 +27,9 @@ Added a deterministic open-core audit/export path for Flyto2.
   contracts.
 - `flyto-indexer`: local-first source intelligence and verification tooling.
 - `flyto-i18n`: locale sources and generated dist artifacts.
-- `flyto-engine-contracts`: OpenAPI, capability, scheduler, and Product
-  Verification contract source.
+- `flyto-contracts`: generated protocol package with OpenAPI, capability
+  catalog, JSON Schemas, examples, conformance helper, and lightweight SDK
+  stubs. It does not export raw Go `internal/**` paths.
 
 ## Kept Closed
 

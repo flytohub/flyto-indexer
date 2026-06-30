@@ -1,5 +1,18 @@
 # Decisions
 
+## 2026-06-30 - Engine contracts publish as protocol artifacts
+
+Decision: replace the first-pass `flyto-engine-contracts` raw source export with
+`flyto-contracts`, a generated protocol package. It maps selected private engine
+source files into public locations and generates schemas, examples,
+conformance helpers, and SDK type stubs.
+
+Reason: exporting Go `internal/**` paths has weak community value and creates a
+messy boundary. Integration authors need stable protocol contracts, not partial
+engine implementation. The exporter must fail closed if a mapped public package
+would recreate private paths such as `internal/**`, `cmd/**`, or private API
+handler trees.
+
 ## 2026-06-30 - Open-core exports are manifest-driven generated artifacts
 
 Decision: add `flyto2-open-core-audit` and `flyto2-open-core-export`, backed by

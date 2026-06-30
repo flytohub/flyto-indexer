@@ -41,7 +41,9 @@
 - `flyto2-open-core-audit` and `flyto2-open-core-export` now define the
   deterministic Flyto2 open-core split. Community source is generated from
   `config/flyto2/open-core-manifest.json`; protected enterprise paths and
-  denied secret/provider markers fail closed before export.
+  denied secret/provider markers fail closed before export. Engine-facing OSS
+  is generated as `flyto-contracts` protocol artifacts, not raw Go
+  `internal/**` source.
 - CI covers lint, tests, verify, build, and no-dependency wheel smoke.
 
 ## Release Blockers

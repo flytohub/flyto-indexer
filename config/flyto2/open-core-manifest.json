@@ -204,34 +204,52 @@
       ]
     },
     {
-      "name": "flyto-engine-contracts",
+      "name": "flyto-contracts",
       "repo": "flyto-engine",
-      "kind": "contract-source",
+      "kind": "protocol-contracts",
       "license": "Apache-2.0",
-      "merge_contract": "Open source contract evidence for capability snapshots, scheduler registry, Product Verification, and OpenAPI shape.",
+      "merge_contract": "Open source protocol package for API, capability, scanner, runner, evidence, audit, and product verification contracts.",
       "must_exist": [
         "api/openapi.yaml",
-        "internal/access/access.go",
         "internal/permission/capabilities.yaml",
-        "internal/scanregistry/scanner.go",
-        "internal/productverify/dispatcher.go"
+        "docs/project-capabilities.md"
       ],
       "include": [
         "LICENSE",
-        "README.md",
         "SECURITY.md",
         "CONTRIBUTING.md",
         "api/openapi.yaml",
         "docs/project-capabilities.md",
-        "internal/access/**",
-        "internal/permission/**",
-        "internal/productverify/**",
-        "internal/scanregistry/capacity.go",
-        "internal/scanregistry/config.go",
-        "internal/scanregistry/control_plane.go",
-        "internal/scanregistry/registry.go",
-        "internal/scanregistry/scanner.go",
-        "internal/scanregistry/scheduler.go"
+        "internal/permission/capabilities.yaml"
+      ],
+      "copy_as": [
+        {
+          "from": "LICENSE",
+          "to": "LICENSE"
+        },
+        {
+          "from": "SECURITY.md",
+          "to": "SECURITY.md"
+        },
+        {
+          "from": "CONTRIBUTING.md",
+          "to": "CONTRIBUTING.md"
+        },
+        {
+          "from": "api/openapi.yaml",
+          "to": "openapi/flyto-engine.openapi.yaml"
+        },
+        {
+          "from": "docs/project-capabilities.md",
+          "to": "docs/project-capabilities.md"
+        },
+        {
+          "from": "internal/permission/capabilities.yaml",
+          "to": "capabilities/capabilities.yaml"
+        }
+      ],
+      "generate": [
+        "flyto-contracts-protocol"
       ],
       "exclude": [
         "internal/billing/**",
@@ -248,6 +266,9 @@
         "api/handlers_scim*"
       ],
       "protected_paths": [
+        "cmd/**",
+        "internal/**",
+        "api/handlers_*",
         "api/handlers_billing*",
         "api/handlers_entitlement*",
         "api/handlers_saml*",
@@ -274,6 +295,11 @@
         "internal/store/**",
         "internal/threatfeed/**",
         "internal/threatintel/**"
+      ],
+      "deny_export_path_patterns": [
+        "cmd/**",
+        "internal/**",
+        "api/handlers_*"
       ]
     }
   ]
