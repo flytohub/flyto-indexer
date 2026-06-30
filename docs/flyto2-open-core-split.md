@@ -12,10 +12,10 @@ Audit the boundary:
 python -m src.cli flyto2-open-core-audit /Users/chester/flytohub
 ```
 
-Export the community tree:
+Export the Flyto2 Warroom CE tree:
 
 ```sh
-python -m src.cli flyto2-open-core-export /Users/chester/flytohub --output /tmp/flyto2-community
+python -m src.cli flyto2-open-core-export /Users/chester/flytohub --output /tmp/flyto2-warroom-ce
 ```
 
 The exporter refuses to write into a non-empty output directory and refuses to
@@ -34,6 +34,23 @@ The first generated community package contains:
   capability catalog, JSON Schemas, examples, conformance helper, and lightweight
   SDK stubs. It is generated from private engine sources without exporting raw
   Go `internal/**` paths.
+
+The generated release tree also contains:
+
+- `install/docker-compose.ce.yml`: local CE stack for engine, worker,
+  scan/discovery drainers, runner, verification, brand-vision, pdf, frontend,
+  and Postgres.
+- `install/docker-compose.ee-sim.yml`: enterprise simulation override that
+  turns on `enterprise_airgap`, enterprise JWT auth, internal runner secrets,
+  and sealed master-key requirements.
+- `install/scripts/build-local-images.sh`: maintainer-only local image builder
+  from `/Users/chester/flytohub`.
+- `install/scripts/mint-ee-sim-jwt.py`: zero-dependency helper for browser
+  enterprise-sim tokens.
+- `install/scripts/audit-release-tree.py`: fail-closed release audit for
+  private path leaks, CE/private image mixing, and secret-like generated values.
+- `docs/local-install.md`, `docs/enterprise-simulation.md`, and
+  `docs/code-protection.md`: operator instructions shipped with the package.
 
 ## Kept Closed
 
@@ -58,6 +75,27 @@ The generated community tree is not source of truth. Fix source repos first,
 rerun the exporter, and review the generated diff. This keeps private Flyto2
 development and OSS publication mergeable without a parallel hand-maintained
 fork.
+
+## Local Install Rule
+
+The CE compose is a local/self-hosted delivery shape, not the private development
+compose file. It references published CE image coordinates by default, while
+maintainers can build the same tags locally:
+
+```sh
+sh /tmp/flyto2-warroom-ce/install/scripts/build-local-images.sh /Users/chester/flytohub
+cp /tmp/flyto2-warroom-ce/install/.env.ce.example /tmp/flyto2-warroom-ce/install/.env
+make -C /tmp/flyto2-warroom-ce ce-up
+```
+
+Enterprise behavior can be simulated without publishing enterprise source:
+
+```sh
+cp /tmp/flyto2-warroom-ce/install/.env.ee-sim.example /tmp/flyto2-warroom-ce/install/.env.ee-sim
+make -C /tmp/flyto2-warroom-ce ee-sim-up
+```
+
+Fill secrets only in the local copied env file. Do not commit them.
 
 ## Contract Package Rule
 

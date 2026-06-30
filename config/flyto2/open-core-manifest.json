@@ -1,11 +1,28 @@
 {
   "schema": "flyto.open-core-manifest.v1",
-  "package_name": "flyto2-community",
+  "package_name": "flyto2-warroom-ce",
   "strategy": {
     "model": "open-core",
+    "product": "Flyto2 Warroom",
     "source_of_truth": "private Flyto2 workspace",
     "export_mode": "deterministic whitelist with fail-closed deny guards",
     "merge_rule": "Change private source first, rerun exporter, review generated delta."
+  },
+  "release": {
+    "name": "flyto2-warroom-ce",
+    "display_name": "Flyto2 Warroom CE",
+    "generate": [
+      "warroom-ce-installer"
+    ],
+    "public_images": {
+      "engine": "docker.io/flytohub/flyto2-warroom-engine-ce",
+      "worker": "docker.io/flytohub/flyto2-warroom-worker-ce",
+      "frontend": "docker.io/flytohub/flyto2-warroom-code-ce",
+      "runner": "docker.io/flytohub/flyto2-warroom-runner-ce",
+      "verification": "docker.io/flytohub/flyto2-warroom-verification-ce",
+      "brand_vision": "docker.io/flytohub/flyto2-warroom-brand-vision-ce",
+      "pdf": "docker.io/flytohub/flyto2-warroom-pdf-ce"
+    }
   },
   "global_exclude": [
     ".git/**",
@@ -36,8 +53,8 @@
     "BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY",
     "STRIPE_SECRET_KEY\\s*=\\s*[^\\s$<]+",
     "FIREBASE_PRIVATE_KEY\\s*=\\s*[^\\s$<]+",
-    "FLYTO_VERIFICATION_SECRET\\s*=\\s*[^\\s$<]+",
-    "FLYTO_RUNNER_SECRET\\s*=\\s*[^\\s$<]+"
+    "FLYTO_VERIFICATION_SECRET[ \\t]*=[ \\t]*[^\\s$<]+",
+    "FLYTO_RUNNER_SECRET[ \\t]*=[ \\t]*[^\\s$<]+"
   ],
   "closed_source_boundaries": [
     "billing, entitlement mutation, commercial gates, and Stripe/offline-license adapters",

@@ -1211,19 +1211,26 @@ def cmd_tools(args):
         },
         {
             "name": "flyto2-open-core-export",
-            "summary": "Generate a community/open-core source tree from whitelisted workspace files",
+            "summary": "Generate the Flyto2 Warroom CE open-core package and local installer tree",
             "args": [
                 {"name": "path", "type": "string", "required": False, "default": ".", "description": "Workspace root path"},
                 {"name": "--manifest", "type": "string", "required": False, "description": "Open-core manifest JSON"},
                 {"name": "--output", "type": "string", "required": True, "description": "Empty output directory"},
                 {"name": "--json", "type": "boolean", "required": False, "default": False, "description": "Output as JSON"},
             ],
-            "outputs": ["generated README", "OPEN_CORE_MANIFEST.json", "packages/<name>/ source trees"],
+            "outputs": [
+                "generated README",
+                "OPEN_CORE_MANIFEST.json",
+                "packages/<name>/ source trees",
+                "install/docker-compose.ce.yml",
+                "install/docker-compose.ee-sim.yml",
+                "release audit files",
+            ],
             "side_effects": ["copies whitelisted source files into --output"],
             "examples": [
-                "flyto-index flyto2-open-core-export /Users/chester/flytohub --output /tmp/flyto2-community",
+                "flyto-index flyto2-open-core-export /Users/chester/flytohub --output /tmp/flyto2-warroom-ce",
             ],
-            "exit_codes": {"0": "export written", "2": "audit failed before export"},
+            "exit_codes": {"0": "export written", "2": "boundary or release audit failed"},
         },
         {
             "name": "flyto2-memory-bootstrap",

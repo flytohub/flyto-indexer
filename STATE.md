@@ -44,6 +44,12 @@
   denied secret/provider markers fail closed before export. Engine-facing OSS
   is generated as `flyto-contracts` protocol artifacts, not raw Go
   `internal/**` source.
+- `flyto2-open-core-export` now generates the Flyto2 Warroom CE local installer
+  layer: CE Docker Compose, enterprise-simulation override, local image build
+  helper, enterprise JWT helper, release-tree audit script, and local
+  install/enterprise simulation/code-protection docs. The generated release
+  audit fails closed on private path leakage, CE/private image mixing, and
+  secret-like generated values.
 - CI covers lint, tests, verify, build, and no-dependency wheel smoke.
 
 ## Release Blockers
@@ -71,4 +77,5 @@
 | Flyto2 release packet | `python -m src.cli flyto2-release-packet /Users/chester/flytohub --health-report config/flyto2/health-baseline-2026-06-21.json --json` | Workspace inventory, deliverables, blockers, readiness verdict |
 | Flyto2 fresh packet | `python -m src.cli flyto2-release-packet /Users/chester/flytohub --health-report config/flyto2/health-baseline-2026-06-21.json --fresh-evidence-dir reports/flyto2-9h-2026-06-22 --require-fresh --run-start <iso8601> --json` | Nine-hour fresh evidence gate |
 | Flyto2 open-core split | `python -m src.cli flyto2-open-core-audit /Users/chester/flytohub --json` | Community package whitelist, protected path, denied-content gate |
+| Flyto2 Warroom CE export | `python -m src.cli flyto2-open-core-export /Users/chester/flytohub --output /tmp/flyto2-warroom-ce --json` | Generated CE installer, EE-sim override, release audit |
 | GitHub Actions startup | `python scripts/audit_github_actions_startup.py --workspace /Users/chester/flytohub --output /tmp/github-actions-startup.json --soft` | Core repo remote CI startup, job creation, and green workflow proof |

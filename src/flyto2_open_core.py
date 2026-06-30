@@ -294,7 +294,8 @@ def audit_open_core(options: OpenCoreOptions) -> dict[str, Any]:
         "workspace": str(workspace),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "strategy": manifest.get("strategy", {}),
-        "package_name": manifest.get("package_name", "flyto2-community"),
+        "package_name": manifest.get("package_name", "flyto2-warroom-ce"),
+        "release": manifest.get("release", {}),
         "packages": packages,
         "blockers": blockers,
         "warnings": warnings,
@@ -666,6 +667,845 @@ type EvidenceEvent struct {
     return written
 
 
+def _release_images(manifest: dict[str, Any]) -> dict[str, str]:
+    release = manifest.get("release", {})
+    images = release.get("public_images", {})
+    return {
+        "engine": images.get("engine", "docker.io/flytohub/flyto2-warroom-engine-ce"),
+        "worker": images.get("worker", "docker.io/flytohub/flyto2-warroom-worker-ce"),
+        "frontend": images.get("frontend", "docker.io/flytohub/flyto2-warroom-code-ce"),
+        "runner": images.get("runner", "docker.io/flytohub/flyto2-warroom-runner-ce"),
+        "verification": images.get(
+            "verification",
+            "docker.io/flytohub/flyto2-warroom-verification-ce",
+        ),
+        "brand_vision": images.get(
+            "brand_vision",
+            "docker.io/flytohub/flyto2-warroom-brand-vision-ce",
+        ),
+        "pdf": images.get("pdf", "docker.io/flytohub/flyto2-warroom-pdf-ce"),
+    }
+
+
+def _public_release_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+    release = dict(manifest.get("release", {}))
+    release.pop("private_images", None)
+    return release
+
+
+def _write_warroom_release(target: Path, manifest: dict[str, Any]) -> list[str]:
+    written: list[str] = []
+    images = _release_images(manifest)
+
+    def write_text(rel: str, text: str) -> None:
+        path = target / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        written.append(rel)
+
+    write_text(
+        "install/docker-compose.ce.yml",
+        f"""name: flyto2-warroom-ce
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${{POSTGRES_USER:-flyto}}"
+      POSTGRES_PASSWORD: "${{POSTGRES_PASSWORD:-change-me-local-only}}" # placeholder
+      POSTGRES_DB: "${{POSTGRES_DB:-flyto}}"
+    ports:
+      - "127.0.0.1:${{FLYTO_POSTGRES_PORT:-5432}}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${{POSTGRES_USER:-flyto}}"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+  engine:
+    image: "${{FLYTO_WARROOM_ENGINE_IMAGE:-{images['engine']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${{FLYTO_ENGINE_PORT:-8080}}:8080"
+    environment:
+      FLYTO_EDITION: "community"
+      FLYTO_ENV: "${{FLYTO_ENV:-development}}"
+      FLYTO_DEV_AUTH: "${{FLYTO_DEV_AUTH:-1}}"
+      FLYTO_CORS_ORIGINS: "${{FLYTO_CORS_ORIGINS:-http://localhost:8088,http://127.0.0.1:8088,http://localhost:5173,http://127.0.0.1:5173}}"
+      FLYTO_PG_URL: "postgres://${{POSTGRES_USER:-flyto}}:${{POSTGRES_PASSWORD:-change-me-local-only}}@postgres:5432/${{POSTGRES_DB:-flyto}}?sslmode=disable" # placeholder
+      FLYTO_SCAN_DRAINER: "${{FLYTO_SCAN_DRAINER:-0}}"
+      FLYTO_POST_SCAN_HOOK_CONCURRENCY: "${{FLYTO_POST_SCAN_HOOK_CONCURRENCY:-1}}"
+      FLYTO_RUNNER_URL: "http://runner:8090"
+      FLYTO_VERIFICATION_URL: "http://verification:8344"
+      FLYTO_VERIFICATION_CALLBACK_URL: "http://engine:8080/api/v1/code/runner/executions/callback"
+      FLYTO_PDF_URL: "http://pdf:3000"
+      FLYTO_BRAND_VISION_URL: "http://brand-vision:8095"
+      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:-}}" # placeholder
+      FLYTO_VERIFICATION_SECRET: "${{FLYTO_VERIFICATION_SECRET:-}}" # placeholder
+      FLYTO_RUNNER_DEV_OPEN: "${{FLYTO_RUNNER_DEV_OPEN:-1}}"
+      FLYTO_MASTER_KEY: "${{FLYTO_MASTER_KEY:-}}"
+      FLYTO_MASTER_KEY_ID: "${{FLYTO_MASTER_KEY_ID:-local-ce}}"
+      FLYTO_PLATFORM_ADMIN_UIDS: "${{FLYTO_PLATFORM_ADMIN_UIDS:-}}"
+      OPENAI_API_KEY: "${{OPENAI_API_KEY:-}}"
+      GOOGLE_PAGESPEED_KEY: "${{GOOGLE_PAGESPEED_KEY:-}}"
+      FLYTO_GITHUB_TOKEN: "${{FLYTO_GITHUB_TOKEN:-}}"
+      FLYTO_ABUSECH_AUTH_KEY: "${{FLYTO_ABUSECH_AUTH_KEY:-}}"
+      HIBP_API_KEY: "${{HIBP_API_KEY:-}}"
+      ABUSEIPDB_API_KEY: "${{ABUSEIPDB_API_KEY:-}}"
+      FLYTO_VT_API_KEY: "${{FLYTO_VT_API_KEY:-}}"
+      VIRUSTOTAL_API_KEY: "${{VIRUSTOTAL_API_KEY:-}}"
+      FLYTO_URLSCAN_API_KEY: "${{FLYTO_URLSCAN_API_KEY:-}}"
+      SHODAN_API_KEY: "${{SHODAN_API_KEY:-}}"
+      FLYTO_IPINFO_TOKEN: "${{FLYTO_IPINFO_TOKEN:-}}"
+    volumes:
+      - trivy-cache:/var/cache/trivy
+      - blobs:/app/data/blobs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      runner:
+        condition: service_healthy
+      verification:
+        condition: service_started
+      brand-vision:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8080/health\", timeout=2)'"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+
+  scan-drainer:
+    image: "${{FLYTO_WARROOM_ENGINE_IMAGE:-{images['engine']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    restart: unless-stopped
+    environment:
+      FLYTO_SERVER_MODE: "scan-drain-loop"
+      FLYTO_EDITION: "community"
+      FLYTO_ENV: "${{FLYTO_ENV:-development}}"
+      FLYTO_PG_URL: "postgres://${{POSTGRES_USER:-flyto}}:${{POSTGRES_PASSWORD:-change-me-local-only}}@postgres:5432/${{POSTGRES_DB:-flyto}}?sslmode=disable" # placeholder
+      FLYTO_RUNNER_URL: "http://runner:8090"
+      FLYTO_PDF_URL: "http://pdf:3000"
+      FLYTO_BRAND_VISION_URL: "http://brand-vision:8095"
+      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:-}}" # placeholder
+      FLYTO_RUNNER_DEV_OPEN: "${{FLYTO_RUNNER_DEV_OPEN:-1}}"
+      FLYTO_MASTER_KEY: "${{FLYTO_MASTER_KEY:-}}"
+      FLYTO_MASTER_KEY_ID: "${{FLYTO_MASTER_KEY_ID:-local-ce}}"
+      FLYTO_GITHUB_TOKEN: "${{FLYTO_GITHUB_TOKEN:-}}"
+      OPENAI_API_KEY: "${{OPENAI_API_KEY:-}}"
+    volumes:
+      - trivy-cache:/var/cache/trivy
+      - blobs:/app/data/blobs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      runner:
+        condition: service_healthy
+
+  discovery-drainer:
+    image: "${{FLYTO_WARROOM_ENGINE_IMAGE:-{images['engine']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    restart: unless-stopped
+    environment:
+      FLYTO_SERVER_MODE: "discovery-drain-loop"
+      FLYTO_EDITION: "community"
+      FLYTO_ENV: "${{FLYTO_ENV:-development}}"
+      FLYTO_PG_URL: "postgres://${{POSTGRES_USER:-flyto}}:${{POSTGRES_PASSWORD:-change-me-local-only}}@postgres:5432/${{POSTGRES_DB:-flyto}}?sslmode=disable" # placeholder
+      FLYTO_RUNNER_URL: "http://runner:8090"
+      FLYTO_PDF_URL: "http://pdf:3000"
+      FLYTO_BRAND_VISION_URL: "http://brand-vision:8095"
+      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:-}}" # placeholder
+      FLYTO_RUNNER_DEV_OPEN: "${{FLYTO_RUNNER_DEV_OPEN:-1}}"
+      FLYTO_DISCOVERY_DRAINER_MAX_CONCURRENCY: "${{FLYTO_DISCOVERY_DRAINER_MAX_CONCURRENCY:-1}}"
+      FLYTO_DISCOVERY_DRAINER_MIN_FREE_MEMORY_MB: "${{FLYTO_DISCOVERY_DRAINER_MIN_FREE_MEMORY_MB:-1024}}"
+      FLYTO_MASTER_KEY: "${{FLYTO_MASTER_KEY:-}}"
+      FLYTO_MASTER_KEY_ID: "${{FLYTO_MASTER_KEY_ID:-local-ce}}"
+      FLYTO_GITHUB_TOKEN: "${{FLYTO_GITHUB_TOKEN:-}}"
+      OPENAI_API_KEY: "${{OPENAI_API_KEY:-}}"
+    volumes:
+      - trivy-cache:/var/cache/trivy
+      - blobs:/app/data/blobs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      runner:
+        condition: service_healthy
+
+  worker:
+    image: "${{FLYTO_WARROOM_WORKER_IMAGE:-{images['worker']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    restart: unless-stopped
+    environment:
+      FLYTO_EDITION: "community"
+      FLYTO_ENV: "${{FLYTO_ENV:-development}}"
+      FLYTO_PG_URL: "postgres://${{POSTGRES_USER:-flyto}}:${{POSTGRES_PASSWORD:-change-me-local-only}}@postgres:5432/${{POSTGRES_DB:-flyto}}?sslmode=disable" # placeholder
+      FLYTO_WORKER_MODE: "${{FLYTO_WORKER_MODE:-queue-only}}"
+      FLYTO_RUNNER_URL: "http://runner:8090"
+      FLYTO_VERIFICATION_URL: "http://verification:8344"
+      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:-}}" # placeholder
+      FLYTO_VERIFICATION_SECRET: "${{FLYTO_VERIFICATION_SECRET:-}}" # placeholder
+      FLYTO_RUNNER_DEV_OPEN: "${{FLYTO_RUNNER_DEV_OPEN:-1}}"
+      FLYTO_MASTER_KEY: "${{FLYTO_MASTER_KEY:-}}"
+      FLYTO_MASTER_KEY_ID: "${{FLYTO_MASTER_KEY_ID:-local-ce}}"
+      FLYTO_INDEX_BIN: "${{FLYTO_INDEX_BIN:-flyto-index}}"
+      OPENAI_API_KEY: "${{OPENAI_API_KEY:-}}"
+    volumes:
+      - trivy-cache:/var/cache/trivy
+      - blobs:/app/data/blobs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      runner:
+        condition: service_healthy
+
+  runner:
+    image: "${{FLYTO_WARROOM_RUNNER_IMAGE:-{images['runner']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${{FLYTO_RUNNER_PORT:-8090}}:8090"
+    environment:
+      PORT: "8090"
+      OPENAI_API_KEY: "${{OPENAI_API_KEY:-}}"
+      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:-}}" # placeholder
+      FLYTO_RUNNER_DEV_OPEN: "${{FLYTO_RUNNER_DEV_OPEN:-1}}"
+      FLYTO_ENGINE_COST_URL: "http://engine:8080/api/v1/code/runner/cost-events"
+      FLYTO_ENGINE_CALLBACK_URL: "http://engine:8080/api/v1/code/runner/executions/callback"
+      FLYTO_AI_ALLOW_PROD_TARGETS: "${{FLYTO_AI_ALLOW_PROD_TARGETS:-0}}"
+      FLYTO_ALLOW_PRIVATE_NETWORK: "${{FLYTO_ALLOW_PRIVATE_NETWORK:-false}}"
+      FLYTO_ALLOWED_HOSTS: "${{FLYTO_ALLOWED_HOSTS:-host.docker.internal,localhost,127.0.0.1}}"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8090/health\", timeout=2)'"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+
+  verification:
+    image: "${{FLYTO_WARROOM_VERIFICATION_IMAGE:-{images['verification']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${{FLYTO_VERIFICATION_PORT:-8344}}:8344"
+    environment:
+      FLYTO_ENGINE_URL: "http://engine:8080"
+      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:-}}" # placeholder
+      FLYTO_VERIFICATION_SECRET: "${{FLYTO_VERIFICATION_SECRET:-}}" # placeholder
+      FLYTO_ALLOWED_HOSTS: "${{FLYTO_ALLOWED_HOSTS:-host.docker.internal,localhost,127.0.0.1}}"
+      FLYTO_ALLOW_PRIVATE_NETWORK: "${{FLYTO_ALLOW_PRIVATE_NETWORK:-true}}"
+
+  brand-vision:
+    image: "${{FLYTO_WARROOM_BRAND_VISION_IMAGE:-{images['brand_vision']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${{FLYTO_BRAND_VISION_PORT:-8095}}:8095"
+    environment:
+      FLYTO_BRAND_VISION_API_KEY: "${{FLYTO_BRAND_VISION_API_KEY:-}}"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8095/health\", timeout=2)'"]
+      interval: 10s
+      timeout: 3s
+      retries: 15
+
+  pdf:
+    image: "${{FLYTO_WARROOM_PDF_IMAGE:-{images['pdf']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      PDF_TIMEOUT_MS: "${{PDF_TIMEOUT_MS:-30000}}"
+
+  frontend:
+    image: "${{FLYTO_WARROOM_FRONTEND_IMAGE:-{images['frontend']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${{FLYTO_CODE_PORT:-8088}}:80"
+    depends_on:
+      engine:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  trivy-cache:
+  blobs:
+""",
+    )
+
+    write_text(
+        "install/docker-compose.ee-sim.yml",
+        """services:
+  engine:
+    environment:
+      FLYTO_EDITION: "enterprise_airgap"
+      FLYTO_AUTH_MODE: "enterprise"
+      FLYTO_DEV_AUTH: "0"
+      FLYTO_ENTERPRISE_JWT_SECRET_KEY: "${FLYTO_ENTERPRISE_JWT_SECRET_KEY:?set FLYTO_ENTERPRISE_JWT_SECRET_KEY in install/.env.ee-sim}" # placeholder
+      FLYTO_RUNNER_SECRET: "${FLYTO_RUNNER_SECRET:?set FLYTO_RUNNER_SECRET in install/.env.ee-sim}" # placeholder
+      FLYTO_VERIFICATION_SECRET: "${FLYTO_VERIFICATION_SECRET:?set FLYTO_VERIFICATION_SECRET in install/.env.ee-sim}" # placeholder
+      FLYTO_RUNNER_DEV_OPEN: "0"
+      FLYTO_MASTER_KEY: "${FLYTO_MASTER_KEY:?set FLYTO_MASTER_KEY in install/.env.ee-sim}"
+      FLYTO_MASTER_KEY_ID: "${FLYTO_MASTER_KEY_ID:-local-ee-sim}"
+      FLYTO_AI_BASE_URL: "${FLYTO_AI_BASE_URL:-http://host.docker.internal:11434/v1}"
+
+  scan-drainer:
+    environment:
+      FLYTO_EDITION: "enterprise_airgap"
+      FLYTO_AUTH_MODE: "enterprise"
+      FLYTO_RUNNER_SECRET: "${FLYTO_RUNNER_SECRET:?set FLYTO_RUNNER_SECRET in install/.env.ee-sim}" # placeholder
+      FLYTO_RUNNER_DEV_OPEN: "0"
+      FLYTO_MASTER_KEY: "${FLYTO_MASTER_KEY:?set FLYTO_MASTER_KEY in install/.env.ee-sim}"
+      FLYTO_MASTER_KEY_ID: "${FLYTO_MASTER_KEY_ID:-local-ee-sim}"
+
+  discovery-drainer:
+    environment:
+      FLYTO_EDITION: "enterprise_airgap"
+      FLYTO_AUTH_MODE: "enterprise"
+      FLYTO_RUNNER_SECRET: "${FLYTO_RUNNER_SECRET:?set FLYTO_RUNNER_SECRET in install/.env.ee-sim}" # placeholder
+      FLYTO_RUNNER_DEV_OPEN: "0"
+      FLYTO_MASTER_KEY: "${FLYTO_MASTER_KEY:?set FLYTO_MASTER_KEY in install/.env.ee-sim}"
+      FLYTO_MASTER_KEY_ID: "${FLYTO_MASTER_KEY_ID:-local-ee-sim}"
+
+  worker:
+    environment:
+      FLYTO_EDITION: "enterprise_airgap"
+      FLYTO_AUTH_MODE: "enterprise"
+      FLYTO_RUNNER_SECRET: "${FLYTO_RUNNER_SECRET:?set FLYTO_RUNNER_SECRET in install/.env.ee-sim}" # placeholder
+      FLYTO_VERIFICATION_SECRET: "${FLYTO_VERIFICATION_SECRET:?set FLYTO_VERIFICATION_SECRET in install/.env.ee-sim}" # placeholder
+      FLYTO_RUNNER_DEV_OPEN: "0"
+      FLYTO_MASTER_KEY: "${FLYTO_MASTER_KEY:?set FLYTO_MASTER_KEY in install/.env.ee-sim}"
+      FLYTO_MASTER_KEY_ID: "${FLYTO_MASTER_KEY_ID:-local-ee-sim}"
+
+  runner:
+    environment:
+      FLYTO_RUNNER_SECRET: "${FLYTO_RUNNER_SECRET:?set FLYTO_RUNNER_SECRET in install/.env.ee-sim}" # placeholder
+      FLYTO_RUNNER_DEV_OPEN: "0"
+
+  verification:
+    environment:
+      FLYTO_RUNNER_SECRET: "${FLYTO_RUNNER_SECRET:?set FLYTO_RUNNER_SECRET in install/.env.ee-sim}" # placeholder
+      FLYTO_VERIFICATION_SECRET: "${FLYTO_VERIFICATION_SECRET:?set FLYTO_VERIFICATION_SECRET in install/.env.ee-sim}" # placeholder
+""",
+    )
+
+    write_text(
+        "install/.env.ce.example",
+        """# Flyto2 Warroom CE local install.
+# Copy this file to install/.env and keep the copy out of git.
+
+FLYTO_WARROOM_TAG=ce-local
+POSTGRES_USER=flyto
+POSTGRES_PASSWORD=change-me-local-only
+POSTGRES_DB=flyto
+FLYTO_ENV=development
+FLYTO_DEV_AUTH=1
+FLYTO_RUNNER_DEV_OPEN=1
+FLYTO_ENGINE_PORT=8080
+FLYTO_CODE_PORT=8088
+FLYTO_PLATFORM_ADMIN_UIDS=
+FLYTO_RUNNER_SECRET=
+FLYTO_VERIFICATION_SECRET=
+FLYTO_MASTER_KEY=
+FLYTO_MASTER_KEY_ID=local-ce
+OPENAI_API_KEY=
+GOOGLE_PAGESPEED_KEY=
+FLYTO_GITHUB_TOKEN=
+""",
+    )
+    write_text(
+        "install/.env.ee-sim.example",
+        """# Flyto2 Warroom enterprise simulation.
+# Copy this file to install/.env.ee-sim and fill local-only secrets there.
+
+FLYTO_WARROOM_TAG=ee-sim-local
+POSTGRES_USER=flyto
+POSTGRES_PASSWORD=change-me-local-only
+POSTGRES_DB=flyto
+FLYTO_ENV=development
+FLYTO_ENTERPRISE_JWT_SECRET_KEY=
+FLYTO_RUNNER_SECRET=
+FLYTO_VERIFICATION_SECRET=
+FLYTO_MASTER_KEY=
+FLYTO_MASTER_KEY_ID=local-ee-sim
+FLYTO_AI_BASE_URL=http://host.docker.internal:11434/v1
+OPENAI_API_KEY=
+""",
+    )
+    write_text(
+        "install/Makefile",
+        """SHELL := /bin/sh
+ENV_CE ?= install/.env
+ENV_EE_SIM ?= install/.env.ee-sim
+COMPOSE_CE = docker compose --env-file $(ENV_CE) -f install/docker-compose.ce.yml
+COMPOSE_EE_SIM = docker compose --env-file $(ENV_EE_SIM) -f install/docker-compose.ce.yml -f install/docker-compose.ee-sim.yml
+
+.PHONY: ce-up ce-down ce-logs ce-ps ce-reset-db ee-sim-up ee-sim-down ee-sim-logs audit build-local-images
+
+ce-up:
+\t$(COMPOSE_CE) up -d
+
+ce-down:
+\t$(COMPOSE_CE) down
+
+ce-logs:
+\t$(COMPOSE_CE) logs -f --tail=200
+
+ce-ps:
+\t$(COMPOSE_CE) ps
+
+ce-reset-db:
+\t$(COMPOSE_CE) down
+\tdocker volume rm flyto2-warroom-ce_pgdata || true
+
+ee-sim-up:
+\t$(COMPOSE_EE_SIM) up -d
+
+ee-sim-down:
+\t$(COMPOSE_EE_SIM) down
+
+ee-sim-logs:
+\t$(COMPOSE_EE_SIM) logs -f --tail=200
+
+audit:
+\tpython3 install/scripts/audit-release-tree.py .
+
+build-local-images:
+\tsh install/scripts/build-local-images.sh /Users/chester/flytohub
+""",
+    )
+    write_text(
+        "install/scripts/build-local-images.sh",
+        f"""#!/bin/sh
+set -eu
+
+WORKSPACE="${{1:-/Users/chester/flytohub}}"
+TAG="${{FLYTO_WARROOM_TAG:-ce-local}}"
+ENGINE_IMAGE="${{FLYTO_WARROOM_ENGINE_IMAGE:-{images['engine']}}}"
+WORKER_IMAGE="${{FLYTO_WARROOM_WORKER_IMAGE:-{images['worker']}}}"
+FRONTEND_IMAGE="${{FLYTO_WARROOM_FRONTEND_IMAGE:-{images['frontend']}}}"
+RUNNER_IMAGE="${{FLYTO_WARROOM_RUNNER_IMAGE:-{images['runner']}}}"
+VERIFICATION_IMAGE="${{FLYTO_WARROOM_VERIFICATION_IMAGE:-{images['verification']}}}"
+BRAND_VISION_IMAGE="${{FLYTO_WARROOM_BRAND_VISION_IMAGE:-{images['brand_vision']}}}"
+PDF_IMAGE="${{FLYTO_WARROOM_PDF_IMAGE:-{images['pdf']}}}"
+
+docker build -t "$ENGINE_IMAGE:$TAG" "$WORKSPACE/flyto-engine"
+docker build -f "$WORKSPACE/flyto-engine/Dockerfile.worker" -t "$WORKER_IMAGE:$TAG" "$WORKSPACE/flyto-engine"
+docker build -t "$RUNNER_IMAGE:$TAG" "$WORKSPACE/flyto-engine/runner"
+docker build -f "$WORKSPACE/flyto-core/Dockerfile.verification" -t "$VERIFICATION_IMAGE:$TAG" "$WORKSPACE/flyto-core"
+docker build -t "$BRAND_VISION_IMAGE:$TAG" "$WORKSPACE/flyto-engine/brand-vision"
+docker build -t "$PDF_IMAGE:$TAG" "$WORKSPACE/flyto-engine/pdf-service"
+
+TMP_ROOT="$(mktemp -d)"
+trap 'rm -rf "$TMP_ROOT"' EXIT
+CODE_CTX="$TMP_ROOT/flyto-code"
+mkdir -p "$CODE_CTX"
+tar -C "$WORKSPACE/flyto-code" -cf - . | tar -C "$CODE_CTX" -xf -
+rm -rf "$CODE_CTX/flyto-design-tokens-pkg"
+if [ -d "$WORKSPACE/flyto-design-tokens" ]; then
+  cp -R "$WORKSPACE/flyto-design-tokens" "$CODE_CTX/flyto-design-tokens-pkg"
+else
+  echo "missing $WORKSPACE/flyto-design-tokens" >&2
+  exit 1
+fi
+mkdir -p "$CODE_CTX/public/i18n/code"
+if [ -d "$WORKSPACE/flyto-i18n/dist/code" ]; then
+  cp -R "$WORKSPACE/flyto-i18n/dist/code/." "$CODE_CTX/public/i18n/code/"
+fi
+python3 - "$CODE_CTX/package.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+for section in ("dependencies", "devDependencies"):
+    deps = payload.get(section, {{}})
+    for name, value in list(deps.items()):
+        if value == "file:../flyto-design-tokens":
+            deps[name] = "file:./flyto-design-tokens-pkg"
+path.write_text(json.dumps(payload, indent=2) + "\\n", encoding="utf-8")
+PY
+npm install --package-lock-only --ignore-scripts --legacy-peer-deps --prefix "$CODE_CTX"
+docker build \\
+  --build-arg VITE_ENGINE_URL="${{FLYTO_CODE_ENGINE_URL:-http://localhost:8080}}" \\
+  --build-arg VITE_AUTH_MODE="${{FLYTO_CODE_AUTH_MODE:-enterprise}}" \\
+  --build-arg VITE_AUTOMATION_URL="${{FLYTO_AUTOMATION_URL:-http://localhost:8080}}" \\
+  --build-arg VITE_CORTEX_URL="${{FLYTO_CORTEX_URL:-http://localhost:8080}}" \\
+  -t "$FRONTEND_IMAGE:$TAG" \\
+  "$CODE_CTX"
+""",
+    )
+    write_text(
+        "install/scripts/mint-ee-sim-jwt.py",
+        '''#!/usr/bin/env python3
+import argparse
+import base64
+import hashlib
+import hmac
+import json
+import os
+import time
+
+
+def b64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Mint a local Flyto2 Warroom enterprise-sim JWT.")
+    parser.add_argument("--secret", default=os.environ.get("FLYTO_ENTERPRISE_JWT_SECRET_KEY", ""))
+    parser.add_argument("--sub", default="local-admin")
+    parser.add_argument("--email", default="local-admin@example.invalid")
+    parser.add_argument("--name", default="Local Admin")
+    parser.add_argument("--ttl-seconds", type=int, default=8 * 60 * 60)
+    args = parser.parse_args()
+    if len(args.secret) < 32:
+        raise SystemExit("secret must be at least 32 characters")
+    now = int(time.time())
+    header = {"alg": "HS256", "typ": "JWT"}
+    payload = {
+        "type": "access",
+        "sub": args.sub,
+        "email": args.email,
+        "name": args.name,
+        "iat": now,
+        "exp": now + args.ttl_seconds,
+    }
+    signing_input = ".".join([
+        b64url(json.dumps(header, separators=(",", ":")).encode("utf-8")),
+        b64url(json.dumps(payload, separators=(",", ":")).encode("utf-8")),
+    ])
+    sig = hmac.new(args.secret.encode("utf-8"), signing_input.encode("ascii"), hashlib.sha256)
+    print(signing_input + "." + b64url(sig.digest()))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+''',
+    )
+    write_text(
+        "install/scripts/audit-release-tree.py",
+        '''#!/usr/bin/env python3
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
+
+REQUIRED = [
+    "OPEN_CORE_MANIFEST.json",
+    "packages/flyto-contracts/openapi/flyto-engine.openapi.yaml",
+    "packages/flyto-contracts/capabilities/capabilities.yaml",
+    "packages/flyto-contracts/schemas/evidence-event.schema.json",
+    "install/docker-compose.ce.yml",
+    "install/docker-compose.ee-sim.yml",
+    "install/.env.ce.example",
+    "install/.env.ee-sim.example",
+    "install/scripts/mint-ee-sim-jwt.py",
+    "docs/local-install.md",
+    "docs/enterprise-simulation.md",
+    "docs/code-protection.md",
+]
+
+PRIVATE_GLOBS = [
+    "packages/flyto-contracts/internal/**",
+    "packages/flyto-contracts/cmd/**",
+    "packages/flyto-contracts/api/handlers_*",
+]
+
+DENIED_ANYWHERE = [
+    re.compile(r"FLYTO_RUNNER_SECRET[ \\t]*=[ \\t]*[^\\s$<]+"),
+    re.compile(r"FLYTO_VERIFICATION_SECRET[ \\t]*=[ \\t]*[^\\s$<]+"),
+    re.compile(r"FLYTO_ENTERPRISE_JWT_SECRET_KEY[ \\t]*=[ \\t]*[^\\s$<]+"),
+    re.compile(r"BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY"),
+    re.compile(r"ghcr\\.io/.+-ee"),
+    re.compile(r"flyto2-warroom-[a-z-]+-ee"),
+]
+
+DENIED_CE_COMPOSE = [
+    re.compile(r"ghcr\\.io/.+-ee"),
+    re.compile(r"enterprise_airgap"),
+    re.compile(r"FLYTO_AUTH_MODE"),
+    re.compile(r"FLYTO_ENTERPRISE_JWT_SECRET_KEY"),
+]
+
+
+def text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return ""
+
+
+def main() -> int:
+    blockers: list[str] = []
+    for rel in REQUIRED:
+        if not (ROOT / rel).exists():
+            blockers.append(f"missing required release file: {rel}")
+    for pattern in PRIVATE_GLOBS:
+        for match in ROOT.glob(pattern):
+            if match.is_file():
+                blockers.append(f"private path escaped release tree: {match.relative_to(ROOT)}")
+    ce_compose = ROOT / "install/docker-compose.ce.yml"
+    if ce_compose.exists():
+        ce_text = text(ce_compose)
+        for regex in DENIED_CE_COMPOSE:
+            if regex.search(ce_text):
+                blockers.append(f"CE compose contains denied marker: {regex.pattern}")
+    for path in ROOT.rglob("*"):
+        if not path.is_file() or path.stat().st_size > 2_000_000:
+            continue
+        body = text(path)
+        for regex in DENIED_ANYWHERE:
+            if regex.search(body):
+                blockers.append(f"secret-like value in {path.relative_to(ROOT)}: {regex.pattern}")
+    if blockers:
+        for item in blockers:
+            print("BLOCKED: " + item, file=sys.stderr)
+        return 2
+    print("ok")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+''',
+    )
+    write_text(
+        "docs/local-install.md",
+        """# Flyto2 Warroom Local Install
+
+This generated tree is the self-hosted Flyto2 Warroom CE delivery shape. It is
+safe to publish because it contains whitelisted packages, public contracts, and
+installer files only.
+
+## Build Local Images From The Private Workspace
+
+Maintainers with the private workspace can build the local images:
+
+```sh
+python -m src.cli flyto2-open-core-export /Users/chester/flytohub --output /tmp/flyto2-warroom-ce
+sh /tmp/flyto2-warroom-ce/install/scripts/build-local-images.sh /Users/chester/flytohub
+```
+
+The script builds engine, worker, runner, verification, brand-vision, pdf, and
+frontend images with the `ce-local` tag. Public users would pull the same image
+names from Docker Hub after the release pipeline publishes them.
+
+## Start CE Locally
+
+```sh
+cp /tmp/flyto2-warroom-ce/install/.env.ce.example /tmp/flyto2-warroom-ce/install/.env
+make -C /tmp/flyto2-warroom-ce ce-up
+```
+
+Open:
+
+- Frontend: `http://localhost:8088`
+- Engine health: `http://localhost:8080/health`
+
+CE local mode sets `FLYTO_DEV_AUTH=1` because production `local_jwt` auth is not
+implemented in the engine server yet. That is acceptable for a laptop smoke
+stack and blocked by documentation/audit from being described as production
+community auth.
+
+## Reset The Database
+
+```sh
+make -C /tmp/flyto2-warroom-ce ce-reset-db
+```
+
+This removes only the generated compose stack's `pgdata` volume.
+
+## Audit The Release Tree
+
+```sh
+make -C /tmp/flyto2-warroom-ce audit
+```
+""",
+    )
+    write_text(
+        "docs/enterprise-simulation.md",
+        """# Flyto2 Warroom Enterprise Simulation
+
+Enterprise simulation runs the same local stack with fail-closed enterprise
+gates enabled: `enterprise_airgap` edition, enterprise JWT auth, internal runner
+secrets, and sealed master-key requirements.
+
+## Configure Local-Only Secrets
+
+```sh
+cp /tmp/flyto2-warroom-ce/install/.env.ee-sim.example /tmp/flyto2-warroom-ce/install/.env.ee-sim
+```
+
+Fill the blank values in `install/.env.ee-sim`. Use local-only values and do not
+commit that file.
+
+Required values:
+
+- `FLYTO_ENTERPRISE_JWT_SECRET_KEY` must be at least 32 characters.
+- `FLYTO_RUNNER_SECRET` enables signed engine-to-runner calls.
+- `FLYTO_VERIFICATION_SECRET` enables signed verification callbacks.
+- `FLYTO_MASTER_KEY` enables sealed runtime credentials.
+
+## Start EE Simulation
+
+```sh
+make -C /tmp/flyto2-warroom-ce ee-sim-up
+```
+
+## Mint A Browser Token
+
+```sh
+export FLYTO_ENTERPRISE_JWT_SECRET_KEY=<same-local-secret>
+TOKEN="$(python3 /tmp/flyto2-warroom-ce/install/scripts/mint-ee-sim-jwt.py)"
+```
+
+Paste this in the browser console on `http://localhost:8088`, then refresh:
+
+```js
+sessionStorage.setItem("jwt_access_token", JSON.stringify("<paste-token-here>"))
+```
+
+The engine verifies the HS256 token and rejects expired, unsigned, wrong-type,
+or wrong-secret tokens.
+
+## What This Simulates
+
+- Enterprise auth boundary without Firebase.
+- Airgap edition/capability gates.
+- Runner and verification internal secret gates.
+- Local AI-compatible endpoint wiring without making AI a gate authority.
+- One database-backed stack for code, container, cloud/runtime, CTEM, evidence,
+  reports, scheduler ledger, and audit surfaces.
+
+## What This Does Not Pretend
+
+This does not publish enterprise source code. Enterprise implementations remain
+private images and private source; CE receives protocol contracts and install
+composition only.
+""",
+    )
+    write_text(
+        "docs/code-protection.md",
+        """# Flyto2 Warroom Code Protection
+
+The open-core release protects private code by construction:
+
+- Release content is generated from an allowlist.
+- Private `cmd/**`, Go `internal/**`, private handlers, billing, tenant store,
+  connector credentials, hosted control plane, commercial threat intel, and live
+  remediation orchestration are not copied.
+- `flyto-contracts` exposes OpenAPI, capabilities, schemas, examples, and SDK
+  stubs instead of raw engine source.
+- CE compose only references public image coordinates or maintainer-overridden
+  local CE image names.
+- EE simulation is an override file. It can enable enterprise gates locally, but
+  it does not include enterprise implementation source.
+
+Run this before publishing:
+
+```sh
+python3 install/scripts/audit-release-tree.py .
+```
+
+The audit fails if private engine paths escape, CE compose references EE image
+coordinates, or generated files contain secret-like values.
+
+This is technical containment, not a substitute for license, trademark, image
+signing, SBOM, and release provenance. A production release should publish signed
+images and attach the generated `OPEN_CORE_MANIFEST.json` as evidence.
+""",
+    )
+    return written
+
+
+def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+    release = manifest.get("release", {})
+    if "warroom-ce-installer" not in list(release.get("generate", [])):
+        return {"ok": True, "blockers": [], "checked": False}
+
+    blockers: list[dict[str, Any]] = []
+    required = [
+        "OPEN_CORE_MANIFEST.json",
+        "packages/flyto-contracts/openapi/flyto-engine.openapi.yaml",
+        "packages/flyto-contracts/capabilities/capabilities.yaml",
+        "packages/flyto-contracts/schemas/evidence-event.schema.json",
+        "install/docker-compose.ce.yml",
+        "install/docker-compose.ee-sim.yml",
+        "install/.env.ce.example",
+        "install/.env.ee-sim.example",
+        "install/scripts/audit-release-tree.py",
+        "install/scripts/mint-ee-sim-jwt.py",
+        "docs/local-install.md",
+        "docs/enterprise-simulation.md",
+        "docs/code-protection.md",
+    ]
+    missing = [rel for rel in required if not (root / rel).exists()]
+    if missing:
+        blockers.append({
+            "code": "release_required_file_missing",
+            "message": "Generated Warroom release is missing required files.",
+            "paths": missing,
+        })
+
+    private_paths: list[str] = []
+    for pattern in [
+        "packages/flyto-contracts/internal/**",
+        "packages/flyto-contracts/cmd/**",
+        "packages/flyto-contracts/api/handlers_*",
+    ]:
+        private_paths.extend(
+            _posix(path.relative_to(root)) for path in root.glob(pattern) if path.is_file()
+        )
+    if private_paths:
+        blockers.append({
+            "code": "private_path_escaped_release",
+            "message": "Private engine paths escaped into the generated release tree.",
+            "paths": sorted(private_paths)[:20],
+        })
+
+    ce_compose = root / "install/docker-compose.ce.yml"
+    ce_text = _read_text_if_safe(ce_compose) if ce_compose.exists() else ""
+    denied_ce = [
+        r"ghcr\.io/.+-ee",
+        r"enterprise_airgap",
+        r"FLYTO_AUTH_MODE",
+        r"FLYTO_ENTERPRISE_JWT_SECRET_KEY",
+    ]
+    ce_findings = [pattern for pattern in denied_ce if ce_text and re.search(pattern, ce_text)]
+    if ce_findings:
+        blockers.append({
+            "code": "ce_compose_contains_private_marker",
+            "message": "CE compose must not reference enterprise auth or private image coordinates.",
+            "patterns": ce_findings,
+        })
+
+    secret_patterns = [
+        r"FLYTO_RUNNER_SECRET[ \t]*=[ \t]*[^\s$<]+",
+        r"FLYTO_VERIFICATION_SECRET[ \t]*=[ \t]*[^\s$<]+",
+        r"FLYTO_ENTERPRISE_JWT_SECRET_KEY[ \t]*=[ \t]*[^\s$<]+",
+        r"BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY",
+        r"ghcr\.io/.+-ee",
+        r"flyto2-warroom-[a-z-]+-ee",
+    ]
+    content_findings: list[dict[str, str]] = []
+    compiled = [re.compile(pattern) for pattern in secret_patterns]
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        body = _read_text_if_safe(path)
+        if body is None:
+            continue
+        for pattern, regex in zip(secret_patterns, compiled):
+            if regex.search(body):
+                content_findings.append({"file": _posix(path.relative_to(root)), "pattern": pattern})
+    if content_findings:
+        blockers.append({
+            "code": "release_secret_like_value",
+            "message": "Generated release contains a secret-like value.",
+            "findings": content_findings[:20],
+        })
+
+    return {"ok": not blockers, "blockers": blockers, "checked": True}
+
+
 def export_open_core(options: OpenCoreOptions) -> dict[str, Any]:
     if options.output_dir is None:
         raise ValueError("output_dir is required for open-core export")
@@ -688,6 +1528,7 @@ def export_open_core(options: OpenCoreOptions) -> dict[str, Any]:
 
     global_exclude = list(manifest.get("global_exclude", []))
     exported_packages: list[dict[str, Any]] = []
+    release_files: list[str] = []
     for spec in manifest.get("packages", []):
         repo = _repo_path(workspace, spec["repo"])
         exclude = global_exclude + list(spec.get("exclude", []))
@@ -710,12 +1551,19 @@ def export_open_core(options: OpenCoreOptions) -> dict[str, Any]:
             "path": _posix(target.relative_to(out)),
         })
 
+    release = manifest.get("release", {})
+    public_release = _public_release_manifest(manifest)
+    if "warroom-ce-installer" in list(release.get("generate", [])):
+        release_files = _write_warroom_release(out, manifest)
+
     export_manifest = {
         "schema": "flyto.open-core-export.v1",
         "generated_at": audit["generated_at"],
         "source_workspace": str(workspace),
         "source_manifest": str(options.manifest_path.resolve()),
         "package_name": audit["package_name"],
+        "release": public_release,
+        "release_files": release_files,
         "packages": exported_packages,
         "closed_source_boundaries": audit["closed_source_boundaries"],
         "merge_contracts": audit["merge_contracts"],
@@ -725,7 +1573,26 @@ def export_open_core(options: OpenCoreOptions) -> dict[str, Any]:
         encoding="utf-8",
     )
     (out / "README.md").write_text(format_open_core_export(export_manifest), encoding="utf-8")
-    return {**audit, "exported": True, "output_dir": str(out), "exported_packages": exported_packages}
+    release_audit = _audit_generated_release(out, manifest)
+    if not release_audit["ok"]:
+        return {
+            **audit,
+            "ok": False,
+            "exported": True,
+            "output_dir": str(out),
+            "exported_packages": exported_packages,
+            "release_files": release_files,
+            "release_audit": release_audit,
+            "blockers": audit["blockers"] + release_audit["blockers"],
+        }
+    return {
+        **audit,
+        "exported": True,
+        "output_dir": str(out),
+        "exported_packages": exported_packages,
+        "release_files": release_files,
+        "release_audit": release_audit,
+    }
 
 
 def format_open_core_audit(result: dict[str, Any]) -> str:
@@ -765,6 +1632,17 @@ def format_open_core_export(manifest: dict[str, Any]) -> str:
     ]
     for package in manifest["packages"]:
         lines.append(f"- `{package['name']}` from `{package['repo']}`: {package['file_count']} files")
+    if manifest.get("release_files"):
+        lines.extend([
+            "",
+            "## Local Install",
+            "",
+            "- `install/docker-compose.ce.yml`: local CE stack.",
+            "- `install/docker-compose.ee-sim.yml`: enterprise simulation override.",
+            "- `install/scripts/audit-release-tree.py`: fail-closed release audit.",
+            "- `docs/local-install.md`: local startup and reset steps.",
+            "- `docs/enterprise-simulation.md`: enterprise JWT simulation steps.",
+        ])
     lines.extend(["", "## Kept Closed"])
     for boundary in manifest.get("closed_source_boundaries", []):
         lines.append(f"- {boundary}")

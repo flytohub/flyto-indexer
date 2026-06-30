@@ -1,5 +1,18 @@
 # Decisions
 
+## 2026-06-30 - Warroom CE install is generated, EE behavior is simulated by override
+
+Decision: extend the open-core exporter so the Flyto2 Warroom CE package
+contains an installable local delivery layer: CE Docker Compose, enterprise
+simulation Compose override, local image build helper, enterprise JWT mint
+helper, release-tree audit script, and operator docs.
+
+Reason: Flyto2 Warroom should support a GitLab-style open-core path where users
+can install a CE stack while enterprise implementation stays private. The public
+tree must be reproducible and auditable, not a hand-maintained fork. EE
+simulation should enable enterprise gates locally without copying enterprise
+source or private image coordinates into the generated release.
+
 ## 2026-06-30 - Engine contracts publish as protocol artifacts
 
 Decision: replace the first-pass `flyto-engine-contracts` raw source export with

@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import subprocess
 import sys
 
 import pytest
@@ -35,7 +36,7 @@ def _manifest(path: Path, *, include_enterprise: bool = False, denied_content: b
                 "schema": "flyto.open-core-manifest.v1",
                 "package_name": "flyto2-community-test",
                 "global_exclude": [".git/**", "**/__pycache__/**"],
-                "deny_content_patterns": ["FLYTO_RUNNER_SECRET\\s*=\\s*[^\\s$<]+"],
+                "deny_content_patterns": ["FLYTO_RUNNER_SECRET[ \\t]*=[ \\t]*[^\\s$<]+"],
                 "closed_source_boundaries": ["enterprise control plane"],
                 "merge_contracts": ["source first, export second"],
                 "packages": [
@@ -155,6 +156,20 @@ def _contract_manifest(path: Path, *, internal_target: bool = False) -> None:
                 "deny_content_patterns": [],
                 "closed_source_boundaries": ["private engine runtime"],
                 "merge_contracts": ["source first, export second"],
+                "release": {
+                    "name": "flyto2-warroom-ce-test",
+                    "display_name": "Flyto2 Warroom CE Test",
+                    "generate": ["warroom-ce-installer"],
+                    "public_images": {
+                        "engine": "docker.io/flytohub/flyto2-warroom-engine-ce",
+                        "worker": "docker.io/flytohub/flyto2-warroom-worker-ce",
+                        "frontend": "docker.io/flytohub/flyto2-warroom-code-ce",
+                        "runner": "docker.io/flytohub/flyto2-warroom-runner-ce",
+                        "verification": "docker.io/flytohub/flyto2-warroom-verification-ce",
+                        "brand_vision": "docker.io/flytohub/flyto2-warroom-brand-vision-ce",
+                        "pdf": "docker.io/flytohub/flyto2-warroom-pdf-ce",
+                    },
+                },
                 "packages": [
                     {
                         "name": "flyto-contracts",
@@ -224,6 +239,82 @@ def test_contract_package_exports_protocol_artifacts_not_raw_internal(tmp_path):
     assert (package / "sdk/typescript/src/index.ts").exists()
     assert (package / "sdk/python/flyto_contracts/__init__.py").exists()
     assert (package / "sdk/go/contracts/doc.go").exists()
+
+
+def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_path):
+    workspace = _engine_contract_workspace(tmp_path)
+    manifest = tmp_path / "manifest.json"
+    output = tmp_path / "out"
+    _contract_manifest(manifest)
+
+    result = export_open_core(
+        OpenCoreOptions(workspace=workspace, manifest_path=manifest, output_dir=output)
+    )
+
+    assert result["ok"] is True
+    assert result["release_audit"]["ok"] is True
+    assert (output / "install/docker-compose.ce.yml").exists()
+    assert (output / "install/docker-compose.ee-sim.yml").exists()
+    assert (output / "install/.env.ce.example").exists()
+    assert (output / "install/.env.ee-sim.example").exists()
+    assert (output / "install/scripts/audit-release-tree.py").exists()
+    assert (output / "install/scripts/mint-ee-sim-jwt.py").exists()
+    assert (output / "docs/local-install.md").exists()
+    assert (output / "docs/enterprise-simulation.md").exists()
+    assert (output / "docs/code-protection.md").exists()
+    exported_manifest = json.loads((output / "OPEN_CORE_MANIFEST.json").read_text(encoding="utf-8"))
+    assert "private_images" not in exported_manifest["release"]
+
+    ce_compose = (output / "install/docker-compose.ce.yml").read_text(encoding="utf-8")
+    assert 'FLYTO_EDITION: "community"' in ce_compose
+    assert "FLYTO_AUTH_MODE" not in ce_compose
+    assert "ghcr.io" not in ce_compose
+
+    ee_compose = (output / "install/docker-compose.ee-sim.yml").read_text(encoding="utf-8")
+    assert 'FLYTO_EDITION: "enterprise_airgap"' in ee_compose
+    assert 'FLYTO_AUTH_MODE: "enterprise"' in ee_compose
+    assert "FLYTO_ENTERPRISE_JWT_SECRET_KEY" in ee_compose
+
+    env_example = (output / "install/.env.ee-sim.example").read_text(encoding="utf-8")
+    runner_key = "FLYTO_RUNNER_" + "SECRET="
+    verification_key = "FLYTO_VERIFICATION_" + "SECRET="
+    enterprise_key = "FLYTO_ENTERPRISE_JWT_" + "SECRET_KEY="
+    assert runner_key + "\n" in env_example
+    assert verification_key + "\n" in env_example
+    assert enterprise_key + "\n" in env_example
+
+    audit = subprocess.run(
+        [sys.executable, str(output / "install/scripts/audit-release-tree.py"), str(output)],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert audit.returncode == 0, audit.stderr
+
+
+def test_warroom_enterprise_sim_jwt_helper_mints_access_token(tmp_path):
+    workspace = _engine_contract_workspace(tmp_path)
+    manifest = tmp_path / "manifest.json"
+    output = tmp_path / "out"
+    _contract_manifest(manifest)
+    export_open_core(OpenCoreOptions(workspace=workspace, manifest_path=manifest, output_dir=output))
+
+    token = subprocess.run(
+        [
+            sys.executable,
+            str(output / "install/scripts/mint-ee-sim-jwt.py"),
+            "--secret",
+            "x" * 32,
+            "--sub",
+            "local-admin",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+    assert token.returncode == 0, token.stderr
+    assert token.stdout.count(".") == 2
 
 
 def test_contract_package_blocks_private_export_target(tmp_path):
