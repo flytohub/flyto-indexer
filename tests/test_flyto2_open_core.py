@@ -302,6 +302,7 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert (output / "install/.env.ce.example").exists()
     assert (output / "install/.env.ee-sim.example").exists()
     assert (output / "install/scripts/audit-release-tree.py").exists()
+    assert (output / "install/scripts/hash-local-password.py").exists()
     assert (output / "install/scripts/mint-ee-sim-jwt.py").exists()
     assert (output / "docs/local-install.md").exists()
     assert (output / "docs/enterprise-simulation.md").exists()
@@ -317,8 +318,22 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
 
     ce_compose = (output / "install/docker-compose.ce.yml").read_text(encoding="utf-8")
     assert 'FLYTO_EDITION: "community"' in ce_compose
-    assert "FLYTO_AUTH_MODE" not in ce_compose
+    assert 'FLYTO_AUTH_MODE: "local_jwt"' in ce_compose
+    assert "FLYTO_LOCAL_AUTH_JWT_SECRET" in ce_compose
+    assert "FLYTO_LOCAL_AUTH_PASSWORD_SHA256" in ce_compose
+    assert "FLYTO_DEV_AUTH" not in ce_compose
+    assert 'FLYTO_RUNNER_DEV_OPEN: "0"' in ce_compose
     assert "ghcr.io" not in ce_compose
+
+    ce_env = (output / "install/.env.ce.example").read_text(encoding="utf-8")
+    assert "FLYTO_LOCAL_AUTH_EMAIL=local-admin@example.invalid" in ce_env
+    assert "FLYTO_LOCAL_AUTH_PASSWORD_SHA256=\n" in ce_env
+    assert "FLYTO_LOCAL_AUTH_JWT_SECRET=\n" in ce_env
+    assert "FLYTO_DEV_AUTH" not in ce_env
+
+    frontend_env = (output / "packages/flyto-code/.env.example").read_text(encoding="utf-8")
+    assert "VITE_AUTH_MODE=local_jwt" in frontend_env
+    assert "VITE_AUTH_MODE=enterprise" not in frontend_env
 
     ee_compose = (output / "install/docker-compose.ee-sim.yml").read_text(encoding="utf-8")
     assert 'FLYTO_EDITION: "enterprise_airgap"' in ee_compose

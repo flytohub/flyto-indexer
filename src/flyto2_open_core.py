@@ -741,14 +741,9 @@ license boundaries.
         """# Flyto2 Warroom CE frontend local config.
 
 VITE_ENGINE_URL=http://localhost:8080
-VITE_AUTH_MODE=enterprise
+VITE_AUTH_MODE=local_jwt
 
-# Local-only dev auth. Use only with engine FLYTO_DEV_AUTH=1.
-VITE_DEV_AUTH_BYPASS=1
-VITE_DEV_AUTH_UID=local-admin
-VITE_DEV_AUTH_EMAIL=local-admin@example.invalid
-
-# Optional OAuth/Firebase values when running a custom auth setup.
+# Optional OAuth/Firebase values when running a custom private auth setup.
 VITE_GITHUB_CLIENT_ID=your_github_client_id
 VITE_GITLAB_CLIENT_ID=your_gitlab_client_id
 VITE_GITLAB_BASE_URL=https://gitlab.com
@@ -846,8 +841,16 @@ services:
       - "127.0.0.1:${{FLYTO_ENGINE_PORT:-8080}}:8080"
     environment:
       FLYTO_EDITION: "community"
+      FLYTO_AUTH_MODE: "local_jwt"
       FLYTO_ENV: "${{FLYTO_ENV:-development}}"
-      FLYTO_DEV_AUTH: "${{FLYTO_DEV_AUTH:-1}}"
+      FLYTO_LOCAL_AUTH_JWT_SECRET: "${{FLYTO_LOCAL_AUTH_JWT_SECRET:?set FLYTO_LOCAL_AUTH_JWT_SECRET in install/.env}}" # placeholder
+      FLYTO_LOCAL_AUTH_EMAIL: "${{FLYTO_LOCAL_AUTH_EMAIL:?set FLYTO_LOCAL_AUTH_EMAIL in install/.env}}"
+      FLYTO_LOCAL_AUTH_PASSWORD_SHA256: "${{FLYTO_LOCAL_AUTH_PASSWORD_SHA256:?set FLYTO_LOCAL_AUTH_PASSWORD_SHA256 in install/.env}}" # placeholder
+      FLYTO_LOCAL_AUTH_DISPLAY_NAME: "${{FLYTO_LOCAL_AUTH_DISPLAY_NAME:-Local Admin}}"
+      FLYTO_LOCAL_AUTH_USER_ID: "${{FLYTO_LOCAL_AUTH_USER_ID:-local-admin}}"
+      FLYTO_LOCAL_AUTH_ORG_ID: "${{FLYTO_LOCAL_AUTH_ORG_ID:-local-warroom}}"
+      FLYTO_LOCAL_AUTH_ORG_NAME: "${{FLYTO_LOCAL_AUTH_ORG_NAME:-Flyto2 Warroom}}"
+      FLYTO_LOCAL_AUTH_ORG_SLUG: "${{FLYTO_LOCAL_AUTH_ORG_SLUG:-flyto2-warroom}}"
       FLYTO_CORS_ORIGINS: "${{FLYTO_CORS_ORIGINS:-http://localhost:8088,http://127.0.0.1:8088,http://localhost:5173,http://127.0.0.1:5173}}"
       FLYTO_PG_URL: "postgres://${{POSTGRES_USER:-flyto}}:${{POSTGRES_PASSWORD:-change-me-local-only}}@postgres:5432/${{POSTGRES_DB:-flyto}}?sslmode=disable" # placeholder
       FLYTO_SCAN_DRAINER: "${{FLYTO_SCAN_DRAINER:-0}}"
@@ -857,9 +860,9 @@ services:
       FLYTO_VERIFICATION_CALLBACK_URL: "http://engine:8080/api/v1/code/runner/executions/callback"
       FLYTO_PDF_URL: "http://pdf:3000"
       FLYTO_BRAND_VISION_URL: "http://brand-vision:8095"
-      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:-}}" # placeholder
-      FLYTO_VERIFICATION_SECRET: "${{FLYTO_VERIFICATION_SECRET:-}}" # placeholder
-      FLYTO_RUNNER_DEV_OPEN: "${{FLYTO_RUNNER_DEV_OPEN:-1}}"
+      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:?set FLYTO_RUNNER_SECRET in install/.env}}" # placeholder
+      FLYTO_VERIFICATION_SECRET: "${{FLYTO_VERIFICATION_SECRET:?set FLYTO_VERIFICATION_SECRET in install/.env}}" # placeholder
+      FLYTO_RUNNER_DEV_OPEN: "0"
       FLYTO_MASTER_KEY: "${{FLYTO_MASTER_KEY:-}}"
       FLYTO_MASTER_KEY_ID: "${{FLYTO_MASTER_KEY_ID:-local-ce}}"
       FLYTO_PLATFORM_ADMIN_UIDS: "${{FLYTO_PLATFORM_ADMIN_UIDS:-}}"
@@ -903,8 +906,8 @@ services:
       FLYTO_RUNNER_URL: "http://runner:8090"
       FLYTO_PDF_URL: "http://pdf:3000"
       FLYTO_BRAND_VISION_URL: "http://brand-vision:8095"
-      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:-}}" # placeholder
-      FLYTO_RUNNER_DEV_OPEN: "${{FLYTO_RUNNER_DEV_OPEN:-1}}"
+      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:?set FLYTO_RUNNER_SECRET in install/.env}}" # placeholder
+      FLYTO_RUNNER_DEV_OPEN: "0"
       FLYTO_MASTER_KEY: "${{FLYTO_MASTER_KEY:-}}"
       FLYTO_MASTER_KEY_ID: "${{FLYTO_MASTER_KEY_ID:-local-ce}}"
       FLYTO_GITHUB_TOKEN: "${{FLYTO_GITHUB_TOKEN:-}}"
@@ -929,8 +932,8 @@ services:
       FLYTO_RUNNER_URL: "http://runner:8090"
       FLYTO_PDF_URL: "http://pdf:3000"
       FLYTO_BRAND_VISION_URL: "http://brand-vision:8095"
-      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:-}}" # placeholder
-      FLYTO_RUNNER_DEV_OPEN: "${{FLYTO_RUNNER_DEV_OPEN:-1}}"
+      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:?set FLYTO_RUNNER_SECRET in install/.env}}" # placeholder
+      FLYTO_RUNNER_DEV_OPEN: "0"
       FLYTO_DISCOVERY_DRAINER_MAX_CONCURRENCY: "${{FLYTO_DISCOVERY_DRAINER_MAX_CONCURRENCY:-1}}"
       FLYTO_DISCOVERY_DRAINER_MIN_FREE_MEMORY_MB: "${{FLYTO_DISCOVERY_DRAINER_MIN_FREE_MEMORY_MB:-1024}}"
       FLYTO_MASTER_KEY: "${{FLYTO_MASTER_KEY:-}}"
@@ -956,9 +959,9 @@ services:
       FLYTO_WORKER_MODE: "${{FLYTO_WORKER_MODE:-queue-only}}"
       FLYTO_RUNNER_URL: "http://runner:8090"
       FLYTO_VERIFICATION_URL: "http://verification:8344"
-      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:-}}" # placeholder
-      FLYTO_VERIFICATION_SECRET: "${{FLYTO_VERIFICATION_SECRET:-}}" # placeholder
-      FLYTO_RUNNER_DEV_OPEN: "${{FLYTO_RUNNER_DEV_OPEN:-1}}"
+      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:?set FLYTO_RUNNER_SECRET in install/.env}}" # placeholder
+      FLYTO_VERIFICATION_SECRET: "${{FLYTO_VERIFICATION_SECRET:?set FLYTO_VERIFICATION_SECRET in install/.env}}" # placeholder
+      FLYTO_RUNNER_DEV_OPEN: "0"
       FLYTO_MASTER_KEY: "${{FLYTO_MASTER_KEY:-}}"
       FLYTO_MASTER_KEY_ID: "${{FLYTO_MASTER_KEY_ID:-local-ce}}"
       FLYTO_INDEX_BIN: "${{FLYTO_INDEX_BIN:-flyto-index}}"
@@ -980,8 +983,8 @@ services:
     environment:
       PORT: "8090"
       OPENAI_API_KEY: "${{OPENAI_API_KEY:-}}"
-      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:-}}" # placeholder
-      FLYTO_RUNNER_DEV_OPEN: "${{FLYTO_RUNNER_DEV_OPEN:-1}}"
+      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:?set FLYTO_RUNNER_SECRET in install/.env}}" # placeholder
+      FLYTO_RUNNER_DEV_OPEN: "0"
       FLYTO_ENGINE_COST_URL: "http://engine:8080/api/v1/code/runner/cost-events"
       FLYTO_ENGINE_CALLBACK_URL: "http://engine:8080/api/v1/code/runner/executions/callback"
       FLYTO_AI_ALLOW_PROD_TARGETS: "${{FLYTO_AI_ALLOW_PROD_TARGETS:-0}}"
@@ -1000,8 +1003,8 @@ services:
       - "127.0.0.1:${{FLYTO_VERIFICATION_PORT:-8344}}:8344"
     environment:
       FLYTO_ENGINE_URL: "http://engine:8080"
-      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:-}}" # placeholder
-      FLYTO_VERIFICATION_SECRET: "${{FLYTO_VERIFICATION_SECRET:-}}" # placeholder
+      FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:?set FLYTO_RUNNER_SECRET in install/.env}}" # placeholder
+      FLYTO_VERIFICATION_SECRET: "${{FLYTO_VERIFICATION_SECRET:?set FLYTO_VERIFICATION_SECRET in install/.env}}" # placeholder
       FLYTO_ALLOWED_HOSTS: "${{FLYTO_ALLOWED_HOSTS:-host.docker.internal,localhost,127.0.0.1}}"
       FLYTO_ALLOW_PRIVATE_NETWORK: "${{FLYTO_ALLOW_PRIVATE_NETWORK:-true}}"
 
@@ -1107,10 +1110,16 @@ POSTGRES_USER=flyto
 POSTGRES_PASSWORD=change-me-local-only
 POSTGRES_DB=flyto
 FLYTO_ENV=development
-FLYTO_DEV_AUTH=1
-FLYTO_RUNNER_DEV_OPEN=1
 FLYTO_ENGINE_PORT=8080
 FLYTO_CODE_PORT=8088
+FLYTO_LOCAL_AUTH_EMAIL=local-admin@example.invalid
+FLYTO_LOCAL_AUTH_PASSWORD_SHA256=
+FLYTO_LOCAL_AUTH_JWT_SECRET=
+FLYTO_LOCAL_AUTH_DISPLAY_NAME=Local Admin
+FLYTO_LOCAL_AUTH_USER_ID=local-admin
+FLYTO_LOCAL_AUTH_ORG_ID=local-warroom
+FLYTO_LOCAL_AUTH_ORG_NAME=Flyto2 Warroom
+FLYTO_LOCAL_AUTH_ORG_SLUG=flyto2-warroom
 FLYTO_PLATFORM_ADMIN_UIDS=
 FLYTO_RUNNER_SECRET=
 FLYTO_VERIFICATION_SECRET=
@@ -1237,12 +1246,37 @@ PY
 npm install --package-lock-only --ignore-scripts --legacy-peer-deps --prefix "$CODE_CTX"
 docker build \\
   --build-arg VITE_ENGINE_URL="${{FLYTO_CODE_ENGINE_URL:-http://localhost:8080}}" \\
-  --build-arg VITE_AUTH_MODE="${{FLYTO_CODE_AUTH_MODE:-enterprise}}" \\
+  --build-arg VITE_AUTH_MODE="${{FLYTO_CODE_AUTH_MODE:-local_jwt}}" \\
   --build-arg VITE_AUTOMATION_URL="${{FLYTO_AUTOMATION_URL:-http://localhost:8080}}" \\
   --build-arg VITE_CORTEX_URL="${{FLYTO_CORTEX_URL:-http://localhost:8080}}" \\
   -t "$FRONTEND_IMAGE:$TAG" \\
   "$CODE_CTX"
 """,
+    )
+    write_text(
+        "install/scripts/hash-local-password.py",
+        '''#!/usr/bin/env python3
+import getpass
+import hashlib
+import sys
+
+
+def main() -> int:
+    password = getpass.getpass("Local admin password: ")
+    confirm = getpass.getpass("Confirm password: ")
+    if password != confirm:
+        print("passwords do not match", file=sys.stderr)
+        return 2
+    if len(password) < 12:
+        print("password must be at least 12 characters", file=sys.stderr)
+        return 2
+    print(hashlib.sha256(password.encode("utf-8")).hexdigest())
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+''',
     )
     write_text(
         "install/scripts/mint-ee-sim-jwt.py",
@@ -1314,6 +1348,7 @@ REQUIRED = [
     "install/docker-compose.ee-sim.yml",
     "install/.env.ce.example",
     "install/.env.ee-sim.example",
+    "install/scripts/hash-local-password.py",
     "install/scripts/mint-ee-sim-jwt.py",
     "docs/local-install.md",
     "docs/enterprise-simulation.md",
@@ -1348,7 +1383,9 @@ DENIED_ANYWHERE = [
 DENIED_CE_COMPOSE = [
     re.compile(r"ghcr\\.io/.+-ee"),
     re.compile(r"enterprise_airgap"),
-    re.compile(r"FLYTO_AUTH_MODE"),
+    re.compile("FLYTO_AUTH_MODE:\\\\s*[\\\"']?(enterprise|enterprise_airgap|firebase)"),
+    re.compile("FLYTO_DEV_AUTH:\\\\s*[\\\"']?1"),
+    re.compile("FLYTO_RUNNER_DEV_OPEN:\\\\s*[\\\"']?1"),
     re.compile(r"FLYTO_ENTERPRISE_JWT_SECRET_KEY"),
 ]
 
@@ -1375,6 +1412,22 @@ def main() -> int:
         for regex in DENIED_CE_COMPOSE:
             if regex.search(ce_text):
                 blockers.append(f"CE compose contains denied marker: {regex.pattern}")
+        for marker in [
+            'FLYTO_EDITION: "community"',
+            'FLYTO_AUTH_MODE: "local_jwt"',
+            "FLYTO_LOCAL_AUTH_JWT_SECRET",
+            "FLYTO_LOCAL_AUTH_PASSWORD_SHA256",
+        ]:
+            if marker not in ce_text:
+                blockers.append(f"CE compose missing required marker: {marker}")
+    frontend_env = ROOT / "packages/flyto-code/.env.example"
+    if frontend_env.exists():
+        frontend_text = text(frontend_env)
+        if "VITE_AUTH_MODE=local_jwt" not in frontend_text:
+            blockers.append("frontend CE env must default VITE_AUTH_MODE=local_jwt")
+        for denied in ("VITE_AUTH_MODE=enterprise", "VITE_AUTH_MODE=firebase"):
+            if denied in frontend_text:
+                blockers.append(f"frontend CE env contains denied auth mode: {denied}")
     for path in ROOT.rglob("*"):
         if not path.is_file() or path.stat().st_size > 2_000_000:
             continue
@@ -1419,6 +1472,24 @@ names from Docker Hub after the release pipeline publishes them.
 
 ```sh
 cp /tmp/flyto2-warroom-ce/install/.env.ce.example /tmp/flyto2-warroom-ce/install/.env
+python3 /tmp/flyto2-warroom-ce/install/scripts/hash-local-password.py
+openssl rand -base64 48
+openssl rand -base64 48
+openssl rand -base64 48
+openssl rand -base64 48
+```
+
+Paste the generated values into `install/.env`:
+
+- first `openssl` output -> `FLYTO_LOCAL_AUTH_JWT_SECRET`
+- second `openssl` output -> `FLYTO_RUNNER_SECRET`
+- third `openssl` output -> `FLYTO_VERIFICATION_SECRET`
+- fourth `openssl` output -> `FLYTO_MASTER_KEY`
+- password hash output -> `FLYTO_LOCAL_AUTH_PASSWORD_SHA256`
+
+Then start the stack:
+
+```sh
 make -C /tmp/flyto2-warroom-ce ce-up
 ```
 
@@ -1427,10 +1498,9 @@ Open:
 - Frontend: `http://localhost:8088`
 - Engine health: `http://localhost:8080/health`
 
-CE local mode sets `FLYTO_DEV_AUTH=1` because production `local_jwt` auth is not
-implemented in the engine server yet. That is acceptable for a laptop smoke
-stack and blocked by documentation/audit from being described as production
-community auth.
+Sign in with the `FLYTO_LOCAL_AUTH_EMAIL` value and the password used by
+`hash-local-password.py`. CE uses engine-issued local JWTs; it does not require
+Firebase and it does not use dev auth.
 
 ## Reset The Database
 
@@ -1815,7 +1885,7 @@ jobs:
         working-directory: packages/flyto-code
         env:
           VITE_ENGINE_URL: http://localhost:8080
-          VITE_AUTH_MODE: enterprise
+          VITE_AUTH_MODE: local_jwt
           VITE_AUTOMATION_URL: http://localhost:8080
           VITE_CORTEX_URL: http://localhost:8080
         run: |
@@ -1847,6 +1917,7 @@ def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, 
         "install/.env.ce.example",
         "install/.env.ee-sim.example",
         "install/scripts/audit-release-tree.py",
+        "install/scripts/hash-local-password.py",
         "install/scripts/mint-ee-sim-jwt.py",
         "docs/local-install.md",
         "docs/enterprise-simulation.md",
@@ -1889,7 +1960,9 @@ def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, 
     denied_ce = [
         r"ghcr\.io/.+-ee",
         r"enterprise_airgap",
-        r"FLYTO_AUTH_MODE",
+        "FLYTO_AUTH_MODE:\\s*[\"']?(enterprise|enterprise_airgap|firebase)",
+        "FLYTO_DEV_AUTH:\\s*[\"']?1",
+        "FLYTO_RUNNER_DEV_OPEN:\\s*[\"']?1",
         r"FLYTO_ENTERPRISE_JWT_SECRET_KEY",
     ]
     ce_findings = [pattern for pattern in denied_ce if ce_text and re.search(pattern, ce_text)]
@@ -1899,6 +1972,44 @@ def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, 
             "message": "CE compose must not reference enterprise auth or private image coordinates.",
             "patterns": ce_findings,
         })
+    if ce_text:
+        missing_markers = [
+            marker
+            for marker in [
+                'FLYTO_EDITION: "community"',
+                'FLYTO_AUTH_MODE: "local_jwt"',
+                "FLYTO_LOCAL_AUTH_JWT_SECRET",
+                "FLYTO_LOCAL_AUTH_PASSWORD_SHA256",
+            ]
+            if marker not in ce_text
+        ]
+        if missing_markers:
+            blockers.append({
+                "code": "ce_compose_missing_community_auth_marker",
+                "message": "CE compose must default to engine-issued local JWT auth.",
+                "markers": missing_markers,
+            })
+
+    frontend_env = root / "packages/flyto-code/.env.example"
+    frontend_env_text = _read_text_if_safe(frontend_env) if frontend_env.exists() else ""
+    if frontend_env_text and "VITE_AUTH_MODE=local_jwt" not in frontend_env_text:
+        blockers.append({
+            "code": "frontend_env_not_local_jwt",
+            "message": "Flyto-code CE env must default to local JWT auth.",
+            "path": "packages/flyto-code/.env.example",
+        })
+    if frontend_env_text:
+        denied_frontend_auth = [
+            marker
+            for marker in ["VITE_AUTH_MODE=enterprise", "VITE_AUTH_MODE=firebase"]
+            if marker in frontend_env_text
+        ]
+        if denied_frontend_auth:
+            blockers.append({
+                "code": "frontend_env_contains_denied_auth_mode",
+                "message": "Flyto-code CE env must not default to private/Firebase auth.",
+                "markers": denied_frontend_auth,
+            })
 
     local_dev_email_pattern = "aa0909286667" + r"@gmail\.com"
     local_dev_uid_pattern = "g3KyCLkH7" + "IZwXILPXHS3fbo4VnB2"
