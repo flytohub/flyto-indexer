@@ -319,6 +319,14 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert (output / "docs/local-install.md").exists()
     assert (output / "docs/enterprise-simulation.md").exists()
     assert (output / "docs/code-protection.md").exists()
+    assert (output / "docs/official-builds.md").exists()
+    assert (output / "docs/github-hardening.md").exists()
+    assert (output / "TRADEMARK.md").exists()
+    assert (output / "SECURITY.md").exists()
+    assert (output / "GOVERNANCE.md").exists()
+    assert (output / ".github/CODEOWNERS").exists()
+    assert (output / ".github/pull_request_template.md").exists()
+    assert (output / "scripts/audit-github-protection.py").exists()
     assert (output / "packages/flyto-code/src-next/lib/env.ts").exists()
     assert (output / "packages/flyto-code/LICENSE").exists()
     assert (output / "packages/flyto-code/.env.example").exists()
@@ -330,6 +338,7 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     makefile = (output / "Makefile").read_text(encoding="utf-8")
     assert "docker-compose" in makefile
     assert "docker compose version" in makefile
+    assert "python3 scripts/audit-github-protection.py ." in makefile
     build_script = (output / "install/scripts/build-local-images.sh").read_text(encoding="utf-8")
     assert 'docker tag "$ENGINE_IMAGE:$ENGINE_TAG" "$WORKER_IMAGE:$WORKER_TAG"' in build_script
     assert "Dockerfile.worker" not in build_script
@@ -370,6 +379,17 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert "VITE_AUTH_MODE=local_jwt" in frontend_env
     assert "VITE_AUTH_MODE=enterprise" not in frontend_env
 
+    trademark = (output / "TRADEMARK.md").read_text(encoding="utf-8")
+    assert "do not grant rights to the Flyto2 name" in trademark
+    assert "Modified Distributions" in trademark
+    governance = (output / "GOVERNANCE.md").read_text(encoding="utf-8")
+    assert "private Flyto2 source workspace" in governance
+    codeowners = (output / ".github/CODEOWNERS").read_text(encoding="utf-8")
+    assert "@ChesterHsu" in codeowners
+    ci = (output / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "governance-audit" in ci
+    assert "python scripts/audit-github-protection.py ." in ci
+
     ee_compose = (output / "install/docker-compose.ee-sim.yml").read_text(encoding="utf-8")
     assert 'FLYTO_EDITION: "enterprise_airgap"' in ee_compose
     assert 'FLYTO_AUTH_MODE: "enterprise"' in ee_compose
@@ -394,6 +414,14 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
         capture_output=True,
     )
     assert audit.returncode == 0, audit.stderr
+
+    github_audit = subprocess.run(
+        [sys.executable, str(output / "scripts/audit-github-protection.py"), str(output)],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert github_audit.returncode == 0, github_audit.stderr
 
 
 def test_warroom_enterprise_sim_jwt_helper_mints_access_token(tmp_path):

@@ -1240,6 +1240,7 @@ ee-sim-logs:
 
 audit:
 \tpython3 install/scripts/audit-release-tree.py .
+\tpython3 scripts/audit-github-protection.py .
 
 build-local-images:
 \tsh install/scripts/build-local-images.sh /Users/chester/flytohub
@@ -1444,6 +1445,15 @@ REQUIRED = [
     "docs/local-install.md",
     "docs/enterprise-simulation.md",
     "docs/code-protection.md",
+    "docs/official-builds.md",
+    "docs/github-hardening.md",
+    "TRADEMARK.md",
+    "SECURITY.md",
+    "GOVERNANCE.md",
+    ".github/CODEOWNERS",
+    ".github/pull_request_template.md",
+    ".github/workflows/ci.yml",
+    "scripts/audit-github-protection.py",
 ]
 
 PRIVATE_GLOBS = [
@@ -1717,6 +1727,179 @@ images and attach the generated `OPEN_CORE_MANIFEST.json` as evidence.
 """,
     )
     write_text(
+        "TRADEMARK.md",
+        """# Flyto2 Trademark Policy
+
+The open-source licenses in this repository grant rights to the code they cover.
+They do not grant rights to the Flyto2 name, Flyto2 Warroom name, Flyto logos,
+product artwork, domain names, or other brand assets.
+
+## Allowed Use
+
+You may use the Flyto2 name to truthfully describe compatibility or origin, such
+as "forked from Flyto2 Warroom CE" or "compatible with Flyto2 contracts".
+
+## Restricted Use
+
+Without written permission, you may not:
+
+- call a modified distribution "Flyto2", "Flyto2 Warroom", or confusingly
+  similar names;
+- use Flyto logos, product marks, screenshots, or artwork to imply official
+  endorsement;
+- publish Docker images, packages, domains, or marketplace listings that appear
+  to be an official Flyto2 build or official Flyto release;
+- remove attribution or represent a fork as the upstream project.
+
+## Modified Distributions
+
+If you distribute a modified build, make the modification clear in the name,
+README, image labels, release notes, and user-visible login/about screens. Do
+not use official Flyto2 release names, official Docker tags, or official support
+channels for modified builds.
+
+Official source and release locations are declared in `OPEN_CORE_MANIFEST.json`
+and in `docs/official-builds.md`.
+""",
+    )
+    write_text(
+        "SECURITY.md",
+        """# Security Policy
+
+## Supported Versions
+
+Security fixes are accepted for the current `main` branch of Flyto2 Warroom CE.
+Enterprise-only fixes are handled in the private Flyto2 workspace and are not
+published from this repository unless the affected CE contract or installer also
+needs an update.
+
+## Reporting A Vulnerability
+
+Use GitHub private vulnerability reporting or contact the maintainers through
+the official Flyto security channel. Do not file public issues for exploitable
+vulnerabilities, secrets, customer data exposure, auth bypasses, supply-chain
+tampering, or runner escape findings.
+
+Include:
+
+- affected component and version or commit;
+- reproduction steps;
+- expected impact;
+- whether the issue affects CE, EE, or both;
+- any suggested patch or mitigation.
+
+## Secret Handling
+
+Never submit credentials, customer data, private image coordinates, production
+tokens, private keys, or enterprise-only implementation details. The release
+audit is intentionally fail-closed for secret-like values and private paths.
+""",
+    )
+    write_text(
+        "GOVERNANCE.md",
+        """# Flyto2 Warroom CE Governance
+
+Flyto2 Warroom CE follows an open-core model similar to mature enterprise
+projects: the community edition is public, installable, and patchable; enterprise
+implementations, hosted control plane code, customer data connectors, and
+commercial remediation workflows remain private.
+
+## Source Of Truth
+
+This repository is a generated CE distribution. The private Flyto2 workspace is
+the source of truth for implementation. Public PRs are reviewed here, converted
+into upstream patch bundles, applied to the source workspace, tested there, and
+then re-exported back into this repository.
+
+## Required Checks
+
+Every PR must keep these checks green:
+
+- release boundary audit;
+- GitHub protection audit;
+- public contract conformance;
+- frontend install/build smoke;
+- upstream patch preview for public PRs.
+
+## Contributor Certificate
+
+By contributing, you certify that you have the right to submit the work under
+the applicable package license and that the contribution may be imported back
+into the private Flyto2 source workspace for CE and commercial releases.
+
+Use a Signed-off-by line in commits when practical:
+
+```text
+Signed-off-by: Your Name <you@example.com>
+```
+
+## Maintainer Rule
+
+Generated files should not become a permanent fork. If a change belongs to a
+source package or contract, apply it upstream and regenerate this repo.
+""",
+    )
+    write_text(
+        "docs/official-builds.md",
+        """# Official Builds And Supply Chain
+
+Flyto2 Warroom CE treats source, images, and release evidence as one chain.
+
+## Official Sources
+
+- Source mirror: `github.com/flytohub/flyto-warroom`
+- Source of truth: private Flyto2 workspace, exported by
+  `flyto2-open-core-export`
+- Export evidence: `OPEN_CORE_MANIFEST.json`
+
+## Official Images
+
+The official CE image repository and per-service tags are declared in
+`OPEN_CORE_MANIFEST.json`. A modified distribution must use different image
+names and must not imply that it is an official Flyto2 build.
+
+## Release Evidence
+
+An official release should include:
+
+- git commit SHA;
+- generated `OPEN_CORE_MANIFEST.json`;
+- passing `python install/scripts/audit-release-tree.py .`;
+- Docker image digests for every service tag;
+- SBOM/provenance/signature evidence when the release pipeline supports it.
+
+## Forks
+
+Forks may rebuild CE under their own names. Forks may not use Flyto2 trademarks,
+official tags, or official release channels for modified images.
+""",
+    )
+    write_text(
+        "docs/github-hardening.md",
+        """# GitHub Hardening
+
+Recommended repository settings for `flytohub/flyto-warroom`:
+
+- default branch: `main`;
+- require pull requests before merging;
+- require at least one approving review;
+- dismiss stale approvals when new commits are pushed;
+- require review from CODEOWNERS;
+- require conversation resolution;
+- require linear history;
+- block force pushes and branch deletion;
+- require the `release-audit` and `governance-audit` status checks;
+- restrict release publishing to maintainer-owned GitHub Actions.
+
+The repository also carries file-level guardrails:
+
+- `.github/CODEOWNERS` defines sensitive ownership.
+- `.github/pull_request_template.md` requires DCO, trademark, and secret checks.
+- `scripts/audit-github-protection.py` fails CI if protection files are removed
+  or weakened.
+""",
+    )
+    write_text(
         ".gitignore",
         """.DS_Store
 .env
@@ -1870,8 +2053,11 @@ GENERATED_REVIEW_PREFIXES = (
 GENERATED_REVIEW_FILES = {
     "README.md",
     "CONTRIBUTING.md",
+    "GOVERNANCE.md",
     "LICENSES.md",
     "OPEN_CORE_MANIFEST.json",
+    "SECURITY.md",
+    "TRADEMARK.md",
 }
 
 
@@ -1959,6 +2145,118 @@ if __name__ == "__main__":
 ''',
     )
     write_text(
+        ".github/CODEOWNERS",
+        """# Flyto2 Warroom CE generated open-core mirror.
+* @ChesterHsu
+
+/OPEN_CORE_MANIFEST.json @ChesterHsu
+/TRADEMARK.md @ChesterHsu
+/SECURITY.md @ChesterHsu
+/GOVERNANCE.md @ChesterHsu
+/.github/ @ChesterHsu
+/install/ @ChesterHsu
+/scripts/ @ChesterHsu
+/packages/flyto-contracts/ @ChesterHsu
+""",
+    )
+    write_text(
+        ".github/pull_request_template.md",
+        """## Summary
+
+Describe the product problem and the scope of this change.
+
+## Checklist
+
+- [ ] I did not commit credentials, customer data, private image coordinates, or enterprise-only implementation details.
+- [ ] I kept Flyto2 trademarks and official release names reserved for upstream builds.
+- [ ] I understand accepted CE changes may be imported into the private Flyto2 source workspace and commercial releases.
+- [ ] I ran `python install/scripts/audit-release-tree.py .` or explained why it is not applicable.
+- [ ] I included tests, contract checks, or installer evidence for behavior changes.
+- [ ] My commits include `Signed-off-by:` lines, or I certify the same DCO statement in this PR.
+
+## Evidence
+
+Paste relevant command results, screenshots, image digests, or contract output.
+""",
+    )
+    write_text(
+        "scripts/audit-github-protection.py",
+        '''#!/usr/bin/env python3
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+
+ROOT = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
+
+REQUIRED_MARKERS = {
+    "TRADEMARK.md": [
+        "do not grant rights to the Flyto2 name",
+        "Modified Distributions",
+        "official Flyto2 build",
+    ],
+    "SECURITY.md": [
+        "Reporting A Vulnerability",
+        "Never submit credentials",
+    ],
+    "GOVERNANCE.md": [
+        "Source Of Truth",
+        "Contributor Certificate",
+        "private Flyto2 source workspace",
+    ],
+    "docs/official-builds.md": [
+        "Official Images",
+        "OPEN_CORE_MANIFEST.json",
+        "Docker image digests",
+    ],
+    "docs/github-hardening.md": [
+        "require pull requests before merging",
+        "require the `release-audit` and `governance-audit` status checks",
+    ],
+    ".github/CODEOWNERS": [
+        "@ChesterHsu",
+        "/packages/flyto-contracts/",
+        "/install/",
+    ],
+    ".github/pull_request_template.md": [
+        "private image coordinates",
+        "Signed-off-by:",
+        "commercial releases",
+    ],
+    ".github/workflows/ci.yml": [
+        "release-audit",
+        "governance-audit",
+        "Audit GitHub protection files",
+        "Export upstream patch preview",
+    ],
+}
+
+
+def main() -> int:
+    blockers: list[str] = []
+    for rel, markers in REQUIRED_MARKERS.items():
+        path = ROOT / rel
+        if not path.exists():
+            blockers.append(f"missing protection file: {rel}")
+            continue
+        text = path.read_text(encoding="utf-8")
+        for marker in markers:
+            if marker not in text:
+                blockers.append(f"{rel} missing marker: {marker}")
+    if blockers:
+        for blocker in blockers:
+            print("BLOCKED: " + blocker, file=sys.stderr)
+        return 2
+    print("ok")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+''',
+    )
+    write_text(
         ".github/workflows/ci.yml",
         """name: Flyto Warroom CE
 
@@ -1969,6 +2267,16 @@ on:
       - main
 
 jobs:
+  governance-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Audit GitHub protection files
+        run: python scripts/audit-github-protection.py .
+
   release-audit:
     runs-on: ubuntu-latest
     steps:
@@ -2029,6 +2337,15 @@ def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, 
         "docs/local-install.md",
         "docs/enterprise-simulation.md",
         "docs/code-protection.md",
+        "docs/official-builds.md",
+        "docs/github-hardening.md",
+        "TRADEMARK.md",
+        "SECURITY.md",
+        "GOVERNANCE.md",
+        ".github/CODEOWNERS",
+        ".github/pull_request_template.md",
+        ".github/workflows/ci.yml",
+        "scripts/audit-github-protection.py",
     ]
     missing = [rel for rel in required if not (root / rel).exists()]
     if missing:
