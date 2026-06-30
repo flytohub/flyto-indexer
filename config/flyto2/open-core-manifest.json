@@ -1,0 +1,280 @@
+{
+  "schema": "flyto.open-core-manifest.v1",
+  "package_name": "flyto2-community",
+  "strategy": {
+    "model": "open-core",
+    "source_of_truth": "private Flyto2 workspace",
+    "export_mode": "deterministic whitelist with fail-closed deny guards",
+    "merge_rule": "Change private source first, rerun exporter, review generated delta."
+  },
+  "global_exclude": [
+    ".git/**",
+    ".flyto/**",
+    ".flyto-index/**",
+    ".flyto-runs/**",
+    ".hypothesis/**",
+    ".mypy_cache/**",
+    ".pytest_cache/**",
+    ".ruff_cache/**",
+    ".venv/**",
+    ".venv-sec/**",
+    "**/__pycache__/**",
+    "**/*.pyc",
+    "build/**",
+    "node_modules/**",
+    "out/**",
+    "output/**",
+    "reports/**"
+  ],
+  "deny_content_patterns": [
+    "sk_live_[A-Za-z0-9]{16,}",
+    "sk_test_[A-Za-z0-9]{16,}",
+    "AIza[0-9A-Za-z_-]{20,}",
+    "ghp_[0-9A-Za-z_]{20,}",
+    "github_pat_[0-9A-Za-z_]{20,}",
+    "xox[baprs]-[0-9A-Za-z-]{20,}",
+    "BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY",
+    "STRIPE_SECRET_KEY\\s*=\\s*[^\\s$<]+",
+    "FIREBASE_PRIVATE_KEY\\s*=\\s*[^\\s$<]+",
+    "FLYTO_VERIFICATION_SECRET\\s*=\\s*[^\\s$<]+",
+    "FLYTO_RUNNER_SECRET\\s*=\\s*[^\\s$<]+"
+  ],
+  "closed_source_boundaries": [
+    "billing, entitlement mutation, commercial gates, and Stripe/offline-license adapters",
+    "enterprise SSO/SAML/SCIM, legal hold, airgap installers, deployment edition internals",
+    "darkweb, stealer-log, phishing-feed, commercial threat-intel, and proprietary correlation datasets",
+    "cloud/container/runtime live remediation orchestration and customer connector credentials",
+    "Flyto Cloud multi-tenant SaaS control plane, runner fleet control, and hosted telemetry",
+    "AutoFix promotion, approval, rollback orchestration, and commercial AI proposal workflows",
+    "front-end enterprise cockpit composition until a standalone community shell is generated"
+  ],
+  "merge_contracts": [
+    "OSS exports are generated artifacts; do not hand-edit generated community trees.",
+    "Every package must declare source repo, license, include patterns, protected paths, and deny path patterns.",
+    "Exporter fails closed on missing include patterns, missing required paths, protected path inclusion, and denied content markers.",
+    "Community packages may call back into enterprise only through documented contracts, not private imports."
+  ],
+  "packages": [
+    {
+      "name": "flyto-core",
+      "repo": "flyto-core",
+      "kind": "runtime-sdk",
+      "license": "Apache-2.0",
+      "merge_contract": "YAML workflow runtime, deterministic verification, browser/module SDK, plugin contracts.",
+      "must_exist": [
+        "src/core/modules",
+        "src/core/engine",
+        "src/recipes/warroom-deterministic-audit.yaml",
+        "docs/YAML_WORKFLOW_SPEC.md"
+      ],
+      "include": [
+        "LICENSE",
+        "NOTICE",
+        "README.md",
+        "SECURITY.md",
+        "CONTRIBUTING.md",
+        "CODE_OF_CONDUCT.md",
+        "pyproject.toml",
+        "MANIFEST.in",
+        "src/cli/**",
+        "src/core/analysis/**",
+        "src/core/api/**",
+        "src/core/browser/**",
+        "src/core/catalog/**",
+        "src/core/engine/**",
+        "src/core/modules/**",
+        "src/core/plugin/**",
+        "src/core/runtime/**",
+        "src/core/testing/**",
+        "src/core/validation/**",
+        "src/core/verification_service.py",
+        "src/recipe_bundles/**",
+        "src/recipes/**",
+        "docs/**",
+        "examples/spec-verify/**",
+        "plugin-template/**",
+        "tests/cli/**",
+        "tests/core/**",
+        "tests/modules/**",
+        "tests/runtime/**",
+        "tests/test_verification_service.py"
+      ],
+      "exclude": [
+        "src/core/enterprise/**",
+        "src/core/licensing/**",
+        "src/core/metering/**",
+        "src/core/secrets/**",
+        "tests/enterprise/**",
+        "tests/core/test_step_executor_real.py",
+        "tests/core/test_trace_checkpoint_redaction.py",
+        "tests/runtime/test_security.py"
+      ],
+      "protected_paths": [
+        "src/core/enterprise/**",
+        "src/core/licensing/**",
+        "src/core/metering/**",
+        "src/core/secrets/**",
+        "tests/enterprise/**"
+      ],
+      "deny_path_patterns": [
+        "src/core/enterprise/**",
+        "src/core/licensing/**",
+        "src/core/metering/**",
+        "src/core/secrets/**",
+        "tests/enterprise/**"
+      ]
+    },
+    {
+      "name": "flyto-indexer",
+      "repo": "flyto-indexer",
+      "kind": "local-code-intelligence",
+      "license": "Apache-2.0",
+      "merge_contract": "Local-first static analysis, impact, taint, dependency, SBOM, release evidence gates.",
+      "must_exist": [
+        "src/cli.py",
+        "src/verify.py",
+        "src/scanner",
+        "src/analyzer",
+        "tests/test_verify.py"
+      ],
+      "include": [
+        "LICENSE",
+        "NOTICE",
+        "README.md",
+        "SECURITY.md",
+        "CONTRIBUTING.md",
+        "TRADEMARK.md",
+        "pyproject.toml",
+        "Dockerfile",
+        "src/**",
+        "tests/**",
+        "config/**",
+        "docs/**",
+        "examples/**",
+        "integrations/**",
+        "mcp_config.example.json",
+        "server.json",
+        "run_mcp.sh"
+      ],
+      "exclude": [
+        "dist/**",
+        ".mcp/**",
+        "tests/test_secret_scanner_filters.py"
+      ],
+      "protected_paths": [
+        "dist/**"
+      ],
+      "deny_path_patterns": [
+        "dist/**"
+      ]
+    },
+    {
+      "name": "flyto-i18n",
+      "repo": "flyto-i18n",
+      "kind": "shared-locales",
+      "license": "MIT",
+      "merge_contract": "Shared locale source and generated dist consumed by Flyto frontends and engine messages.",
+      "must_exist": [
+        "locales",
+        "dist",
+        "scripts/validate.py",
+        "scripts/build-dist.py"
+      ],
+      "include": [
+        "LICENSE",
+        "README.md",
+        "SECURITY.md",
+        "CONTRIBUTING.md",
+        "package.json",
+        "Makefile",
+        "locales/**",
+        "dist/**",
+        "schema/**",
+        "scripts/*.py",
+        "tests/**"
+      ],
+      "exclude": [
+        "scripts/one-off/**"
+      ],
+      "protected_paths": [
+        "scripts/one-off/**"
+      ],
+      "deny_path_patterns": [
+        "scripts/one-off/**"
+      ]
+    },
+    {
+      "name": "flyto-engine-contracts",
+      "repo": "flyto-engine",
+      "kind": "contract-source",
+      "license": "Apache-2.0",
+      "merge_contract": "Open source contract evidence for capability snapshots, scheduler registry, Product Verification, and OpenAPI shape.",
+      "must_exist": [
+        "api/openapi.yaml",
+        "internal/access/access.go",
+        "internal/permission/capabilities.yaml",
+        "internal/scanregistry/scanner.go",
+        "internal/productverify/dispatcher.go"
+      ],
+      "include": [
+        "LICENSE",
+        "README.md",
+        "SECURITY.md",
+        "CONTRIBUTING.md",
+        "api/openapi.yaml",
+        "docs/project-capabilities.md",
+        "internal/access/**",
+        "internal/permission/**",
+        "internal/productverify/**",
+        "internal/scanregistry/capacity.go",
+        "internal/scanregistry/config.go",
+        "internal/scanregistry/control_plane.go",
+        "internal/scanregistry/registry.go",
+        "internal/scanregistry/scanner.go",
+        "internal/scanregistry/scheduler.go"
+      ],
+      "exclude": [
+        "internal/billing/**",
+        "internal/offlinelicense/**",
+        "internal/stealerlogs/**",
+        "internal/threatfeed/**",
+        "internal/threatintel/**",
+        "internal/cloudscan/**",
+        "internal/containerlive/**",
+        "internal/store/**",
+        "api/handlers_billing*",
+        "api/handlers_entitlement*",
+        "api/handlers_saml*",
+        "api/handlers_scim*"
+      ],
+      "protected_paths": [
+        "api/handlers_billing*",
+        "api/handlers_entitlement*",
+        "api/handlers_saml*",
+        "api/handlers_scim*",
+        "internal/billing/**",
+        "internal/cloudscan/**",
+        "internal/containerlive/**",
+        "internal/offlinelicense/**",
+        "internal/stealerlogs/**",
+        "internal/store/**",
+        "internal/threatfeed/**",
+        "internal/threatintel/**"
+      ],
+      "deny_path_patterns": [
+        "api/handlers_billing*",
+        "api/handlers_entitlement*",
+        "api/handlers_saml*",
+        "api/handlers_scim*",
+        "internal/billing/**",
+        "internal/cloudscan/**",
+        "internal/containerlive/**",
+        "internal/offlinelicense/**",
+        "internal/stealerlogs/**",
+        "internal/store/**",
+        "internal/threatfeed/**",
+        "internal/threatintel/**"
+      ]
+    }
+  ]
+}

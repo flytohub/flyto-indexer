@@ -1,5 +1,17 @@
 # Decisions
 
+## 2026-06-30 - Open-core exports are manifest-driven generated artifacts
+
+Decision: add `flyto2-open-core-audit` and `flyto2-open-core-export`, backed by
+`config/flyto2/open-core-manifest.json`, as the authority for Flyto2 community
+package publication.
+
+Reason: Flyto2 should use open source to build trust, but enterprise control
+planes, billing, commercial intelligence, tenant governance, and live
+remediation orchestration must not leak through manual copy/paste. A
+deterministic whitelist keeps the OSS tree reproducible and mergeable while
+failing closed on protected paths and denied secret/provider markers.
+
 ## 2026-06-24 - Remote CI startup is workspace release evidence
 
 Decision: GitHub Actions startup evidence is now a workspace-level fresh

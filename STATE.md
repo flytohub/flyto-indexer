@@ -38,6 +38,10 @@
   artifacts for the remaining release-packet deliverables from current local
   source evidence, while leaving contract artifacts such as Product
   Verification and public-site verification responsible for their own findings.
+- `flyto2-open-core-audit` and `flyto2-open-core-export` now define the
+  deterministic Flyto2 open-core split. Community source is generated from
+  `config/flyto2/open-core-manifest.json`; protected enterprise paths and
+  denied secret/provider markers fail closed before export.
 - CI covers lint, tests, verify, build, and no-dependency wheel smoke.
 
 ## Release Blockers
@@ -64,4 +68,5 @@
 | Build | `python -m build` | Package integrity |
 | Flyto2 release packet | `python -m src.cli flyto2-release-packet /Users/chester/flytohub --health-report config/flyto2/health-baseline-2026-06-21.json --json` | Workspace inventory, deliverables, blockers, readiness verdict |
 | Flyto2 fresh packet | `python -m src.cli flyto2-release-packet /Users/chester/flytohub --health-report config/flyto2/health-baseline-2026-06-21.json --fresh-evidence-dir reports/flyto2-9h-2026-06-22 --require-fresh --run-start <iso8601> --json` | Nine-hour fresh evidence gate |
+| Flyto2 open-core split | `python -m src.cli flyto2-open-core-audit /Users/chester/flytohub --json` | Community package whitelist, protected path, denied-content gate |
 | GitHub Actions startup | `python scripts/audit_github_actions_startup.py --workspace /Users/chester/flytohub --output /tmp/github-actions-startup.json --soft` | Core repo remote CI startup, job creation, and green workflow proof |

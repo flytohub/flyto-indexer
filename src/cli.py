@@ -359,6 +359,34 @@ def main():
     release_packet_parser.add_argument("--report-format", choices=["json", "markdown"], default="json", help="Report artifact format")
     release_packet_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
 
+    # flyto2-open-core-audit
+    open_core_audit_parser = subparsers.add_parser(
+        "flyto2-open-core-audit",
+        help="Audit the Flyto2 open-core split boundary",
+        description=(
+            "Validate the deterministic open-core package manifest. Fails closed "
+            "when whitelisted files would include protected enterprise paths, "
+            "missing contract paths, or denied secret/provider markers."
+        ),
+    )
+    open_core_audit_parser.add_argument("path", nargs="?", default=".", help="Workspace root path")
+    open_core_audit_parser.add_argument("--manifest", help="Open-core manifest JSON (default: packaged Flyto2 manifest)")
+    open_core_audit_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
+
+    # flyto2-open-core-export
+    open_core_export_parser = subparsers.add_parser(
+        "flyto2-open-core-export",
+        help="Export the Flyto2 community/open-core source tree",
+        description=(
+            "Copy only manifest-whitelisted files into a generated community tree. "
+            "The output directory must be empty; generated copies must not be hand-edited."
+        ),
+    )
+    open_core_export_parser.add_argument("path", nargs="?", default=".", help="Workspace root path")
+    open_core_export_parser.add_argument("--manifest", help="Open-core manifest JSON (default: packaged Flyto2 manifest)")
+    open_core_export_parser.add_argument("--output", required=True, help="Empty output directory for the generated community tree")
+    open_core_export_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
+
     # flyto2-memory-bootstrap
     memory_parser = subparsers.add_parser(
         "flyto2-memory-bootstrap",
@@ -539,6 +567,10 @@ def main():
             result = cmd_flyto2_product_gate(args)
         elif args.command == "flyto2-release-packet":
             result = cmd_flyto2_release_packet(args)
+        elif args.command == "flyto2-open-core-audit":
+            result = cmd_flyto2_open_core_audit(args)
+        elif args.command == "flyto2-open-core-export":
+            result = cmd_flyto2_open_core_export(args)
         elif args.command == "flyto2-memory-bootstrap":
             result = cmd_flyto2_memory_bootstrap(args)
         elif args.command == "verify-baseline":
@@ -1160,6 +1192,38 @@ def cmd_tools(args):
                 "flyto-index flyto2-release-packet /Users/chester/flytohub --fresh-evidence-dir reports/flyto2-9h-2026-06-22 --require-fresh --run-start 2026-06-22T00:00:00+08:00",
             ],
             "exit_codes": {"0": "success or controlled beta residuals", "2": "blocked for production"},
+        },
+        {
+            "name": "flyto2-open-core-audit",
+            "summary": "Audit the Flyto2 open-core split manifest and fail closed on boundary leaks",
+            "args": [
+                {"name": "path", "type": "string", "required": False, "default": ".", "description": "Workspace root path"},
+                {"name": "--manifest", "type": "string", "required": False, "description": "Open-core manifest JSON"},
+                {"name": "--json", "type": "boolean", "required": False, "default": False, "description": "Output as JSON"},
+            ],
+            "outputs": ["package file counts", "protected path counts", "blockers", "closed-source boundary list"],
+            "side_effects": [],
+            "examples": [
+                "flyto-index flyto2-open-core-audit /Users/chester/flytohub",
+                "flyto-index flyto2-open-core-audit . --json",
+            ],
+            "exit_codes": {"0": "open-core boundary clean", "2": "open-core boundary blocked"},
+        },
+        {
+            "name": "flyto2-open-core-export",
+            "summary": "Generate a community/open-core source tree from whitelisted workspace files",
+            "args": [
+                {"name": "path", "type": "string", "required": False, "default": ".", "description": "Workspace root path"},
+                {"name": "--manifest", "type": "string", "required": False, "description": "Open-core manifest JSON"},
+                {"name": "--output", "type": "string", "required": True, "description": "Empty output directory"},
+                {"name": "--json", "type": "boolean", "required": False, "default": False, "description": "Output as JSON"},
+            ],
+            "outputs": ["generated README", "OPEN_CORE_MANIFEST.json", "packages/<name>/ source trees"],
+            "side_effects": ["copies whitelisted source files into --output"],
+            "examples": [
+                "flyto-index flyto2-open-core-export /Users/chester/flytohub --output /tmp/flyto2-community",
+            ],
+            "exit_codes": {"0": "export written", "2": "audit failed before export"},
         },
         {
             "name": "flyto2-memory-bootstrap",
@@ -2486,6 +2550,58 @@ def cmd_flyto2_release_packet(args):
     print(format_release_packet(result))
     if result["verdict"] == "BLOCKED_FOR_PRODUCTION":
         sys.exit(2)
+    return None
+
+
+def cmd_flyto2_open_core_audit(args):
+    """Audit the deterministic Flyto2 open-core split."""
+    from .flyto2_open_core import (
+        DEFAULT_OPEN_CORE_MANIFEST,
+        OpenCoreOptions,
+        audit_open_core,
+        format_open_core_audit,
+    )
+
+    manifest = Path(args.manifest).resolve() if args.manifest else DEFAULT_OPEN_CORE_MANIFEST
+    result = audit_open_core(
+        OpenCoreOptions(
+            workspace=Path(args.path).resolve(),
+            manifest_path=manifest,
+        )
+    )
+    if hasattr(args, "as_json") and args.as_json:
+        return result
+
+    print(format_open_core_audit(result))
+    if not result["ok"]:
+        sys.exit(2)
+    return None
+
+
+def cmd_flyto2_open_core_export(args):
+    """Export the deterministic Flyto2 community/open-core package tree."""
+    from .flyto2_open_core import (
+        DEFAULT_OPEN_CORE_MANIFEST,
+        OpenCoreOptions,
+        export_open_core,
+        format_open_core_audit,
+    )
+
+    manifest = Path(args.manifest).resolve() if args.manifest else DEFAULT_OPEN_CORE_MANIFEST
+    result = export_open_core(
+        OpenCoreOptions(
+            workspace=Path(args.path).resolve(),
+            manifest_path=manifest,
+            output_dir=Path(args.output).resolve(),
+        )
+    )
+    if hasattr(args, "as_json") and args.as_json:
+        return result
+
+    print(format_open_core_audit(result))
+    if not result["ok"] or not result.get("exported"):
+        sys.exit(2)
+    print(f"Exported to: {result['output_dir']}")
     return None
 
 
