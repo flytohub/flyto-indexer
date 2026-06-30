@@ -378,6 +378,7 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert "FLYTO_DEV_AUTH" not in ce_compose
     assert 'FLYTO_RUNNER_DEV_OPEN: "0"' in ce_compose
     assert 'entrypoint: ["/app/worker"]' in ce_compose
+    assert 'FLYTO_WORKSPACES: "${FLYTO_WORKSPACES:-local-warroom}"' in ce_compose
     assert "ghcr.io" not in ce_compose
     assert 'urlopen("http' not in ce_compose
     assert "urlopen('http://localhost:8080/health'" in ce_compose
@@ -387,7 +388,14 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert "FLYTO_WARROOM_ENGINE_TAG=engine-ce" in ce_env
     assert "FLYTO_WARROOM_FRONTEND_TAG=code-ce" in ce_env
     assert "FLYTO_WARROOM_TAG" not in ce_env
+    assert "FLYTO_POSTGRES_PORT=5432" in ce_env
+    assert "FLYTO_ENGINE_PORT=8080" in ce_env
+    assert "FLYTO_CODE_PORT=8088" in ce_env
+    assert "FLYTO_RUNNER_PORT=8090" in ce_env
+    assert "FLYTO_VERIFICATION_PORT=8344" in ce_env
+    assert "FLYTO_BRAND_VISION_PORT=8095" in ce_env
     assert "FLYTO_LOCAL_AUTH_EMAIL=local-admin@example.invalid" in ce_env
+    assert "FLYTO_WORKSPACES=local-warroom" in ce_env
     assert "FLYTO_LOCAL_AUTH_PASSWORD_SHA256=\n" in ce_env
     assert "FLYTO_LOCAL_AUTH_JWT_SECRET=\n" in ce_env
     assert "FLYTO_DEV_AUTH" not in ce_env
@@ -477,6 +485,27 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
         capture_output=True,
     )
     assert preflight.returncode == 0, preflight.stderr
+
+    bad_env = output / "install/.env.bad-password"
+    bad_env.write_text(
+        generated_env.replace("POSTGRES_PASSWORD=", "POSTGRES_PASSWORD=bad:password@", 1),
+        encoding="utf-8",
+    )
+    bad_env.chmod(0o600)
+    bad_preflight = subprocess.run(
+        [
+            sys.executable,
+            str(output / "install/scripts/preflight.py"),
+            "--env",
+            str(bad_env),
+            "--skip-compose",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert bad_preflight.returncode == 2
+    assert "POSTGRES_PASSWORD must use URL-safe characters" in bad_preflight.stderr
 
     image_check = subprocess.run(
         [

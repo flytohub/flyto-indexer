@@ -34,9 +34,9 @@
       "pdf": "pdf-ce"
     },
     "public_image_digests": {
-      "engine": "sha256:4f6e7911e9fffc795b09e61d04206e37c6a5e3316dff1d61032d8cc0626b2527",
-      "worker": "sha256:4f6e7911e9fffc795b09e61d04206e37c6a5e3316dff1d61032d8cc0626b2527",
-      "frontend": "sha256:de8537658a123398c837ef72078a6c1370728e8add464ab9257d157caf694175",
+      "engine": "sha256:4ba0700b45ab7e5f5c70b4764a36ffcbf5722e7ae4147cfbf86cf0461f93ed33",
+      "worker": "sha256:4ba0700b45ab7e5f5c70b4764a36ffcbf5722e7ae4147cfbf86cf0461f93ed33",
+      "frontend": "sha256:f0ab307b8c38822a6202540caaa429f882f8100b641bbb09809437316a619eb0",
       "runner": "sha256:239744f8753365b4e82f08628a9964aa6364ce8d37823f92ad83dcf915d75774",
       "verification": "sha256:ae3f5da8571eb1ee877ec4baf8c0e430f91ff73a878f8e2eeb9b07aae0eb8a90",
       "brand_vision": "sha256:f83f2a3b3c3e3de9313077646c57c769d9ca303746d1d02312d808cbab5074ad",

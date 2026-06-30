@@ -980,6 +980,7 @@ services:
       FLYTO_ENV: "${{FLYTO_ENV:-development}}"
       FLYTO_PG_URL: "postgres://${{POSTGRES_USER:-flyto}}:${{POSTGRES_PASSWORD:-change-me-local-only}}@postgres:5432/${{POSTGRES_DB:-flyto}}?sslmode=disable" # placeholder
       FLYTO_WORKER_MODE: "${{FLYTO_WORKER_MODE:-queue-only}}"
+      FLYTO_WORKSPACES: "${{FLYTO_WORKSPACES:-local-warroom}}"
       FLYTO_RUNNER_URL: "http://runner:8090"
       FLYTO_VERIFICATION_URL: "http://verification:8344"
       FLYTO_RUNNER_SECRET: "${{FLYTO_RUNNER_SECRET:?set FLYTO_RUNNER_SECRET in install/.env}}" # placeholder
@@ -1150,14 +1151,19 @@ POSTGRES_USER=flyto
 POSTGRES_PASSWORD=change-me-local-only
 POSTGRES_DB=flyto
 FLYTO_ENV=development
+FLYTO_POSTGRES_PORT=5432
 FLYTO_ENGINE_PORT=8080
 FLYTO_CODE_PORT=8088
+FLYTO_RUNNER_PORT=8090
+FLYTO_VERIFICATION_PORT=8344
+FLYTO_BRAND_VISION_PORT=8095
 FLYTO_LOCAL_AUTH_EMAIL=local-admin@example.invalid
 FLYTO_LOCAL_AUTH_PASSWORD_SHA256=
 FLYTO_LOCAL_AUTH_JWT_SECRET=
 FLYTO_LOCAL_AUTH_DISPLAY_NAME=Local Admin
 FLYTO_LOCAL_AUTH_USER_ID=local-admin
 FLYTO_LOCAL_AUTH_ORG_ID=local-warroom
+FLYTO_WORKSPACES=local-warroom
 FLYTO_LOCAL_AUTH_ORG_NAME=Flyto2 Warroom
 FLYTO_LOCAL_AUTH_ORG_SLUG=flyto2-warroom
 FLYTO_PLATFORM_ADMIN_UIDS=
@@ -1617,6 +1623,7 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import re
 import shutil
 import stat
 import subprocess
@@ -1633,6 +1640,7 @@ REQUIRED_NON_EMPTY = [
     "FLYTO_VERIFICATION_SECRET",
     "FLYTO_MASTER_KEY",
 ]
+URL_SAFE_COMPONENT_RE = re.compile(r"^[A-Za-z0-9._~-]+$")
 
 
 def parse_env(path: Path) -> dict[str, str]:
@@ -1673,6 +1681,12 @@ def main() -> int:
                 blockers.append(f"{key} is empty in {env_path}")
         if values.get("POSTGRES_PASSWORD") == "change-me-local-only":
             blockers.append("POSTGRES_PASSWORD still uses the example placeholder")
+        postgres_password = values.get("POSTGRES_PASSWORD", "")
+        if postgres_password and not URL_SAFE_COMPONENT_RE.fullmatch(postgres_password):
+            blockers.append(
+                "POSTGRES_PASSWORD must use URL-safe characters [A-Za-z0-9._~-]; "
+                "run setup-ce.py again or replace characters like ':', '@', '/', '?', '#', '[', and ']'"
+            )
         if values.get("FLYTO_LOCAL_AUTH_EMAIL") == "local-admin@example.invalid":
             blockers.append("FLYTO_LOCAL_AUTH_EMAIL still uses the example placeholder")
         mode = stat.S_IMODE(env_path.stat().st_mode)
