@@ -442,6 +442,11 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     readme = (output / "README.md").read_text(encoding="utf-8")
     assert "# Flyto2 Warroom" in readme
     assert "Self-hosted Community Edition" in readme
+    assert "## Official Channels" in readme
+    assert "https://flyto2.com/open-source/" in readme
+    assert "https://docs.flyto2.com/warroom/self-hosted-ce" in readme
+    assert "https://github.com/flytohub/flyto-warroom" in readme
+    assert "https://hub.docker.com/r/chesterhsu/flyto-warroom" in readme
     assert "## What Is Flyto2 Warroom?" in readme
     assert "## Core Capabilities" in readme
     assert "## Quick Start" in readme

@@ -238,6 +238,25 @@ class TestNoFalsePositives:
             findings = TaintAnalyzer(root).analyze()
             assert len(findings) == 0
 
+    def test_next_build_outputs_are_skipped(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            for rel in (
+                ".next/server",
+                ".next/static/chunks",
+                ".open-next/server",
+                "out/_next/static",
+            ):
+                asset_dir = root / rel
+                asset_dir.mkdir(parents=True)
+                (asset_dir / "bundle.js").write_text(
+                    "location.hash && (document.body.innerHTML = location.hash)\n",
+                    encoding="utf-8",
+                )
+
+            findings = TaintAnalyzer(root).analyze()
+            assert len(findings) == 0
+
     def test_go_url_query_read_alone_is_safe(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

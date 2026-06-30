@@ -61,6 +61,11 @@ _HIGH_RISK_CHANGE_PATTERNS = (
     "*credential*",
     ".claude/settings.local.json",
 )
+_HIGH_RISK_CHANGE_EXEMPTIONS = (
+    ".env.example",
+    ".env.sample",
+    ".env.template",
+)
 _CONTRACT_SOURCE_EXTENSIONS = {".ts", ".tsx", ".js", ".jsx", ".go", ".py"}
 _CONTRACT_SKIP_PARTS = {"__tests__", "__mocks__", "tests", "test", "fixtures"}
 _CONTRACT_SKIP_SUFFIXES = (".test", ".spec")
@@ -834,7 +839,7 @@ def _check_package_integrity(root: Path, add_check) -> None:
     package_entries = _package_manifest_entries(wheel_packages, wheel_sources, force_include, sdist_include)
     forbidden_entries = [
         entry for entry in package_entries
-        if _matches_any(entry, _GENERATED_CHANGE_PATTERNS + _HIGH_RISK_CHANGE_PATTERNS)
+        if _matches_any(entry, _GENERATED_CHANGE_PATTERNS) or _is_high_risk_change_path(entry)
     ]
     missing = sorted(name for name, present in required.items() if not present)
     status = "pass"
@@ -860,14 +865,21 @@ def _check_ci_closed_loop(root: Path, add_check) -> None:
         return
 
     lowered = ci_text.lower()
+    lowered_with_scripts = f"{ci_text}\n{_read_package_scripts(root)}".lower()
     project_name = _pyproject_name(root) or root.name
     required = {
-        "verify": "flyto-index verify" in lowered or "verify-workspace" in lowered,
-        "tests": any(token in lowered for token in (
+        "verify": any(token in lowered for token in (
+            "flyto-index verify", "verify-workspace", "npm run verify", "pnpm verify", "yarn verify",
+        )),
+        "tests": any(token in lowered_with_scripts for token in (
             "pytest", "vitest", "npm test", "npm run test", "pnpm test", "yarn test", "go test",
         )),
-        "lint": any(token in lowered for token in ("ruff", "mypy", "eslint", "npm run lint", "golangci-lint")),
-        "build": any(token in lowered for token in ("python -m build", "npm run build", "go build", "cargo build")),
+        "lint": any(token in lowered_with_scripts for token in (
+            "ruff", "mypy", "eslint", "npm run lint", "pnpm lint", "yarn lint", "golangci-lint",
+        )),
+        "build": any(token in lowered_with_scripts for token in (
+            "python -m build", "npm run build", "pnpm build", "yarn build", "go build", "cargo build",
+        )),
     }
     if project_name == "flyto-indexer":
         required.update({
@@ -895,7 +907,7 @@ def _check_change_hygiene(root: Path, add_check) -> None:
 
     changed = _git_changed_paths(root)
     generated = [path for path in changed if _matches_any(path, _GENERATED_CHANGE_PATTERNS)]
-    high_risk = [path for path in changed if _matches_any(path, _HIGH_RISK_CHANGE_PATTERNS)]
+    high_risk = [path for path in changed if _is_high_risk_change_path(path)]
     status = "pass"
     summary = "No high-risk working tree changes"
     if generated:
@@ -1991,6 +2003,24 @@ def _read_ci_files(root: Path) -> tuple[list[Path], str]:
     return readable, "\n".join(chunks)
 
 
+def _read_package_scripts(root: Path) -> str:
+    package_json = root / "package.json"
+    if not package_json.is_file():
+        return ""
+    try:
+        data = json.loads(package_json.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return ""
+    scripts = data.get("scripts")
+    if not isinstance(scripts, dict):
+        return ""
+    lines = []
+    for name, command in scripts.items():
+        if isinstance(name, str) and isinstance(command, str):
+            lines.append(f"npm run {name}: {command}")
+    return "\n".join(lines)
+
+
 def _pyproject_name(root: Path) -> str:
     pyproject = root / "pyproject.toml"
     if not pyproject.exists():
@@ -2045,6 +2075,13 @@ def _git_changed_paths(root: Path) -> list[str]:
 def _matches_any(path: str, patterns: tuple[str, ...]) -> bool:
     normalized = path.replace("\\", "/")
     return any(fnmatch.fnmatch(normalized, pattern) for pattern in patterns)
+
+
+def _is_high_risk_change_path(path: str) -> bool:
+    return _matches_any(path, _HIGH_RISK_CHANGE_PATTERNS) and not _matches_any(
+        path,
+        _HIGH_RISK_CHANGE_EXEMPTIONS,
+    )
 
 
 def _load_verify_policy(root: Path, policy_path: str | Path | None = None) -> tuple[dict[str, Any], Path | None]:

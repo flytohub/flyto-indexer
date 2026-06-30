@@ -981,6 +981,33 @@ def test_ci_closed_loop_warns_without_verify(tmp_path):
     assert "verify" in checks["ci_closed_loop"]["metrics"]["missing"]
 
 
+def test_ci_closed_loop_accepts_npm_verify_script_expansion(tmp_path):
+    _write_project(tmp_path, project_name="flyto-docs")
+    (tmp_path / "package.json").write_text(
+        json.dumps({
+            "scripts": {
+                "test": "node scripts/audit-docs-public.mjs",
+                "lint": "node scripts/audit-docs-public.mjs",
+                "build": "vitepress build",
+                "verify": "npm run test && npm run lint && npm run build",
+            }
+        }),
+        encoding="utf-8",
+    )
+    workflow = tmp_path / ".github" / "workflows" / "deploy.yml"
+    workflow.parent.mkdir(parents=True, exist_ok=True)
+    workflow.write_text(
+        "name: Deploy\njobs:\n  build:\n    steps:\n      - run: npm run verify\n",
+        encoding="utf-8",
+    )
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["ci_closed_loop"]["status"] == "pass"
+    assert checks["ci_closed_loop"]["metrics"]["missing"] == []
+
+
 def test_change_hygiene_warns_on_high_risk_paths(tmp_path):
     _write_project(tmp_path)
     subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
@@ -997,6 +1024,24 @@ def test_change_hygiene_warns_on_high_risk_paths(tmp_path):
     checks = {check["name"]: check for check in result["checks"]}
     assert checks["change_hygiene"]["status"] == "warn"
     assert ".env.production" in checks["change_hygiene"]["metrics"]["high_risk"]
+
+
+def test_change_hygiene_allows_env_example(tmp_path):
+    _write_project(tmp_path)
+    subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], capture_output=True, check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+        capture_output=True,
+        check=True,
+    )
+    (tmp_path / ".env.example").write_text("PUBLIC_URL=https://example.com\n", encoding="utf-8")
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["change_hygiene"]["status"] == "pass"
+    assert ".env.example" not in checks["change_hygiene"]["metrics"]["high_risk"]
 
 
 def test_render_report_formats(tmp_path):

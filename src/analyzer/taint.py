@@ -44,7 +44,7 @@ MAX_CROSS_DEPTH = 6
 SKIP_DIR_PATTERNS = re.compile(
     r"(?:^|/)(?:test|tests|__tests__|mock|fixture|node_modules|__pycache__|"
     r"\.git|dist|dist-next|build|\.venv[^/]*|venv[^/]*|site-packages|"
-    r"\.nuxt|\.output|coverage)(?:/|$)|"
+    r"\.next|\.nuxt|\.output|\.open-next|\.wrangler|\.cloudflare|out|coverage)(?:/|$)|"
     r"(?:^|/)[^/]*(?:_test\.go|_test\.py|\.test\.[jt]sx?|\.spec\.[jt]sx?)$"
 )
 
