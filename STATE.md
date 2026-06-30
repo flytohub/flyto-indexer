@@ -50,6 +50,10 @@
   install/enterprise simulation/code-protection docs. The generated release
   audit fails closed on private path leakage, CE/private image mixing, and
   secret-like generated values.
+- The Warroom CE export includes `flyto-code` frontend source as
+  `packages/flyto-code`, with sanitized public metadata and `.env.example`.
+  Public frontend PRs are intended to flow back into the private `flyto-code`
+  source repo through generated upstream patches before re-export.
 - CI covers lint, tests, verify, build, and no-dependency wheel smoke.
 
 ## Release Blockers

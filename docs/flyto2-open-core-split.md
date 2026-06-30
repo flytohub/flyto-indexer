@@ -30,6 +30,9 @@ The first generated community package contains:
 - `flyto-indexer`: local-first source indexing, dependency/taint/security
   analysis, SBOM, release evidence gates, CLI/MCP adapters.
 - `flyto-i18n`: shared locale source and generated distribution files.
+- `flyto-code`: Flyto2 Warroom CE React/Vite frontend source, public assets,
+  i18n runtime, UI audit scripts, and vendored design tokens needed for local
+  builds.
 - `flyto-contracts`: generated public protocol package containing OpenAPI,
   capability catalog, JSON Schemas, examples, conformance helper, and lightweight
   SDK stubs. It is generated from private engine sources without exporting raw
@@ -66,8 +69,8 @@ The generated release tree also contains:
   telemetry.
 - AutoFix promotion, approval, rollback orchestration, and commercial AI
   proposal workflows.
-- Full enterprise cockpit UI composition until a standalone community shell is
-  generated.
+- Hosted SaaS-only frontend configuration, private preview credentials, and
+  enterprise image publishing metadata.
 
 ## Merge Rule
 

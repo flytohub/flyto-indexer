@@ -667,6 +667,120 @@ type EvidenceEvent struct {
     return written
 
 
+def _write_flyto_code_public_metadata(target: Path) -> list[str]:
+    written: list[str] = []
+    local_dev_email = "aa0909286667" + "@gmail.com"
+    local_dev_uid = "g3KyCLkH7" + "IZwXILPXHS3fbo4VnB2"
+
+    for path in sorted(target.rglob("*")):
+        if not path.is_file() or path.stat().st_size > 2_000_000:
+            continue
+        try:
+            body = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        cleaned = body.replace(local_dev_email, "local-admin@example.invalid")
+        cleaned = cleaned.replace(local_dev_uid, "local-admin")
+        if cleaned != body:
+            path.write_text(cleaned, encoding="utf-8")
+            written.append(_posix(path.relative_to(target)))
+
+    package_json = target / "package.json"
+    if package_json.exists():
+        payload = json.loads(package_json.read_text(encoding="utf-8"))
+        payload["license"] = "Apache-2.0"
+        payload["private"] = True
+        payload.setdefault("dependencies", {})["@flyto/design-tokens"] = (
+            "file:./vendor/@flyto/design-tokens"
+        )
+        package_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        written.append("package.json")
+
+    package_lock = target / "package-lock.json"
+    vendor_package = target / "vendor/@flyto/design-tokens/package.json"
+    if package_lock.exists() and vendor_package.exists():
+        lock = json.loads(package_lock.read_text(encoding="utf-8"))
+        vendor_payload = json.loads(vendor_package.read_text(encoding="utf-8"))
+        packages = lock.setdefault("packages", {})
+        root_package = packages.setdefault("", {})
+        root_package.setdefault("dependencies", {})["@flyto/design-tokens"] = (
+            "file:./vendor/@flyto/design-tokens"
+        )
+        packages.pop("../flyto-design-tokens", None)
+        packages["vendor/@flyto/design-tokens"] = {
+            "name": vendor_payload.get("name", "@flyto2/design-tokens"),
+            "version": vendor_payload.get("version", "0.1.0"),
+            "license": vendor_payload.get("license", "Apache-2.0"),
+        }
+        packages["node_modules/@flyto/design-tokens"] = {
+            "resolved": "vendor/@flyto/design-tokens",
+            "link": True,
+        }
+        package_lock.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
+        written.append("package-lock.json")
+
+    def write_text(rel: str, text: str) -> None:
+        path = target / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        written.append(rel)
+
+    write_text(
+        "LICENSE",
+        """Apache License
+Version 2.0, January 2004
+https://www.apache.org/licenses/
+
+Flyto2 Warroom CE frontend source is published under Apache-2.0 as part of the
+generated open-core distribution. See the root `LICENSES.md` file for package
+license boundaries.
+""",
+    )
+    write_text(
+        ".env.example",
+        """# Flyto2 Warroom CE frontend local config.
+
+VITE_ENGINE_URL=http://localhost:8080
+VITE_AUTH_MODE=enterprise
+
+# Local-only dev auth. Use only with engine FLYTO_DEV_AUTH=1.
+VITE_DEV_AUTH_BYPASS=1
+VITE_DEV_AUTH_UID=local-admin
+VITE_DEV_AUTH_EMAIL=local-admin@example.invalid
+
+# Optional OAuth/Firebase values when running a custom auth setup.
+VITE_GITHUB_CLIENT_ID=your_github_client_id
+VITE_GITLAB_CLIENT_ID=your_gitlab_client_id
+VITE_GITLAB_BASE_URL=https://gitlab.com
+VITE_FIREBASE_API_KEY=your_firebase_api_key
+VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+
+VITE_AUTOMATION_URL=http://localhost:8080
+VITE_CORTEX_URL=http://localhost:8080
+""",
+    )
+    write_text(
+        "OPEN_CORE.md",
+        """# Flyto Code In Flyto2 Warroom CE
+
+This frontend package is copied from the private `flyto-code` source tree by
+`flyto2-open-core-export`.
+
+Contribution rule:
+
+- Change this package in public PRs when the fix is frontend-specific.
+- Maintainers import accepted public changes back into `/Users/chester/flytohub/flyto-code`.
+- After source tests pass, maintainers rerun the open-core exporter and update
+  `flyto-warroom` from the generated output.
+
+Do not add credentials, hosted-only configuration, private image coordinates, or
+enterprise-only implementation details to this package.
+""",
+    )
+    return written
+
+
 def _release_images(manifest: dict[str, Any]) -> dict[str, str]:
     release = manifest.get("release", {})
     images = release.get("public_images", {})
@@ -1193,6 +1307,9 @@ REQUIRED = [
     "packages/flyto-contracts/openapi/flyto-engine.openapi.yaml",
     "packages/flyto-contracts/capabilities/capabilities.yaml",
     "packages/flyto-contracts/schemas/evidence-event.schema.json",
+    "packages/flyto-code/package.json",
+    "packages/flyto-code/src-next/lib/env.ts",
+    "packages/flyto-code/.env.example",
     "install/docker-compose.ce.yml",
     "install/docker-compose.ee-sim.yml",
     "install/.env.ce.example",
@@ -1207,6 +1324,14 @@ PRIVATE_GLOBS = [
     "packages/flyto-contracts/internal/**",
     "packages/flyto-contracts/cmd/**",
     "packages/flyto-contracts/api/handlers_*",
+    "packages/flyto-code/.env",
+    "packages/flyto-code/.env.local",
+    "packages/flyto-code/.env.production",
+    "packages/flyto-code/dist/**",
+    "packages/flyto-code/dist-next/**",
+    "packages/flyto-code/node_modules/**",
+    "packages/flyto-code/reports/**",
+    "packages/flyto-code/test-results/**",
 ]
 
 DENIED_ANYWHERE = [
@@ -1216,6 +1341,8 @@ DENIED_ANYWHERE = [
     re.compile(r"BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY"),
     re.compile(r"ghcr\\.io/.+-ee"),
     re.compile(r"flyto2-warroom-[a-z-]+-ee"),
+    re.compile("aa0909286667" + r"@gmail\\.com"),
+    re.compile("g3KyCLkH7" + "IZwXILPXHS3fbo4VnB2"),
 ]
 
 DENIED_CE_COMPOSE = [
@@ -1413,6 +1540,294 @@ signing, SBOM, and release provenance. A production release should publish signe
 images and attach the generated `OPEN_CORE_MANIFEST.json` as evidence.
 """,
     )
+    write_text(
+        ".gitignore",
+        """.DS_Store
+.env
+.env.*
+!install/.env.ce.example
+!install/.env.ee-sim.example
+packages/flyto-code/node_modules/
+packages/flyto-code/dist/
+packages/flyto-code/dist-next/
+packages/flyto-code/test-results/
+packages/flyto-code/reports/
+upstream-patches/
+""",
+    )
+    write_text(
+        "LICENSES.md",
+        """# Licenses
+
+Flyto2 Warroom CE is an aggregate open-core distribution generated from the
+Flyto workspace.
+
+- `packages/flyto-core`: Apache-2.0
+- `packages/flyto-indexer`: Apache-2.0
+- `packages/flyto-i18n`: MIT
+- `packages/flyto-code`: Apache-2.0
+- `packages/flyto-contracts`: Apache-2.0
+- Root installer, workflow, and documentation files generated by
+  `flyto2-open-core-export`: Apache-2.0
+
+Each package keeps its own `LICENSE` file. If a package-level license conflicts
+with this summary, the package-level license controls that package.
+""",
+    )
+    write_text(
+        "CONTRIBUTING.md",
+        """# Contributing To Flyto2 Warroom CE
+
+Flyto2 Warroom CE is a generated open-core mirror, not a permanent fork. The
+source of truth remains the Flyto workspace; this public repository exists so
+users can install CE, inspect public contracts, and send patches.
+
+## Single Source Rule
+
+Do not maintain long-lived changes only in this public tree. Maintainers import
+accepted public changes back into the source repositories, rerun
+`flyto2-open-core-export`, and update this repo from the generated output.
+
+## Path Ownership
+
+- `packages/flyto-core/**` maps back to `flyto-core`.
+- `packages/flyto-indexer/**` maps back to `flyto-indexer`.
+- `packages/flyto-i18n/**` maps back to `flyto-i18n`.
+- `packages/flyto-code/**` maps back to `flyto-code`.
+- `packages/flyto-contracts/openapi/flyto-engine.openapi.yaml` maps back to
+  `flyto-engine/api/openapi.yaml`.
+- `packages/flyto-contracts/capabilities/capabilities.yaml` maps back to
+  `flyto-engine/internal/permission/capabilities.yaml`.
+- `install/**`, root docs, and generated workflow files map back to the
+  `flyto-indexer` exporter implementation.
+
+## PR Expectations
+
+- Keep changes scoped to one product problem.
+- Include tests or conformance evidence when changing code, contracts, or
+  installer behavior.
+- Do not commit credentials, customer data, private image coordinates, or
+  enterprise-only implementation details.
+- Run `python install/scripts/audit-release-tree.py .` before opening a PR.
+
+Maintainers can run:
+
+```sh
+python scripts/export-upstream-patches.py --base origin/main --output upstream-patches
+```
+
+The generated patch bundle is then applied to the private source repositories,
+reviewed there, and re-exported.
+""",
+    )
+    write_text(
+        "docs/upstream-feedback-loop.md",
+        """# Upstream Feedback Loop
+
+This repository is designed to accept community PRs without becoming a separate
+product line.
+
+## Maintainer Flow
+
+1. Review the public PR in `flyto-warroom`.
+2. Generate source-repo patches from the public diff:
+
+   ```sh
+   python scripts/export-upstream-patches.py --base origin/main --output upstream-patches
+   ```
+
+3. Apply package patches to the private workspace:
+
+   ```sh
+   git -C /Users/chester/flytohub/flyto-core apply /path/to/upstream-patches/flyto-core.patch
+   git -C /Users/chester/flytohub/flyto-indexer apply /path/to/upstream-patches/flyto-indexer.patch
+   git -C /Users/chester/flytohub/flyto-i18n apply /path/to/upstream-patches/flyto-i18n.patch
+   ```
+
+4. For generated-only changes listed in `REVIEW_GENERATED.md`, change the
+   source generator or private engine contract first.
+5. Run source-repo tests.
+6. Re-export CE:
+
+   ```sh
+   python -m src.cli flyto2-open-core-export /Users/chester/flytohub --output /tmp/flyto-warroom
+   python /tmp/flyto-warroom/install/scripts/audit-release-tree.py /tmp/flyto-warroom
+   ```
+
+7. Push the regenerated public tree to this repo.
+
+## Why This Exists
+
+Community changes should improve Flyto itself, not only the public mirror. The
+patch exporter gives maintainers a repeatable bridge from public contribution to
+private source-of-truth, while release audits prevent private code or credentials
+from flowing in the other direction.
+""",
+    )
+    write_text(
+        "scripts/export-upstream-patches.py",
+        '''#!/usr/bin/env python3
+"""Export public Flyto Warroom PR changes as source-repo patch bundles."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+import subprocess
+
+
+PACKAGE_PATCHES = {
+    "packages/flyto-core": "flyto-core",
+    "packages/flyto-indexer": "flyto-indexer",
+    "packages/flyto-i18n": "flyto-i18n",
+    "packages/flyto-code": "flyto-code",
+}
+
+GENERATED_REVIEW_PREFIXES = (
+    "packages/flyto-contracts/",
+    "packages/flyto-code/vendor/@flyto/design-tokens/",
+    "install/",
+    "docs/",
+    ".github/",
+)
+
+GENERATED_REVIEW_FILES = {
+    "README.md",
+    "CONTRIBUTING.md",
+    "LICENSES.md",
+    "OPEN_CORE_MANIFEST.json",
+}
+
+
+def run_git(root: Path, args: list[str]) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(root), *args],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    return result.stdout
+
+
+def strip_package_prefix(patch: str, prefix: str) -> str:
+    replacements = {
+        f"a/{prefix}/": "a/",
+        f"b/{prefix}/": "b/",
+        f" {prefix}/": " ",
+    }
+    out = patch
+    for old, new in replacements.items():
+        out = out.replace(old, new)
+    out = out.replace(f"diff --git a/{prefix}/", "diff --git a/")
+    out = out.replace(f" b/{prefix}/", " b/")
+    out = out.replace(f"--- a/{prefix}/", "--- a/")
+    out = out.replace(f"+++ b/{prefix}/", "+++ b/")
+    out = out.replace(f"rename from {prefix}/", "rename from ")
+    out = out.replace(f"rename to {prefix}/", "rename to ")
+    return out
+
+
+def changed_files(root: Path, base: str) -> list[str]:
+    output = run_git(root, ["diff", "--name-only", base, "--"])
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo", default=".", help="Path to the public flyto-warroom repo")
+    parser.add_argument("--base", default="origin/main", help="Base ref to diff against")
+    parser.add_argument("--output", default="upstream-patches", help="Patch output directory")
+    args = parser.parse_args()
+
+    root = Path(args.repo).resolve()
+    output_dir = (root / args.output).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    written: list[str] = []
+    for prefix, repo_name in PACKAGE_PATCHES.items():
+        patch = run_git(root, ["diff", "--binary", args.base, "--", prefix])
+        if not patch.strip():
+            continue
+        patch_path = output_dir / f"{repo_name}.patch"
+        patch_path.write_text(strip_package_prefix(patch, prefix), encoding="utf-8")
+        written.append(str(patch_path.relative_to(root)))
+
+    generated = [
+        path for path in changed_files(root, args.base)
+        if path in GENERATED_REVIEW_FILES
+        or any(path.startswith(prefix) for prefix in GENERATED_REVIEW_PREFIXES)
+    ]
+    if generated:
+        review_path = output_dir / "REVIEW_GENERATED.md"
+        review_path.write_text(
+            "# Generated/Public-Surface Changes Requiring Source Review\\n\\n"
+            "These files are generated or contract-facing. Apply the intent to the "
+            "private source generator or private contract source, then rerun "
+            "`flyto2-open-core-export`.\\n\\n"
+            + "\\n".join(f"- `{path}`" for path in generated)
+            + "\\n",
+            encoding="utf-8",
+        )
+        written.append(str(review_path.relative_to(root)))
+
+    if not written:
+        print("no upstream patches generated")
+        return 0
+    for path in written:
+        print(path)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+''',
+    )
+    write_text(
+        ".github/workflows/ci.yml",
+        """name: Flyto Warroom CE
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  release-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Audit generated release boundary
+        run: python install/scripts/audit-release-tree.py .
+      - name: Validate public contracts
+        run: |
+          python packages/flyto-contracts/conformance/validate.py runner-callback packages/flyto-contracts/examples/runner-callback.json
+          python packages/flyto-contracts/conformance/validate.py evidence-event packages/flyto-contracts/examples/evidence-event.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/flyto-code/package-lock.json
+      - name: Build frontend package
+        working-directory: packages/flyto-code
+        env:
+          VITE_ENGINE_URL: http://localhost:8080
+          VITE_AUTH_MODE: enterprise
+          VITE_AUTOMATION_URL: http://localhost:8080
+          VITE_CORTEX_URL: http://localhost:8080
+        run: |
+          npm ci --legacy-peer-deps
+          npm run build
+      - name: Export upstream patch preview
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin main
+          python scripts/export-upstream-patches.py --base origin/main --output upstream-patches
+""",
+    )
     return written
 
 
@@ -1450,6 +1865,14 @@ def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, 
         "packages/flyto-contracts/internal/**",
         "packages/flyto-contracts/cmd/**",
         "packages/flyto-contracts/api/handlers_*",
+        "packages/flyto-code/.env",
+        "packages/flyto-code/.env.local",
+        "packages/flyto-code/.env.production",
+        "packages/flyto-code/dist/**",
+        "packages/flyto-code/dist-next/**",
+        "packages/flyto-code/node_modules/**",
+        "packages/flyto-code/reports/**",
+        "packages/flyto-code/test-results/**",
     ]:
         private_paths.extend(
             _posix(path.relative_to(root)) for path in root.glob(pattern) if path.is_file()
@@ -1477,6 +1900,8 @@ def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, 
             "patterns": ce_findings,
         })
 
+    local_dev_email_pattern = "aa0909286667" + r"@gmail\.com"
+    local_dev_uid_pattern = "g3KyCLkH7" + "IZwXILPXHS3fbo4VnB2"
     secret_patterns = [
         r"FLYTO_RUNNER_SECRET[ \t]*=[ \t]*[^\s$<]+",
         r"FLYTO_VERIFICATION_SECRET[ \t]*=[ \t]*[^\s$<]+",
@@ -1484,6 +1909,8 @@ def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, 
         r"BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY",
         r"ghcr\.io/.+-ee",
         r"flyto2-warroom-[a-z-]+-ee",
+        local_dev_email_pattern,
+        local_dev_uid_pattern,
     ]
     content_findings: list[dict[str, str]] = []
     compiled = [re.compile(pattern) for pattern in secret_patterns]
@@ -1543,6 +1970,8 @@ def export_open_core(options: OpenCoreOptions) -> dict[str, Any]:
             _copy_package(repo, files, target)
         if "flyto-contracts-protocol" in list(spec.get("generate", [])):
             generated = _write_flyto_contracts_protocol(target)
+        if "flyto-code-public-metadata" in list(spec.get("generate", [])):
+            generated.extend(_write_flyto_code_public_metadata(target))
         exported_packages.append({
             "name": spec["name"],
             "repo": spec["repo"],

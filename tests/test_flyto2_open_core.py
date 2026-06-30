@@ -143,6 +143,24 @@ def _engine_contract_workspace(tmp_path: Path) -> Path:
     _write(repo, "docs/project-capabilities.md", "# Project Capabilities\n")
     _write(repo, "internal/permission/capabilities.yaml", "modules:\n  code:\n    enabled: true\n")
     _write(repo, "internal/store/private.go", "package store\n")
+    code = _repo(tmp_path, "flyto-code")
+    _write(
+        code,
+        "package.json",
+        json.dumps({
+            "name": "flyto-code",
+            "version": "0.0.0",
+            "private": True,
+            "license": "UNLICENSED",
+        }),
+    )
+    _write(code, "README.md", "# Flyto Code\n")
+    _write(code, "SECURITY.md", "# Security\n")
+    _write(code, "CONTRIBUTING.md", "# Contributing\n")
+    _write(code, "src-next/lib/env.ts", "export const env = { engineUrl: 'http://localhost:8080' }\n")
+    _write(code, "public/README.md", "# Public\n")
+    _write(code, "vendor/@flyto/design-tokens/package.json", '{"name":"@flyto/design-tokens"}\n')
+    _write(code, ".env", "VITE_DEV_AUTH_EMAIL=private@example.test\n")
     return tmp_path
 
 
@@ -171,6 +189,32 @@ def _contract_manifest(path: Path, *, internal_target: bool = False) -> None:
                     },
                 },
                 "packages": [
+                    {
+                        "name": "flyto-code",
+                        "repo": "flyto-code",
+                        "kind": "warroom-frontend",
+                        "license": "Apache-2.0",
+                        "merge_contract": "frontend",
+                        "must_exist": [
+                            "src-next",
+                            "public",
+                            "package.json",
+                            "vendor/@flyto/design-tokens",
+                        ],
+                        "include": [
+                            "README.md",
+                            "SECURITY.md",
+                            "CONTRIBUTING.md",
+                            "package.json",
+                            "src-next/**",
+                            "public/**",
+                            "vendor/**",
+                        ],
+                        "generate": ["flyto-code-public-metadata"],
+                        "exclude": [".env", ".env.*", "dist/**", "node_modules/**"],
+                        "protected_paths": [".env", ".env.*", "dist/**", "node_modules/**"],
+                        "deny_path_patterns": [".env", ".env.*", "dist/**", "node_modules/**"],
+                    },
                     {
                         "name": "flyto-contracts",
                         "repo": "flyto-engine",
@@ -262,8 +306,14 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert (output / "docs/local-install.md").exists()
     assert (output / "docs/enterprise-simulation.md").exists()
     assert (output / "docs/code-protection.md").exists()
+    assert (output / "packages/flyto-code/src-next/lib/env.ts").exists()
+    assert (output / "packages/flyto-code/LICENSE").exists()
+    assert (output / "packages/flyto-code/.env.example").exists()
+    assert not (output / "packages/flyto-code/.env").exists()
     exported_manifest = json.loads((output / "OPEN_CORE_MANIFEST.json").read_text(encoding="utf-8"))
     assert "private_images" not in exported_manifest["release"]
+    code_package = json.loads((output / "packages/flyto-code/package.json").read_text(encoding="utf-8"))
+    assert code_package["license"] == "Apache-2.0"
 
     ce_compose = (output / "install/docker-compose.ce.yml").read_text(encoding="utf-8")
     assert 'FLYTO_EDITION: "community"' in ce_compose

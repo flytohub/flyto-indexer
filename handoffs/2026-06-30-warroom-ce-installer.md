@@ -19,12 +19,16 @@ Generated release files include:
 - `docs/local-install.md`
 - `docs/enterprise-simulation.md`
 - `docs/code-protection.md`
+- `packages/flyto-code/**` frontend source with generated public metadata.
 
 ## Boundaries
 
 - The CE compose references only public CE image coordinates.
 - Private EE image coordinates are not stored in the open-core manifest or
   exported manifest.
+- `flyto-code` is exported as CE frontend source, but raw `.env*`, build
+  outputs, reports, node_modules, and personal local dev auth examples are
+  blocked from the release tree.
 - `flyto-contracts` remains protocol-only: OpenAPI, capabilities, schemas,
   examples, conformance helper, and SDK stubs.
 - Raw engine `cmd/**`, Go `internal/**`, and private handler trees must never

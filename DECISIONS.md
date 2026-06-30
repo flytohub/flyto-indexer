@@ -13,6 +13,18 @@ tree must be reproducible and auditable, not a hand-maintained fork. EE
 simulation should enable enterprise gates locally without copying enterprise
 source or private image coordinates into the generated release.
 
+## 2026-06-30 - Warroom CE publishes frontend source too
+
+Decision: include `flyto-code` in the generated `flyto-warroom` public tree as
+`packages/flyto-code`, with sanitized public metadata, public `.env.example`,
+and CI frontend build coverage.
+
+Reason: a self-hostable Warroom CE repo that exposes only backend contracts and
+installer files cannot support meaningful community UI fixes. Frontend changes
+should be reviewable in public PRs, then imported back into the private
+`flyto-code` source repo before re-export so Flyto does not split into two
+long-lived products.
+
 ## 2026-06-30 - Engine contracts publish as protocol artifacts
 
 Decision: replace the first-pass `flyto-engine-contracts` raw source export with

@@ -63,7 +63,7 @@
     "cloud/container/runtime live remediation orchestration and customer connector credentials",
     "Flyto Cloud multi-tenant SaaS control plane, runner fleet control, and hosted telemetry",
     "AutoFix promotion, approval, rollback orchestration, and commercial AI proposal workflows",
-    "front-end enterprise cockpit composition until a standalone community shell is generated"
+    "hosted SaaS-only frontend configuration, private preview credentials, and enterprise image publishing metadata"
   ],
   "merge_contracts": [
     "OSS exports are generated artifacts; do not hand-edit generated community trees.",
@@ -218,6 +218,96 @@
       ],
       "deny_path_patterns": [
         "scripts/one-off/**"
+      ]
+    },
+    {
+      "name": "flyto-code",
+      "repo": "flyto-code",
+      "kind": "warroom-frontend",
+      "license": "Apache-2.0",
+      "merge_contract": "React/Vite Warroom CE frontend, capability-gated cockpit, i18n runtime, and UI audit scripts.",
+      "must_exist": [
+        "src-next",
+        "public",
+        "package.json",
+        "vite.config.next.ts",
+        "vendor/@flyto/design-tokens"
+      ],
+      "include": [
+        "README.md",
+        "SECURITY.md",
+        "CONTRIBUTING.md",
+        "package.json",
+        "package-lock.json",
+        ".npmrc",
+        "Dockerfile",
+        "nginx.conf",
+        "index-next.html",
+        "eslint.config.js",
+        "vite.config.next.ts",
+        "vitest.config.ts",
+        "playwright.config.ts",
+        "playwright.ctem.config.ts",
+        "tsconfig*.json",
+        "src-next/**",
+        "public/**",
+        "docs/**",
+        "e2e/**",
+        "scripts/**",
+        "vendor/**"
+      ],
+      "generate": [
+        "flyto-code-public-metadata"
+      ],
+      "exclude": [
+        ".env",
+        ".env.*",
+        ".flyto-index/**",
+        ".flyto-rules.yaml",
+        ".github/**",
+        ".gitleaks.toml",
+        ".semgrep/**",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "ARCHITECTURE.md",
+        "DECISIONS.md",
+        "PROJECT.md",
+        "ROADMAP.md",
+        "STATE.md",
+        "CHANGELOG.md",
+        "REFACTOR_PLAN.md",
+        "tasks.md",
+        "dist/**",
+        "dist-next/**",
+        "node_modules/**",
+        "out/**",
+        "reports/**",
+        "test-results/**",
+        "lh.json",
+        "scripts/one-off/**"
+      ],
+      "protected_paths": [
+        ".env",
+        ".env.*",
+        ".flyto-index/**",
+        ".github/**",
+        "dist/**",
+        "dist-next/**",
+        "node_modules/**",
+        "out/**",
+        "reports/**",
+        "test-results/**",
+        "lh.json"
+      ],
+      "deny_path_patterns": [
+        ".env",
+        ".env.*",
+        "dist/**",
+        "dist-next/**",
+        "node_modules/**",
+        "out/**",
+        "reports/**",
+        "test-results/**"
       ]
     },
     {
