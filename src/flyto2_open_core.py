@@ -1226,7 +1226,12 @@ trap 'rm -rf "$TMP_ROOT"' EXIT
 CODE_CTX="$TMP_ROOT/flyto-code"
 mkdir -p "$CODE_CTX"
 tar -C "$WORKSPACE/flyto-code" -cf - . | tar -C "$CODE_CTX" -xf -
-rm -rf "$CODE_CTX/flyto-design-tokens-pkg"
+rm -rf "$CODE_CTX/node_modules" \
+  "$CODE_CTX/dist" \
+  "$CODE_CTX/dist-next" \
+  "$CODE_CTX/out" \
+  "$CODE_CTX/test-results" \
+  "$CODE_CTX/flyto-design-tokens-pkg"
 if [ -d "$WORKSPACE/flyto-design-tokens" ]; then
   cp -R "$WORKSPACE/flyto-design-tokens" "$CODE_CTX/flyto-design-tokens-pkg"
 else
@@ -1237,21 +1242,45 @@ mkdir -p "$CODE_CTX/public/i18n/code"
 if [ -d "$WORKSPACE/flyto-i18n/dist/code" ]; then
   cp -R "$WORKSPACE/flyto-i18n/dist/code/." "$CODE_CTX/public/i18n/code/"
 fi
-python3 - "$CODE_CTX/package.json" <<'PY'
+python3 - "$CODE_CTX/package.json" "$CODE_CTX/package-lock.json" "$CODE_CTX/flyto-design-tokens-pkg/package.json" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
+lock_path = Path(sys.argv[2])
+tokens_path = Path(sys.argv[3])
 payload = json.loads(path.read_text(encoding="utf-8"))
 for section in ("dependencies", "devDependencies"):
     deps = payload.get(section, {{}})
     for name, value in list(deps.items()):
-        if value == "file:../flyto-design-tokens":
+        if name == "@flyto/design-tokens" or value in ("file:../flyto-design-tokens", "file:./vendor/@flyto/design-tokens"):
             deps[name] = "file:./flyto-design-tokens-pkg"
 path.write_text(json.dumps(payload, indent=2) + "\\n", encoding="utf-8")
+
+tokens = json.loads(tokens_path.read_text(encoding="utf-8"))
+tokens["name"] = "@flyto/design-tokens"
+tokens_path.write_text(json.dumps(tokens, indent=2) + "\\n", encoding="utf-8")
+
+if lock_path.exists():
+    lock = json.loads(lock_path.read_text(encoding="utf-8"))
+    packages = lock.setdefault("packages", {{}})
+    root_package = packages.setdefault("", {{}})
+    root_package.setdefault("dependencies", {{}})["@flyto/design-tokens"] = "file:./flyto-design-tokens-pkg"
+    for key in list(packages):
+        if key == "../flyto-design-tokens" or key == "vendor/@flyto/design-tokens" or key.endswith("/flyto-design-tokens"):
+            packages.pop(key, None)
+    packages["flyto-design-tokens-pkg"] = {{
+        "name": "@flyto/design-tokens",
+        "version": tokens.get("version", "0.1.0"),
+        "license": tokens.get("license", "Apache-2.0"),
+    }}
+    packages["node_modules/@flyto/design-tokens"] = {{
+        "resolved": "flyto-design-tokens-pkg",
+        "link": True,
+    }}
+    lock_path.write_text(json.dumps(lock, indent=2) + "\\n", encoding="utf-8")
 PY
-npm install --package-lock-only --ignore-scripts --legacy-peer-deps --prefix "$CODE_CTX"
 docker build \\
   --build-arg VITE_ENGINE_URL="${{FLYTO_CODE_ENGINE_URL:-http://localhost:8080}}" \\
   --build-arg VITE_AUTH_MODE="${{FLYTO_CODE_AUTH_MODE:-local_jwt}}" \\

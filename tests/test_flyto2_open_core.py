@@ -323,6 +323,10 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     build_script = (output / "install/scripts/build-local-images.sh").read_text(encoding="utf-8")
     assert 'docker tag "$ENGINE_IMAGE:$TAG" "$WORKER_IMAGE:$TAG"' in build_script
     assert "Dockerfile.worker" not in build_script
+    assert 'rm -rf "$CODE_CTX/node_modules"' in build_script
+    assert '"file:./vendor/@flyto/design-tokens"' in build_script
+    assert 'tokens["name"] = "@flyto/design-tokens"' in build_script
+    assert "npm install --package-lock-only" not in build_script
 
     ce_compose = (output / "install/docker-compose.ce.yml").read_text(encoding="utf-8")
     assert 'FLYTO_EDITION: "community"' in ce_compose
