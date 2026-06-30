@@ -776,23 +776,42 @@ enterprise-only implementation details to this package.
     return written
 
 
+_WARROOM_IMAGE_SERVICES = (
+    "engine",
+    "worker",
+    "frontend",
+    "runner",
+    "verification",
+    "brand_vision",
+    "pdf",
+)
+
+_WARROOM_DEFAULT_IMAGE_REPOSITORY = "docker.io/chesterhsu/flyto-warroom"
+
+_WARROOM_DEFAULT_IMAGE_TAGS = {
+    "engine": "engine-ce",
+    "worker": "worker-ce",
+    "frontend": "code-ce",
+    "runner": "runner-ce",
+    "verification": "verification-ce",
+    "brand_vision": "brand-vision-ce",
+    "pdf": "pdf-ce",
+}
+
+
 def _release_images(manifest: dict[str, Any]) -> dict[str, str]:
     release = manifest.get("release", {})
     images = release.get("public_images", {})
+    default_repository = release.get("public_image_repository", _WARROOM_DEFAULT_IMAGE_REPOSITORY)
+    return {service: images.get(service, default_repository) for service in _WARROOM_IMAGE_SERVICES}
+
+
+def _release_image_tags(manifest: dict[str, Any]) -> dict[str, str]:
+    release = manifest.get("release", {})
+    tags = release.get("public_image_tags", {})
     return {
-        "engine": images.get("engine", "docker.io/flytohub/flyto2-warroom-engine-ce"),
-        "worker": images.get("worker", "docker.io/flytohub/flyto2-warroom-worker-ce"),
-        "frontend": images.get("frontend", "docker.io/flytohub/flyto2-warroom-code-ce"),
-        "runner": images.get("runner", "docker.io/flytohub/flyto2-warroom-runner-ce"),
-        "verification": images.get(
-            "verification",
-            "docker.io/flytohub/flyto2-warroom-verification-ce",
-        ),
-        "brand_vision": images.get(
-            "brand_vision",
-            "docker.io/flytohub/flyto2-warroom-brand-vision-ce",
-        ),
-        "pdf": images.get("pdf", "docker.io/flytohub/flyto2-warroom-pdf-ce"),
+        service: tags.get(service, _WARROOM_DEFAULT_IMAGE_TAGS[service])
+        for service in _WARROOM_IMAGE_SERVICES
     }
 
 
@@ -805,6 +824,7 @@ def _public_release_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
 def _write_warroom_release(target: Path, manifest: dict[str, Any]) -> list[str]:
     written: list[str] = []
     images = _release_images(manifest)
+    image_tags = _release_image_tags(manifest)
 
     def write_text(rel: str, text: str) -> None:
         path = target / rel
@@ -835,7 +855,7 @@ services:
       retries: 60
 
   engine:
-    image: "${{FLYTO_WARROOM_ENGINE_IMAGE:-{images['engine']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    image: "${{FLYTO_WARROOM_ENGINE_IMAGE:-{images['engine']}}}:${{FLYTO_WARROOM_ENGINE_TAG:-{image_tags['engine']}}}"
     restart: unless-stopped
     ports:
       - "127.0.0.1:${{FLYTO_ENGINE_PORT:-8080}}:8080"
@@ -898,7 +918,7 @@ services:
       retries: 30
 
   scan-drainer:
-    image: "${{FLYTO_WARROOM_ENGINE_IMAGE:-{images['engine']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    image: "${{FLYTO_WARROOM_ENGINE_IMAGE:-{images['engine']}}}:${{FLYTO_WARROOM_ENGINE_TAG:-{image_tags['engine']}}}"
     restart: unless-stopped
     environment:
       FLYTO_SERVER_MODE: "scan-drain-loop"
@@ -924,7 +944,7 @@ services:
         condition: service_healthy
 
   discovery-drainer:
-    image: "${{FLYTO_WARROOM_ENGINE_IMAGE:-{images['engine']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    image: "${{FLYTO_WARROOM_ENGINE_IMAGE:-{images['engine']}}}:${{FLYTO_WARROOM_ENGINE_TAG:-{image_tags['engine']}}}"
     restart: unless-stopped
     environment:
       FLYTO_SERVER_MODE: "discovery-drain-loop"
@@ -952,7 +972,7 @@ services:
         condition: service_healthy
 
   worker:
-    image: "${{FLYTO_WARROOM_WORKER_IMAGE:-{images['worker']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    image: "${{FLYTO_WARROOM_WORKER_IMAGE:-{images['worker']}}}:${{FLYTO_WARROOM_WORKER_TAG:-{image_tags['worker']}}}"
     restart: unless-stopped
     entrypoint: ["/app/worker"]
     environment:
@@ -979,7 +999,7 @@ services:
         condition: service_healthy
 
   runner:
-    image: "${{FLYTO_WARROOM_RUNNER_IMAGE:-{images['runner']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    image: "${{FLYTO_WARROOM_RUNNER_IMAGE:-{images['runner']}}}:${{FLYTO_WARROOM_RUNNER_TAG:-{image_tags['runner']}}}"
     restart: unless-stopped
     ports:
       - "127.0.0.1:${{FLYTO_RUNNER_PORT:-8090}}:8090"
@@ -1002,7 +1022,7 @@ services:
       retries: 30
 
   verification:
-    image: "${{FLYTO_WARROOM_VERIFICATION_IMAGE:-{images['verification']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    image: "${{FLYTO_WARROOM_VERIFICATION_IMAGE:-{images['verification']}}}:${{FLYTO_WARROOM_VERIFICATION_TAG:-{image_tags['verification']}}}"
     restart: unless-stopped
     ports:
       - "127.0.0.1:${{FLYTO_VERIFICATION_PORT:-8344}}:8344"
@@ -1014,7 +1034,7 @@ services:
       FLYTO_ALLOW_PRIVATE_NETWORK: "${{FLYTO_ALLOW_PRIVATE_NETWORK:-true}}"
 
   brand-vision:
-    image: "${{FLYTO_WARROOM_BRAND_VISION_IMAGE:-{images['brand_vision']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    image: "${{FLYTO_WARROOM_BRAND_VISION_IMAGE:-{images['brand_vision']}}}:${{FLYTO_WARROOM_BRAND_VISION_TAG:-{image_tags['brand_vision']}}}"
     restart: unless-stopped
     ports:
       - "127.0.0.1:${{FLYTO_BRAND_VISION_PORT:-8095}}:8095"
@@ -1029,14 +1049,14 @@ services:
       retries: 15
 
   pdf:
-    image: "${{FLYTO_WARROOM_PDF_IMAGE:-{images['pdf']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    image: "${{FLYTO_WARROOM_PDF_IMAGE:-{images['pdf']}}}:${{FLYTO_WARROOM_PDF_TAG:-{image_tags['pdf']}}}"
     restart: unless-stopped
     environment:
       PORT: "3000"
       PDF_TIMEOUT_MS: "${{PDF_TIMEOUT_MS:-30000}}"
 
   frontend:
-    image: "${{FLYTO_WARROOM_FRONTEND_IMAGE:-{images['frontend']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
+    image: "${{FLYTO_WARROOM_FRONTEND_IMAGE:-{images['frontend']}}}:${{FLYTO_WARROOM_FRONTEND_TAG:-{image_tags['frontend']}}}"
     restart: unless-stopped
     ports:
       - "127.0.0.1:${{FLYTO_CODE_PORT:-8088}}:80"
@@ -1109,10 +1129,23 @@ volumes:
 
     write_text(
         "install/.env.ce.example",
-        """# Flyto2 Warroom CE local install.
+        f"""# Flyto2 Warroom CE local install.
 # Copy this file to install/.env and keep the copy out of git.
 
-FLYTO_WARROOM_TAG=ce-local
+FLYTO_WARROOM_ENGINE_IMAGE={images['engine']}
+FLYTO_WARROOM_ENGINE_TAG={image_tags['engine']}
+FLYTO_WARROOM_WORKER_IMAGE={images['worker']}
+FLYTO_WARROOM_WORKER_TAG={image_tags['worker']}
+FLYTO_WARROOM_FRONTEND_IMAGE={images['frontend']}
+FLYTO_WARROOM_FRONTEND_TAG={image_tags['frontend']}
+FLYTO_WARROOM_RUNNER_IMAGE={images['runner']}
+FLYTO_WARROOM_RUNNER_TAG={image_tags['runner']}
+FLYTO_WARROOM_VERIFICATION_IMAGE={images['verification']}
+FLYTO_WARROOM_VERIFICATION_TAG={image_tags['verification']}
+FLYTO_WARROOM_BRAND_VISION_IMAGE={images['brand_vision']}
+FLYTO_WARROOM_BRAND_VISION_TAG={image_tags['brand_vision']}
+FLYTO_WARROOM_PDF_IMAGE={images['pdf']}
+FLYTO_WARROOM_PDF_TAG={image_tags['pdf']}
 POSTGRES_USER=flyto
 POSTGRES_PASSWORD=change-me-local-only
 POSTGRES_DB=flyto
@@ -1139,10 +1172,23 @@ FLYTO_GITHUB_TOKEN=
     )
     write_text(
         "install/.env.ee-sim.example",
-        """# Flyto2 Warroom enterprise simulation.
+        f"""# Flyto2 Warroom enterprise simulation.
 # Copy this file to install/.env.ee-sim and fill local-only secrets there.
 
-FLYTO_WARROOM_TAG=ee-sim-local
+FLYTO_WARROOM_ENGINE_IMAGE={images['engine']}
+FLYTO_WARROOM_ENGINE_TAG={image_tags['engine']}
+FLYTO_WARROOM_WORKER_IMAGE={images['worker']}
+FLYTO_WARROOM_WORKER_TAG={image_tags['worker']}
+FLYTO_WARROOM_FRONTEND_IMAGE={images['frontend']}
+FLYTO_WARROOM_FRONTEND_TAG={image_tags['frontend']}
+FLYTO_WARROOM_RUNNER_IMAGE={images['runner']}
+FLYTO_WARROOM_RUNNER_TAG={image_tags['runner']}
+FLYTO_WARROOM_VERIFICATION_IMAGE={images['verification']}
+FLYTO_WARROOM_VERIFICATION_TAG={image_tags['verification']}
+FLYTO_WARROOM_BRAND_VISION_IMAGE={images['brand_vision']}
+FLYTO_WARROOM_BRAND_VISION_TAG={image_tags['brand_vision']}
+FLYTO_WARROOM_PDF_IMAGE={images['pdf']}
+FLYTO_WARROOM_PDF_TAG={image_tags['pdf']}
 POSTGRES_USER=flyto
 POSTGRES_PASSWORD=change-me-local-only
 POSTGRES_DB=flyto
@@ -1205,21 +1251,28 @@ build-local-images:
 set -eu
 
 WORKSPACE="${{1:-/Users/chester/flytohub}}"
-TAG="${{FLYTO_WARROOM_TAG:-ce-local}}"
-ENGINE_IMAGE="${{FLYTO_WARROOM_ENGINE_IMAGE:-{images['engine']}}}"
-WORKER_IMAGE="${{FLYTO_WARROOM_WORKER_IMAGE:-{images['worker']}}}"
-FRONTEND_IMAGE="${{FLYTO_WARROOM_FRONTEND_IMAGE:-{images['frontend']}}}"
-RUNNER_IMAGE="${{FLYTO_WARROOM_RUNNER_IMAGE:-{images['runner']}}}"
-VERIFICATION_IMAGE="${{FLYTO_WARROOM_VERIFICATION_IMAGE:-{images['verification']}}}"
-BRAND_VISION_IMAGE="${{FLYTO_WARROOM_BRAND_VISION_IMAGE:-{images['brand_vision']}}}"
-PDF_IMAGE="${{FLYTO_WARROOM_PDF_IMAGE:-{images['pdf']}}}"
+IMAGE_REPOSITORY="${{FLYTO_WARROOM_IMAGE_REPOSITORY:-{_WARROOM_DEFAULT_IMAGE_REPOSITORY}}}"
+ENGINE_IMAGE="${{FLYTO_WARROOM_ENGINE_IMAGE:-$IMAGE_REPOSITORY}}"
+ENGINE_TAG="${{FLYTO_WARROOM_ENGINE_TAG:-{image_tags['engine']}}}"
+WORKER_IMAGE="${{FLYTO_WARROOM_WORKER_IMAGE:-$IMAGE_REPOSITORY}}"
+WORKER_TAG="${{FLYTO_WARROOM_WORKER_TAG:-{image_tags['worker']}}}"
+FRONTEND_IMAGE="${{FLYTO_WARROOM_FRONTEND_IMAGE:-$IMAGE_REPOSITORY}}"
+FRONTEND_TAG="${{FLYTO_WARROOM_FRONTEND_TAG:-{image_tags['frontend']}}}"
+RUNNER_IMAGE="${{FLYTO_WARROOM_RUNNER_IMAGE:-$IMAGE_REPOSITORY}}"
+RUNNER_TAG="${{FLYTO_WARROOM_RUNNER_TAG:-{image_tags['runner']}}}"
+VERIFICATION_IMAGE="${{FLYTO_WARROOM_VERIFICATION_IMAGE:-$IMAGE_REPOSITORY}}"
+VERIFICATION_TAG="${{FLYTO_WARROOM_VERIFICATION_TAG:-{image_tags['verification']}}}"
+BRAND_VISION_IMAGE="${{FLYTO_WARROOM_BRAND_VISION_IMAGE:-$IMAGE_REPOSITORY}}"
+BRAND_VISION_TAG="${{FLYTO_WARROOM_BRAND_VISION_TAG:-{image_tags['brand_vision']}}}"
+PDF_IMAGE="${{FLYTO_WARROOM_PDF_IMAGE:-$IMAGE_REPOSITORY}}"
+PDF_TAG="${{FLYTO_WARROOM_PDF_TAG:-{image_tags['pdf']}}}"
 
-docker build -t "$ENGINE_IMAGE:$TAG" "$WORKSPACE/flyto-engine"
-docker tag "$ENGINE_IMAGE:$TAG" "$WORKER_IMAGE:$TAG"
-docker build -t "$RUNNER_IMAGE:$TAG" "$WORKSPACE/flyto-engine/runner"
-docker build -f "$WORKSPACE/flyto-core/Dockerfile.verification" -t "$VERIFICATION_IMAGE:$TAG" "$WORKSPACE/flyto-core"
-docker build -t "$BRAND_VISION_IMAGE:$TAG" "$WORKSPACE/flyto-engine/brand-vision"
-docker build -t "$PDF_IMAGE:$TAG" "$WORKSPACE/flyto-engine/pdf-service"
+docker build -t "$ENGINE_IMAGE:$ENGINE_TAG" "$WORKSPACE/flyto-engine"
+docker tag "$ENGINE_IMAGE:$ENGINE_TAG" "$WORKER_IMAGE:$WORKER_TAG"
+docker build -t "$RUNNER_IMAGE:$RUNNER_TAG" "$WORKSPACE/flyto-engine/runner"
+docker build -f "$WORKSPACE/flyto-core/Dockerfile.verification" -t "$VERIFICATION_IMAGE:$VERIFICATION_TAG" "$WORKSPACE/flyto-core"
+docker build -t "$BRAND_VISION_IMAGE:$BRAND_VISION_TAG" "$WORKSPACE/flyto-engine/brand-vision"
+docker build -t "$PDF_IMAGE:$PDF_TAG" "$WORKSPACE/flyto-engine/pdf-service"
 
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
@@ -1286,7 +1339,7 @@ docker build \\
   --build-arg VITE_AUTH_MODE="${{FLYTO_CODE_AUTH_MODE:-local_jwt}}" \\
   --build-arg VITE_AUTOMATION_URL="${{FLYTO_AUTOMATION_URL:-http://localhost:8080}}" \\
   --build-arg VITE_CORTEX_URL="${{FLYTO_CORTEX_URL:-http://localhost:8080}}" \\
-  -t "$FRONTEND_IMAGE:$TAG" \\
+  -t "$FRONTEND_IMAGE:$FRONTEND_TAG" \\
   "$CODE_CTX"
 """,
     )
@@ -1516,8 +1569,10 @@ sh /tmp/flyto2-warroom-ce/install/scripts/build-local-images.sh /Users/chester/f
 ```
 
 The script builds engine, worker, runner, verification, brand-vision, pdf, and
-frontend images with the `ce-local` tag. Public users would pull the same image
-names from Docker Hub after the release pipeline publishes them.
+frontend images with the same per-service tags used by Docker Hub
+(`engine-ce`, `worker-ce`, `code-ce`, and so on). Public users can pull those
+tags directly from the published image repository, while maintainers can rebuild
+the same tags locally from the private workspace before starting compose.
 
 ## Start CE Locally
 

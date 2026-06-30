@@ -14,14 +14,24 @@
     "generate": [
       "warroom-ce-installer"
     ],
+    "public_image_repository": "docker.io/chesterhsu/flyto-warroom",
     "public_images": {
-      "engine": "docker.io/flytohub/flyto2-warroom-engine-ce",
-      "worker": "docker.io/flytohub/flyto2-warroom-worker-ce",
-      "frontend": "docker.io/flytohub/flyto2-warroom-code-ce",
-      "runner": "docker.io/flytohub/flyto2-warroom-runner-ce",
-      "verification": "docker.io/flytohub/flyto2-warroom-verification-ce",
-      "brand_vision": "docker.io/flytohub/flyto2-warroom-brand-vision-ce",
-      "pdf": "docker.io/flytohub/flyto2-warroom-pdf-ce"
+      "engine": "docker.io/chesterhsu/flyto-warroom",
+      "worker": "docker.io/chesterhsu/flyto-warroom",
+      "frontend": "docker.io/chesterhsu/flyto-warroom",
+      "runner": "docker.io/chesterhsu/flyto-warroom",
+      "verification": "docker.io/chesterhsu/flyto-warroom",
+      "brand_vision": "docker.io/chesterhsu/flyto-warroom",
+      "pdf": "docker.io/chesterhsu/flyto-warroom"
+    },
+    "public_image_tags": {
+      "engine": "engine-ce",
+      "worker": "worker-ce",
+      "frontend": "code-ce",
+      "runner": "runner-ce",
+      "verification": "verification-ce",
+      "brand_vision": "brand-vision-ce",
+      "pdf": "pdf-ce"
     }
   },
   "global_exclude": [

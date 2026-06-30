@@ -178,14 +178,24 @@ def _contract_manifest(path: Path, *, internal_target: bool = False) -> None:
                     "name": "flyto2-warroom-ce-test",
                     "display_name": "Flyto2 Warroom CE Test",
                     "generate": ["warroom-ce-installer"],
+                    "public_image_repository": "docker.io/chesterhsu/flyto-warroom",
                     "public_images": {
-                        "engine": "docker.io/flytohub/flyto2-warroom-engine-ce",
-                        "worker": "docker.io/flytohub/flyto2-warroom-worker-ce",
-                        "frontend": "docker.io/flytohub/flyto2-warroom-code-ce",
-                        "runner": "docker.io/flytohub/flyto2-warroom-runner-ce",
-                        "verification": "docker.io/flytohub/flyto2-warroom-verification-ce",
-                        "brand_vision": "docker.io/flytohub/flyto2-warroom-brand-vision-ce",
-                        "pdf": "docker.io/flytohub/flyto2-warroom-pdf-ce",
+                        "engine": "docker.io/chesterhsu/flyto-warroom",
+                        "worker": "docker.io/chesterhsu/flyto-warroom",
+                        "frontend": "docker.io/chesterhsu/flyto-warroom",
+                        "runner": "docker.io/chesterhsu/flyto-warroom",
+                        "verification": "docker.io/chesterhsu/flyto-warroom",
+                        "brand_vision": "docker.io/chesterhsu/flyto-warroom",
+                        "pdf": "docker.io/chesterhsu/flyto-warroom",
+                    },
+                    "public_image_tags": {
+                        "engine": "engine-ce",
+                        "worker": "worker-ce",
+                        "frontend": "code-ce",
+                        "runner": "runner-ce",
+                        "verification": "verification-ce",
+                        "brand_vision": "brand-vision-ce",
+                        "pdf": "pdf-ce",
                     },
                 },
                 "packages": [
@@ -321,16 +331,22 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert "docker-compose" in makefile
     assert "docker compose version" in makefile
     build_script = (output / "install/scripts/build-local-images.sh").read_text(encoding="utf-8")
-    assert 'docker tag "$ENGINE_IMAGE:$TAG" "$WORKER_IMAGE:$TAG"' in build_script
+    assert 'docker tag "$ENGINE_IMAGE:$ENGINE_TAG" "$WORKER_IMAGE:$WORKER_TAG"' in build_script
     assert "Dockerfile.worker" not in build_script
     assert 'rm -rf "$CODE_CTX/node_modules"' in build_script
     assert '"file:./vendor/@flyto/design-tokens"' in build_script
     assert 'tokens["name"] = "@flyto/design-tokens"' in build_script
     assert "npm install --package-lock-only" not in build_script
+    assert "FLYTO_WARROOM_TAG" not in build_script
+    assert 'ENGINE_TAG="${FLYTO_WARROOM_ENGINE_TAG:-engine-ce}"' in build_script
+    assert 'FRONTEND_TAG="${FLYTO_WARROOM_FRONTEND_TAG:-code-ce}"' in build_script
 
     ce_compose = (output / "install/docker-compose.ce.yml").read_text(encoding="utf-8")
     assert 'FLYTO_EDITION: "community"' in ce_compose
     assert 'FLYTO_AUTH_MODE: "local_jwt"' in ce_compose
+    assert "${FLYTO_WARROOM_ENGINE_IMAGE:-docker.io/chesterhsu/flyto-warroom}:${FLYTO_WARROOM_ENGINE_TAG:-engine-ce}" in ce_compose
+    assert "${FLYTO_WARROOM_FRONTEND_IMAGE:-docker.io/chesterhsu/flyto-warroom}:${FLYTO_WARROOM_FRONTEND_TAG:-code-ce}" in ce_compose
+    assert "FLYTO_WARROOM_TAG" not in ce_compose
     assert "FLYTO_LOCAL_AUTH_JWT_SECRET" in ce_compose
     assert "FLYTO_LOCAL_AUTH_PASSWORD_SHA256" in ce_compose
     assert "FLYTO_DEV_AUTH" not in ce_compose
@@ -341,6 +357,10 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert "urlopen('http://localhost:8080/health'" in ce_compose
 
     ce_env = (output / "install/.env.ce.example").read_text(encoding="utf-8")
+    assert "FLYTO_WARROOM_ENGINE_IMAGE=docker.io/chesterhsu/flyto-warroom" in ce_env
+    assert "FLYTO_WARROOM_ENGINE_TAG=engine-ce" in ce_env
+    assert "FLYTO_WARROOM_FRONTEND_TAG=code-ce" in ce_env
+    assert "FLYTO_WARROOM_TAG" not in ce_env
     assert "FLYTO_LOCAL_AUTH_EMAIL=local-admin@example.invalid" in ce_env
     assert "FLYTO_LOCAL_AUTH_PASSWORD_SHA256=\n" in ce_env
     assert "FLYTO_LOCAL_AUTH_JWT_SECRET=\n" in ce_env
