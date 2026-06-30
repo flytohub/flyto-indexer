@@ -439,6 +439,16 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert "What CE Includes" in docker_overview
     assert "Enterprise Path" in docker_overview
     assert "currently published as linux/arm64 images" in docker_overview
+    readme = (output / "README.md").read_text(encoding="utf-8")
+    assert "# Flyto2 Warroom" in readme
+    assert "Self-hosted Community Edition" in readme
+    assert "## What Is Flyto2 Warroom?" in readme
+    assert "## Core Capabilities" in readme
+    assert "## Quick Start" in readme
+    assert "## Docker Images" in readme
+    assert "## CE And Enterprise" in readme
+    assert "## What Stays Private" in readme
+    assert "Enterprise Cloud Bridge" in readme
     bridge = (output / "docs/enterprise-cloud-bridge.md").read_text(encoding="utf-8")
     assert "Flyto2 Enterprise Cloud Bridge" in bridge
     assert "Premium actions must fail closed" in bridge
