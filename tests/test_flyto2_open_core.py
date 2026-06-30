@@ -297,6 +297,8 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
 
     assert result["ok"] is True
     assert result["release_audit"]["ok"] is True
+    assert (output / "Makefile").exists()
+    assert not (output / "install/Makefile").exists()
     assert (output / "install/docker-compose.ce.yml").exists()
     assert (output / "install/docker-compose.ee-sim.yml").exists()
     assert (output / "install/.env.ce.example").exists()
@@ -315,6 +317,12 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert "private_images" not in exported_manifest["release"]
     code_package = json.loads((output / "packages/flyto-code/package.json").read_text(encoding="utf-8"))
     assert code_package["license"] == "Apache-2.0"
+    makefile = (output / "Makefile").read_text(encoding="utf-8")
+    assert "docker-compose" in makefile
+    assert "docker compose version" in makefile
+    build_script = (output / "install/scripts/build-local-images.sh").read_text(encoding="utf-8")
+    assert 'docker tag "$ENGINE_IMAGE:$TAG" "$WORKER_IMAGE:$TAG"' in build_script
+    assert "Dockerfile.worker" not in build_script
 
     ce_compose = (output / "install/docker-compose.ce.yml").read_text(encoding="utf-8")
     assert 'FLYTO_EDITION: "community"' in ce_compose
@@ -323,7 +331,10 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert "FLYTO_LOCAL_AUTH_PASSWORD_SHA256" in ce_compose
     assert "FLYTO_DEV_AUTH" not in ce_compose
     assert 'FLYTO_RUNNER_DEV_OPEN: "0"' in ce_compose
+    assert 'entrypoint: ["/app/worker"]' in ce_compose
     assert "ghcr.io" not in ce_compose
+    assert 'urlopen("http' not in ce_compose
+    assert "urlopen('http://localhost:8080/health'" in ce_compose
 
     ce_env = (output / "install/.env.ce.example").read_text(encoding="utf-8")
     assert "FLYTO_LOCAL_AUTH_EMAIL=local-admin@example.invalid" in ce_env
@@ -347,6 +358,10 @@ def test_warroom_release_package_includes_local_and_enterprise_simulation(tmp_pa
     assert runner_key + "\n" in env_example
     assert verification_key + "\n" in env_example
     assert enterprise_key + "\n" in env_example
+
+    local_node_module = output / "packages/flyto-code/node_modules/dotenv/README.md"
+    local_node_module.parent.mkdir(parents=True)
+    local_node_module.write_text("BEGIN " + "PRIVATE KEY\nlocal package docs\n", encoding="utf-8")
 
     audit = subprocess.run(
         [sys.executable, str(output / "install/scripts/audit-release-tree.py"), str(output)],

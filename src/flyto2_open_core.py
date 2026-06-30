@@ -890,7 +890,9 @@ services:
       brand-vision:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8080/health\", timeout=2)'"]
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=2)"
       interval: 10s
       timeout: 3s
       retries: 30
@@ -952,6 +954,7 @@ services:
   worker:
     image: "${{FLYTO_WARROOM_WORKER_IMAGE:-{images['worker']}}}:${{FLYTO_WARROOM_TAG:-ce-local}}"
     restart: unless-stopped
+    entrypoint: ["/app/worker"]
     environment:
       FLYTO_EDITION: "community"
       FLYTO_ENV: "${{FLYTO_ENV:-development}}"
@@ -991,7 +994,9 @@ services:
       FLYTO_ALLOW_PRIVATE_NETWORK: "${{FLYTO_ALLOW_PRIVATE_NETWORK:-false}}"
       FLYTO_ALLOWED_HOSTS: "${{FLYTO_ALLOWED_HOSTS:-host.docker.internal,localhost,127.0.0.1}}"
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8090/health\", timeout=2)'"]
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8090/health', timeout=2)"
       interval: 10s
       timeout: 3s
       retries: 30
@@ -1016,7 +1021,9 @@ services:
     environment:
       FLYTO_BRAND_VISION_API_KEY: "${{FLYTO_BRAND_VISION_API_KEY:-}}"
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8095/health\", timeout=2)'"]
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8095/health', timeout=2)"
       interval: 10s
       timeout: 3s
       retries: 15
@@ -1150,12 +1157,13 @@ OPENAI_API_KEY=
 """,
     )
     write_text(
-        "install/Makefile",
+        "Makefile",
         """SHELL := /bin/sh
 ENV_CE ?= install/.env
 ENV_EE_SIM ?= install/.env.ee-sim
-COMPOSE_CE = docker compose --env-file $(ENV_CE) -f install/docker-compose.ce.yml
-COMPOSE_EE_SIM = docker compose --env-file $(ENV_EE_SIM) -f install/docker-compose.ce.yml -f install/docker-compose.ee-sim.yml
+DOCKER_COMPOSE ?= $(shell if docker compose version >/dev/null 2>&1; then printf 'docker compose'; elif command -v docker-compose >/dev/null 2>&1; then printf 'docker-compose'; else printf 'docker compose'; fi)
+COMPOSE_CE = $(DOCKER_COMPOSE) --env-file $(ENV_CE) -f install/docker-compose.ce.yml
+COMPOSE_EE_SIM = $(DOCKER_COMPOSE) --env-file $(ENV_EE_SIM) -f install/docker-compose.ce.yml -f install/docker-compose.ee-sim.yml
 
 .PHONY: ce-up ce-down ce-logs ce-ps ce-reset-db ee-sim-up ee-sim-down ee-sim-logs audit build-local-images
 
@@ -1207,7 +1215,7 @@ BRAND_VISION_IMAGE="${{FLYTO_WARROOM_BRAND_VISION_IMAGE:-{images['brand_vision']
 PDF_IMAGE="${{FLYTO_WARROOM_PDF_IMAGE:-{images['pdf']}}}"
 
 docker build -t "$ENGINE_IMAGE:$TAG" "$WORKSPACE/flyto-engine"
-docker build -f "$WORKSPACE/flyto-engine/Dockerfile.worker" -t "$WORKER_IMAGE:$TAG" "$WORKSPACE/flyto-engine"
+docker tag "$ENGINE_IMAGE:$TAG" "$WORKER_IMAGE:$TAG"
 docker build -t "$RUNNER_IMAGE:$TAG" "$WORKSPACE/flyto-engine/runner"
 docker build -f "$WORKSPACE/flyto-core/Dockerfile.verification" -t "$VERIFICATION_IMAGE:$TAG" "$WORKSPACE/flyto-core"
 docker build -t "$BRAND_VISION_IMAGE:$TAG" "$WORKSPACE/flyto-engine/brand-vision"
@@ -1338,6 +1346,7 @@ ROOT = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
 
 REQUIRED = [
     "OPEN_CORE_MANIFEST.json",
+    "Makefile",
     "packages/flyto-contracts/openapi/flyto-engine.openapi.yaml",
     "packages/flyto-contracts/capabilities/capabilities.yaml",
     "packages/flyto-contracts/schemas/evidence-event.schema.json",
@@ -1362,12 +1371,15 @@ PRIVATE_GLOBS = [
     "packages/flyto-code/.env",
     "packages/flyto-code/.env.local",
     "packages/flyto-code/.env.production",
-    "packages/flyto-code/dist/**",
-    "packages/flyto-code/dist-next/**",
-    "packages/flyto-code/node_modules/**",
-    "packages/flyto-code/reports/**",
-    "packages/flyto-code/test-results/**",
 ]
+
+LOCAL_ARTIFACT_PARTS = {
+    "node_modules",
+    "dist",
+    "dist-next",
+    "reports",
+    "test-results",
+}
 
 DENIED_ANYWHERE = [
     re.compile(r"FLYTO_RUNNER_SECRET[ \\t]*=[ \\t]*[^\\s$<]+"),
@@ -1397,6 +1409,14 @@ def text(path: Path) -> str:
         return ""
 
 
+def is_local_artifact(path: Path) -> bool:
+    try:
+        rel = path.relative_to(ROOT)
+    except ValueError:
+        return False
+    return any(part in LOCAL_ARTIFACT_PARTS for part in rel.parts)
+
+
 def main() -> int:
     blockers: list[str] = []
     for rel in REQUIRED:
@@ -1404,7 +1424,7 @@ def main() -> int:
             blockers.append(f"missing required release file: {rel}")
     for pattern in PRIVATE_GLOBS:
         for match in ROOT.glob(pattern):
-            if match.is_file():
+            if match.is_file() and not is_local_artifact(match):
                 blockers.append(f"private path escaped release tree: {match.relative_to(ROOT)}")
     ce_compose = ROOT / "install/docker-compose.ce.yml"
     if ce_compose.exists():
@@ -1430,6 +1450,8 @@ def main() -> int:
                 blockers.append(f"frontend CE env contains denied auth mode: {denied}")
     for path in ROOT.rglob("*"):
         if not path.is_file() or path.stat().st_size > 2_000_000:
+            continue
+        if is_local_artifact(path):
             continue
         body = text(path)
         for regex in DENIED_ANYWHERE:
@@ -1909,6 +1931,7 @@ def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, 
     blockers: list[dict[str, Any]] = []
     required = [
         "OPEN_CORE_MANIFEST.json",
+        "Makefile",
         "packages/flyto-contracts/openapi/flyto-engine.openapi.yaml",
         "packages/flyto-contracts/capabilities/capabilities.yaml",
         "packages/flyto-contracts/schemas/evidence-event.schema.json",
@@ -1939,11 +1962,6 @@ def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, 
         "packages/flyto-code/.env",
         "packages/flyto-code/.env.local",
         "packages/flyto-code/.env.production",
-        "packages/flyto-code/dist/**",
-        "packages/flyto-code/dist-next/**",
-        "packages/flyto-code/node_modules/**",
-        "packages/flyto-code/reports/**",
-        "packages/flyto-code/test-results/**",
     ]:
         private_paths.extend(
             _posix(path.relative_to(root)) for path in root.glob(pattern) if path.is_file()
@@ -2025,8 +2043,12 @@ def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, 
     ]
     content_findings: list[dict[str, str]] = []
     compiled = [re.compile(pattern) for pattern in secret_patterns]
+    local_artifact_parts = {"node_modules", "dist", "dist-next", "reports", "test-results"}
     for path in root.rglob("*"):
         if not path.is_file():
+            continue
+        rel_parts = path.relative_to(root).parts
+        if any(part in local_artifact_parts for part in rel_parts):
             continue
         body = _read_text_if_safe(path)
         if body is None:
