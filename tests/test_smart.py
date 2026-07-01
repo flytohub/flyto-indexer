@@ -116,6 +116,15 @@ def mock_git():
 
 
 @pytest.fixture
+def mock_staleness():
+    with patch("tools.smart._staleness_mod") as m:
+        mod = MagicMock()
+        mod.find_stale_symbols.return_value = {"stale_symbols": [], "count": 0}
+        m.return_value = mod
+        yield mod
+
+
+@pytest.fixture
 def mock_maint():
     with patch("tools.smart._maint_mod") as m:
         mod = MagicMock()
@@ -246,12 +255,12 @@ class TestSmartImpact:
 
 class TestSmartAudit:
 
-    def test_always_includes_health(self, mock_quality, mock_git, mock_maint):
+    def test_always_includes_health(self, mock_quality, mock_git, mock_staleness, mock_maint):
         result = smart_audit()
         assert "health" in result
         assert result["health"]["score"] == 72
 
-    def test_auto_expands_weak_dimensions(self, mock_quality, mock_git, mock_maint):
+    def test_auto_expands_weak_dimensions(self, mock_quality, mock_git, mock_staleness, mock_maint):
         """Score < 80 for security and complexity → auto-expand both."""
         result = smart_audit()
         # security=60 → should have security_findings
@@ -261,16 +270,16 @@ class TestSmartAudit:
         # dead_code=90 → should NOT auto-expand
         assert "dead_code" not in result
 
-    def test_focus_overrides(self, mock_quality, mock_git, mock_maint):
+    def test_focus_overrides(self, mock_quality, mock_git, mock_staleness, mock_maint):
         result = smart_audit(focus="dead_code")
         assert "dead_code" in result
 
-    def test_low_score_suggests_refactoring(self, mock_quality, mock_git, mock_maint):
+    def test_low_score_suggests_refactoring(self, mock_quality, mock_git, mock_staleness, mock_maint):
         """Overall score 72 < 80 → includes refactoring suggestions."""
         result = smart_audit()
         assert "refactoring_suggestions" in result
 
-    def test_always_includes_hotspots(self, mock_quality, mock_git, mock_maint):
+    def test_always_includes_hotspots(self, mock_quality, mock_git, mock_staleness, mock_maint):
         result = smart_audit()
         assert "git_hotspots" in result
 

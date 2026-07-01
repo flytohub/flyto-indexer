@@ -13,6 +13,7 @@ from tool_registry import (
     INDEXER_TOOL_NAMES,
     get_vscode_tool_schemas,
     execute_tool,
+    has_tool,
     _VSCODE_TOOL_NAMES,
     _mcp_to_openai,
 )
@@ -217,19 +218,9 @@ class TestSchemaConsistency:
 
     def test_all_mcp_tools_in_dispatch(self):
         """Every MCP tool should have a dispatch handler."""
-        # We can't easily test dispatch without importing all tools,
-        # but we can verify the dispatch dict keys exist
-        from tool_registry import execute_tool
         for tool in MCP_TOOLS:
             name = tool["name"]
-            # execute_tool should not raise KeyError for known tools
-            # (it will fail because index isn't loaded, but shouldn't raise KeyError)
-            try:
-                execute_tool(name, {})
-            except KeyError:
-                pytest.fail(f"Tool '{name}' missing from dispatch table")
-            except Exception:
-                pass  # Other errors are expected (no index loaded)
+            assert has_tool(name), f"Tool '{name}' missing from dispatch table"
 
     def test_vscode_tools_subset_of_mcp(self):
         """All VSCode tool names must be valid MCP tool names."""
