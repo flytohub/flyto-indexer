@@ -906,7 +906,23 @@ def _check_change_hygiene(root: Path, add_check) -> None:
         return
 
     changed = _git_changed_paths(root)
-    generated = [path for path in changed if _matches_any(path, _GENERATED_CHANGE_PATTERNS)]
+    policy, _source = _load_verify_policy(root)
+    allow_generated_patterns = tuple(
+        str(pattern)
+        for pattern in _as_list(
+            policy.get("allow_generated_changes")
+            or policy.get("allow_tracked_generated")
+            or []
+        )
+        if str(pattern).strip()
+    )
+    generated_candidates = [
+        path for path in changed if _matches_any(path, _GENERATED_CHANGE_PATTERNS)
+    ]
+    generated = [
+        path for path in generated_candidates if not _matches_any(path, allow_generated_patterns)
+    ]
+    allowed_generated = sorted(set(generated_candidates) - set(generated))
     high_risk = [path for path in changed if _is_high_risk_change_path(path)]
     status = "pass"
     summary = "No high-risk working tree changes"
@@ -924,6 +940,8 @@ def _check_change_hygiene(root: Path, add_check) -> None:
         metrics={
             "changed": len(changed),
             "generated": generated,
+            "allowed_generated": allowed_generated,
+            "allow_generated_patterns": list(allow_generated_patterns),
             "high_risk": high_risk,
         },
     )

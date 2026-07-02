@@ -1044,6 +1044,53 @@ def test_change_hygiene_allows_env_example(tmp_path):
     assert ".env.example" not in checks["change_hygiene"]["metrics"]["high_risk"]
 
 
+def test_change_hygiene_fails_generated_dist_by_default(tmp_path):
+    _write_project(tmp_path)
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "bundle.json").write_text("{}\n", encoding="utf-8")
+    subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], capture_output=True, check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+        capture_output=True,
+        check=True,
+    )
+    (tmp_path / "dist" / "bundle.json").write_text('{"changed": true}\n', encoding="utf-8")
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["change_hygiene"]["status"] == "fail"
+    assert checks["change_hygiene"]["metrics"]["generated"] == ["dist/bundle.json"]
+
+
+def test_change_hygiene_allows_policy_owned_generated_dist(tmp_path):
+    _write_project(tmp_path)
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "bundle.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / ".flyto-rules.yaml").write_text(
+        "verify:\n"
+        "  allow_generated_changes:\n"
+        "    - dist/**\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], capture_output=True, check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+        capture_output=True,
+        check=True,
+    )
+    (tmp_path / "dist" / "bundle.json").write_text('{"changed": true}\n', encoding="utf-8")
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["change_hygiene"]["status"] == "pass"
+    assert checks["change_hygiene"]["metrics"]["generated"] == []
+    assert checks["change_hygiene"]["metrics"]["allowed_generated"] == ["dist/bundle.json"]
+
+
 def test_render_report_formats(tmp_path):
     _write_project(tmp_path)
     result = run_verification(tmp_path, full_scan=True)
