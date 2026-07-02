@@ -23,11 +23,21 @@ _SKIP_DIRS = frozenset({
     "test", "tests", "__tests__", "spec",
 })
 
-# Database call patterns
-_DB_CALLS = frozenset({
-    "execute", "query", "find", "find_one", "find_all",
-    "get", "filter", "select", "fetch", "fetchone", "fetchall",
-    "fetchmany", "all", "first", "count",
+# Database call patterns. Keep generic collection helpers out of this set unless
+# the receiver also looks like a DB/ORM object; otherwise ordinary dict/list
+# calls such as result.get() or line.count() become noisy false positives.
+_DIRECT_DB_CALLS = frozenset({
+    "execute", "query", "select", "fetch", "fetchone", "fetchall", "fetchmany",
+    "find_one", "find_all",
+})
+
+_GENERIC_DB_METHODS = frozenset({
+    "get", "find", "filter", "all", "first", "count",
+})
+
+_DB_RECEIVER_HINTS = frozenset({
+    "db", "database", "session", "cursor", "conn", "connection", "engine",
+    "query", "queryset", "objects", "collection", "table", "model", "orm",
 })
 
 # Blocking I/O patterns (should not be in async)
@@ -116,7 +126,7 @@ class _PerfVisitor(ast.NodeVisitor):
         short_name = call_name.rsplit(".", 1)[-1]
 
         # N+1: DB call inside a loop
-        if self._in_loop_depth > 0 and short_name in _DB_CALLS:
+        if self._in_loop_depth > 0 and self._looks_like_db_call(call_name, short_name):
             self.issues.append(PerfIssue(
                 file=self.file_path, line=node.lineno,
                 func_name=self._current_func,
@@ -164,6 +174,15 @@ class _PerfVisitor(ast.NodeVisitor):
             return ast.unparse(node.func)
         except Exception:
             return ""
+
+    def _looks_like_db_call(self, call_name: str, short_name: str) -> bool:
+        if short_name in _DIRECT_DB_CALLS:
+            return True
+        if short_name not in _GENERIC_DB_METHODS or "." not in call_name:
+            return False
+        receiver = call_name.rsplit(".", 1)[0].lower()
+        receiver_parts = re.split(r"[^a-z0-9_]+", receiver)
+        return any(part in _DB_RECEIVER_HINTS for part in receiver_parts)
 
 
 def _scan_unbounded_queries(project_root: Path) -> list[PerfIssue]:

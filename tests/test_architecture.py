@@ -2214,6 +2214,38 @@ class TestPerfPatterns:
             n1 = [i for i in result.issues if i.category == "n_plus_1"]
             assert len(n1) >= 1, "Failed to detect N+1 query pattern"
 
+    def test_ordinary_collection_helpers_inside_loops_are_not_n_plus_1(self):
+        from analyzer.perf_patterns import analyze_perf_patterns
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "app.py").write_text(textwrap.dedent('''\
+                def summarize(rows, result, line):
+                    values = []
+                    for row in rows:
+                        values.append(result.get(row.id, "missing"))
+                        values.append(line.count(":"))
+                        values.append(row.path.find("/api/"))
+                    return values
+            '''), encoding="utf-8")
+            result = analyze_perf_patterns(tmpdir)
+            n1 = [i for i in result.issues if i.category == "n_plus_1"]
+            assert n1 == [], f"Ordinary collection helpers were flagged as N+1: {n1}"
+
+    def test_detects_orm_generic_methods_inside_loops(self):
+        from analyzer.perf_patterns import analyze_perf_patterns
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "app.py").write_text(textwrap.dedent('''\
+                def load_profiles(users):
+                    profiles = []
+                    for user in users:
+                        profiles.append(User.objects.get(id=user.id))
+                    return profiles
+            '''), encoding="utf-8")
+            result = analyze_perf_patterns(tmpdir)
+            n1 = [i for i in result.issues if i.category == "n_plus_1"]
+            assert len(n1) >= 1, "Failed to detect ORM generic method N+1 pattern"
+
     def test_detects_sync_in_async(self):
         from analyzer.perf_patterns import analyze_perf_patterns
 
