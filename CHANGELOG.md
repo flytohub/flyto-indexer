@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## [2.11.1] - 2026-07-08
+
+### Added
+- `agent-audit` now emits a **CWE id** and stable **rule_id** per finding, and
+  an **mcp_reachable** flag — true when the sink is reachable (BFS over
+  intra-file call edges) from an MCP/module entrypoint (`@register_module`/tool
+  decorators, FastAPI routes, BaseModule `execute`/`run`), i.e. its params are
+  attacker-influenced. This is the prioritization / AI-triage gate.
+- Three new `agent-audit` classes (same required-guard / caller-controlled
+  model): `code-injection` (CWE-95, eval/exec), `path-traversal-read` (CWE-22,
+  open-read / read_text/read_bytes), and `ssti` (CWE-1336,
+  render_template_string / Template.from_string). (2.11.0 added
+  `command-injection` and `unsafe-deserialization`.)
+- `AgentPolicyAnalyzer.parse_failures` counter so unparseable files are not a
+  silent coverage gap.
+
+### Tests
+- `tests/test_agent_policy.py` pins every class (positive + guarded-negative)
+  and the mcp_reachable signal.
+
 ## [2.11.0] - 2026-07-08
 
 ### Added
