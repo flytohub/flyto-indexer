@@ -3143,6 +3143,17 @@ def changed_files(root: Path, base: str) -> list[str]:
     return [line.strip() for line in output.splitlines() if line.strip()]
 
 
+def display_path(path: Path, root: Path) -> str:
+    # Prefer a repo-relative path for readability, but tolerate an --output
+    # directory OUTSIDE the repo (an absolute path) instead of crashing on
+    # Path.relative_to(). The doc's example uses an in-repo output dir, but an
+    # external --output is a legitimate call.
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", default=".", help="Path to the public flyto-warroom repo")
@@ -3161,7 +3172,7 @@ def main() -> int:
             continue
         patch_path = output_dir / f"{repo_name}.patch"
         patch_path.write_text(strip_package_prefix(patch, prefix), encoding="utf-8")
-        written.append(str(patch_path.relative_to(root)))
+        written.append(display_path(patch_path, root))
 
     generated = [
         path for path in changed_files(root, args.base)
@@ -3179,7 +3190,7 @@ def main() -> int:
             + "\\n",
             encoding="utf-8",
         )
-        written.append(str(review_path.relative_to(root)))
+        written.append(display_path(review_path, root))
 
     if not written:
         print("no upstream patches generated")

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## [2.12.2] - 2026-07-09
+
+### Fixed
+- The generated `export-upstream-patches.py` flow-back tool crashed with
+  `ValueError: ... is not in the subpath of ...` when `--output` pointed to a
+  directory OUTSIDE the repo (it did `patch_path.relative_to(root)` on the
+  report line). It now falls back to the absolute path via a `display_path()`
+  helper, so both in-repo and external output dirs work. Verified end-to-end:
+  a simulated warroom PR touching a source file produces a correctly
+  prefix-stripped `<repo>.patch`, and a generated-only file is flagged in
+  `REVIEW_GENERATED.md` — the backward (warroom→source) half of the
+  bidirectional loop now runs cleanly.
+
 ## [2.12.1] - 2026-07-08
 
 ### Fixed
