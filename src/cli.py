@@ -247,6 +247,23 @@ def main():
     taint_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON instead of human-readable text")
     taint_parser.add_argument("--max-results", type=int, default=50, dest="max_results", help="Max flows to show (default 50)")
 
+    # agent-audit
+    agent_audit_parser = subparsers.add_parser(
+        "agent-audit",
+        help="AI-agent security policy audit — SSRF guards, redirect revalidation, route auth, env-secret exposure, sandbox file writes",
+        description=(
+            "Detect AI-agent / MCP / sandbox boundary vulnerability classes that "
+            "generic SAST misses: caller-controlled outbound URLs with no SSRF "
+            "guard, guarded HTTP modules that still follow redirects, "
+            "state-changing routes without auth, attacker-influenced env reads, "
+            "env credentials reaching a caller-controlled base_url, and file "
+            "writes to caller-controlled paths without the sandbox guard."
+        ),
+    )
+    agent_audit_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    agent_audit_parser.add_argument("--severity", choices=["critical", "high", "medium", "low"], help="Filter by severity level")
+    agent_audit_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON instead of human-readable text")
+
     # call-sites
     callsites_parser = subparsers.add_parser(
         "call-sites",
@@ -555,6 +572,8 @@ def main():
             result = cmd_docs(args)
         elif args.command == "taint":
             result = cmd_taint(args)
+        elif args.command == "agent-audit":
+            result = cmd_agent_audit(args)
         elif args.command == "call-sites":
             result = cmd_call_sites(args)
         elif args.command == "check":
@@ -2294,6 +2313,45 @@ def cmd_call_sites(args):
             out["stats"]["lsp_error"] = str(e)
 
     return json.dumps(out, indent=2 if not args.path else None)
+
+
+def cmd_agent_audit(args):
+    """AI-agent security policy audit."""
+    from .analyzer.agent_policy import AgentPolicyAnalyzer
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    findings = AgentPolicyAnalyzer(project_path).analyze()
+    if getattr(args, "severity", None):
+        findings = [f for f in findings if f.severity == args.severity]
+
+    order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    findings.sort(key=lambda f: (order.get(f.severity, 9), f.category, f.file_path, f.line))
+
+    if getattr(args, "as_json", False):
+        by_cat: dict = {}
+        for f in findings:
+            by_cat[f.category] = by_cat.get(f.category, 0) + 1
+        return {
+            "total": len(findings),
+            "by_category": by_cat,
+            "findings": [f.to_dict() for f in findings],
+        }
+
+    print(f"AI-Agent Policy Audit: {project_path.name}")
+    print(f"  Findings: {len(findings)}")
+    by_cat: dict = {}
+    for f in findings:
+        by_cat.setdefault(f.category, []).append(f)
+    for cat in sorted(by_cat):
+        print(f"\n[{cat}] ({len(by_cat[cat])})")
+        for f in by_cat[cat]:
+            print(f"  {f.severity:8} {f.file_path}:{f.line}  ({f.function})")
+            print(f"           {f.message}")
+    return None
 
 
 def cmd_taint(args):
