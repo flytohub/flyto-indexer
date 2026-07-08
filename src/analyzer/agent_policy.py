@@ -19,7 +19,7 @@ not flagged). Pure stdlib; mirrors the style of analyzer/taint.py.
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from pathlib import Path
 
 SSRF_GUARDS = {"validate_url_with_env_config", "validate_url_ssrf",
