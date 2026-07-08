@@ -1,0 +1,41 @@
+schema_version: 1
+recipe_id: flyto2-ui-smoke
+runtime:
+  engine: flyto-core
+  mode: browser-smoke
+inputs:
+  base_url:
+    type: string
+    required: true
+  path:
+    type: string
+    required: true
+  required_text:
+    type: array
+    items:
+      type: string
+  output_prefix:
+    type: string
+    required: true
+steps:
+  - id: open-page
+    module: browser.open
+    params:
+      url: "{{base_url}}{{path}}"
+  - id: assert-required-text
+    module: browser.assert_text
+    params:
+      text: "{{required_text}}"
+  - id: capture-evidence
+    module: browser.capture
+    params:
+      screenshot: "{{output_prefix}}.png"
+      console: "{{output_prefix}}-console.json"
+      network_redaction:
+        include_headers: false
+        include_bodies: false
+        strip_query: true
+outputs:
+  evidence:
+    - "{{output_prefix}}.png"
+    - "{{output_prefix}}-console.json"

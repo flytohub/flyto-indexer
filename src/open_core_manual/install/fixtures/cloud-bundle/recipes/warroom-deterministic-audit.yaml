@@ -1,0 +1,42 @@
+schema_version: 1
+recipe_id: warroom-deterministic-audit
+runtime:
+  engine: flyto-core
+  mode: deterministic-audit
+inputs:
+  target:
+    type: string
+    required: true
+  output:
+    type: string
+    required: true
+  markdown_output:
+    type: string
+    required: true
+steps:
+  - id: collect-route-evidence
+    module: browser.map_routes
+    params:
+      target: "{{target}}"
+      max_depth: 2
+      network_redaction:
+        include_headers: false
+        include_bodies: false
+        strip_query: true
+  - id: score-ui-integrity
+    module: audit.score_ui_integrity
+    params:
+      require_dom_integrity: true
+      require_console_clean: true
+  - id: write-json-report
+    module: report.write_json
+    params:
+      output: "{{output}}"
+  - id: write-markdown-report
+    module: report.write_markdown
+    params:
+      output: "{{markdown_output}}"
+outputs:
+  evidence:
+    - "{{output}}"
+    - "{{markdown_output}}"

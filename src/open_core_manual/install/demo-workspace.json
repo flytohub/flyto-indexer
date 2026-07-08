@@ -1,0 +1,147 @@
+{
+  "schema": "flyto.demo-workspace.v1",
+  "name": "Flyto2 Warroom CE Demo",
+  "description": "BYO offensive validation demo workspace that turns existing tool findings into verified attack paths, pentest evidence, red-team scenarios, and remediation records.",
+  "surfaces": [
+    {
+      "id": "byo",
+      "title": "BYO finding intake",
+      "ce_path": "Imported ASM, SAST, DAST, CSPM, SIEM, scanner, and threat-feed findings stay source-labeled with origin, scope, and freshness.",
+      "enterprise_path": "Managed connectors add scheduled refresh, commercial enrichment, provenance checks, and signed bridge results."
+    },
+    {
+      "id": "attack_path",
+      "title": "Attack path validation",
+      "ce_path": "Correlates imported findings, assets, code context, exposure, and evidence into attack hypotheses an operator can inspect.",
+      "enterprise_path": "Premium correlation adds managed enrichment, fleet-scale ranking, and customer-specific red-team scenario generation."
+    },
+    {
+      "id": "validation",
+      "title": "Safe offensive validation",
+      "ce_path": "Authorization gate, scope boundary, non-destructive checks, replay steps, screenshot, DOM snapshot, and network evidence.",
+      "enterprise_path": "Managed runner fleets, signed callbacks, approval workflows, and live cloud/container/runtime remediation with rollback evidence."
+    },
+    {
+      "id": "code",
+      "title": "Code security",
+      "ce_path": "SAST, SCA, secrets, IaC, reachability, code score, and deterministic remediation evidence.",
+      "enterprise_path": "AI proposals, approval bundles, promotion, rollback, and managed merge evidence."
+    },
+    {
+      "id": "container",
+      "title": "Container security",
+      "ce_path": "Image and Dockerfile posture are source-labeled as repo definition or local container evidence.",
+      "enterprise_path": "Live registry/workload remediation and managed connector execution."
+    },
+    {
+      "id": "cloud",
+      "title": "Cloud posture",
+      "ce_path": "Cloud connector contracts, posture views, IAM evidence, and local findings when configured.",
+      "enterprise_path": "Live cloud remediation, commercial enrichment, and signed managed actions."
+    },
+    {
+      "id": "external",
+      "title": "External attack surface",
+      "ce_path": "Footprint, asset map, ownership, posture, false-positive handling, and verification loop.",
+      "enterprise_path": "Commercial threat intelligence, continuous monitoring, and managed validation."
+    },
+    {
+      "id": "evidence",
+      "title": "Evidence graph",
+      "ce_path": "Timeline, evidence pack, replay result, audit trail, and signed artifact contract examples.",
+      "enterprise_path": "Legal hold, airgap evidence bundles, support attestations, and customer-specific retention."
+    },
+    {
+      "id": "autofix",
+      "title": "AutoFix loop",
+      "ce_path": "Deterministic fix rules, gated preview, operator acceptance, and verification evidence.",
+      "enterprise_path": "AI proposal gate, approval workflow, live cloud/container/runtime remediation, rollback evidence."
+    }
+  ],
+  "evidence_pack": [
+    {
+      "id": "ev-byo-001",
+      "surface": "byo",
+      "kind": "finding_import",
+      "claim": "Existing scanner and security-tool findings are inputs with source, scope, and freshness labels.",
+      "status": "source_labeled"
+    },
+    {
+      "id": "ev-path-001",
+      "surface": "attack_path",
+      "kind": "attack_hypothesis",
+      "claim": "Imported findings are correlated into a candidate path before any active validation is dispatched.",
+      "status": "operator_review"
+    },
+    {
+      "id": "ev-validation-001",
+      "surface": "validation",
+      "kind": "safe_verification",
+      "claim": "Pentest validation requires authorization, scope, and evidence before the workflow can claim success.",
+      "status": "authorization_required"
+    },
+    {
+      "id": "ev-code-001",
+      "surface": "code",
+      "kind": "scanner_result",
+      "claim": "Dependency finding is reachable through the demo API route.",
+      "status": "needs_verification"
+    },
+    {
+      "id": "ev-container-001",
+      "surface": "container",
+      "kind": "definition_scan",
+      "claim": "Container issue is tied to Dockerfile/package definition, not a live cluster.",
+      "status": "source_labeled"
+    },
+    {
+      "id": "ev-cloud-001",
+      "surface": "cloud",
+      "kind": "connector_contract",
+      "claim": "Cloud remediation is gated unless a connector, role, and entitlement are present.",
+      "status": "gated"
+    },
+    {
+      "id": "ev-external-001",
+      "surface": "external",
+      "kind": "verification_loop",
+      "claim": "External exposure can be marked verified fixed, reopened, or false positive with evidence.",
+      "status": "triage_ready"
+    },
+    {
+      "id": "ev-autofix-001",
+      "surface": "autofix",
+      "kind": "remediation_loop",
+      "claim": "AutoFix requires preview, gate decision, operator acceptance, and post-fix verification.",
+      "status": "approval_required"
+    }
+  ],
+  "expected_ce_views": [
+    "Dashboard / unified cockpit",
+    "BYO finding intake",
+    "Attack paths",
+    "Safe validation runner",
+    "Timeline / evidence graph",
+    "Code security",
+    "Container posture",
+    "Cloud posture",
+    "External attack surface",
+    "AutoFix / remediation center",
+    "Reports / compliance evidence"
+  ],
+  "claims": {
+    "not_claimed": [
+      "CE does not claim guaranteed coverage.",
+      "CE does not claim 100% AutoFix success.",
+      "CE does not claim full replacement of Aikido or any scanner.",
+      "CE does not claim to replace the customer's existing security stack."
+    ],
+    "claimed": [
+      "Bring your own tools. Flyto2 turns their findings into verified attack paths, pentest evidence, and red-team scenarios.",
+      "The public loop is Findings -> Attack Paths -> Offensive Validation -> Evidence -> Remediation.",
+      "CE shows the open-core evidence loop locally.",
+      "Premium actions attach through capability, entitlement, connector, and signed evidence contracts.",
+      "False positives and verification results are part of the workflow, not hidden from the user."
+    ]
+  }
+}

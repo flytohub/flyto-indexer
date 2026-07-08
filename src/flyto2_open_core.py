@@ -3086,6 +3086,10 @@ GENERATED_REVIEW_PREFIXES = (
     "install/",
     "docs/",
     ".github/",
+    # generated CE tooling (audit-ce-boundary.py, audit-positioning.py, READMEs,
+    # export-upstream-patches.py itself) — all emitted by the generator, so a
+    # warroom-side change routes back to the generator, not a source patch.
+    "scripts/",
 )
 
 GENERATED_REVIEW_FILES = {
@@ -3098,6 +3102,11 @@ GENERATED_REVIEW_FILES = {
     "OPEN_CORE_MANIFEST.json",
     "SECURITY.md",
     "TRADEMARK.md",
+    # hand-authored CE-only root/packages files (rest of the open_core_manual
+    # bucket is covered by the docs/ install/ scripts/ prefixes above).
+    ".env.example",
+    "CHANGELOG.md",
+    "packages/README.md",
 }
 
 
@@ -3537,7 +3546,39 @@ jobs:
         run: python install/scripts/verify-docker-images.py
 """,
     )
+
+    # Hand-authored CE-only ("generated-only") files that have no source-repo
+    # home: CE distribution docs, install tooling, cloud-bundle fixtures, and
+    # positioning material. Per docs/upstream-feedback-loop.md step 4 these are
+    # the "generated-only" bucket — kept verbatim under the packaged
+    # open_core_manual/ resource dir and byte-copied here so a clean regen
+    # reproduces them exactly instead of silently dropping them. (Previously
+    # these lived only in the published repo, so any regen deleted them.)
+    manual_root = Path(__file__).resolve().parent / "open_core_manual"
+    if manual_root.is_dir():
+        for src_path in sorted(manual_root.rglob("*")):
+            if not src_path.is_file():
+                continue
+            rel = src_path.relative_to(manual_root).as_posix()
+            dst = target / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(src_path.read_bytes())  # byte-exact; preserves LF
+            written.append(rel)
+
     return written
+
+
+def _manual_ce_relpaths() -> list[str]:
+    """Relative paths of the bundled hand-authored CE-only files (source of
+    truth for the generated-only bucket copied by _write_warroom_release)."""
+    manual_root = Path(__file__).resolve().parent / "open_core_manual"
+    if not manual_root.is_dir():
+        return []
+    return sorted(
+        p.relative_to(manual_root).as_posix()
+        for p in manual_root.rglob("*")
+        if p.is_file()
+    )
 
 
 def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
@@ -3589,6 +3630,17 @@ def _audit_generated_release(root: Path, manifest: dict[str, Any]) -> dict[str, 
             "code": "release_required_file_missing",
             "message": "Generated Warroom release is missing required files.",
             "paths": missing,
+        })
+
+    # Every hand-authored CE-only file must land in the tree. This is what
+    # prevents the "silent drop on regen" that stranded these files in the
+    # published repo before they were bundled under open_core_manual/.
+    manual_missing = [rel for rel in _manual_ce_relpaths() if not (root / rel).exists()]
+    if manual_missing:
+        blockers.append({
+            "code": "manual_ce_file_missing",
+            "message": "Generated release is missing hand-authored CE-only (open_core_manual) files.",
+            "paths": manual_missing,
         })
 
     private_paths: list[str] = []

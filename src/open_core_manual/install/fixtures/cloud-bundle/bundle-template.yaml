@@ -1,0 +1,151 @@
+schema_version: 1
+kind: flyto.warroom.bundle.v1
+bundle_id: flyto2-warroom-smoke
+display_name: Flyto2 Warroom Smoke Recipes
+description: Reusable Flyto2 Warroom UI smoke recipes for project-scoped regression checks.
+cloud_target:
+  root_folder: Warroom
+  project_folder_arg: project_slug
+  default_folder_path:
+    - Warroom
+    - "{{project_slug}}"
+security:
+  secrets_policy: runtime_args_only
+  forbidden_stored_fields:
+    - password
+    - token
+    - pat
+    - authorization
+    - cookie
+    - firebase_session
+  network_redaction:
+    include_headers: false
+    include_bodies: false
+    strip_query: true
+  notes:
+    - Credentials must be supplied by the caller at execution time.
+    - Recipe artifacts may include screenshots and redacted JSON reports only.
+required_args:
+  - project_slug
+  - base_url
+required_runtime_args:
+  - username
+  - password
+secrets_policy: runtime_args_only
+recipes:
+  - recipe_id: flyto2-ui-smoke
+    source: recipes/flyto2-ui-smoke.yaml
+    folder_path:
+      - Warroom
+      - "{{project_slug}}"
+      - UI Smoke
+    scenarios:
+      - scenario_id: footprint
+        display_name: Flyto2 Footprint Smoke
+        base_url: "{{base_url}}"
+        path: /footprint
+        required_text:
+          - Footprint
+        output_prefix: "{{project_slug}}-footprint"
+      - scenario_id: projects
+        display_name: Flyto2 Projects Smoke
+        base_url: "{{base_url}}"
+        path: /projects
+        required_text:
+          - Projects
+        output_prefix: "{{project_slug}}-projects"
+  - recipe_id: flyto2-ui-smoke
+    source: recipes/flyto2-ui-smoke.yaml
+    folder_path:
+      - Warroom
+      - "{{project_slug}}"
+      - Research Footprint
+    scenarios:
+      - scenario_id: research-footprint
+        display_name: Flyto2 Research Footprint Smoke
+        base_url: "{{base_url}}"
+        path: /footprint
+        required_text:
+          - Footprint
+        output_prefix: "{{project_slug}}-research-footprint"
+  - recipe_id: flyto2-ui-smoke
+    source: recipes/flyto2-ui-smoke.yaml
+    folder_path:
+      - Warroom
+      - "{{project_slug}}"
+      - Pentest
+    scenarios:
+      - scenario_id: pentest
+        display_name: Flyto2 Pentest Smoke
+        base_url: "{{base_url}}"
+        path: /pentest
+        required_text:
+          - Pentest
+        output_prefix: "{{project_slug}}-pentest"
+  - recipe_id: flyto2-ui-smoke
+    source: recipes/flyto2-ui-smoke.yaml
+    folder_path:
+      - Warroom
+      - "{{project_slug}}"
+      - Red Team
+    scenarios:
+      - scenario_id: redteam
+        display_name: Flyto2 Red Team Smoke
+        base_url: "{{base_url}}"
+        path: /projects
+        required_text:
+          - Projects
+        output_prefix: "{{project_slug}}-redteam"
+  - recipe_id: warroom-deterministic-audit
+    source: recipes/warroom-deterministic-audit.yaml
+    folder_path:
+      - Warroom
+      - "{{project_slug}}"
+      - Product Verification
+    scenarios:
+      - scenario_id: product-verification
+        display_name: Flyto2 Product Verification
+        target: "{{base_url}}/product-verification"
+        output: "{{project_slug}}-product-verification.json"
+        markdown_output: "{{project_slug}}-product-verification.md"
+  - recipe_id: flyto2-ui-login-smoke
+    source: recipes/flyto2-ui-login-smoke.yaml
+    runtime_required_args:
+      - username
+      - password
+    folder_path:
+      - Warroom
+      - "{{project_slug}}"
+      - Authenticated UI Smoke
+    scenarios:
+      - scenario_id: authenticated-pentest
+        display_name: Flyto2 Authenticated Pentest Smoke
+        base_url: "{{base_url}}"
+        login_url: "{{base_url}}/login"
+        page_url: "{{base_url}}/pentest"
+        required_text:
+          - Pentest
+        output_prefix: "{{project_slug}}-authenticated-pentest"
+      - scenario_id: authenticated-redteam
+        display_name: Flyto2 Authenticated Red Team Smoke
+        base_url: "{{base_url}}"
+        login_url: "{{base_url}}/login"
+        page_url: "{{base_url}}/projects"
+        required_text:
+          - Projects
+        output_prefix: "{{project_slug}}-authenticated-redteam"
+export_contract:
+  report_format: json
+  durable_fields:
+    - desktop.pass_dom_integrity
+    - mobile.pass_dom_integrity
+    - console_errors
+    - network_sample.requests
+    - site_graph.intents
+    - site_graph.state_graph
+    - scores.observed_coverage
+    - scores.reachable_coverage
+    - scores.api_ui_consistency
+    - scores.business_logic_confidence
+    - artifacts.desktop_screenshot
+    - artifacts.mobile_screenshot

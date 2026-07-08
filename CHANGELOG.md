@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## [2.12.1] - 2026-07-08
+
+### Fixed
+- `flyto2-open-core-export` was silently DROPPING 29 hand-authored CE-only files
+  that existed only in the published warroom repo (CE distribution docs, install
+  tooling, cloud-bundle fixtures, positioning material, `.env.example`,
+  `CHANGELOG.md`, generated READMEs). They had no source-repo home, so every
+  clean regen deleted them. They are now bundled verbatim under
+  `open_core_manual/` (shipped in the wheel) and byte-copied into the generated
+  tree, so regeneration reproduces them exactly. `_audit_generated_release` now
+  hard-fails if any of them are missing (`manual_ce_file_missing`).
+
+### Changed
+- `export-upstream-patches.py` flow-back now classifies the full CE-only surface
+  as generated-only: added `scripts/` to `GENERATED_REVIEW_PREFIXES` (was an
+  existing gap — the generated `scripts/audit-*.py` weren't covered) and added
+  `.env.example`, `CHANGELOG.md`, `packages/README.md` to `GENERATED_REVIEW_FILES`,
+  so a warroom-side edit to any of them routes back to the generator instead of a
+  misdirected source patch.
+
 ## [2.12.0] - 2026-07-08
 
 ### Added
