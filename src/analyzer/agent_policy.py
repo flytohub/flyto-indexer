@@ -73,6 +73,21 @@ CWE = {
 MCP_ENTRY_DECORATORS = ("register_module", "register", "tool", "mcp_tool", "app_route")
 MCP_ENTRY_METHODS = ("execute", "run", "handle", "__call__")
 
+# ── Deterministic exploitability score (0..100, explainable — no LLM) ────────
+# Philosophy: decide with dimension scores; only the ambiguous middle band is
+# escalated (to dynamic verify / LLM) downstream. Mirrors the engine's
+# BlastRadius contract (deterministic, explainable weights).
+CATEGORY_BASE = {
+    "code-injection": 40, "unauth-route": 35, "key-to-endpoint": 35,
+    "command-injection": 35, "unsafe-deserialization": 35, "ssti": 30,
+    "ssrf-no-guard": 25, "redirect-follow": 25, "file-write-no-guard": 25,
+    "dynamic-env-read": 20, "path-traversal-read": 12,
+}
+CONF_POINTS = {"high": 35, "medium": 18, "low": 5}
+REACHABLE_POINTS = 25
+BAND_CONFIRM = 70   # >= : deterministic confirm (no LLM)
+BAND_DROP = 35      # <  : deterministic drop/low (no LLM); between => review (LLM)
+
 
 @dataclass
 class AgentFinding:
@@ -87,6 +102,9 @@ class AgentFinding:
     rule_id: str = ""           # stable rule identifier, e.g. "agent/ssrf-no-guard"
     cwe: str = ""               # CWE id, e.g. "CWE-918"
     mcp_reachable: bool = False # sink reachable from an MCP/module entrypoint (params attacker-influenced)
+    exploitability: int = 0     # deterministic 0..100 score
+    band: str = "review"        # confirm (auto) | review (→ verify/LLM) | drop
+    score_factors: str = ""     # explainable breakdown of the score
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -291,9 +309,17 @@ class AgentPolicyAnalyzer:
 
     def _add(self, rel, line, cat, sev, fn, msg, rec="", conf="medium"):
         mcp = self._file_has_entries if fn is None else (getattr(fn, "name", None) in self._reachable)
+        base = CATEGORY_BASE.get(cat, 20)
+        cpts = CONF_POINTS.get(conf, 18)
+        mpts = REACHABLE_POINTS if mcp else 0
+        score = min(100, base + cpts + mpts)
+        band = "confirm" if score >= BAND_CONFIRM else ("drop" if score < BAND_DROP else "review")
+        factors = (f"category:{cat} +{base}; confidence:{conf} +{cpts}; "
+                   f"reachable:{bool(mcp)} +{mpts}")
         self.findings.append(AgentFinding(
             rel, line, cat, sev, getattr(fn, "name", "<file>"), msg, rec, conf,
-            rule_id="agent/" + cat, cwe=CWE.get(cat, ""), mcp_reachable=bool(mcp)))
+            rule_id="agent/" + cat, cwe=CWE.get(cat, ""), mcp_reachable=bool(mcp),
+            exploitability=score, band=band, score_factors=factors))
 
     def analyze(self) -> list[AgentFinding]:
         for fp in self.root.rglob("*.py"):

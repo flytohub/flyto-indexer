@@ -2333,23 +2333,31 @@ def cmd_agent_audit(args):
 
     if getattr(args, "as_json", False):
         by_cat: dict = {}
+        by_band: dict = {}
         for f in findings:
             by_cat[f.category] = by_cat.get(f.category, 0) + 1
+            by_band[f.band] = by_band.get(f.band, 0) + 1
         return {
             "total": len(findings),
             "by_category": by_cat,
+            "by_band": by_band,  # confirm (auto) | review (→verify/LLM) | drop
             "findings": [f.to_dict() for f in findings],
         }
 
     print(f"AI-Agent Policy Audit: {project_path.name}")
     print(f"  Findings: {len(findings)}")
+    by_band: dict = {}
+    for f in findings:
+        by_band[f.band] = by_band.get(f.band, 0) + 1
+    print(f"  Bands: confirm={by_band.get('confirm', 0)} "
+          f"review={by_band.get('review', 0)} drop={by_band.get('drop', 0)}")
     by_cat: dict = {}
     for f in findings:
         by_cat.setdefault(f.category, []).append(f)
     for cat in sorted(by_cat):
         print(f"\n[{cat}] ({len(by_cat[cat])})")
-        for f in by_cat[cat]:
-            print(f"  {f.severity:8} {f.file_path}:{f.line}  ({f.function})")
+        for f in sorted(by_cat[cat], key=lambda x: -x.exploitability):
+            print(f"  [{f.exploitability:3d} {f.band:7}] {f.severity:8} {f.file_path}:{f.line}  ({f.function})")
             print(f"           {f.message}")
     return None
 

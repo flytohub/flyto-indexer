@@ -177,6 +177,36 @@ def test_mcp_reachable_set_on_registered_handler(tmp_path):
     assert ssrf and ssrf[0].mcp_reachable is True
 
 
+def test_exploitability_score_and_band(tmp_path):
+    # reachable + high-signal class => high score => confirm band, no LLM needed
+    _, findings = _cats(tmp_path, "mod.py", (
+        "import aiohttp\n"
+        "@register_module(module_id='core.api.http_get')\n"
+        "async def http_get(context):\n"
+        "    url = context['params'].get('url')\n"
+        "    async with aiohttp.ClientSession() as session:\n"
+        "        await session.get(url)\n"
+    ))
+    ssrf = [f for f in findings if f.category == "ssrf-no-guard"][0]
+    assert 0 <= ssrf.exploitability <= 100
+    assert ssrf.band == "confirm"          # reachable + high confidence
+    assert "category:" in ssrf.score_factors and "reachable:True" in ssrf.score_factors
+
+
+def test_low_signal_lands_in_review_or_drop(tmp_path):
+    # non-reachable read from a caller path: low base + no reachability =>
+    # NOT auto-confirm (goes to review/drop, i.e. escalated or dropped, not auto)
+    _, findings = _cats(tmp_path, "helper.py", (
+        "def _orphan(context):\n"
+        "    p = context['params'].get('path')\n"
+        "    with open(p, 'r') as f:\n"
+        "        return f.read()\n"
+    ))
+    reads = [f for f in findings if f.category == "path-traversal-read"]
+    assert reads and reads[0].band in ("review", "drop")
+    assert reads[0].band != "confirm"
+
+
 def test_not_mcp_reachable_for_unreferenced_helper(tmp_path):
     _, findings = _cats(tmp_path, "mod.py", (
         "import aiohttp\n"
