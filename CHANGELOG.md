@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## [2.12.0] - 2026-07-08
+
+### Added
+- `agent-audit` findings now carry a **deterministic exploitability score**
+  (0–100) built from category base + confirmation signals + MCP-reachability,
+  binned into **confirm / review / drop** bands (`BAND_CONFIRM=70`,
+  `BAND_DROP=35`). This is the "minimize-LLM" gate: high-confidence findings
+  confirm and low-confidence findings drop without any model call; only the
+  ambiguous review band is a candidate for optional downstream LLM triage.
+  `score_factors` exposes the per-signal breakdown.
+
+### Changed
+- `flyto2-open-core-export` now emits a top-level **`LICENSE`** (full Apache-2.0,
+  so GitHub detects the license on the generated flyto-warroom CE repo), a
+  **`CLA.md`** (Apache-style inbound grant + dual-edition relicense right), and
+  a **`.github/workflows/cla.yml`** (cla-assistant PR gate). `CONTRIBUTING.md`
+  gains a CLA section. All three are registered in both the export-time release
+  audit and the embedded downstream `audit-release-tree.py` required lists, so
+  regeneration no longer drops them.
+
 ## [2.11.1] - 2026-07-08
 
 ### Added
