@@ -1,0 +1,136 @@
+"""Regression pin for the AI-agent security policy analyzer.
+
+Each class has a positive fixture (must flag) and, where the guard idiom
+applies, a negative fixture (guarded code must NOT flag). Keeps the rules from
+silently breaking.
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+from analyzer.agent_policy import AgentPolicyAnalyzer  # noqa: E402
+
+
+def _cats(tmp_path, name, code):
+    (tmp_path / name).write_text(code, encoding="utf-8")
+    findings = AgentPolicyAnalyzer(str(tmp_path)).analyze()
+    return {f.category for f in findings}, findings
+
+
+def test_ssrf_no_guard_flagged(tmp_path):
+    cats, _ = _cats(tmp_path, "m.py", (
+        "import aiohttp\n"
+        "async def mod(context):\n"
+        "    params = context['params']\n"
+        "    url = params.get('url')\n"
+        "    async with aiohttp.ClientSession() as session:\n"
+        "        await session.get(url)\n"
+    ))
+    assert "ssrf-no-guard" in cats
+
+
+def test_ssrf_guarded_not_flagged(tmp_path):
+    cats, _ = _cats(tmp_path, "m.py", (
+        "import aiohttp\n"
+        "async def mod(context):\n"
+        "    params = context['params']\n"
+        "    url = params.get('url')\n"
+        "    validate_url_with_env_config(url)\n"
+        "    async with aiohttp.ClientSession() as session:\n"
+        "        await session.get(url)\n"
+    ))
+    assert "ssrf-no-guard" not in cats
+
+
+def test_unauth_route_flagged(tmp_path):
+    cats, _ = _cats(tmp_path, "r.py", (
+        "async def run(body):\n"
+        "    return {'ok': True}\n"
+    ).replace("async def run", "@app.post('/run')\nasync def run"))
+    assert "unauth-route" in cats
+
+
+def test_auth_route_not_flagged(tmp_path):
+    cats, _ = _cats(tmp_path, "r.py", (
+        "@app.post('/run')\n"
+        "async def run(body, _=Depends(require_auth)):\n"
+        "    return {'ok': True}\n"
+    ))
+    assert "unauth-route" not in cats
+
+
+def test_dynamic_env_read_flagged_high(tmp_path):
+    cats, findings = _cats(tmp_path, "e.py", (
+        "import os\n"
+        "def resolve(ref):\n"
+        "    parts = ref.split('.')\n"
+        "    return os.getenv(parts[1])\n"
+    ))
+    assert "dynamic-env-read" in cats
+    assert any(f.category == "dynamic-env-read" and f.confidence == "high" for f in findings)
+
+
+def test_bounded_env_selector_not_flagged(tmp_path):
+    cats, _ = _cats(tmp_path, "e.py", (
+        "import os\n"
+        "def key(provider):\n"
+        "    env_vars = {'openai': 'OPENAI_API_KEY'}\n"
+        "    return os.getenv(env_vars.get(provider))\n"
+    ))
+    assert "dynamic-env-read" not in cats
+
+
+def test_file_write_no_guard_flagged(tmp_path):
+    cats, _ = _cats(tmp_path, "w.py", (
+        "def write(context):\n"
+        "    params = context['params']\n"
+        "    p = params.get('output_path')\n"
+        "    with open(p, 'wb') as f:\n"
+        "        f.write(b'x')\n"
+    ))
+    assert "file-write-no-guard" in cats
+
+
+def test_command_injection_flagged(tmp_path):
+    cats, _ = _cats(tmp_path, "c.py", (
+        "import os\n"
+        "def run(context):\n"
+        "    cmd = context['params'].get('cmd')\n"
+        "    os.system(cmd)\n"
+    ))
+    assert "command-injection" in cats
+
+
+def test_unsafe_deserialization_flagged(tmp_path):
+    cats, _ = _cats(tmp_path, "d.py", (
+        "import pickle\n"
+        "def load(context):\n"
+        "    blob = context['params'].get('blob')\n"
+        "    return pickle.loads(blob)\n"
+    ))
+    assert "unsafe-deserialization" in cats
+
+
+def test_key_to_endpoint_flagged(tmp_path):
+    cats, findings = _cats(tmp_path, "llm.py", (
+        "import os\n"
+        "def chat(context):\n"
+        "    base_url = context['params'].get('base_url')\n"
+        "    api_key = os.getenv('OPENAI_API_KEY')\n"
+        "    headers = {'Authorization': 'Bearer ' + api_key}\n"
+        "    return base_url, headers\n"
+    ))
+    assert "key-to-endpoint" in cats
+
+
+def test_findings_carry_cwe_and_rule_id(tmp_path):
+    _, findings = _cats(tmp_path, "m.py", (
+        "import aiohttp\n"
+        "async def mod(context):\n"
+        "    url = context['params'].get('url')\n"
+        "    async with aiohttp.ClientSession() as session:\n"
+        "        await session.get(url)\n"
+    ))
+    ssrf = [f for f in findings if f.category == "ssrf-no-guard"]
+    assert ssrf and ssrf[0].cwe == "CWE-918"
+    assert ssrf[0].rule_id == "agent/ssrf-no-guard"

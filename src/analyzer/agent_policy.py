@@ -51,6 +51,18 @@ SOURCE_PATTERNS = ("params.get(", "params[", ".params.get(", ".params[",
 
 IGNORE_DIRS = {"tests", "test", "__pycache__", ".git", ".flyto-index"}
 
+# CWE mapping per category — makes findings advisory/GHSA-shaped (細膩).
+CWE = {
+    "ssrf-no-guard": "CWE-918",
+    "redirect-follow": "CWE-918",
+    "unauth-route": "CWE-306",
+    "dynamic-env-read": "CWE-522",
+    "key-to-endpoint": "CWE-522",
+    "file-write-no-guard": "CWE-22",
+    "command-injection": "CWE-78",
+    "unsafe-deserialization": "CWE-502",
+}
+
 
 @dataclass
 class AgentFinding:
@@ -62,6 +74,8 @@ class AgentFinding:
     message: str
     recommendation: str = ""
     confidence: str = "medium"  # high | medium | low — triage tier / AI-triage gate
+    rule_id: str = ""           # stable rule identifier, e.g. "agent/ssrf-no-guard"
+    cwe: str = ""               # CWE id, e.g. "CWE-918"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -188,6 +202,25 @@ class AgentPolicyAnalyzer:
                           conf)
                 break
 
+        # command-injection. External input into a shell/command sink.
+        for lineno, arg, shelly in _cmd_sinks(fn):
+            if self._is_external(arg, ext):
+                conf = "high" if shelly else "medium"
+                self._add(rel, lineno, "command-injection", "critical", fn,
+                          "caller-controlled input reaches a shell/command execution sink",
+                          "Avoid shell=True; pass an argument list and validate/allowlist inputs.",
+                          conf)
+                break
+
+        # unsafe-deserialization. External input into an unsafe loader.
+        for lineno, arg in _deser_sinks(fn):
+            if self._is_external(arg, ext):
+                self._add(rel, lineno, "unsafe-deserialization", "high", fn,
+                          "caller-controlled input is deserialized with an unsafe loader",
+                          "Use safe loaders (yaml.safe_load, json); never unpickle/marshal untrusted data.",
+                          "high")
+                break
+
         # file-write-no-guard. HIGH for arbitrary bytes (open+fetched content),
         # MEDIUM for format-constrained library writers (img.save/wb.save).
         writes_fetched = bool(sinks) or ".read()" in fn_src or "content" in fn_src
@@ -217,7 +250,8 @@ class AgentPolicyAnalyzer:
 
     def _add(self, rel, line, cat, sev, fn, msg, rec="", conf="medium"):
         self.findings.append(AgentFinding(
-            rel, line, cat, sev, getattr(fn, "name", "<file>"), msg, rec, conf))
+            rel, line, cat, sev, getattr(fn, "name", "<file>"), msg, rec, conf,
+            rule_id="agent/" + cat, cwe=CWE.get(cat, "")))
 
     def analyze(self) -> list[AgentFinding]:
         for fp in self.root.rglob("*.py"):
@@ -330,6 +364,41 @@ def _is_bounded_selector(node) -> bool:
        and node.func.attr == "get":
         return isinstance(node.func.value, (ast.Dict, ast.Name))
     return False
+
+
+def _cmd_sinks(fn):
+    """Shell/command-execution sinks: (lineno, arg_node, shell_true)."""
+    out = []
+    for c in [n for n in ast.walk(fn) if isinstance(n, ast.Call)]:
+        d = _dotted(c.func)
+        name = d.split(".")[-1]
+        if d.endswith("os.system") or d.endswith("os.popen"):
+            if c.args:
+                out.append((c.lineno, c.args[0], True))
+        elif "subprocess" in d and name in {"run", "call", "Popen", "check_output", "check_call"}:
+            shelly = any(
+                kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True
+                for kw in c.keywords
+            )
+            if c.args:
+                out.append((c.lineno, c.args[0], shelly))
+    return out
+
+
+def _deser_sinks(fn):
+    """Unsafe deserialization sinks: (lineno, arg_node)."""
+    out = []
+    for c in [n for n in ast.walk(fn) if isinstance(n, ast.Call)]:
+        d = _dotted(c.func)
+        name = d.split(".")[-1]
+        if d.endswith("pickle.loads") or d.endswith("pickle.load") or d.endswith("marshal.loads"):
+            if c.args:
+                out.append((c.lineno, c.args[0]))
+        elif name == "load" and "yaml" in d:
+            has_safe = any("Safe" in _unparse(kw.value) for kw in c.keywords)
+            if not has_safe and c.args:
+                out.append((c.lineno, c.args[0]))
+    return out
 
 
 def _file_writes(fn):
