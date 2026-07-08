@@ -134,3 +134,55 @@ def test_findings_carry_cwe_and_rule_id(tmp_path):
     ssrf = [f for f in findings if f.category == "ssrf-no-guard"]
     assert ssrf and ssrf[0].cwe == "CWE-918"
     assert ssrf[0].rule_id == "agent/ssrf-no-guard"
+
+
+def test_code_injection_flagged(tmp_path):
+    cats, _ = _cats(tmp_path, "x.py", (
+        "def run(context):\n"
+        "    expr = context['params'].get('expr')\n"
+        "    return eval(expr)\n"
+    ))
+    assert "code-injection" in cats
+
+
+def test_path_traversal_read_flagged(tmp_path):
+    cats, _ = _cats(tmp_path, "x.py", (
+        "def read(context):\n"
+        "    p = context['params'].get('path')\n"
+        "    with open(p, 'r') as f:\n"
+        "        return f.read()\n"
+    ))
+    assert "path-traversal-read" in cats
+
+
+def test_ssti_flagged(tmp_path):
+    cats, _ = _cats(tmp_path, "x.py", (
+        "def render(context):\n"
+        "    tpl = context['params'].get('tpl')\n"
+        "    return render_template_string(tpl)\n"
+    ))
+    assert "ssti" in cats
+
+
+def test_mcp_reachable_set_on_registered_handler(tmp_path):
+    _, findings = _cats(tmp_path, "mod.py", (
+        "import aiohttp\n"
+        "@register_module(module_id='core.api.http_get')\n"
+        "async def http_get(context):\n"
+        "    url = context['params'].get('url')\n"
+        "    async with aiohttp.ClientSession() as session:\n"
+        "        await session.get(url)\n"
+    ))
+    ssrf = [f for f in findings if f.category == "ssrf-no-guard"]
+    assert ssrf and ssrf[0].mcp_reachable is True
+
+
+def test_not_mcp_reachable_for_unreferenced_helper(tmp_path):
+    _, findings = _cats(tmp_path, "mod.py", (
+        "import aiohttp\n"
+        "async def _orphan(url):\n"
+        "    async with aiohttp.ClientSession() as session:\n"
+        "        await session.get(url)\n"
+    ))
+    ssrf = [f for f in findings if f.category == "ssrf-no-guard"]
+    assert ssrf and ssrf[0].mcp_reachable is False

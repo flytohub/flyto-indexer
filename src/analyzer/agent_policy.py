@@ -61,7 +61,17 @@ CWE = {
     "file-write-no-guard": "CWE-22",
     "command-injection": "CWE-78",
     "unsafe-deserialization": "CWE-502",
+    "code-injection": "CWE-95",
+    "path-traversal-read": "CWE-22",
+    "ssti": "CWE-1336",
 }
+
+# Decorator / method names that mark a function as reachable from the MCP
+# execute_module surface or the hosted API (i.e. its params are attacker-
+# influenced). Used to compute per-file reachability (the "is this actually
+# reachable?" signal that plain static rules lack).
+MCP_ENTRY_DECORATORS = ("register_module", "register", "tool", "mcp_tool", "app_route")
+MCP_ENTRY_METHODS = ("execute", "run", "handle", "__call__")
 
 
 @dataclass
@@ -76,6 +86,7 @@ class AgentFinding:
     confidence: str = "medium"  # high | medium | low — triage tier / AI-triage gate
     rule_id: str = ""           # stable rule identifier, e.g. "agent/ssrf-no-guard"
     cwe: str = ""               # CWE id, e.g. "CWE-918"
+    mcp_reachable: bool = False # sink reachable from an MCP/module entrypoint (params attacker-influenced)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -102,6 +113,9 @@ class AgentPolicyAnalyzer:
     def __init__(self, project_root: Path):
         self.root = Path(project_root)
         self.findings: list[AgentFinding] = []
+        self._reachable: set[str] = set()   # per-file MCP-reachable function names
+        self._file_has_entries = False       # per-file: exposes any MCP/route entry
+        self.parse_failures = 0              # 穩定: no silent coverage gaps
 
     # ── caller-controlled (external) dataflow, intra-function ──────────────
     def _external_names(self, fn: ast.AST) -> set[str]:
@@ -221,6 +235,33 @@ class AgentPolicyAnalyzer:
                           "high")
                 break
 
+        # code-injection. eval/exec on caller input.
+        for lineno, arg in _eval_sinks(fn):
+            if self._is_external(arg, ext):
+                self._add(rel, lineno, "code-injection", "critical", fn,
+                          "caller-controlled input reaches eval/exec",
+                          "Never eval/exec caller input; use explicit dispatch or a safe parser.",
+                          "high")
+                break
+
+        # path-traversal-read. file read from a caller path, no sandbox guard.
+        for lineno, patharg in _file_reads(fn):
+            if not (called & PATH_GUARDS) and self._is_external(patharg, ext):
+                self._add(rel, lineno, "path-traversal-read", "high", fn,
+                          "file read from a caller-controlled path without the sandbox guard",
+                          "Confine reads to FLYTO_SANDBOX_DIR via validate_path_with_env_config.",
+                          "medium")
+                break
+
+        # ssti. template rendered from caller input.
+        for lineno, arg in _ssti_sinks(fn):
+            if self._is_external(arg, ext):
+                self._add(rel, lineno, "ssti", "high", fn,
+                          "caller-controlled input rendered as a server-side template",
+                          "Never build templates from caller input; pass data as sandboxed variables.",
+                          "high")
+                break
+
         # file-write-no-guard. HIGH for arbitrary bytes (open+fetched content),
         # MEDIUM for format-constrained library writers (img.save/wb.save).
         writes_fetched = bool(sinks) or ".read()" in fn_src or "content" in fn_src
@@ -249,20 +290,24 @@ class AgentPolicyAnalyzer:
                       "high")
 
     def _add(self, rel, line, cat, sev, fn, msg, rec="", conf="medium"):
+        mcp = self._file_has_entries if fn is None else (getattr(fn, "name", None) in self._reachable)
         self.findings.append(AgentFinding(
             rel, line, cat, sev, getattr(fn, "name", "<file>"), msg, rec, conf,
-            rule_id="agent/" + cat, cwe=CWE.get(cat, "")))
+            rule_id="agent/" + cat, cwe=CWE.get(cat, ""), mcp_reachable=bool(mcp)))
 
     def analyze(self) -> list[AgentFinding]:
         for fp in self.root.rglob("*.py"):
             if any(part in IGNORE_DIRS for part in fp.parts):
                 continue
             try:
-                text = fp.read_text(encoding="utf-8")
+                text = fp.read_text(encoding="utf-8", errors="replace")
                 tree = ast.parse(text)
             except Exception:
+                self.parse_failures += 1
                 continue
             rel = str(fp.relative_to(self.root)).replace("\\", "/")
+            self._reachable = _mcp_reachable_set(tree)
+            self._file_has_entries = bool(self._reachable)
             for fn in [n for n in ast.walk(tree)
                        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]:
                 called = _called(fn)
@@ -364,6 +409,76 @@ def _is_bounded_selector(node) -> bool:
        and node.func.attr == "get":
         return isinstance(node.func.value, (ast.Dict, ast.Name))
     return False
+
+
+def _mcp_reachable_set(tree) -> set:
+    """Function names reachable from an MCP/module/route entrypoint (params are
+    attacker-influenced). Entries = @register_module/tool decorators, FastAPI
+    route decorators, or BaseModule execute/run methods. BFS over intra-file
+    call edges from those entries."""
+    funcs = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    names = {f.name for f in funcs}
+    entries: set[str] = set()
+    callgraph: dict = {}
+    for f in funcs:
+        is_entry = f.name in MCP_ENTRY_METHODS
+        for d in f.decorator_list:
+            dd = _dotted(d.func) if isinstance(d, ast.Call) else _dotted(d)
+            if any(k in dd for k in MCP_ENTRY_DECORATORS):
+                is_entry = True
+            if isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) \
+               and d.func.attr in {"get", "post", "put", "delete", "patch"}:
+                is_entry = True  # HTTP route = externally reachable
+        if is_entry:
+            entries.add(f.name)
+        callees = set()
+        for c in [n for n in ast.walk(f) if isinstance(n, ast.Call)]:
+            nm = _dotted(c.func).split(".")[-1]
+            if nm in names:
+                callees.add(nm)
+        callgraph[f.name] = callees
+    reachable = set(entries)
+    frontier = list(entries)
+    while frontier:
+        n = frontier.pop()
+        for callee in callgraph.get(n, ()):
+            if callee not in reachable:
+                reachable.add(callee)
+                frontier.append(callee)
+    return reachable
+
+
+def _eval_sinks(fn):
+    out = []
+    for c in [n for n in ast.walk(fn) if isinstance(n, ast.Call)]:
+        if isinstance(c.func, ast.Name) and c.func.id in ("eval", "exec") and c.args:
+            out.append((c.lineno, c.args[0]))
+    return out
+
+
+def _file_reads(fn):
+    out = []
+    for c in [n for n in ast.walk(fn) if isinstance(n, ast.Call)]:
+        if isinstance(c.func, ast.Name) and c.func.id == "open" and c.args:
+            mode = c.args[1] if len(c.args) >= 2 else None
+            is_write = (isinstance(mode, ast.Constant) and isinstance(mode.value, str)
+                        and any(x in mode.value for x in ("w", "a", "x", "+")))
+            if not is_write:
+                out.append((c.lineno, c.args[0]))
+        elif isinstance(c.func, ast.Attribute) and c.func.attr in ("read_text", "read_bytes"):
+            recv = c.func.value
+            inner = recv.args[0] if isinstance(recv, ast.Call) and recv.args else recv
+            out.append((c.lineno, inner))
+    return out
+
+
+def _ssti_sinks(fn):
+    out = []
+    for c in [n for n in ast.walk(fn) if isinstance(n, ast.Call)]:
+        name = _dotted(c.func).split(".")[-1]
+        if name in ("render_template_string", "from_string", "Template") and c.args:
+            out.append((c.lineno, c.args[0]))
+    return out
 
 
 def _cmd_sinks(fn):
