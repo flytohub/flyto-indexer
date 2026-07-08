@@ -2,7 +2,18 @@
 
 ## Unreleased
 
+## [2.11.0] - 2026-07-08
+
 ### Added
+- Added `flyto-index agent-audit` — an AI-agent / MCP / sandbox security policy
+  analyzer that detects vulnerability classes generic SAST and the stock taint
+  engine miss (policy / absence / cross-function bugs): outbound HTTP on a
+  caller-controlled URL with no SSRF guard, guarded HTTP modules that follow
+  redirects unrevalidated, unauthenticated state-changing routes,
+  attacker-influenced `os.getenv`/`environ` reads, env credentials reachable at
+  a caller-controlled `base_url`, and file writes to caller-controlled paths
+  without the sandbox guard. Emits a high/medium/low confidence tier (the gate
+  for downstream AI triage). Pure stdlib; no external dependencies.
 - Added `flyto2-product-gate` to validate the Flyto2 workspace product-line
   registry, repo classification, project memory completeness, and health
   targets before release readiness review.
