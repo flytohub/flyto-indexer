@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "flyto-indexer"
-version = "2.13.0"
+version = "2.14.0"
 description = "Code intelligence MCP server for AI-assisted development — impact analysis, semantic search, and dependency graphs"
 readme = "README.md"
 license = "Apache-2.0"
@@ -66,10 +66,6 @@ packages = ["src"]
 # scanners silently report 0 findings on known-bad fixtures.
 [tool.hatch.build.targets.wheel.force-include]
 "config/rules" = "flyto_indexer/config/rules"
-"config/flyto2" = "flyto_indexer/config/flyto2"
-# NOTE: src/open_core_manual/ (hand-authored CE-only files byte-copied into the
-# generated warroom tree) ships automatically via packages=["src"] above — it
-# does NOT need a force-include entry (that would double-add and fail the build).
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

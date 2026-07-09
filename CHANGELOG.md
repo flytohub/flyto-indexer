@@ -2,7 +2,25 @@
 
 ## Unreleased
 
-## [2.13.0] - 2026-07-09
+## [2.14.0] - 2026-07-09
+
+### Removed
+- **Extracted all Flyto2 company-specific business tooling out of this public,
+  general-purpose code-intelligence package** — it never belonged here and it
+  leaked the commercial edition boundary / private-code structure to anyone who
+  `pip install`ed the tool. Removed the `flyto2-open-core-audit`,
+  `flyto2-open-core-export`, `flyto2-product-gate`, `flyto2-release-packet`, and
+  `flyto2-memory-bootstrap` CLI commands, their modules (`flyto2_open_core.py`,
+  `flyto2_release_packet.py`, `flyto2_product_gate.py`,
+  `flyto2_memory_bootstrap.py`), the `config/flyto2/` manifests (open-core
+  boundary, product lines, evidence gates, health baseline), and the
+  `open_core_manual/` bucket. This tooling now lives in the private flyto-engine
+  repo (`release/`). flyto-indexer is once again purely a code-intelligence tool
+  (index / search / impact / audit / verify / scan / deps / secrets / taint…).
+
+### Note
+- Prior releases (2.12.x, 2.13.0) shipped the open-core generator + manifest and
+  should be treated as leaking the edition boundary; consider yanking them.
 
 ### Changed
 - `flyto2-open-core-export` no longer VENDORS the already-open, separately

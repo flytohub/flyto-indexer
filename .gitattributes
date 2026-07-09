@@ -1,5 +1,0 @@
-# The open-core "manual" bucket is byte-copied verbatim into the generated
-# flyto-warroom tree by flyto2-open-core-export. Pin it to LF and never apply
-# CRLF conversion, so a regen on ANY platform (Windows dev, Mac, CI) reproduces
-# the published repo's line endings exactly instead of reintroducing CRLF churn.
-src/open_core_manual/** -text
