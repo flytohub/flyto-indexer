@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## [2.13.0] - 2026-07-09
+
+### Changed
+- `flyto2-open-core-export` no longer VENDORS the already-open, separately
+  published packages `flyto-core`, `flyto-indexer`, and `flyto-i18n` into the
+  generated warroom tree. Copying their source only duplicated thousands of
+  files and caused regeneration churn while not being used at runtime (the CE
+  `docker-compose` runs prebuilt images). They are now declared external
+  dependencies (new generated `DEPENDENCIES.md`) installed from their public
+  registries; each keeps its own repo as the single source of truth. Removed
+  them from the manifest `packages[]`, `PACKAGE_PATCHES`, `LICENSES.md`, the
+  flow-back path-ownership doc, and the embedded CI (which had lint/test steps
+  pointing at the now-absent `packages/flyto-indexer/`). The bundled CE product
+  content — `packages/flyto-code` (frontend) and `packages/flyto-contracts`
+  (engine API contracts) — is unchanged.
+
 ## [2.12.2] - 2026-07-09
 
 ### Fixed
