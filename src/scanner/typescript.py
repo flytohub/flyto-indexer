@@ -756,6 +756,13 @@ class TypeScriptScanner(BaseScanner):
     ]
 
     _TEMPLATE_VAR_RE = re.compile(r'\$\{[^}]*\}')
+    _MSW_IMPORT_RE = re.compile(
+        r'''import\s*\{[^}]*\b(?:http|rest)\b[^}]*\}\s*from\s*[`"']msw[`"']'''
+    )
+    _MSW_HANDLER_PREFIX_RE = re.compile(
+        r'''(?:^|[^\w$])(?:http|rest)\s*\.\s*(?:get|post|put|delete|patch|head|options|all)\s*\(\s*$''',
+        re.I,
+    )
 
     @staticmethod
     def _normalize_api_url(url: str) -> str:
@@ -771,6 +778,8 @@ class TypeScriptScanner(BaseScanner):
 
         for pattern in self._API_CALL_PATTERNS:
             for match in pattern.finditer(content):
+                if self._is_msw_handler_definition(content, match):
+                    continue
                 groups = match.groups()
                 if len(groups) == 1:
                     method = "GET"
@@ -782,6 +791,8 @@ class TypeScriptScanner(BaseScanner):
                 url = self._normalize_api_url(raw_url)
                 line = content[:match.start()].count('\n') + 1
 
+                if url.rstrip('/') == "/api":
+                    continue
                 if url in seen:
                     continue
                 seen.add(url)
@@ -794,6 +805,18 @@ class TypeScriptScanner(BaseScanner):
                 })
 
         return results
+
+    def _is_msw_handler_definition(self, content: str, match: re.Match) -> bool:
+        if not self._MSW_IMPORT_RE.search(content):
+            return False
+
+        snippet = match.group(0).lstrip()
+        if snippet.startswith(("http.", "rest.")):
+            return True
+
+        line_start = content.rfind('\n', 0, match.start()) + 1
+        prefix = content[line_start:match.start()]
+        return bool(self._MSW_HANDLER_PREFIX_RE.search(prefix))
 
     def _build_function_ranges(
         self, symbols: list, rel_path: str

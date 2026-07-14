@@ -894,6 +894,60 @@ def test_single_project_islands_matches_in_repo_api_calls():
     assert check["metrics"]["unmatched_api_calls"] == 0
 
 
+def test_single_project_islands_matches_openapi_contracts(tmp_path):
+    contract = tmp_path / "packages" / "flyto-contracts" / "openapi" / "flyto-engine.openapi.yaml"
+    contract.parent.mkdir(parents=True)
+    contract.write_text(
+        "openapi: 3.1.0\n"
+        "paths:\n"
+        "  /api/v1/system/events:\n"
+        "    get:\n"
+        "      responses: {}\n"
+        "  /api/v1/code/orgs/{org_id}/events:\n"
+        "    get:\n"
+        "      responses: {}\n",
+        encoding="utf-8",
+    )
+    source_sid = "demo:src/lib/engine/events.ts:file:events"
+    checks = _run_single_project_island_check(
+        {
+            source_sid: {
+                "path": "src/lib/engine/events.ts",
+                "type": "file",
+                "name": "events",
+            },
+        },
+        {
+            "system_events": {
+                "source": source_sid,
+                "target": "/api/v1/system/events",
+                "type": "api_calls",
+                "metadata": {"method": "GET", "url": "/api/v1/system/events"},
+            },
+            "org_events": {
+                "source": source_sid,
+                "target": "/api/v1/code/orgs/*/events",
+                "type": "api_calls",
+                "metadata": {"method": "GET", "url": "/api/v1/code/orgs/*/events"},
+            },
+        },
+        project_root=tmp_path,
+    )
+
+    check = checks["single_project_islands"]
+    assert check["status"] == "pass"
+    assert check["metrics"]["api_definitions"] == 2
+    assert check["metrics"]["api_calls"] == 2
+    assert check["metrics"]["unmatched_api_calls"] == 0
+
+
+def test_normalize_api_path_converges_trailing_wildcards():
+    assert (
+        _normalize_api_path("/api/v1/code/orgs/*/redteam/preflight*")
+        == "/api/v1/code/orgs/{param}/redteam/preflight{param}"
+    )
+
+
 def test_cmd_verify_workspace_json(tmp_path):
     project = tmp_path / "project"
     _write_project(project)

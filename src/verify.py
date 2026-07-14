@@ -503,6 +503,9 @@ def _check_single_project_islands(engine: IndexEngine, add_check) -> None:
             })
 
     api_defs, api_calls = _extract_single_project_api_contract(symbols, dependencies)
+    if isinstance(project_root, Path):
+        api_defs.extend(_extract_openapi_api_contracts(project_root))
+        api_defs = _dedupe_contract_items(api_defs)
     unmatched_api_calls = _match_single_project_api_calls(api_defs, api_calls)
     status = "pass"
     summary = "No high-confidence single-project islands found"
@@ -577,16 +580,125 @@ def _extract_single_project_api_contract(symbols: dict[str, Any], dependencies: 
         raw = str(metadata.get("url") or _dep_value(dep, "target_id", "target") or "")
         if not raw.startswith("/api/"):
             continue
+        normalized = _normalize_api_path(raw)
+        if normalized == "/api":
+            continue
         source = _dep_value(dep, "source_id", "source")
         api_calls.append({
             "method": str(metadata.get("method") or "").upper(),
             "path": _strip_url_to_api_path(raw),
             "raw": raw,
-            "normalized": _normalize_api_path(raw),
+            "normalized": normalized,
             "source": _symbol_id_path(source),
         })
 
     return _dedupe_contract_items(api_defs), _dedupe_contract_items(api_calls)
+
+
+_OPENAPI_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD", "TRACE"}
+_OPENAPI_SKIP_DIRS = {".git", ".flyto-index", "node_modules", "dist", "dist-next", "build", "coverage"}
+
+
+def _extract_openapi_api_contracts(root: Path) -> list[dict[str, Any]]:
+    api_defs: list[dict[str, Any]] = []
+    for path in _iter_openapi_contract_files(root):
+        if path.suffix.lower() == ".json":
+            api_defs.extend(_extract_openapi_json_api_contracts(path))
+        else:
+            api_defs.extend(_extract_openapi_yaml_api_contracts(path))
+    return _dedupe_contract_items(api_defs)
+
+
+def _iter_openapi_contract_files(root: Path) -> list[Path]:
+    files: list[Path] = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        rel_parts = set(path.relative_to(root).parts)
+        if rel_parts & _OPENAPI_SKIP_DIRS:
+            continue
+        suffix = path.suffix.lower()
+        if suffix not in {".yaml", ".yml", ".json"}:
+            continue
+        rel = str(path.relative_to(root)).replace("\\", "/").lower()
+        if "openapi" in rel:
+            files.append(path)
+    return files
+
+
+def _extract_openapi_json_api_contracts(path: Path) -> list[dict[str, Any]]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    paths = data.get("paths") if isinstance(data, dict) else None
+    if not isinstance(paths, dict):
+        return []
+
+    api_defs: list[dict[str, Any]] = []
+    for route_path, route in paths.items():
+        if not isinstance(route_path, str) or not route_path.startswith("/api/"):
+            continue
+        if not isinstance(route, dict):
+            continue
+        for method in route:
+            method_name = str(method).upper()
+            if method_name not in _OPENAPI_METHODS:
+                continue
+            api_defs.append(_openapi_contract_item(method_name, route_path, path))
+    return api_defs
+
+
+def _extract_openapi_yaml_api_contracts(path: Path) -> list[dict[str, Any]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+
+    api_defs: list[dict[str, Any]] = []
+    in_paths = False
+    paths_indent = 0
+    current_path = ""
+    current_path_indent = 0
+
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+
+        if not in_paths:
+            if stripped == "paths:":
+                in_paths = True
+                paths_indent = indent
+            continue
+        if indent <= paths_indent:
+            break
+
+        path_match = re.match(r'''^[`"']?(/[^`"']*?)[`"']?:\s*(?:#.*)?$''', stripped)
+        if path_match:
+            current_path = path_match.group(1)
+            current_path_indent = indent
+            continue
+        if not current_path or not current_path.startswith("/api/") or indent <= current_path_indent:
+            continue
+
+        method = stripped.split(":", 1)[0].upper()
+        if method in _OPENAPI_METHODS:
+            api_defs.append(_openapi_contract_item(method, current_path, path))
+
+    return api_defs
+
+
+def _openapi_contract_item(method: str, route_path: str, path: Path) -> dict[str, Any]:
+    return {
+        "method": method,
+        "path": route_path,
+        "raw": f"{method} {route_path}",
+        "normalized": _normalize_api_path(route_path),
+        "source": str(path),
+        "symbol": f"openapi:{path}:{method} {route_path}",
+    }
 
 
 def _match_single_project_api_calls(api_defs: list[dict[str, Any]], api_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1732,6 +1844,7 @@ def _normalize_api_path(raw: str) -> str:
     path = re.sub(r"\[[^]/]+\]", "{param}", path)
     path = re.sub(r":[A-Za-z_][A-Za-z0-9_]*", "{param}", path)
     path = re.sub(r"(?<=/)\*(?=/|$)", "{param}", path)
+    path = re.sub(r"(?<=[^/])\*(?=/|$)", "{param}", path)
     path = re.sub(r"/+", "/", path).rstrip("/")
     return path or "/"
 
