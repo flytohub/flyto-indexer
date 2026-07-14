@@ -60,4 +60,4 @@ See `src/scanner/python.py` for a reference implementation.
 
 ## Questions?
 
-Open an issue on GitHub or email dev@flyto2.net.
+Open an issue on GitHub or email dev@flyto2.com.

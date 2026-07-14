@@ -22,4 +22,4 @@ If you fork Flyto2 Indexer, please rename your fork to avoid confusion. You may 
 
 ## Questions
 
-If you're unsure whether your use of the Flyto2 name is acceptable, please contact dev@flyto2.net.
+If you're unsure whether your use of the Flyto2 name is acceptable, please contact dev@flyto2.com.

@@ -11,7 +11,7 @@ license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.11"
 authors = [
-    { name = "Flyto2 Team", email = "dev@flyto2.net" }
+    { name = "Flyto2 Team", email = "dev@flyto2.com" }
 ]
 keywords = ["code-indexing", "ast", "ai", "development-tools"]
 classifiers = [
