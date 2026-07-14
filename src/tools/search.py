@@ -3,6 +3,7 @@
 import re
 
 try:
+    from ..bm25 import tokenize
     from ..index_store import (
         load_index,
         get_symbol_content_text,
@@ -14,6 +15,7 @@ try:
     )
     from ..synonyms import expand_query
 except ImportError:
+    from bm25 import tokenize
     from index_store import (
         load_index,
         get_symbol_content_text,
@@ -42,6 +44,22 @@ _STRING_PATTERNS = [
     re.compile(r"'([^'\\]*(?:\\.[^'\\]*)*)'"),
     re.compile(r'`([^`]*)`'),
 ]
+
+
+def _tokens(text: str) -> set[str]:
+    return set(tokenize(text or ""))
+
+
+def _token_overlap(query_tokens: list[str], field_tokens: set[str]) -> set[str]:
+    return {token for token in query_tokens if token in field_tokens}
+
+
+def _long_partial_match(query_tokens: list[str], value: str) -> bool:
+    return any(len(token) >= 3 and token in value for token in query_tokens)
+
+
+def _compact(text: str) -> str:
+    return "".join(tokenize(text or ""))
 
 
 def _search_todos(content: str, query_lower: str, sym: dict) -> list:
@@ -141,9 +159,15 @@ def _score_symbol(
     """Score a symbol for keyword search. Returns (score, match_reasons) or None if no match."""
     score = 0
     match_reason = []
-    path = symbol.get("path", "").lower()
-    name = symbol.get("name", "").lower()
+    raw_path = symbol.get("path", "")
+    raw_name = symbol.get("name", "")
+    path = raw_path.lower()
+    name = raw_name.lower()
     sym_type = symbol.get("type", "")
+    name_tokens = _tokens(raw_name)
+    path_tokens = _tokens(raw_path)
+    compact_name = _compact(raw_name)
+    compact_query = "".join(query_words)
 
     # === BM25 base score (if available) ===
     bm25_score = bm25_scores.get(symbol_id, 0)
@@ -152,17 +176,28 @@ def _score_symbol(
         match_reason.append("bm25")
 
     # === Text matching (additive bonuses) ===
-    # Name match (high weight) — check original query words
-    if any(w in name for w in query_words):
+    # Name match (high weight). Short tokens such as "ce" must match whole
+    # tokens only; otherwise "ce" incorrectly scores "Evidence" and "Source".
+    if _token_overlap(query_words, name_tokens):
         score += 10
+        match_reason.append("name")
+    elif _long_partial_match(query_words, name):
+        score += 5
         match_reason.append("name")
 
     # Exact match bonus
     if query_lower == name:
         score += 20
+    elif compact_name and len(name_tokens) >= 2 and compact_name in compact_query:
+        score += 12
+        if "name" not in match_reason:
+            match_reason.append("name")
 
     # Synonym name match — name contains an expanded synonym term
-    if synonym_tokens and any(w in name for w in synonym_tokens):
+    if synonym_tokens and (
+        _token_overlap(list(synonym_tokens), name_tokens)
+        or _long_partial_match(list(synonym_tokens), name)
+    ):
         score += 5
         if "synonym" not in match_reason:
             match_reason.append("synonym")
@@ -175,19 +210,29 @@ def _score_symbol(
         if "fuzzy" not in match_reason:
             match_reason.append("fuzzy")
 
+    path_overlap = _token_overlap(query_words, path_tokens)
+    if path_overlap:
+        score += min(4 + len(path_overlap) * 2, 10)
+        match_reason.append("path")
+
     # Summary match — check both original and expanded words
     summary = symbol.get("summary", "").lower()
-    if any(w in summary for w in query_words):
+    summary_tokens = _tokens(summary)
+    if _token_overlap(query_words, summary_tokens) or _long_partial_match(query_words, summary):
         score += 5
         match_reason.append("summary")
-    elif synonym_tokens and any(w in summary for w in synonym_tokens):
+    elif synonym_tokens and (
+        _token_overlap(list(synonym_tokens), summary_tokens)
+        or _long_partial_match(list(synonym_tokens), summary)
+    ):
         score += 3
         match_reason.append("summary_synonym")
 
     # Content match (only if no BM25 hit — avoid double-loading)
     if bm25_score == 0:
         content = get_symbol_content_text(symbol_id, symbol).lower()
-        if any(w in content for w in all_search_words):
+        content_terms = [w for w in all_search_words if len(w) >= 3]
+        if any(w in content for w in content_terms):
             score += 1
             match_reason.append("content")
 
@@ -289,10 +334,17 @@ def _build_candidates(all_symbols, bm25_scores, query_lower, query_words, synony
     for symbol_id, symbol in all_symbols.items():
         if symbol_id in candidates:
             continue
-        name = symbol.get("name", "").lower()
-        if any(w in name for w in query_words):
+        raw_name = symbol.get("name", "")
+        raw_path = symbol.get("path", "")
+        name = raw_name.lower()
+        if _token_overlap(query_words, _tokens(raw_name)) or _long_partial_match(query_words, name):
             candidates[symbol_id] = symbol
-        elif synonym_tokens and any(w in name for w in synonym_tokens):
+        elif _token_overlap(query_words, _tokens(raw_path)):
+            candidates[symbol_id] = symbol
+        elif synonym_tokens and (
+            _token_overlap(list(synonym_tokens), _tokens(raw_name))
+            or _long_partial_match(list(synonym_tokens), name)
+        ):
             candidates[symbol_id] = symbol
         elif query_lower == name:
             candidates[symbol_id] = symbol
@@ -345,9 +397,11 @@ def search_by_keyword(
     """
     index = load_index()
     query_lower = query.lower()
-    query_words = query_lower.split()
 
     original_tokens, synonym_tokens = expand_query(query)
+    query_words = tokenize(query) or query_lower.split()
+    original_tokens = set(query_words) | {str(token).lower() for token in original_tokens}
+    synonym_tokens = set(tokenize(" ".join(str(token) for token in synonym_tokens)))
     all_search_words = list(original_tokens | synonym_tokens)
 
     boost_paths: set = set()

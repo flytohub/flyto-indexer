@@ -16,6 +16,7 @@ from src.verify import (
     _classify_product_surfaces,
     _check_cross_project_contract,
     _check_dynamic_validation_plan,
+    _check_impact_loop,
     _check_mcp_runtime_smoke,
     _check_product_loop_closure,
     _check_single_project_islands,
@@ -343,6 +344,47 @@ def test_run_verification_closes_core_loops(tmp_path):
     assert checks["impact_loop"]["status"] == "pass"
     assert checks["weak_scan_secrets"]["status"] == "pass"
     assert checks["agent_hygiene"]["status"] == "pass"
+
+
+def test_run_verification_invalidates_index_store_after_scan(tmp_path, monkeypatch):
+    _write_project(tmp_path)
+    calls = []
+
+    import src.index_store as store
+
+    monkeypatch.setattr(store, "invalidate_caches", lambda: calls.append("invalidated"))
+
+    result = run_verification(tmp_path, full_scan=True, query="handle_auth")
+
+    assert result["pass"] is True
+    assert calls == ["invalidated"]
+
+
+def test_impact_loop_warns_when_ref_count_has_no_direct_references():
+    checks = []
+
+    def add_check(name, status, summary, metrics=None):
+        checks.append({
+            "name": name,
+            "status": status,
+            "summary": summary,
+            "metrics": metrics or {},
+        })
+
+    engine = SimpleNamespace(
+        impact=lambda symbol, max_depth=2: {
+            "symbol": symbol,
+            "symbol_info": {"ref_count": 1},
+            "direct_references": [],
+        }
+    )
+
+    _check_impact_loop(engine, "demo:ce/worker-ce/server.go:function:newHandler", add_check)
+
+    assert checks[0]["name"] == "impact_loop"
+    assert checks[0]["status"] == "warn"
+    assert checks[0]["metrics"]["ref_count"] == 1
+    assert checks[0]["metrics"]["direct_references"] == 0
 
 
 def test_run_verification_fails_runtime_dependencies(tmp_path):

@@ -53,7 +53,7 @@ class TestZeroDependency:
         "xml", "html", "http", "urllib", "socket", "abc", "copy",
         "contextlib", "traceback", "argparse", "datetime", "uuid",
         "string", "struct", "base64", "signal", "inspect", "importlib",
-        "unittest", "pprint", "csv", "glob", "stat", "platform",
+        "unittest", "pprint", "csv", "glob", "stat", "platform", "shlex",
         "xml.etree.ElementTree", "xml.etree",
         "sqlite3",
     }

@@ -36,11 +36,44 @@ def _validate_ref(ref: str) -> bool:
     return bool(_SAFE_REF_PATTERN.match(ref)) and len(ref) <= 256
 
 
-def _find_git_root(project_roots: dict) -> Optional[str]:
-    """Find the first valid git root from project_roots."""
-    for root in project_roots.values():
-        if root and Path(root).exists() and (Path(root) / ".git").exists():
-            return root
+def _nearest_git_root(path: Path) -> Optional[str]:
+    current = path.resolve()
+    if current.is_file():
+        current = current.parent
+    for candidate in (current, *current.parents):
+        if (candidate / ".git").exists():
+            return str(candidate)
+    return None
+
+
+def _find_git_root(project_roots: dict, project: str = None) -> Optional[str]:
+    """Find a valid git root from project_roots, project path, or cwd."""
+    candidates: list[Path] = []
+    if project:
+        project_path = Path(project).expanduser()
+        if project_path.is_absolute():
+            candidates.append(project_path)
+        else:
+            candidates.append((Path.cwd() / project_path).resolve())
+        for name, root in project_roots.items():
+            if project == name or project.lower() in str(name).lower():
+                candidates.append(Path(root))
+
+    candidates.extend(Path(root) for root in project_roots.values() if root)
+    candidates.append(Path.cwd())
+
+    seen: set[Path] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if resolved in seen or not resolved.exists():
+            continue
+        seen.add(resolved)
+        git_root = _nearest_git_root(resolved)
+        if git_root:
+            return git_root
     return None
 
 
@@ -237,7 +270,7 @@ def impact_from_diff(
     # Find git root
     index = load_index()
     project_roots = index.get("project_roots", {})
-    git_root = _find_git_root(project_roots)
+    git_root = _find_git_root(project_roots, project)
     if not git_root:
         return {"error": "No git repository found in indexed project roots"}
 

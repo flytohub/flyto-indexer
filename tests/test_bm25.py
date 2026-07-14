@@ -305,3 +305,130 @@ def list_products():
             # The first result should be the auth function
             first_sym = result_ids[0]
             assert "authenticate" in first_sym.lower() or "auth" in first_sym.lower()
+
+    def test_bm25_indexes_go_symbol_path_terms(self):
+        from src.engine import IndexEngine
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            go_file = root / "ce" / "worker-ce" / "server.go"
+            go_file.parent.mkdir(parents=True)
+            go_file.write_text(
+                "package main\n\n"
+                "func newHandler() string {\n"
+                "    return runQueueProbe()\n"
+                "}\n\n"
+                "func runQueueProbe() string {\n"
+                "    return \"queue\"\n"
+                "}\n",
+                encoding="utf-8",
+            )
+
+            idx_dir = root / ".flyto-index"
+            engine = IndexEngine("flyto-engine", root, index_dir=idx_dir)
+            engine.scan(incremental=False)
+
+            loaded = BM25Index.load(idx_dir / "bm25.json")
+            results = loaded.search("worker ce server")
+            result_ids = [r[0] for r in results]
+
+            assert any("newHandler" in sid for sid in result_ids)
+            assert any("runQueueProbe" in sid for sid in result_ids)
+
+    def test_keyword_search_uses_path_terms_from_bm25_documents(self):
+        from src.engine import IndexEngine
+        from src.tools.search import search_by_keyword
+        import src.index_store as store
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            go_file = root / "ce" / "worker-ce" / "server.go"
+            go_file.parent.mkdir(parents=True)
+            go_file.write_text(
+                "package main\n\n"
+                "func newHandler() string {\n"
+                "    return runQueueProbe()\n"
+                "}\n\n"
+                "func runQueueProbe() string {\n"
+                "    return \"queue\"\n"
+                "}\n",
+                encoding="utf-8",
+            )
+
+            idx_dir = root / ".flyto-index"
+            engine = IndexEngine("flyto-engine", root, index_dir=idx_dir)
+            engine.scan(incremental=False)
+
+            old_index_dir = store.INDEX_DIR
+            old_explicit = store._EXPLICIT_INDEX_DIR
+            store.INDEX_DIR = idx_dir
+            store._EXPLICIT_INDEX_DIR = str(idx_dir)
+            store.invalidate_caches()
+
+            try:
+                result = search_by_keyword("worker ce server", project="flyto-engine")
+            finally:
+                store.INDEX_DIR = old_index_dir
+                store._EXPLICIT_INDEX_DIR = old_explicit
+                store.invalidate_caches()
+
+            result_ids = [r["symbol_id"] for r in result["results"]]
+            assert any("newHandler" in sid for sid in result_ids)
+            assert any("runQueueProbe" in sid for sid in result_ids)
+
+    def test_keyword_search_ranks_ce_worker_runtime_above_substring_noise(self):
+        from src.engine import IndexEngine
+        from src.tools.search import search_by_keyword
+        import src.index_store as store
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            go_file = root / "ce" / "worker-ce" / "server.go"
+            go_file.parent.mkdir(parents=True)
+            go_file.write_text(
+                "package main\n\n"
+                "const serviceName = \"worker-ce-source-runtime\"\n\n"
+                "func newHandler() string {\n"
+                "    return runQueueProbe()\n"
+                "}\n\n"
+                "func runQueueProbe() string {\n"
+                "    return serviceName\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            noisy_file = root / "internal" / "attribution" / "evidence_chain.go"
+            noisy_file.parent.mkdir(parents=True)
+            noisy_file.write_text(
+                "package attribution\n\n"
+                "// BuildEvidenceChain composes source evidence for runtime validation.\n"
+                "func BuildEvidenceChain() string {\n"
+                "    return \"source runtime evidence\"\n"
+                "}\n",
+                encoding="utf-8",
+            )
+
+            idx_dir = root / ".flyto-index"
+            engine = IndexEngine("flyto-engine", root, index_dir=idx_dir)
+            engine.scan(incremental=False)
+
+            old_index_dir = store.INDEX_DIR
+            old_explicit = store._EXPLICIT_INDEX_DIR
+            store.INDEX_DIR = idx_dir
+            store._EXPLICIT_INDEX_DIR = str(idx_dir)
+            store.invalidate_caches()
+
+            try:
+                result = search_by_keyword(
+                    "ce worker source runtime newHandler",
+                    project="flyto-engine",
+                )
+            finally:
+                store.INDEX_DIR = old_index_dir
+                store._EXPLICIT_INDEX_DIR = old_explicit
+                store.invalidate_caches()
+
+            result_ids = [r["symbol_id"] for r in result["results"]]
+            assert "flyto-engine:ce/worker-ce/server.go:function:newHandler" in result_ids[:3]
+            assert result_ids.index("flyto-engine:ce/worker-ce/server.go:function:newHandler") < result_ids.index(
+                "flyto-engine:internal/attribution/evidence_chain.go:function:BuildEvidenceChain"
+            )

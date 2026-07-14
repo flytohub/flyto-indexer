@@ -7,9 +7,11 @@ Extracted from engine.py.
 
 try:
     from .bm25 import BM25Index
+    from .search_documents import build_symbol_document
     from .semantic import SemanticIndex
 except ImportError:
     from bm25 import BM25Index
+    from search_documents import build_symbol_document
     from semantic import SemanticIndex
 
 
@@ -24,12 +26,7 @@ class SearchIndexMixin:
 
     def _build_symbol_doc(self, symbol) -> str:
         """Build BM25/semantic document text for a symbol."""
-        parts = [symbol.name]
-        if symbol.summary:
-            parts.append(symbol.summary)
-        if symbol.content:
-            parts.append(symbol.content[:300])
-        return " ".join(parts)
+        return build_symbol_document(symbol)
 
     def _build_bm25_index(self):
         """Build BM25 search index from symbols and save to disk (full rebuild)."""

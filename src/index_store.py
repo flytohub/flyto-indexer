@@ -412,10 +412,10 @@ def _rebuild_semantic_index(index_dir: Path):
     """
     try:
         from .semantic import SemanticIndex
-        from .bm25 import tokenize
+        from .search_documents import build_symbol_document
     except ImportError:
         from semantic import SemanticIndex
-        from bm25 import tokenize
+        from search_documents import build_symbol_document
 
     index_data = load_index()
     if not index_data:
@@ -428,20 +428,7 @@ def _rebuild_semantic_index(index_dir: Path):
     # Build document texts (same logic as engine._build_symbol_doc)
     documents = {}
     for sid, sym in symbols.items():
-        if isinstance(sym, dict):
-            name = sym.get("name", "")
-            summary = sym.get("summary", "")
-            content = sym.get("content", "")
-        else:
-            name = sym.name
-            summary = sym.summary
-            content = sym.content
-        parts = [name]
-        if summary:
-            parts.append(summary)
-        if content:
-            parts.append(content[:300])
-        documents[sid] = " ".join(parts)
+        documents[sid] = build_symbol_document(sym)
 
     if not documents:
         return None

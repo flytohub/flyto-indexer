@@ -290,6 +290,52 @@ class TestSemanticStaleMarker:
                 store.INDEX_DIR = old_index_dir
                 store.invalidate_caches()
 
+    def test_semantic_stale_rebuild_indexes_symbol_path_terms(self):
+        """Lazy semantic rebuild should use the same searchable document as scan."""
+        from src.engine import IndexEngine
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            go_file = root / "ce" / "worker-ce" / "server.go"
+            go_file.parent.mkdir(parents=True)
+            go_file.write_text(
+                "package main\n\n"
+                "func newHandler() string {\n"
+                "    return runQueueProbe()\n"
+                "}\n\n"
+                "func runQueueProbe() string {\n"
+                "    return \"queue\"\n"
+                "}\n",
+                encoding="utf-8",
+            )
+
+            idx_dir = root / ".flyto-index"
+            engine = IndexEngine("flyto-engine", root, index_dir=idx_dir)
+            engine.scan(incremental=False)
+
+            semantic_path = idx_dir / "semantic.json"
+            semantic_path.unlink()
+            stale_marker = idx_dir / ".semantic_stale"
+            stale_marker.write_text("1", encoding="utf-8")
+
+            import src.index_store as store
+            old_index_dir = store.INDEX_DIR
+            old_explicit = store._EXPLICIT_INDEX_DIR
+            store.INDEX_DIR = idx_dir
+            store._EXPLICIT_INDEX_DIR = str(idx_dir)
+            store.invalidate_caches()
+
+            try:
+                semantic = store._load_semantic()
+            finally:
+                store.INDEX_DIR = old_index_dir
+                store._EXPLICIT_INDEX_DIR = old_explicit
+                store.invalidate_caches()
+
+            result_ids = [sid for sid, _score in semantic.search("worker ce server")]
+            assert any("newHandler" in sid for sid in result_ids)
+            assert any("runQueueProbe" in sid for sid in result_ids)
+
     def test_incremental_scan_creates_stale_marker(self):
         """An incremental scan with changes should create .semantic_stale."""
         from src.engine import IndexEngine

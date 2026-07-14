@@ -7,6 +7,7 @@ Usage:
 
 import subprocess
 import re
+import shlex
 from pathlib import Path
 
 try:
@@ -82,7 +83,12 @@ def _run_pytest(project_root: str, test_path: str = None) -> dict:
         "output": "",
     }
 
-    cmd = ["python", "-m", "pytest", test_path or ".", "-x", "--tb=short", "-q"]
+    cmd = ["python", "-m", "pytest"]
+    if test_path:
+        cmd.extend(shlex.split(test_path))
+    else:
+        cmd.append(".")
+    cmd.extend(["-x", "--tb=short", "-q"])
 
     try:
         proc = subprocess.run(
@@ -157,9 +163,18 @@ def validate_changes(
     project_name = project
     project_root = None
 
+    project_path = Path(project).expanduser() if project else None
+    cwd_project_path = (Path.cwd() / project).resolve() if project and not project_path.is_absolute() else None
+
     if project and project in project_roots:
         project_root = project_roots[project]
         project_name = project
+    elif project_path and project_path.exists():
+        project_root = str(project_path.resolve())
+        project_name = project_path.name
+    elif cwd_project_path and cwd_project_path.exists():
+        project_root = str(cwd_project_path)
+        project_name = cwd_project_path.name
     elif project_roots:
         if len(project_roots) == 1:
             project_name = next(iter(project_roots))

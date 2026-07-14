@@ -1,0 +1,226 @@
+{
+  "product_name": "Flyto2",
+  "health_targets": {
+    "core_min_score": 80,
+    "core_min_grade": "B",
+    "active_min_score": 70
+  },
+  "memory_files": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "PROJECT.md",
+    "ARCHITECTURE.md",
+    "STATE.md",
+    "ROADMAP.md",
+    "tasks.md",
+    "DECISIONS.md",
+    "CHANGELOG.md"
+  ],
+  "workflow_files": [
+    "idea-capture.md",
+    "planning.md",
+    "implementation.md",
+    "bugfix.md",
+    "refactor.md",
+    "investigation.md",
+    "wrap-up.md"
+  ],
+  "product_lines": {
+    "cloud_apps_automation": {
+      "label": "Flyto2 Cloud / Apps / Automation",
+      "description": "No-code app automation, workflow builder, crawler apps, recording, templates, marketplace, and per-call execution."
+    },
+    "security": {
+      "label": "Flyto2 Security",
+      "description": "Code security, CTEM, pentest, redteam validation, AI governance, CSPM, darkweb, reports, audit, and compliance."
+    },
+    "data": {
+      "label": "Flyto2 Data",
+      "description": "Future data ingestion, datasets, catalog, ETL, vector/search, knowledge base, and data governance."
+    },
+    "zero_person_agent": {
+      "label": "Flyto2 Zero-person Company Agent",
+      "description": "Agent company OS for operations, research, sales, support, content, engineering, monitoring, and reporting."
+    },
+    "big_data_intelligence": {
+      "label": "Flyto2 Big Data / Intelligence",
+      "description": "External data, market intelligence, threat intelligence, brand/darkweb monitoring, GEO logs, analytics, and reporting."
+    }
+  },
+  "repos": {
+    "flyto-core": {
+      "status": "active",
+      "core": true,
+      "health_target": "B",
+      "core_dependency": "root kernel",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"]
+    },
+    "flyto-cloud": {
+      "status": "active",
+      "core": true,
+      "health_target": "B",
+      "core_dependency": "uses core",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"]
+    },
+    "flyto-code": {
+      "status": "active",
+      "core": true,
+      "health_target": "B",
+      "core_dependency": "uses engine/core",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"]
+    },
+    "flyto-engine": {
+      "status": "active",
+      "core": true,
+      "health_target": "B",
+      "core_dependency": "entitlement/security authority",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"]
+    },
+    "flyto-ai": {
+      "status": "active",
+      "core": true,
+      "health_target": "B",
+      "core_dependency": "AI policy/runtime",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"]
+    },
+    "flyto-indexer": {
+      "status": "active",
+      "core": true,
+      "health_target": "B",
+      "core_dependency": "analysis engine",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"]
+    },
+    "flyto-landing-page": {
+      "status": "active",
+      "health_target": "B",
+      "core_dependency": "public acquisition/GEO surface",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"]
+    },
+    "flyto-docs": {
+      "status": "active",
+      "health_target": "B",
+      "core_dependency": "public docs/GEO surface",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"]
+    },
+    "flyto-blog": {
+      "status": "active",
+      "health_target": "B",
+      "core_dependency": "public content/GEO surface",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"]
+    },
+    "flyto-admin": {
+      "status": "internal tooling",
+      "health_target": "C",
+      "core_dependency": "operator/admin surface",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "zero_person_agent"]
+    },
+    "flyto-console": {
+      "status": "experimental",
+      "health_target": "C",
+      "core_dependency": "agent console surface",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "data", "zero_person_agent", "big_data_intelligence"]
+    },
+    "flyto-cortex": {
+      "status": "experimental",
+      "health_target": "C",
+      "core_dependency": "agent/cortex prototype",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "data", "zero_person_agent", "big_data_intelligence"]
+    },
+    "flyto-data": {
+      "status": "experimental",
+      "health_target": "C",
+      "core_dependency": "future data product",
+      "memory_required": true,
+      "product_lines": ["data", "big_data_intelligence", "cloud_apps_automation", "zero_person_agent"]
+    },
+    "flyto-i18n": {
+      "status": "internal tooling",
+      "health_target": "C",
+      "core_dependency": "localization tooling",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"]
+    },
+    "flyto-plugins-js": {
+      "status": "active",
+      "health_target": "C",
+      "core_dependency": "connector SDK",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "data", "zero_person_agent"]
+    },
+    "flyto-pro": {
+      "status": "active",
+      "health_target": "C",
+      "core_dependency": "pro module bundle",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "zero_person_agent"]
+    },
+    "flyto-pro-core": {
+      "status": "active",
+      "health_target": "C",
+      "core_dependency": "pro runtime extensions",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "zero_person_agent"]
+    },
+    "flyto-modules-pro": {
+      "status": "active",
+      "health_target": "C",
+      "core_dependency": "pro modules",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "zero_person_agent"]
+    },
+    "flyto-vscode": {
+      "status": "active",
+      "health_target": "C",
+      "core_dependency": "developer integration",
+      "memory_required": true,
+      "product_lines": ["security", "cloud_apps_automation", "zero_person_agent"]
+    },
+    "flyto-blueprint": {
+      "status": "internal tooling",
+      "health_target": "C",
+      "core_dependency": "planning/blueprint tooling",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "data", "zero_person_agent"]
+    },
+    "flyto-design-tokens": {
+      "status": "internal tooling",
+      "health_target": "C",
+      "core_dependency": "design system support",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"]
+    },
+    "flyto-evolution-log": {
+      "status": "internal tooling",
+      "health_target": "C",
+      "core_dependency": "product history",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"]
+    },
+    "flyto-app": {
+      "status": "deprecated",
+      "health_target": "D",
+      "core_dependency": "legacy app shell",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation"]
+    },
+    "flyto2": {
+      "status": "deprecated",
+      "health_target": "D",
+      "core_dependency": "legacy root",
+      "memory_required": true,
+      "product_lines": ["cloud_apps_automation"]
+    }
+  }
+}

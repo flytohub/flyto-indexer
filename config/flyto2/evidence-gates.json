@@ -1,0 +1,87 @@
+{
+  "product_name": "Flyto2",
+  "health_signal_policy": {
+    "label": "minimum hygiene signal",
+    "summary": "Health grades are triage signals for code hygiene. They do not prove product readiness.",
+    "limitations": [
+      "Health scores do not prove real user workflow quality.",
+      "Health scores do not prove enterprise deployment readiness.",
+      "Health scores do not prove security control effectiveness beyond the scanned checks.",
+      "Health scores do not prove market positioning, AI citation, or customer trust."
+    ]
+  },
+  "gates": [
+    {
+      "id": "cloud_apps_automation",
+      "title": "Flyto2 Cloud / Apps / Automation evidence",
+      "category": "product_line",
+      "severity": "P1",
+      "product_lines": ["cloud_apps_automation"],
+      "deliverables": ["workspace_inventory", "architecture_dependency_map", "product_state_machine_audit", "deterministic_product_verification", "e2e_browser_smoke_matrix"],
+      "confidence": "No-code automation readiness is supported by workspace inventory, architecture mapping, state-machine guards, deterministic product verification, and browser smoke evidence."
+    },
+    {
+      "id": "security_product",
+      "title": "Flyto2 Security evidence",
+      "category": "product_line",
+      "severity": "P1",
+      "product_lines": ["security"],
+      "deliverables": ["billing_entitlement_audit", "rbac_tenant_isolation_audit", "product_state_machine_audit", "deterministic_product_verification", "security_performance_cicd_audit", "github_actions_startup"],
+      "confidence": "Security readiness is supported by entitlement/RBAC, tenant isolation, state-machine, deterministic product verification, security/CI evidence, and proof that required GitHub Actions workflows started, created jobs, and passed."
+    },
+    {
+      "id": "data_product_reservation",
+      "title": "Flyto2 Data architecture reservation evidence",
+      "category": "product_line",
+      "severity": "P1",
+      "product_lines": ["data"],
+      "deliverables": ["architecture_dependency_map", "workspace_inventory"],
+      "confidence": "The future Data line is not claimed as feature-complete; release confidence requires explicit architecture and ownership reservation evidence."
+    },
+    {
+      "id": "zero_person_agent",
+      "title": "Flyto2 Zero-person Company Agent evidence",
+      "category": "product_line",
+      "severity": "P1",
+      "product_lines": ["zero_person_agent"],
+      "deliverables": ["architecture_dependency_map", "product_state_machine_audit", "deterministic_product_verification", "e2e_browser_smoke_matrix", "security_performance_cicd_audit"],
+      "confidence": "Agent OS readiness is supported by runtime architecture, state handling, deterministic product verification, browser smoke, and security/operability evidence."
+    },
+    {
+      "id": "big_data_intelligence",
+      "title": "Flyto2 Big Data / Intelligence evidence",
+      "category": "product_line",
+      "severity": "P1",
+      "product_lines": ["big_data_intelligence"],
+      "deliverables": ["geo_aeo_seo_ai_crawler_audit", "public_site_verification", "architecture_dependency_map", "security_performance_cicd_audit"],
+      "confidence": "Intelligence readiness is supported by GEO/AI crawler evidence, public-site reachability verification, architecture mapping, and security/performance evidence."
+    },
+    {
+      "id": "enterprise_deployment",
+      "title": "Enterprise / airgap deployment evidence",
+      "category": "deployment",
+      "severity": "P1",
+      "product_lines": ["security", "cloud_apps_automation"],
+      "deliverables": ["enterprise_airgap_open_core_audit", "security_performance_cicd_audit", "github_actions_startup"],
+      "confidence": "Enterprise readiness requires airgap/open-core boundary evidence, CI/security evidence, and proof that required GitHub Actions workflows started, created jobs, and passed."
+    },
+    {
+      "id": "global_visibility",
+      "title": "SEO / AEO / GEO visibility evidence",
+      "category": "visibility",
+      "severity": "P1",
+      "product_lines": ["big_data_intelligence", "cloud_apps_automation", "security"],
+      "deliverables": ["geo_aeo_seo_ai_crawler_audit", "public_site_verification", "i18n_multilingual_audit"],
+      "confidence": "AI/search visibility confidence requires crawler/GEO evidence, public-site route/browser verification, and multilingual/i18n evidence."
+    },
+    {
+      "id": "release_operations",
+      "title": "Release operations evidence",
+      "category": "operability",
+      "severity": "P0",
+      "product_lines": ["cloud_apps_automation", "security", "data", "zero_person_agent", "big_data_intelligence"],
+      "deliverables": ["release_readiness_verdict", "workspace_inventory", "deterministic_product_verification", "public_site_verification", "security_performance_cicd_audit", "github_actions_startup"],
+      "confidence": "Production release confidence requires a passing product gate, clean inventory, deterministic product verification, public-site verification, CI/security evidence, and proof that required GitHub Actions workflows started, created jobs, and passed."
+    }
+  ]
+}

@@ -23,6 +23,15 @@ from .engine import IndexEngine
 from .models import SymbolType
 from .secret_scanner import scan_secrets
 
+
+def _invalidate_index_store_caches() -> None:
+    try:
+        from . import index_store
+    except ImportError:
+        import index_store  # type: ignore[no-redef]
+    index_store.invalidate_caches()
+
+
 _STATUS_RANK = {"pass": 0, "warn": 1, "fail": 2}
 _VERIFY_RESULT_SCHEMA_VERSION = "1"
 _PROJECT_MARKERS = (
@@ -197,6 +206,7 @@ def run_verification(
     index_path = root / ".flyto-index" / "index.json"
     if full_scan or not index_path.exists():
         scan_result = engine.scan(incremental=not full_scan)
+        _invalidate_index_store_caches()
         add_check(
             "scan",
             "pass" if scan_result.get("errors", 0) == 0 else "warn",
@@ -630,8 +640,8 @@ def _check_impact_loop(engine: IndexEngine, symbol: str | None, add_check) -> No
     status = "pass"
     summary = "Impact graph returned direct references"
     if ref_count and not direct:
-        status = "fail"
-        summary = "Symbol has ref_count but no direct references"
+        status = "warn"
+        summary = "Symbol has ref_count but no direct references; index may have indirect or stale reference counts"
     elif unresolved:
         status = "warn"
         summary = "Impact graph has unresolved direct references"
