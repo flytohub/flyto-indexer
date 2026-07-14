@@ -58,7 +58,7 @@ When responding:
 ```yaml
 openapi: 3.1.0
 info:
-  title: Flyto Indexer API
+  title: Flyto2 Indexer API
   description: Semantic code indexing API
   version: 1.0.0
 servers:

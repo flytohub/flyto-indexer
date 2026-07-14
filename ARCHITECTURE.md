@@ -1,4 +1,4 @@
-# Flyto Indexer Architecture
+# Flyto2 Indexer Architecture
 
 ## Boundaries
 

@@ -2,7 +2,7 @@
 
 ## Open
 
-- Add workspace verify recipes for Flyto's five primary repos.
+- Add workspace verify recipes for Flyto2's five primary repos.
 - Add stricter generated-artifact ignore checks for packaged enterprise scans.
 - Add docs examples for custom layer, taint, and capability rules.
 

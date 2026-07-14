@@ -22,7 +22,7 @@ and CI frontend build coverage.
 Reason: a self-hostable Warroom CE repo that exposes only backend contracts and
 installer files cannot support meaningful community UI fixes. Frontend changes
 should be reviewable in public PRs, then imported back into the private
-`flyto-code` source repo before re-export so Flyto does not split into two
+`flyto-code` source repo before re-export so Flyto2 does not split into two
 long-lived products.
 
 ## 2026-06-30 - Engine contracts publish as protocol artifacts
@@ -171,5 +171,5 @@ verification loop must be explicit and machine-checked.
 Decision: indexing, verify, audit, and impact analysis should run without
 external services by default.
 
-Reason: Flyto needs this tool for private source, enterprise deployments, and
+Reason: Flyto2 needs this tool for private source, enterprise deployments, and
 airgapped audit workflows.

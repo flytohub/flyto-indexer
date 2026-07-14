@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in Flyto Indexer, please report it responsibly.
+If you discover a security vulnerability in Flyto2 Indexer, please report it responsibly.
 
 **Email:** security@flyto2.com
 
@@ -15,7 +15,7 @@ We will acknowledge your report within 48 hours and aim to release a fix within 
 
 ## Scope
 
-Flyto Indexer runs locally and does not send any code to external services. The primary security concerns are:
+Flyto2 Indexer runs locally and does not send any code to external services. The primary security concerns are:
 
 - **Index file integrity** — `.flyto-index/` contains metadata about your codebase
 - **MCP server access** — the stdio-based MCP server is only accessible to the local MCP client
@@ -25,4 +25,4 @@ Flyto Indexer runs locally and does not send any code to external services. The 
 
 - Add `.flyto-index/` to your `.gitignore` to avoid committing index data
 - When using the HTTP API, do not expose it to public networks without authentication
-- Keep Flyto Indexer updated to the latest version
+- Keep Flyto2 Indexer updated to the latest version

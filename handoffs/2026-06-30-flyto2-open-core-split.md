@@ -37,7 +37,7 @@ Added a deterministic open-core audit/export path for Flyto2.
 - SSO/SAML/SCIM/legal hold/airgap deployment internals.
 - Darkweb, stealer-log, phishing-feed, proprietary threat-intel/correlation.
 - Cloud/container/runtime live remediation orchestration.
-- Hosted Flyto Cloud control plane, runner fleet, telemetry.
+- Hosted Flyto2 Cloud control plane, runner fleet, telemetry.
 - AutoFix commercial promotion/approval/rollback orchestration.
 - Enterprise cockpit UI composition until a standalone community shell exists.
 

@@ -45,7 +45,7 @@ Create `.vscode/tasks.json`:
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Flyto: Search Code",
+      "label": "Flyto2: Search Code",
       "type": "shell",
       "command": "curl -s -X POST http://localhost:8765/search -H 'Content-Type: application/json' -d '{\"query\": \"${input:searchQuery}\"}' | jq .",
       "problemMatcher": [],
@@ -55,13 +55,13 @@ Create `.vscode/tasks.json`:
       }
     },
     {
-      "label": "Flyto: File Info",
+      "label": "Flyto2: File Info",
       "type": "shell",
       "command": "curl -s -X POST http://localhost:8765/file/info -H 'Content-Type: application/json' -d '{\"path\": \"${relativeFile}\"}' | jq .",
       "problemMatcher": []
     },
     {
-      "label": "Flyto: Start Server",
+      "label": "Flyto2: Start Server",
       "type": "shell",
       "command": "python -m src.api_server",
       "options": {

@@ -217,7 +217,7 @@ def demo_workflow():
 
 def main():
     print("\n" + "="*60)
-    print("Flyto Indexer - LLM Audit + AI Workflow Demo")
+    print("Flyto2 Indexer - LLM Audit + AI Workflow Demo")
     print("="*60)
 
     if not os.getenv("OPENAI_API_KEY"):

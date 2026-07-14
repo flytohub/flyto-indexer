@@ -1,4 +1,4 @@
-# Flyto Indexer - Projects Configuration
+# Flyto2 Indexer - Projects Configuration
 #
 # This is the ONLY place that contains project-specific paths.
 # The MCP server reads project list from the index, not from here.

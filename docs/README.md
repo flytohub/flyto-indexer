@@ -1,4 +1,4 @@
-# Flyto Indexer Docs
+# Flyto2 Indexer Docs
 
 Use this directory for durable architecture, usage, and verification notes.
 

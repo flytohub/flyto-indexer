@@ -58,7 +58,7 @@ The generated release tree also contains:
 
 ## Enterprise Cloud Bridge
 
-CE is intended to be useful without Flyto Cloud. Higher-tier features should be
+CE is intended to be useful without Flyto2 Cloud. Higher-tier features should be
 attached through a documented Enterprise Cloud Bridge rather than by publishing
 private backend source.
 
@@ -67,7 +67,7 @@ The bridge contract is:
 1. CE keeps the local database, local UI, local auth, local evidence timeline,
    and public contracts.
 2. Enterprise entitlements unlock premium actions through capability snapshots.
-3. Premium jobs are sent as signed, minimal requests to Flyto Cloud or private
+3. Premium jobs are sent as signed, minimal requests to Flyto2 Cloud or private
    Enterprise services.
 4. Results return as signed evidence events and artifacts.
 5. Any entitlement, permission, connector, cloud, or signature failure fails
@@ -87,7 +87,7 @@ enterprise identity, airgap packaging, support, and AI proposal workflows.
   correlation datasets.
 - Cloud/container/runtime live remediation orchestration and customer connector
   credential paths.
-- Flyto Cloud Enterprise Bridge services, entitlement signer, managed job
+- Flyto2 Cloud Enterprise Bridge services, entitlement signer, managed job
   execution plane, and hosted SaaS control plane.
 - AutoFix promotion, approval, rollback orchestration, and commercial AI
   proposal workflows.

@@ -1,4 +1,4 @@
-# Flyto security benchmark corpus
+# Flyto2 security benchmark corpus
 
 Owner: Researcher (FLY-39)
 Consumers: QA in week 4 (FLY-11 MVP-exit gate); Backend Dev in week 2 when wiring the Semgrep adapter (FLY-42).
@@ -51,8 +51,8 @@ Meets FLY-39 acceptance (≥300 rows across four languages). The JS+TS bucket is
 
 Rules in `semgrep/semgrep-rules` ship under the **Semgrep Rules License v1.0**, not LGPL as stated in the FLY-11 plan (§5 risk 5). The license permits internal business use of rule YAML files but restricts redistribution and "as-a-service" provisioning. Implications:
 
-- Using these rule IDs in the Flyto indexer to scan customer code is allowed (internal business purpose of the Flyto organisation running the scanner).
-- Shipping the raw rule YAML bodies inside Flyto's binaries for offline scanning on a customer host **is** redistribution — needs legal review before GA.
+- Using these rule IDs in the Flyto2 indexer to scan customer code is allowed (internal business purpose of the Flyto2 organisation running the scanner).
+- Shipping the raw rule YAML bodies inside Flyto2's binaries for offline scanning on a customer host **is** redistribution — needs legal review before GA.
 - This CSV contains **only rule identifiers and severity metadata**, not the rule patterns themselves. Distribution of metadata is lower risk than distribution of the YAML bodies, but CTO + legal should still confirm before any external preview (design partners, docs, marketing).
 
 Parallel risk-5 mitigation in FLY-11 remains valid: package Semgrep as a separate binary invoked by the indexer, never statically link, and emit SPDX so the per-finding rule provenance is auditable.
@@ -67,7 +67,7 @@ Tiered corpus:
 
 | Suite | Language | Cases | Why |
 |---|---|---|---|
-| [OWASP Benchmark v1.2](https://github.com/OWASP-Benchmark/BenchmarkJava) | Java | 2,740 | Mature FP/TP scoring harness; we only consume its scoring methodology — Flyto does not ship Java rules at MVP. Included here as the scoring reference. |
+| [OWASP Benchmark v1.2](https://github.com/OWASP-Benchmark/BenchmarkJava) | Java | 2,740 | Mature FP/TP scoring harness; we only consume its scoring methodology — Flyto2 does not ship Java rules at MVP. Included here as the scoring reference. |
 | [OWASP Benchmark Python v0.1](https://github.com/OWASP-Benchmark/BenchmarkPython) | Python | 1,230 | Primary Python ground truth. Each case ships with a `expectedresults-*.csv` mapping vulnerability category to intended result. |
 | [NIST Juliet C/C++/Java 1.3](https://samate.nist.gov/SARD/test-suites) | (Java/C reference) | — | Scoring cross-check only; not executed in MVP. |
 
@@ -98,15 +98,15 @@ And JS/TS:
 - [OWASP NodeGoat](https://github.com/OWASP/NodeGoat) — intentionally vulnerable Node.js.
 - [appsecco/dvna](https://github.com/appsecco/dvna) — Damn Vulnerable Node.js App.
 
-### Tier 3 — Flyto internal slice
+### Tier 3 — Flyto2 internal slice
 
-Three real internal repos from the Flyto monorepo (per the FLY-11 MVP-exit criterion of "3 internal repos scanned end-to-end"):
+Three real internal repos from the Flyto2 monorepo (per the FLY-11 MVP-exit criterion of "3 internal repos scanned end-to-end"):
 
 - `flyto-indexer` (Python)
 - `flyto-engine` (Go)
 - `flyto-code` (TypeScript + React)
 
-These provide real-world FP signal on the code Flyto engineers read every day. Findings here feed both the Aikido parity comparison and the dogfood loop.
+These provide real-world FP signal on the code Flyto2 engineers read every day. Findings here feed both the Aikido parity comparison and the dogfood loop.
 
 ### Tier 4 — negative control
 

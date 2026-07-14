@@ -35,7 +35,7 @@ os.chdir(src_path)
 
 from auditor.llm_auditor import LLMAuditor
 
-# Flyto projects root directory
+# Flyto2 projects root directory
 FLYTOHUB_ROOT = Path("/path/to/your/projects")
 
 # Projects to audit
@@ -171,7 +171,7 @@ def audit_project(project_name: str, auditor: LLMAuditor) -> dict:
 
 def main():
     print("\n" + "="*60)
-    print("Flyto Indexer - Full Project LLM Audit")
+    print("Flyto2 Indexer - Full Project LLM Audit")
     print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("="*60)
 

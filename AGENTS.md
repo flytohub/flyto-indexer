@@ -4,7 +4,7 @@ Before changing this repository, read `STATE.md`, `ARCHITECTURE.md`,
 `DECISIONS.md`, and the latest entry in `handoffs/_registry.md`.
 
 - `flyto-indexer` is the local code intelligence and verification tool for
-  Flyto repositories.
+  Flyto2 repositories.
 - Keep analysis local by default. Do not introduce network calls for audit,
   indexing, or verification paths unless explicitly designed and documented.
 - Prefer deterministic static analysis, typed impact, dependency, taint, and

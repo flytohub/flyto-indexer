@@ -1,8 +1,8 @@
-# Flyto Indexer Roadmap
+# Flyto2 Indexer Roadmap
 
 ## Now
 
-- Keep verify useful for Flyto's multi-repo audit loops.
+- Keep verify useful for Flyto2's multi-repo audit loops.
 - Keep project memory, architecture, and handoff docs enforced in CI.
 - Preserve local-only operation for default audit and verification paths.
 

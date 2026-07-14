@@ -292,7 +292,7 @@ def run_workspace_verification(
 def format_verification(result: dict[str, Any]) -> str:
     """Human-readable verification report."""
     lines = [
-        f"Flyto Verify: {result['project']}",
+        f"Flyto2 Verify: {result['project']}",
         f"  Path:   {result['path']}",
         f"  Status: {'PASS' if result['pass'] else 'FAIL'}",
         f"  Checks: {result['summary']['pass']} pass, {result['summary']['warn']} warn, {result['summary']['fail']} fail",
@@ -327,7 +327,7 @@ def render_report(result: dict[str, Any], report_format: str) -> str:
 def format_workspace_verification(result: dict[str, Any]) -> str:
     """Human-readable workspace verification report."""
     lines = [
-        f"Flyto Workspace Verify: {result['workspace']}",
+        f"Flyto2 Workspace Verify: {result['workspace']}",
         f"  Path:     {result['path']}",
         f"  Status:   {'PASS' if result['pass'] else 'FAIL'}",
         f"  Projects: {result['summary']['pass']} pass, {result['summary']['warn']} warn, "
@@ -2368,7 +2368,7 @@ def _flatten_report_checks(result: dict[str, Any]) -> list[tuple[str, dict[str, 
 
 
 def _render_markdown_report(result: dict[str, Any]) -> str:
-    title = "Flyto Workspace Verify" if "projects" in result else "Flyto Verify"
+    title = "Flyto2 Workspace Verify" if "projects" in result else "Flyto2 Verify"
     name = result.get("workspace") or result.get("project") or "project"
     lines = [
         f"# {title}: {name}",

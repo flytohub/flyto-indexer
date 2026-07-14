@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Flyto Indexer HTTP API Server
+Flyto2 Indexer HTTP API Server
 
 General-purpose API service that allows any AI tool to query the index.
 
@@ -51,7 +51,7 @@ INDEX_DIR = Path(__file__).parent.parent / ".flyto-index"
 OPENAPI_SPEC = {
     "openapi": "3.1.0",
     "info": {
-        "title": "Flyto Indexer API",
+        "title": "Flyto2 Indexer API",
         "description": "Code semantic indexing API. Search code, get file info, analyze change impact.",
         "version": "1.0.0",
     },
@@ -453,13 +453,13 @@ class APIHandler(BaseHTTPRequestHandler):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Flyto Indexer HTTP API Server")
+    parser = argparse.ArgumentParser(description="Flyto2 Indexer HTTP API Server")
     parser.add_argument("--port", type=int, default=8765, help="Server port")
     parser.add_argument("--host", default="0.0.0.0", help="Server host")
     args = parser.parse_args()
 
     server = HTTPServer((args.host, args.port), APIHandler)
-    logger.info(f"Flyto Indexer API Server running at http://{args.host}:{args.port}")
+    logger.info(f"Flyto2 Indexer API Server running at http://{args.host}:{args.port}")
     logger.info(f"OpenAPI spec: http://{args.host}:{args.port}/openapi.json")
     logger.info(f"Health check: http://{args.host}:{args.port}/health")
 

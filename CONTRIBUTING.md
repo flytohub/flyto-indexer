@@ -1,4 +1,4 @@
-# Contributing to Flyto Indexer
+# Contributing to Flyto2 Indexer
 
 Thanks for your interest in contributing!
 

@@ -1,5 +1,5 @@
 """
-Core data models for Flyto Indexer.
+Core data models for Flyto2 Indexer.
 
 Symbol ID format: project:path:type:name
 Example: flyto-cloud:src/pages/TopUp.vue:component:TopUp

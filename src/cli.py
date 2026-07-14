@@ -1,5 +1,5 @@
 """
-Command-line interface for Flyto Indexer.
+Command-line interface for Flyto2 Indexer.
 
 Usage:
     flyto-index init [path]
@@ -34,7 +34,7 @@ def _ensure_gitignore(directory: Path):
 def main():
     parser = argparse.ArgumentParser(
         prog="flyto-index",
-        description="Flyto Indexer - Code indexing, search, and impact analysis for AI-assisted development",
+        description="Flyto2 Indexer - Code indexing, search, and impact analysis for AI-assisted development",
         epilog=(
             "Examples:\n"
             "  flyto-index init .                  Initialize indexing for current project\n"
@@ -50,12 +50,12 @@ def main():
     # init
     init_parser = subparsers.add_parser(
         "init",
-        help="Initialize Flyto metadata in a project",
+        help="Initialize Flyto2 metadata in a project",
         description="Create the legacy .flyto/ metadata directory and generated-index ignore rules.",
     )
     init_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
     init_parser.add_argument("--name", help="Project name (default: directory name)")
-    init_parser.add_argument("--no-gitignore", action="store_true", help="Do not add generated Flyto directories to .gitignore")
+    init_parser.add_argument("--no-gitignore", action="store_true", help="Do not add generated Flyto2 directories to .gitignore")
     init_parser.add_argument("--index", action="store_true", help="Run indexer immediately after init")
 
     # scan
@@ -628,7 +628,7 @@ def cmd_init(args):
             with open(gitignore_path, "a") as f:
                 if gitignore_path.exists() and not gitignore_path.read_text().endswith("\n"):
                     f.write("\n")
-                f.write("\n# Flyto indexes (generated)\n")
+                f.write("\n# Flyto2 indexes (generated)\n")
                 for entry in missing_entries:
                     f.write(f"{entry}\n")
             print(f"Added {', '.join(repr(e) for e in missing_entries)} to .gitignore")
@@ -764,7 +764,7 @@ def cmd_status(args):
     tag_stats = result.get("tags", {})
     desc_stats = result.get("descriptions", {})
 
-    print(f"Flyto Status: {result['project']}")
+    print(f"Flyto2 Status: {result['project']}")
     print(f"  Format:     {result.get('index_format', 'unknown')}")
     print(f"  Index Dir:  {result.get('index_dir', '')}")
     print(f"  Schema:     v{result['schemaVersion']}")
@@ -957,7 +957,7 @@ def cmd_tools(args):
     commands = [
         {
             "name": "init",
-            "summary": "Initialize Flyto metadata and generated-index ignore rules in a project",
+            "summary": "Initialize Flyto2 metadata and generated-index ignore rules in a project",
             "args": [
                 {"name": "path", "type": "string", "required": False, "default": ".", "description": "Project root path"},
                 {"name": "--name", "type": "string", "required": False, "description": "Project name (default: directory name)"},
@@ -1226,7 +1226,7 @@ def cmd_install_hook(args):
     if hook_file.exists():
         content = hook_file.read_text(encoding="utf-8")
         if HOOK_MARKER_BEGIN in content:
-            print("Flyto hook already installed. Skipping.")
+            print("Flyto2 hook already installed. Skipping.")
             return None
         # Append to existing hook
         if not content.endswith("\n"):

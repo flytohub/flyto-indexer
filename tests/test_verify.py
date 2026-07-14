@@ -92,7 +92,7 @@ def _write_indexer_ci(root: Path):
 
 def _write_indexer_package_config(root: Path):
     (root / "LICENSE").write_text("Apache-2.0\n", encoding="utf-8")
-    (root / "NOTICE").write_text("Flyto\n", encoding="utf-8")
+    (root / "NOTICE").write_text("Flyto2\n", encoding="utf-8")
     (root / "config" / "rules").mkdir(parents=True)
     (root / "config" / "rules" / "demo.yaml").write_text("rules: []\n", encoding="utf-8")
     (root / "pyproject.toml").write_text(
@@ -391,7 +391,7 @@ def test_format_verification_includes_summary(tmp_path):
 
     output = format_verification(result)
 
-    assert "Flyto Verify" in output
+    assert "Flyto2 Verify" in output
     assert "Checks:" in output
 
 
@@ -517,7 +517,7 @@ def test_workspace_verification_aggregates_projects(tmp_path):
     assert result["pass"] is True
     assert result["summary"]["projects"] == 2
     assert len(result["projects"]) == 2
-    assert "Flyto Workspace Verify" in format_workspace_verification(result)
+    assert "Flyto2 Workspace Verify" in format_workspace_verification(result)
 
 
 def test_cross_project_contract_matches_frontend_to_backend(tmp_path):
@@ -1099,7 +1099,7 @@ def test_render_report_formats(tmp_path):
     junit = render_report(result, "junit")
     sarif = render_report(result, "sarif")
 
-    assert "# Flyto Verify" in markdown
+    assert "# Flyto2 Verify" in markdown
     assert "<testsuite" in junit
     assert '"version": "2.1.0"' in sarif
 
@@ -1124,7 +1124,7 @@ def test_cmd_verify_writes_report(tmp_path):
     ))
 
     assert result["pass"] is True
-    assert "# Flyto Verify" in report.read_text(encoding="utf-8")
+    assert "# Flyto2 Verify" in report.read_text(encoding="utf-8")
 
 
 def test_workspace_changed_only_skips_clean_git_project(tmp_path):

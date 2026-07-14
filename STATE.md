@@ -1,11 +1,11 @@
-# Flyto Indexer State
+# Flyto2 Indexer State
 
 ## Current State
 
 - Project memory structure has been bootstrapped for repeatable audit and
   handoff work.
 - The repository already provides CLI and MCP-oriented code intelligence used by
-  Flyto audits.
+  Flyto2 audits.
 - Flyto2 core health gating now uses severity-weighted complexity scoring; the
   2026-06-21 baseline records count, burden, and top-hotspot evidence for
   continued refactoring.
@@ -60,7 +60,7 @@
 
 - No repo-specific release blocker is recorded from this docs bootstrap.
 - Cross-repo production readiness still depends on remote CI stability in
-  sibling Flyto repositories and on continued proof that indexer analysis stays
+  sibling Flyto2 repositories and on continued proof that indexer analysis stays
   local-first.
 - As of the 2026-06-24 workspace audit, required GitHub Actions workflows are
   not green across core repos. Observed blockers include `startup_failure`,

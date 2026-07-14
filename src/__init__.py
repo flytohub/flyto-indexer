@@ -1,5 +1,5 @@
 """
-Flyto Indexer - Code audit and smart indexing system.
+Flyto2 Indexer - Code audit and smart indexing system.
 
 Enables AI to precisely locate code and clearly see what is affected by changes.
 

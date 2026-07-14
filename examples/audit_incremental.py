@@ -40,7 +40,7 @@ os.chdir(src_path)
 from auditor.incremental_audit import IncrementalAuditor
 from auditor.llm_auditor import LLMAuditor
 
-# Flyto projects
+# Flyto2 projects
 FLYTOHUB_ROOT = Path("/path/to/your/projects")
 PROJECTS = [
     "flyto-core",
@@ -163,14 +163,14 @@ def _audit_project(project_name, project_path, index_dir, args, auditor):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Incremental audit for Flyto projects")
+    parser = argparse.ArgumentParser(description="Incremental audit for Flyto2 projects")
     parser.add_argument("--full", action="store_true", help="Force full audit")
     parser.add_argument("--dry-run", action="store_true", help="Only show changes, do not audit")
     parser.add_argument("--project", type=str, help="Only audit the specified project")
     args = parser.parse_args()
 
     print("\n" + "=" * 60)
-    print("Flyto Indexer - Incremental Audit")
+    print("Flyto2 Indexer - Incremental Audit")
     print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 

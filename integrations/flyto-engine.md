@@ -164,7 +164,7 @@ A future `--anonymize` flag may hash paths for additional privacy.
 ### GitHub Action
 
 ```yaml
-name: Flyto Scan
+name: Flyto2 Scan
 on: [pull_request]
 
 jobs:

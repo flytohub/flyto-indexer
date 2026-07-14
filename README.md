@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>Flyto Indexer</h1>
+  <h1>Flyto2 Indexer</h1>
   <p>
     <strong>Know what breaks before you change it.</strong>
   </p>
@@ -20,7 +20,7 @@
 
 ---
 
-## Without Flyto Indexer
+## Without Flyto2 Indexer
 
 ```
 You:    "Rename validateOrder to validate_order"
@@ -33,7 +33,7 @@ AI:     *renames the function*
         *pushes broken code*
 ```
 
-## With Flyto Indexer
+## With Flyto2 Indexer
 
 ```
 You:    "Rename validateOrder to validate_order"
@@ -58,7 +58,7 @@ AI:     → impact(target="validateOrder", change_type="rename")
 **That's the difference.** grep finds text. This finds dependencies.
 
 <div align="center">
-  <img src="demo.gif" alt="Flyto Indexer — impact analysis before renaming" width="800">
+  <img src="demo.gif" alt="Flyto2 Indexer — impact analysis before renaming" width="800">
 </div>
 
 ## Install

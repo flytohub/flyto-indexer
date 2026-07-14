@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Flyto Indexer MCP Server — Protocol handler.
+Flyto2 Indexer MCP Server — Protocol handler.
 
 Handles MCP JSON-RPC communication, rate limiting, and tool dispatch.
 Tool definitions are in tool_registry.py (single source of truth).
@@ -313,7 +313,7 @@ def handle_request(request: dict):
             },
             "serverInfo": {
                 "name": "flyto-indexer",
-                "title": "Flyto Code Indexer",
+                "title": "Flyto2 Code Indexer",
                 "version": "2.3.0",
                 "description": "Code analysis MCP server — impact analysis, dependency tracking, dead code detection, security scanning, and code health scoring across any project.",
                 "websiteUrl": "https://github.com/flytohub/flyto-indexer",

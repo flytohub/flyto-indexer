@@ -1,8 +1,8 @@
-# Flyto Indexer Project
+# Flyto2 Indexer Project
 
 ## Mission
 
-`flyto-indexer` provides local repository intelligence for Flyto development:
+`flyto-indexer` provides local repository intelligence for Flyto2 development:
 project profiles, impact analysis, dependency graphs, security scans, taint
 rules, documentation checks, and verification gates.
 
