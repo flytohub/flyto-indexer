@@ -1,16 +1,124 @@
-taint:
-  sinks:
-  - pattern: ''
-    vuln_type: custom
-    severity: high
-  sources:
-  - pattern: ''
-    language: python
-  sanitizers:
-  - pattern: ''
-    cleanses:
-    - '*'
 version: 1
+
 layers:
-- name: ''
-  paths: []
+  - name: foundation
+    paths:
+      - "src/models.py"
+      - "src/safe_io.py"
+      - "src/safe_xml.py"
+      - "src/flyto_tags.py"
+      - "src/signature.py"
+      - "src/synonyms.py"
+    cannot_import:
+      - scanners
+      - analyzers
+      - index_core
+      - runtime_services
+      - tool_surface
+      - entrypoints
+    reason: "Foundation utilities and data models must stay reusable by every higher layer."
+
+  - name: scanners
+    paths:
+      - "src/scanner/**"
+      - "src/dependency_scanner.py"
+      - "src/dockerfile_scanner.py"
+      - "src/framework_detector.py"
+      - "src/git_secret_scanner.py"
+      - "src/iac_scanner.py"
+      - "src/license_scanner.py"
+      - "src/secret_scanner.py"
+    cannot_import:
+      - tool_surface
+      - entrypoints
+    reason: "Static scanners must not depend on MCP, CLI, or tool dispatch surfaces."
+
+  - name: analyzers
+    paths:
+      - "src/analyzer/**"
+      - "src/doc_scanner.py"
+      - "src/pr_analyzer.py"
+      - "src/quality.py"
+      - "src/sbom_export.py"
+    cannot_import:
+      - tool_surface
+      - entrypoints
+    reason: "Analysis engines must remain callable from CLI, MCP, CI, and package users."
+
+  - name: index_core
+    paths:
+      - "src/bm25.py"
+      - "src/dependency_resolver.py"
+      - "src/embedding.py"
+      - "src/resolver.py"
+      - "src/reverse_index.py"
+      - "src/search_documents.py"
+      - "src/search_index.py"
+      - "src/semantic.py"
+      - "src/test_mapper.py"
+    cannot_import:
+      - tool_surface
+      - entrypoints
+    reason: "Index and search core must stay independent from command/protocol adapters."
+
+  - name: runtime_services
+    paths:
+      - "src/context/**"
+      - "src/diff_impact.py"
+      - "src/engine.py"
+      - "src/flyto_output.py"
+      - "src/index_store.py"
+      - "src/indexer/**"
+      - "src/lsp/**"
+      - "src/mapper/**"
+      - "src/profile/**"
+      - "src/project_profile.py"
+      - "src/rule_loader.py"
+      - "src/session.py"
+      - "src/tools/maintenance.py"
+      - "src/watcher.py"
+    reason: "Runtime services may compose lower layers but must not depend on CLI or MCP entrypoints."
+
+  - name: tool_surface
+    paths:
+      - "src/api_server.py"
+      - "src/tool_registry/**"
+      - "src/tools/**"
+      - "src/verify.py"
+    cannot_import:
+      - entrypoints
+    reason: "Tool and verification surfaces must stay reusable without importing CLI/MCP process code."
+
+  - name: entrypoints
+    paths:
+      - "src/cli.py"
+      - "src/mcp_server.py"
+      - "src/watcher.py"
+    reason: "Entrypoints are allowed to compose all lower layers."
+
+cross_imports_deny:
+  - from: "src/scanner/**"
+    to: "src/tools/**"
+    severity: high
+    reason: "Language scanners must not couple to agent-facing tools."
+  - from: "src/analyzer/**"
+    to: "src/tool_registry/**"
+    severity: high
+    reason: "Analyzers must not couple to MCP tool dispatch metadata."
+  - from: "src/tool_registry/**"
+    to: "src/mcp_server.py"
+    severity: high
+    reason: "Tool registry must stay protocol-neutral."
+
+architecture:
+  - rule: "Generated indexes are never source-controlled policy inputs"
+    glob_deny:
+      - ".flyto-index/**"
+    severity: high
+
+style:
+  - rule: "Avoid shell execution in production scanner code"
+    grep_deny:
+      - pattern: "subprocess\\.[A-Za-z_]+\\([^\\n)]*,\\s*shell\\s*=\\s*True"
+        glob: "src/**/*.py"
+    severity: high

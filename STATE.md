@@ -55,6 +55,20 @@
   Public frontend PRs are intended to flow back into the private `flyto-code`
   source repo through generated upstream patches before re-export.
 - CI covers lint, tests, verify, build, and no-dependency wheel smoke.
+- `verify` now includes a `rules_policy` gate. The repository-owned
+  `.flyto-rules.yaml` declares real architecture layers for foundation,
+  scanners, analyzers, index core, runtime services, tool surfaces, and
+  entrypoints. The gate evaluates rules plus the import graph and currently
+  checks 9 rules, 7 layers, 226 files, and 313 local edges with zero
+  violations.
+- Documentation module coverage is closed for top-level directories through
+  README files in config, examples, handoffs, integrations, scripts, and tests;
+  `scan_documentation` reports an 85 overall score with no suggestions.
+- `single_project_islands` now treats Flyto2 product API closure as `/api/v1`
+  only. Mock/dev fixture endpoints such as `/api/mock/**` and `@mock-utils`
+  dependency metadata are excluded from product API unmatched-call gates, while
+  real `/api/v1/**` frontend calls still require a matching backend/OpenAPI
+  contract.
 
 ## Release Blockers
 

@@ -1,5 +1,24 @@
 # Decisions
 
+## 2026-07-15 - Product API closure ignores mock fixtures
+
+Decision: scope verify-time frontend/backend API closure to `/api/v1/**` and
+exclude mock/dev endpoints such as `/api/mock/**` from unmatched API call gates.
+
+Reason: generated Flyto2 Warroom CE packages include frontend mock helpers for
+local UI fixtures. Treating those helpers as product API calls creates false
+backend contract failures and hides real `/api/v1/**` drift.
+
+## 2026-07-15 - Rules policy is a first-class verify gate
+
+Decision: `flyto-indexer verify` evaluates `.flyto-rules.yaml` through the
+rules engine and layer import graph, and reports it as `rules_policy`.
+
+Reason: an empty rules file gave a false sense of architecture coverage. The
+indexer now owns a real layer policy for foundation, scanners, analyzers, index
+core, runtime services, tool surfaces, and entrypoints, with regression tests
+that prove layer edges are checked and violations fail the verification gate.
+
 ## 2026-06-30 - Warroom CE install is generated, EE behavior is simulated by override
 
 Decision: extend the open-core exporter so the Flyto2 Warroom CE package

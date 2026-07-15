@@ -222,6 +222,7 @@ def run_verification(
     _check_context_loop(engine, query, add_check)
     _check_impact_loop(engine, symbol, add_check)
     _check_weak_scanners(root, add_check)
+    _check_rules_policy(root, add_check)
     _check_no_external_runtime(root, add_check)
     _check_package_integrity(root, add_check)
     _check_ci_closed_loop(root, add_check)
@@ -437,6 +438,50 @@ def _check_index_integrity(engine: IndexEngine, add_check) -> None:
     )
 
 
+def _check_rules_policy(root: Path, add_check) -> None:
+    rules_path = root / ".flyto-rules.yaml"
+    if not rules_path.is_file():
+        add_check("rules_policy", "pass", "No project rules policy to enforce")
+        return
+
+    try:
+        from .analyzer.rules import check_rules
+    except ImportError:
+        from analyzer.rules import check_rules  # type: ignore[no-redef]
+
+    try:
+        result = check_rules(root)
+    except (OSError, ValueError, RuntimeError) as exc:
+        add_check(
+            "rules_policy",
+            "fail",
+            f"Project rules policy could not be evaluated: {exc}",
+            metrics={"policy": str(rules_path)},
+        )
+        return
+
+    violations = int(result.get("total_violations") or 0)
+    layers = result.get("layers") if isinstance(result.get("layers"), dict) else {}
+    status = "pass" if violations == 0 else "fail"
+    summary = "Project rules policy passed" if status == "pass" else "Project rules policy failed"
+    add_check(
+        "rules_policy",
+        status,
+        summary,
+        metrics={
+            "policy": str(rules_path),
+            "rules_checked": int(result.get("rules_checked") or 0),
+            "total_rules": int(result.get("total_rules") or 0),
+            "violations": violations,
+            "pass_rate": result.get("pass_rate"),
+            "layer_count": int(layers.get("layer_count") or 0),
+            "layer_files_checked": int(layers.get("files_checked") or 0),
+            "layer_edges_checked": int(layers.get("edges_checked") or 0),
+            "samples": result.get("violations", [])[:5],
+        },
+    )
+
+
 def _check_single_project_islands(engine: IndexEngine, add_check) -> None:
     index = engine.index
     symbols = index.symbols or {}
@@ -561,7 +606,7 @@ def _extract_single_project_api_contract(symbols: dict[str, Any], dependencies: 
         if not route_path and " " in raw_name:
             method_part, route_path = raw_name.split(" ", 1)
             method = method or method_part.upper()
-        if not route_path.startswith("/api/"):
+        if not _is_product_api_path(route_path):
             continue
         api_defs.append({
             "method": method,
@@ -578,7 +623,7 @@ def _extract_single_project_api_contract(symbols: dict[str, Any], dependencies: 
             continue
         metadata = _dep_metadata(dep)
         raw = str(metadata.get("url") or _dep_value(dep, "target_id", "target") or "")
-        if not raw.startswith("/api/"):
+        if not _is_product_api_path(raw):
             continue
         normalized = _normalize_api_path(raw)
         if normalized == "/api":
@@ -637,7 +682,7 @@ def _extract_openapi_json_api_contracts(path: Path) -> list[dict[str, Any]]:
 
     api_defs: list[dict[str, Any]] = []
     for route_path, route in paths.items():
-        if not isinstance(route_path, str) or not route_path.startswith("/api/"):
+        if not isinstance(route_path, str) or not _is_product_api_path(route_path):
             continue
         if not isinstance(route, dict):
             continue
@@ -680,7 +725,7 @@ def _extract_openapi_yaml_api_contracts(path: Path) -> list[dict[str, Any]]:
             current_path = path_match.group(1)
             current_path_indent = indent
             continue
-        if not current_path or not current_path.startswith("/api/") or indent <= current_path_indent:
+        if not current_path or not _is_product_api_path(current_path) or indent <= current_path_indent:
             continue
 
         method = stripped.split(":", 1)[0].upper()
@@ -713,6 +758,8 @@ def _match_single_project_api_calls(api_defs: list[dict[str, Any]], api_calls: l
     for call in api_calls:
         method = call.get("method", "")
         normalized = call.get("normalized", "")
+        if not _is_product_api_path(str(call.get("path") or normalized)):
+            continue
         if (method and (method, normalized) in api_keys) or normalized in api_paths:
             continue
         unmatched.append(call)
@@ -1776,7 +1823,7 @@ def _extract_backend_routes_from_index(project: Path) -> list[dict[str, Any]]:
         if not route_path and " " in raw:
             method_part, route_path = raw.split(" ", 1)
             method = method or method_part.upper()
-        if not route_path.startswith("/api/"):
+        if not _is_product_api_path(route_path):
             continue
         routes.append({
             "project": project.name,
@@ -1834,6 +1881,11 @@ def _strip_url_to_api_path(raw: str) -> str:
     path = path.split("?", 1)[0].split("#", 1)[0]
     path = re.sub(r"(?<!/)\$\{[^}/]*(?:\}|$)", "", path)
     return path.rstrip(".,:;")
+
+
+def _is_product_api_path(raw: str) -> bool:
+    path = _strip_url_to_api_path(raw)
+    return path == "/api/v1" or path.startswith("/api/v1/")
 
 
 def _normalize_api_path(raw: str) -> str:

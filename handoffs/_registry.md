@@ -2,6 +2,8 @@
 
 | Date | Topic | File | Status |
 | --- | --- | --- | --- |
+| 2026-07-15 | Product API mock fixture exclusion | `2026-07-15-product-api-mock-fixture-exclusion.md` | Active |
+| 2026-07-15 | Rules policy verify gate | `2026-07-15-rules-policy-verify-gate.md` | Active |
 | 2026-06-30 | Flyto2 Warroom CE installer and EE simulation | `2026-06-30-warroom-ce-installer.md` | Active |
 | 2026-06-30 | Flyto2 open-core split gate | `2026-06-30-flyto2-open-core-split.md` | Active |
 | 2026-06-24 | Workspace GitHub Actions startup release gate | `2026-06-24-workspace-github-actions-startup-gate.md` | Active |

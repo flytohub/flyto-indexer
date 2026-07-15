@@ -894,6 +894,74 @@ def test_single_project_islands_matches_in_repo_api_calls():
     assert check["metrics"]["unmatched_api_calls"] == 0
 
 
+def test_single_project_islands_ignores_mock_api_calls():
+    api_sid = "demo:src-next/@mock-utils/api/usersApi.ts:api:GET /api/mock/users"
+    source_sid = "demo:src-next/@mock-utils/api/usersApi.ts:file:usersApi"
+    checks = _run_single_project_island_check(
+        {
+            api_sid: {
+                "path": "src-next/@mock-utils/api/usersApi.ts",
+                "type": "api",
+                "name": "GET /api/mock/users",
+                "metadata": {"method": "GET", "path": "/api/mock/users"},
+            },
+            source_sid: {
+                "path": "src-next/@mock-utils/api/usersApi.ts",
+                "type": "file",
+                "name": "usersApi",
+            },
+        },
+        {
+            "mock_call": {
+                "source": source_sid,
+                "target": "/api/mock/users",
+                "type": "api_calls",
+                "metadata": {"method": "GET", "url": "/api/mock/users"},
+            }
+        },
+    )
+
+    check = checks["single_project_islands"]
+    assert check["status"] == "pass"
+    assert check["metrics"]["api_definitions"] == 0
+    assert check["metrics"]["api_calls"] == 0
+    assert check["metrics"]["unmatched_api_calls"] == 0
+
+
+def test_single_project_islands_still_flags_unmatched_product_api_calls():
+    api_sid = "demo:api/router.go:api:GET /api/v1/health"
+    source_sid = "demo:src/lib/engine/client.ts:file:client"
+    checks = _run_single_project_island_check(
+        {
+            api_sid: {
+                "path": "api/router.go",
+                "type": "api",
+                "name": "GET /api/v1/health",
+                "metadata": {"method": "GET", "path": "/api/v1/health"},
+            },
+            source_sid: {
+                "path": "src/lib/engine/client.ts",
+                "type": "file",
+                "name": "client",
+            },
+        },
+        {
+            "unmatched_call": {
+                "source": source_sid,
+                "target": "/api/v1/unwired",
+                "type": "api_calls",
+                "metadata": {"method": "GET", "url": "/api/v1/unwired"},
+            }
+        },
+    )
+
+    check = checks["single_project_islands"]
+    assert check["status"] == "warn"
+    assert check["metrics"]["api_definitions"] == 1
+    assert check["metrics"]["api_calls"] == 1
+    assert check["metrics"]["unmatched_api_calls"] == 1
+
+
 def test_single_project_islands_matches_openapi_contracts(tmp_path):
     contract = tmp_path / "packages" / "flyto-contracts" / "openapi" / "flyto-engine.openapi.yaml"
     contract.parent.mkdir(parents=True)
@@ -1009,6 +1077,68 @@ def test_verify_policy_budget_allows_named_warning(tmp_path):
     assert checks["agent_hygiene"]["status"] == "warn"
     assert checks["policy_budget"]["status"] == "pass"
     assert result["pass"] is True
+
+
+def test_verify_rules_policy_passes_with_real_layer_edges(tmp_path):
+    _write_project(tmp_path)
+    (tmp_path / "src" / "routes.py").write_text(
+        "from .auth import handle_auth\n\n"
+        "def get_routes():\n"
+        "    if handle_auth('admin'):\n"
+        "        return ['/dashboard']\n"
+        "    return ['/']\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".flyto-rules.yaml").write_text(
+        "version: 1\n"
+        "layers:\n"
+        "  - name: core\n"
+        "    paths: ['src/auth.py']\n"
+        "  - name: routes\n"
+        "    paths: ['src/routes.py']\n",
+        encoding="utf-8",
+    )
+
+    result = run_verification(tmp_path, full_scan=True)
+    checks = {check["name"]: check for check in result["checks"]}
+
+    assert checks["rules_policy"]["status"] == "pass"
+    assert checks["rules_policy"]["metrics"]["rules_checked"] == 2
+    assert checks["rules_policy"]["metrics"]["layer_edges_checked"] >= 1
+
+
+def test_verify_rules_policy_fails_layer_violation(tmp_path):
+    _write_project(tmp_path)
+    (tmp_path / "src" / "scanner").mkdir()
+    (tmp_path / "src" / "tools").mkdir()
+    (tmp_path / "src" / "scanner" / "python.py").write_text(
+        "from ..tools.maintenance import run\n\n"
+        "def scan():\n"
+        "    return run()\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "src" / "tools" / "maintenance.py").write_text(
+        "def run():\n"
+        "    return 'ok'\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".flyto-rules.yaml").write_text(
+        "version: 1\n"
+        "layers:\n"
+        "  - name: scanners\n"
+        "    paths: ['src/scanner/**']\n"
+        "    cannot_import: ['tool_surface']\n"
+        "  - name: tool_surface\n"
+        "    paths: ['src/tools/**']\n",
+        encoding="utf-8",
+    )
+
+    result = run_verification(tmp_path, full_scan=True)
+    checks = {check["name"]: check for check in result["checks"]}
+
+    assert checks["rules_policy"]["status"] == "fail"
+    assert checks["rules_policy"]["metrics"]["violations"] >= 1
+    assert any("scanner" in sample["file"] for sample in checks["rules_policy"]["metrics"]["samples"])
 
 
 def test_no_external_runtime_and_ci_closed_loop_pass_for_indexer(tmp_path):
