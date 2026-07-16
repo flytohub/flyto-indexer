@@ -2,6 +2,7 @@
 
 | Date | Topic | File | Status |
 | --- | --- | --- | --- |
+| 2026-07-16 | TypeScript request method extraction | `2026-07-16-typescript-request-method-extraction.md` | Active |
 | 2026-07-15 | Product API mock fixture exclusion | `2026-07-15-product-api-mock-fixture-exclusion.md` | Active |
 | 2026-07-15 | Rules policy verify gate | `2026-07-15-rules-policy-verify-gate.md` | Active |
 | 2026-06-30 | Flyto2 Warroom CE installer and EE simulation | `2026-06-30-warroom-ce-installer.md` | Active |

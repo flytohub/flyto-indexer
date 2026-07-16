@@ -1,5 +1,16 @@
 # Decisions
 
+## 2026-07-16 - TypeScript API wrappers preserve HTTP methods
+
+Decision: TypeScript API call extraction treats method-aware frontend wrappers
+such as `request<T>('POST', \`/api/v1/.../${id}\`)` as authoritative before
+running broad string-literal fallback detection.
+
+Reason: Flyto2 frontend engine clients use template-literal paths for many
+mutating actions. The broad `/api/vN/**` string fallback was recording those
+paths as GET before the method-aware `request` pattern ran, which polluted API
+drift and product-profile evidence with false method mismatches.
+
 ## 2026-07-15 - Product API closure ignores mock fixtures
 
 Decision: scope verify-time frontend/backend API closure to `/api/v1/**` and

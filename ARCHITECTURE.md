@@ -31,6 +31,11 @@
   matching so generated CE packages do not fail on fixture helpers.
 - This exclusion is only for mock/dev API contracts. Real `/api/v1/**` calls
   remain strict and must be backed by backend route or OpenAPI evidence.
+- TypeScript frontend call extraction must prefer method-aware call patterns
+  (`request<T>('POST', path)`, `axios.post`, `api.patch`, etc.) before broad
+  string-literal `/api/vN/**` fallback patterns. Fallback patterns may discover
+  otherwise-hidden calls, but must not overwrite a real method-bearing wrapper
+  call for the same normalized path.
 
 ## Deployment / Edition
 

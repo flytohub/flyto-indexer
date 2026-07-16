@@ -741,18 +741,18 @@ class TypeScriptScanner(BaseScanner):
 
     # Patterns for detecting frontend HTTP API calls
     _API_CALL_PATTERNS = [
-        re.compile(r'''(?:fetch|useFetch|useAsyncData|\$fetch)\s*\(\s*[`"']([^`"']*?/api/[^`"']*?)[`"']'''),
-        re.compile(r'''axios\s*\.\s*(get|post|put|delete|patch)\s*\(\s*[`"']([^`"']*?)[`"']''', re.I),
-        re.compile(r'''(?:\$?api|http|\$http|request)\s*\.\s*(get|post|put|delete|patch)\s*\(\s*[`"']([^`"']*?)[`"']''', re.I),
-        re.compile(r'''[`"']([^`"']*?/api/[^`"']*?)[`"']\s*[,)]'''),
+        (re.compile(r'''(?:fetch|useFetch|useAsyncData|\$fetch)\s*\(\s*[`"']([^`"']*?/api/[^`"']*?)[`"']'''), False),
+        (re.compile(r'''axios\s*\.\s*(get|post|put|delete|patch)\s*\(\s*[`"']([^`"']*?)[`"']''', re.I), False),
+        (re.compile(r'''(?:\$?api|http|\$http|request)\s*\.\s*(get|post|put|delete|patch)\s*\(\s*[`"']([^`"']*?)[`"']''', re.I), False),
         # Pattern: request<T>(method, path) or request(method, path) — custom wrappers
-        re.compile(r'''request(?:<[^>]*>)?\s*\(\s*[`"'](GET|POST|PUT|DELETE|PATCH)[`"']\s*,\s*[`"']([^`"']*?)[`"']''', re.I),
+        (re.compile(r'''request(?:<[^>]*>)?\s*\(\s*[`"'](GET|POST|PUT|DELETE|PATCH)[`"']\s*,\s*[`"']([^`"']*?)[`"']''', re.I), False),
         # Pattern: fetch with template literal containing path variable
-        re.compile(r'''fetch\s*\(\s*`\$\{[^}]+\}\$\{([^}]+)\}`'''),
+        (re.compile(r'''fetch\s*\(\s*`\$\{[^}]+\}\$\{([^}]+)\}`'''), False),
+        (re.compile(r'''[`"']([^`"']*?/api/[^`"']*?)[`"']\s*[,)]'''), True),
         # Pattern: URL string literal containing /api/vN/ (broader catch-all)
-        re.compile(r'''[`"']((?:https?://[^`"']*)?/api/v\d+/[^`"']*)[`"']'''),
+        (re.compile(r'''[`"']((?:https?://[^`"']*)?/api/v\d+/[^`"']*)[`"']'''), True),
         # Pattern: External API URL (https://api.*)
-        re.compile(r'''[`"'](https://api\.[a-z]+\.[a-z]+/[^`"']*)[`"']'''),
+        (re.compile(r'''[`"'](https://api\.[a-z]+\.[a-z]+/[^`"']*)[`"']'''), True),
     ]
 
     _TEMPLATE_VAR_RE = re.compile(r'\$\{[^}]*\}')
@@ -774,9 +774,10 @@ class TypeScriptScanner(BaseScanner):
     def _extract_api_calls(self, content: str) -> list[dict]:
         """Extract frontend HTTP API calls (fetch, axios, $http, etc.)"""
         results = []
-        seen: set[str] = set()
+        seen: set[tuple[str, str]] = set()
+        seen_non_fallback_urls: set[str] = set()
 
-        for pattern in self._API_CALL_PATTERNS:
+        for pattern, is_fallback in self._API_CALL_PATTERNS:
             for match in pattern.finditer(content):
                 if self._is_msw_handler_definition(content, match):
                     continue
@@ -793,9 +794,14 @@ class TypeScriptScanner(BaseScanner):
 
                 if url.rstrip('/') == "/api":
                     continue
-                if url in seen:
+                if is_fallback and url in seen_non_fallback_urls:
                     continue
-                seen.add(url)
+                key = (method, url)
+                if key in seen:
+                    continue
+                seen.add(key)
+                if not is_fallback:
+                    seen_non_fallback_urls.add(url)
 
                 results.append({
                     "method": method,

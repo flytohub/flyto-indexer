@@ -69,6 +69,11 @@
   dependency metadata are excluded from product API unmatched-call gates, while
   real `/api/v1/**` frontend calls still require a matching backend/OpenAPI
   contract.
+- TypeScript API call extraction now preserves HTTP methods for custom
+  `request<T>(method, template-literal-path)` wrappers before fallback string
+  literal matching. Flyto2 frontend engine clients such as AI governance and
+  container lifecycle actions now report POST/PATCH/DELETE accurately instead
+  of being downgraded to GET by broad `/api/vN/**` catch-all matching.
 
 ## Release Blockers
 

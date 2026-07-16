@@ -173,6 +173,22 @@ class TestTypeScriptAPICallDetection:
         assert len(api_deps) == 1
         assert api_deps[0].metadata["method"] == "DELETE"
 
+    def test_custom_request_template_literal_preserves_method(self, ts_scanner):
+        code = """
+export function approveUseCase(useCaseId: string) {
+  return request<AIGovernanceUseCase>(
+    'POST',
+    `/api/v1/code/ai-governance/use-cases/${useCaseId}/approve`,
+    {},
+  )
+}
+"""
+        _, deps = ts_scanner.scan_file(Path("surfaces.ts"), code)
+        api_deps = [d for d in deps if d.dep_type == DependencyType.API_CALLS]
+        assert len(api_deps) == 1
+        assert api_deps[0].target_id == "/api/v1/code/ai-governance/use-cases/*/approve"
+        assert api_deps[0].metadata["method"] == "POST"
+
     def test_msw_handlers_are_not_frontend_api_calls(self, ts_scanner):
         code = """
 import { http } from 'msw'
