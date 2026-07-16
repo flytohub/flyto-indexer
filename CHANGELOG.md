@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+- Made project-scoped git hotspot analysis fail closed when the requested
+  project root is missing, instead of falling back to an arbitrary discovered
+  index or CWD git repo. Added regression coverage so audit output cannot mix
+  paths from unrelated repositories.
+
 ## [2.14.0] - 2026-07-09
 
 ### Removed

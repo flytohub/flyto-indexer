@@ -212,6 +212,23 @@ class TestGitHotspots:
         result = mock_index.git_hotspots(project="no-git")
         assert "error" in result
 
+    def test_explicit_project_missing_root_does_not_fallback_to_other_repo(self, mock_index, git_repo, tmp_path, monkeypatch):
+        """Project-scoped hotspots must not borrow history from another repo."""
+        missing_root = tmp_path / "missing-project-root"
+        fake_index = {
+            "projects": ["missing-project", "other-project"],
+            "project_roots": {
+                "missing-project": str(missing_root),
+                "other-project": git_repo,
+            },
+            "symbols": {},
+        }
+        monkeypatch.setattr(mock_index, "load_index", lambda: fake_index)
+
+        result = mock_index.git_hotspots(project="missing-project")
+
+        assert result == {"error": "Project root not found on disk: missing-project"}
+
 
 # ---------------------------------------------------------------------------
 # git_cochange

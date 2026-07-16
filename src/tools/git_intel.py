@@ -59,6 +59,9 @@ def _get_project_root(project: Optional[str] = None) -> Tuple[str, str]:
         proj_name = projects[0]
 
     root = project_roots.get(proj_name)
+    if project and (not root or not os.path.isdir(root)):
+        raise ValueError(f"Project root not found on disk: {proj_name}")
+
     if not root or not os.path.isdir(root):
         # Fallback: try to find project root from index directory
         # The index is usually at <project_root>/.flyto-index/

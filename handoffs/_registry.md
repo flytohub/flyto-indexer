@@ -2,6 +2,7 @@
 
 | Date | Topic | File | Status |
 | --- | --- | --- | --- |
+| 2026-07-17 | Project-scoped git hotspots | `2026-07-17-project-scoped-git-hotspots.md` | Active |
 | 2026-07-16 | TypeScript request method extraction | `2026-07-16-typescript-request-method-extraction.md` | Active |
 | 2026-07-15 | Product API mock fixture exclusion | `2026-07-15-product-api-mock-fixture-exclusion.md` | Active |
 | 2026-07-15 | Rules policy verify gate | `2026-07-15-rules-policy-verify-gate.md` | Active |

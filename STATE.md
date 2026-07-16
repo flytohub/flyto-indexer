@@ -74,6 +74,11 @@
   literal matching. Flyto2 frontend engine clients such as AI governance and
   container lifecycle actions now report POST/PATCH/DELETE accurately instead
   of being downgraded to GET by broad `/api/vN/**` catch-all matching.
+- Project-scoped git history intelligence now fails closed when the requested
+  project's indexed root is missing from disk. It no longer falls back to a
+  discovered sibling `.flyto-index` or the current working directory, which
+  prevents audit hotspot output from borrowing paths from unrelated Flyto2
+  repositories.
 
 ## Release Blockers
 
