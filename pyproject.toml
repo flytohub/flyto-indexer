@@ -46,6 +46,10 @@ Homepage = "https://flyto2.com"
 Documentation = "https://docs.flyto2.com"
 Repository = "https://github.com/flytohub/flyto-indexer"
 Issues = "https://github.com/flytohub/flyto-indexer/issues"
+Changelog = "https://github.com/flytohub/flyto-indexer/blob/main/CHANGELOG.md"
+Security = "https://github.com/flytohub/flyto-indexer/blob/main/SECURITY.md"
+Blog = "https://blog.flyto2.com/posts/code-intelligence-with-flyto-indexer"
+Examples = "https://docs.flyto2.com/indexer/"
 
 [tool.hatch.build.targets.sdist]
 include = [
