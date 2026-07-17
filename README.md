@@ -10,15 +10,41 @@
     <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+"></a>
   </p>
   <p>
-    MCP server that gives AI assistants impact analysis, cross-project reference tracking, and code health scoring.<br/>
-    Zero dependencies. Pure Python. 100% local.
+    Open-source code intelligence MCP server for AI coding agents, refactors, pull-request review, and release gates.<br/>
+    Impact analysis, cross-project references, dependency graphs, taint checks, documentation scoring, and code health in one local tool.
   </p>
   <p>
-    <a href="https://flyto2.com"><strong>flyto2.com</strong></a> · <a href="https://docs.flyto2.com">Documentation</a> · <a href="https://www.youtube.com/@Flyto2">YouTube</a>
+    <a href="https://flyto2.com"><strong>flyto2.com</strong></a> ·
+    <a href="https://docs.flyto2.com/indexer/">Docs</a> ·
+    <a href="https://blog.flyto2.com">Blog</a> ·
+    <a href="https://pypi.org/project/flyto-indexer/">PyPI</a> ·
+    <a href="https://www.youtube.com/@Flyto2">YouTube</a>
   </p>
 </div>
 
 ---
+
+Flyto2 Indexer is built for teams that let AI agents touch real code. It gives
+Codex, Claude Code, Cursor, Windsurf, and other MCP clients a local map of your
+repository before they rename symbols, edit shared APIs, delete files, or ship a
+pull request. Grep finds text; Flyto2 Indexer answers what depends on the thing
+you are changing.
+
+Use it for AI code review, monorepo impact analysis, cross-repo dependency
+tracking, safe refactors, security taint scanning, release-readiness checks,
+documentation audits, and GitHub/GitLab merge gates.
+
+## Try it in 60 seconds
+
+```bash
+pip install flyto-indexer
+flyto-index setup .
+flyto-index verify . --strict
+```
+
+That builds the local index, writes agent instructions, configures MCP for
+supported clients, and runs the same closed-loop gate Flyto2 uses before
+shipping AI-assisted code.
 
 ## Without Flyto2 Indexer
 
@@ -75,6 +101,19 @@ That's it. One command does everything:
 
 Restart Claude Code and start using it. Works with any MCP client — Claude Code, Cursor, Windsurf, etc.
 
+## API / MCP Tools
+
+Flyto2 Indexer exposes the tools AI agents need before they make a risky edit:
+
+| Tool | What it protects |
+| --- | --- |
+| `search` | Finds symbols and concepts across a project without guessing filenames. |
+| `impact` | Shows references, blast radius, cross-project usage, and related tests. |
+| `structure` | Maps APIs, packages, dependencies, conventions, and type contracts. |
+| `audit` | Scores security, complexity, dead code, coverage, and git hotspots. |
+| `scan_documentation` | Checks README quality, module docs, config docs, and contribution files. |
+| `verify` | Runs the local closed-loop gate before an agent finishes or a PR merges. |
+
 ## Usage
 
 Use `flyto-index verify` as the default gate before an AI agent finishes a code
@@ -111,6 +150,22 @@ the five product lines, repo classification, project memory, and health targets
 before a release can be considered production-ready.
 Use `flyto2-memory-bootstrap` to create missing project-memory, workflow, and
 handoff files from the same manifest without overwriting existing files.
+
+## Contributing
+
+Pull requests are welcome for scanners, MCP tools, docs, CI gates, and language
+support. Run the local checks before opening a PR:
+
+## Testing
+
+```bash
+python -m pytest
+python -m ruff check src tests
+flyto-index verify . --strict
+```
+
+Security issues should be reported to `security@flyto2.com`. General developer
+questions can go to `dev@flyto2.com` or GitHub Discussions.
 
 Project-specific verify budgets live in `.flyto-rules.yaml` under `verify:`.
 This stays stdlib-only; the verifier reads a small no-dependency subset:
