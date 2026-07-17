@@ -2,16 +2,11 @@
 # Each line is a fixed-string path the guard ignores. Two kinds:
 #   [data]     legitimate domain-as-data (recon fixtures, domain-canon
 #              logic, scanner examples) — NOT branding, keep permanently.
-#   [branding] not-yet-canonicalized legacy-domain (flyto2<dot>com) brand
+#   [branding] not-yet-canonicalized legacy-domain (flyto<dot>io) brand
 #              refs — remove once
-#              FLYA-38 migrates them to flyto.io so the guard goes active.
+#              FLYA-38 migrates them to flyto2.com so the guard goes active.
 # Best-effort classification; verify before deleting an entry.
 
 ## [data] domain-as-data — keep
 
 ## [branding] pending FLYA-38 canonicalization — remove when migrated
-NOTICE
-README.md
-integrations/flyto-engine.md
-pyproject.toml
-src/cli.py
