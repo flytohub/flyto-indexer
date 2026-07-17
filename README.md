@@ -1,7 +1,7 @@
 <div align="center">
   <h1>Flyto2 Indexer</h1>
   <p>
-    <strong>Know what breaks before you change it.</strong>
+    <strong>Code intelligence MCP server for AI coding agents. Know what breaks before you change it.</strong>
   </p>
   <p>
     <a href="https://github.com/flytohub/flyto-indexer/actions"><img src="https://github.com/flytohub/flyto-indexer/workflows/CI/badge.svg" alt="CI"></a>
@@ -27,12 +27,21 @@
 Flyto2 Indexer is built for teams that let AI agents touch real code. It gives
 Codex, Claude Code, Cursor, Windsurf, and other MCP clients a local map of your
 repository before they rename symbols, edit shared APIs, delete files, or ship a
-pull request. Grep finds text; Flyto2 Indexer answers what depends on the thing
-you are changing.
+pull request. Grep finds text; Flyto2 Indexer answers the question that matters:
+what depends on the thing you are changing?
 
 Use it for AI code review, monorepo impact analysis, cross-repo dependency
 tracking, safe refactors, security taint scanning, release-readiness checks,
-documentation audits, and GitHub/GitLab merge gates.
+documentation audits, and GitHub/GitLab merge gates. If you are looking for a
+local MCP server for AI-assisted development, this is the guardrail layer: it
+lets the agent search, inspect impact, and verify the work before it says done.
+
+Good fit if you searched for:
+
+- code intelligence MCP server
+- AI coding agent impact analysis
+- monorepo dependency graph for safe refactors
+- GitHub or GitLab merge gate for AI-generated code
 
 ## Try it in 60 seconds
 
