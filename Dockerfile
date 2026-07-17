@@ -65,11 +65,13 @@ COPY --from=build /wheels/*.whl /tmp/
 # Pin semgrep + checkov versions explicitly so the image is reproducible across
 # CI rebuilds. Update the pins when W2-BE-ADAPTERS tests are rerun against new
 # releases.
-RUN pip install --upgrade pip "setuptools<80" \
+RUN pip install --upgrade pip "setuptools==83.0.0" \
     && pip install \
         /tmp/*.whl \
-        "semgrep==1.95.0" \
-        "checkov==3.2.334" \
+        "semgrep==1.170.0" \
+        "checkov==3.3.8" \
+        "protobuf>=6.33.5,<7" \
+    && pip install --upgrade "mcp>=1.28.1" \
     && rm -f /tmp/*.whl \
     && semgrep --version \
     && checkov --version
