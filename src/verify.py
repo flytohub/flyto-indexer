@@ -260,10 +260,12 @@ def run_workspace_verification(
     baseline_root = Path(baseline_dir).resolve() if baseline_dir else None
     results: list[dict[str, Any]] = []
     skipped_projects: list[str] = []
+    verified_projects: list[Path] = []
     for project in projects:
         if changed_only and not _project_has_changes(project, base):
             skipped_projects.append(str(project))
             continue
+        verified_projects.append(project)
         baseline_path = baseline_root / f"{project.name}.json" if baseline_root else None
         results.append(run_verification(
             project,
@@ -282,9 +284,10 @@ def run_workspace_verification(
         "fail": sum(1 for result in results if not result["pass"]),
     }
     workspace_checks: list[dict[str, Any]] = []
-    _check_cross_project_contract(projects, workspace_checks)
-    _check_product_loop_closure(projects, workspace_checks)
-    _check_dynamic_validation_plan(projects, workspace_checks)
+    workspace_projects = verified_projects if changed_only else projects
+    _check_cross_project_contract(workspace_projects, workspace_checks)
+    _check_product_loop_closure(workspace_projects, workspace_checks)
+    _check_dynamic_validation_plan(workspace_projects, workspace_checks)
     workspace_summary = _summarize_checks(workspace_checks)
     summary["workspace_checks"] = len(workspace_checks)
     summary["workspace_warn"] = workspace_summary.get("warn", 0)
@@ -674,7 +677,7 @@ def _iter_openapi_contract_files(root: Path) -> list[Path]:
 def _extract_openapi_json_api_contracts(path: Path) -> list[dict[str, Any]]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return []
     paths = data.get("paths") if isinstance(data, dict) else None
     if not isinstance(paths, dict):
@@ -697,7 +700,7 @@ def _extract_openapi_json_api_contracts(path: Path) -> list[dict[str, Any]]:
 def _extract_openapi_yaml_api_contracts(path: Path) -> list[dict[str, Any]]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return []
 
     api_defs: list[dict[str, Any]] = []
@@ -2245,7 +2248,6 @@ def _git_changed_paths(root: Path) -> list[str]:
         result = subprocess.run(
             ["git", "-C", str(root), "status", "--porcelain=v1", "--untracked-files=all"],
             capture_output=True,
-            text=True,
             timeout=10,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
@@ -2254,7 +2256,7 @@ def _git_changed_paths(root: Path) -> list[str]:
         return []
 
     paths: list[str] = []
-    for line in result.stdout.splitlines():
+    for line in _decode_process_output(result.stdout).splitlines():
         if len(line) < 4:
             continue
         raw_path = line[3:].strip()
@@ -2268,6 +2270,14 @@ def _git_changed_paths(root: Path) -> list[str]:
 def _matches_any(path: str, patterns: tuple[str, ...]) -> bool:
     normalized = path.replace("\\", "/")
     return any(fnmatch.fnmatch(normalized, pattern) for pattern in patterns)
+
+
+def _decode_process_output(output: str | bytes | None) -> str:
+    if output is None:
+        return ""
+    if isinstance(output, bytes):
+        return output.decode("utf-8", errors="replace")
+    return output
 
 
 def _is_high_risk_change_path(path: str) -> bool:
@@ -2519,13 +2529,13 @@ def _project_has_changes(project: Path, base: str = "") -> bool:
     saw_valid_git = False
     for command in commands:
         try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(command, capture_output=True, timeout=10)
         except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
             return True
         if result.returncode != 0:
             continue
         saw_valid_git = True
-        if result.stdout.strip():
+        if _decode_process_output(result.stdout).strip():
             return True
     return not saw_valid_git
 

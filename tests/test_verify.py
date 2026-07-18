@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.cli import cmd_verify, cmd_verify_baseline, cmd_verify_workspace
+import src.verify as verify_module
 from src.verify import (
     _classify_product_surfaces,
     _check_cross_project_contract,
@@ -20,7 +21,10 @@ from src.verify import (
     _check_mcp_runtime_smoke,
     _check_product_loop_closure,
     _check_single_project_islands,
+    _extract_openapi_json_api_contracts,
+    _git_changed_paths,
     _normalize_api_path,
+    _project_has_changes,
     format_verification,
     format_workspace_verification,
     render_report,
@@ -1397,6 +1401,65 @@ def test_workspace_changed_only_detects_untracked_files(tmp_path):
     assert result["summary"]["projects"] == 1
     assert result["summary"]["skipped"] == 0
     assert result["projects"][0]["project"] == "project"
+
+
+def test_workspace_changed_only_workspace_checks_ignore_skipped_projects(tmp_path):
+    clean_project = tmp_path / "clean-console"
+    changed_project = tmp_path / "changed-code"
+    _write_dynamic_validation_project(clean_project, guard_scripts=False)
+    _write_dynamic_validation_project(changed_project)
+
+    for project in (clean_project, changed_project):
+        subprocess.run(["git", "init", str(project)], capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(project), "add", "."], capture_output=True, check=True)
+        subprocess.run(
+            ["git", "-C", str(project), "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+            capture_output=True,
+            check=True,
+        )
+    (changed_project / "changed.txt").write_text("changed\n", encoding="utf-8")
+
+    result = run_workspace_verification(
+        tmp_path,
+        project_paths=[clean_project, changed_project],
+        full_scan=True,
+        changed_only=True,
+    )
+
+    dynamic_check = next(check for check in result["workspace_checks"] if check["name"] == "dynamic_validation_plan")
+    checked_projects = [entry["project"] for entry in dynamic_check["metrics"]["projects"]]
+
+    assert result["summary"]["projects"] == 1
+    assert result["summary"]["skipped"] == 1
+    assert checked_projects == ["changed-code"]
+    assert dynamic_check["status"] == "pass"
+
+
+def test_workspace_changed_only_tolerates_non_utf8_git_output(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    _write_project(project)
+    (project / ".git").mkdir()
+
+    def fake_run(command, **kwargs):
+        assert kwargs.get("text") is not True
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=b"?? nonutf-\x99.py\n",
+            stderr=b"",
+        )
+
+    monkeypatch.setattr(verify_module.subprocess, "run", fake_run)
+
+    assert _project_has_changes(project) is True
+    assert _git_changed_paths(project) == ["nonutf-\ufffd.py"]
+
+
+def test_openapi_json_contracts_ignore_non_utf8_files(tmp_path):
+    path = tmp_path / "openapi-binary.json"
+    path.write_bytes(b'{"openapi":"3.0.0","paths":{"\x99":{"get":{}}}}')
+
+    assert _extract_openapi_json_api_contracts(path) == []
 
 
 def test_cmd_verify_baseline_create_and_compare(tmp_path):
