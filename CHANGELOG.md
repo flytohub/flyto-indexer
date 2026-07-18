@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Fixed
+- Made `task(action="plan")` path target resolution fail closed. Existing
+  absolute and project-relative file targets now resolve by exact path within
+  the requested project before any keyword/semantic search. If a path-like
+  target is not present in the index, it resolves to `unknown` instead of
+  selecting a similar symbol from another file or project.
 - Made project-scoped git hotspot analysis fail closed when the requested
   project root is missing, instead of falling back to an arbitrary discovered
   index or CWD git repo. Added regression coverage so audit output cannot mix

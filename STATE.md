@@ -79,6 +79,11 @@
   discovered sibling `.flyto-index` or the current working directory, which
   prevents audit hotspot output from borrowing paths from unrelated Flyto2
   repositories.
+- `task(action="plan")` target resolution now treats path-like inputs as exact
+  file targets. Absolute paths are first reduced through `project_roots`, file
+  symbols are preferred, and unmatched path-like targets return `unknown`
+  without falling back to keyword or semantic search. This prevents a requested
+  Flyto2 engine Go file from being planned against an unrelated Python symbol.
 
 ## Release Blockers
 

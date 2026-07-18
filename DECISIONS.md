@@ -1,5 +1,19 @@
 # Decisions
 
+## 2026-07-18 - Task planning resolves explicit paths before symbol search
+
+Decision: `task(action="plan")` treats path-like targets as high-confidence
+file targets. Existing absolute paths are normalized through `project_roots`,
+project-relative paths are matched exactly, file symbols are preferred, and
+unmatched path-like inputs resolve to `unknown` without keyword or semantic
+fallback.
+
+Reason: semantic fallback can choose a similarly named symbol in the wrong file
+or project. During Flyto2 engine refactoring, an explicit
+`cmd/worker/kb_deep_scan_loop.go` path was misplanned as the Python
+`IndexEngine` class from the bundled indexer package. Path inputs must fail
+closed rather than borrow unrelated symbol risk.
+
 ## 2026-07-16 - TypeScript API wrappers preserve HTTP methods
 
 Decision: TypeScript API call extraction treats method-aware frontend wrappers

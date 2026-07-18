@@ -59,6 +59,38 @@ MOCK_INDEX = {
             "end_line": 10,
             "deps": [],
         },
+        "proj-a:src/tools/resolver.py:file:resolver": {
+            "name": "resolver.py",
+            "type": "file",
+            "path": "src/tools/resolver.py",
+            "start_line": 1,
+            "end_line": 80,
+            "deps": [],
+        },
+        "proj-a:src/tools/resolver.py:function:resolve_exact_path": {
+            "name": "resolve_exact_path",
+            "type": "function",
+            "path": "src/tools/resolver.py",
+            "start_line": 12,
+            "end_line": 24,
+            "deps": [],
+        },
+        "proj-a:src/resolver.py:class:SymbolResolver": {
+            "name": "SymbolResolver",
+            "type": "class",
+            "path": "src/resolver.py",
+            "start_line": 1,
+            "end_line": 120,
+            "deps": [],
+        },
+        "proj-a:tests/test_task_analysis.py:file:test_task_analysis": {
+            "name": "test_task_analysis.py",
+            "type": "file",
+            "path": "tests/test_task_analysis.py",
+            "start_line": 1,
+            "end_line": 200,
+            "deps": [],
+        },
     },
     "projects": ["proj-a", "proj-b"],
     "project_roots": {
@@ -71,9 +103,12 @@ MOCK_INDEX = {
 @pytest.fixture(autouse=True)
 def setup_mock_index():
     old_cache = index_store._index_cache
+    old_generation = index_store._cache_generation
     index_store._index_cache = MOCK_INDEX
+    index_store._cache_generation = float("inf")
     yield
     index_store._index_cache = old_cache
+    index_store._cache_generation = old_generation
 
 
 # =========================================================================
@@ -244,6 +279,41 @@ class TestAnalyzeTask:
         )
         assert "error" not in result
         assert "dimensions" in result
+
+
+class TestTaskTargetResolution:
+    """Path-like task targets are resolved by path before symbol search."""
+
+    def test_absolute_file_path_uses_project_root(self):
+        from tools.task_analysis import _resolve_targets
+
+        with patch("tools.task_analysis.load_index", return_value=MOCK_INDEX):
+            resolved = _resolve_targets(["/tmp/proj-a/src/tools/resolver.py"], project="proj-a")
+
+        assert resolved[0]["symbol_id"] == "proj-a:src/tools/resolver.py:file:resolver"
+        assert resolved[0]["path"] == "src/tools/resolver.py"
+
+    def test_nested_relative_file_path_beats_similar_basename(self):
+        from tools.task_analysis import _resolve_targets
+
+        with patch("tools.task_analysis.load_index", return_value=MOCK_INDEX):
+            resolved = _resolve_targets(["src/tools/resolver.py"], project="proj-a")
+
+        assert resolved[0]["symbol_id"] == "proj-a:src/tools/resolver.py:file:resolver"
+        assert resolved[0]["symbol_id"] != "proj-a:src/resolver.py:class:SymbolResolver"
+
+    def test_unmatched_file_path_does_not_fallback_to_keyword_search(self):
+        from tools.task_analysis import _resolve_targets
+
+        with (
+            patch("tools.task_analysis.load_index", return_value=MOCK_INDEX),
+            patch("tools.task_analysis.search_by_keyword") as search,
+        ):
+            resolved = _resolve_targets(["src/tools/missing.py"], project="proj-a")
+
+        search.assert_not_called()
+        assert resolved[0]["symbol_id"] is None
+        assert resolved[0]["type"] == "unknown"
 
 
 # =========================================================================
