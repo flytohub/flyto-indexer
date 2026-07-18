@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+- Added `flyto-index task {plan,gate,validate}` as a local CLI entrypoint for
+  the same guarded task workflow exposed through MCP. The command supports
+  repeatable `--target`, comma-separated `--targets`, JSON/file-backed
+  `--task-contract` and `--current-state`, fail-closed gate exits, and
+  validation exits suitable for shell and CI use.
+
 ### Fixed
 - Made `task(action="plan")` path target resolution fail closed. Existing
   absolute and project-relative file targets now resolve by exact path within

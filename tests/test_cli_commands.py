@@ -422,3 +422,163 @@ class TestCLIDispatch:
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         assert "risk" in data
+
+    def test_task_plan_dispatch(self, monkeypatch, capsys):
+        """Verify task plan reaches smart_task with collected targets."""
+        captured_call = {}
+
+        def fake_smart_task(**kwargs):
+            captured_call.update(kwargs)
+            return {
+                "ok": True,
+                "action": kwargs["action"],
+                "targets": kwargs["targets"],
+            }
+
+        monkeypatch.setattr("src.tools.smart.smart_task", fake_smart_task)
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "flyto-index",
+                "task",
+                "plan",
+                "--description",
+                "split worker",
+                "--target",
+                "cmd/worker/main.go",
+                "--targets",
+                "internal/runledger,internal/evidence",
+                "--intent",
+                "refactor",
+                "--project",
+                "flyto-engine",
+            ],
+        )
+
+        main()
+
+        data = json.loads(capsys.readouterr().out)
+        assert data["ok"] is True
+        assert data["targets"] == [
+            "cmd/worker/main.go",
+            "internal/runledger",
+            "internal/evidence",
+        ]
+        assert captured_call["action"] == "plan"
+        assert captured_call["description"] == "split worker"
+        assert captured_call["intent"] == "refactor"
+        assert captured_call["project"] == "flyto-engine"
+
+    def test_task_gate_dispatch_loads_json_files_and_fails_closed(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """Verify task gate parses JSON files and exits non-zero when denied."""
+        contract_path = tmp_path / "contract.json"
+        state_path = tmp_path / "state.json"
+        contract_path.write_text(
+            json.dumps({"constraints": {"must_run_impact_analysis": True}}),
+            encoding="utf-8",
+        )
+        state_path.write_text(json.dumps({"impact_analysis_done": False}), encoding="utf-8")
+        captured_call = {}
+
+        def fake_smart_task(**kwargs):
+            captured_call.update(kwargs)
+            return {
+                "pass": False,
+                "decision": "block",
+                "message": "impact analysis is required",
+            }
+
+        monkeypatch.setattr("src.tools.smart.smart_task", fake_smart_task)
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "flyto-index",
+                "task",
+                "gate",
+                "--next-phase",
+                "apply_changes",
+                "--task-contract",
+                str(contract_path),
+                "--current-state",
+                str(state_path),
+            ],
+        )
+
+        with pytest.raises(SystemExit) as exc:
+            main()
+
+        assert exc.value.code == 2
+        data = json.loads(capsys.readouterr().out)
+        assert data["pass"] is False
+        assert captured_call["task_contract"]["constraints"]["must_run_impact_analysis"] is True
+        assert captured_call["current_state"]["impact_analysis_done"] is False
+        assert captured_call["next_phase"] == "apply_changes"
+
+    def test_task_gate_dispatch_accepts_inline_json(self, monkeypatch, capsys):
+        """Verify task gate accepts inline JSON objects, not only JSON files."""
+        captured_call = {}
+
+        def fake_smart_task(**kwargs):
+            captured_call.update(kwargs)
+            return {"pass": True, "decision": "pass"}
+
+        monkeypatch.setattr("src.tools.smart.smart_task", fake_smart_task)
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "flyto-index",
+                "task",
+                "gate",
+                "--next-phase",
+                "apply_changes",
+                "--task-contract",
+                '{"constraints":{"must_run_impact_analysis":true}}',
+                "--current-state",
+                '{"impact_analysis_done":true}',
+            ],
+        )
+
+        main()
+
+        data = json.loads(capsys.readouterr().out)
+        assert data["pass"] is True
+        assert captured_call["task_contract"]["constraints"]["must_run_impact_analysis"] is True
+        assert captured_call["current_state"]["impact_analysis_done"] is True
+
+    def test_task_validate_dispatch_fails_on_failed_tests(self, monkeypatch, capsys):
+        """Verify task validate exits non-zero when smart validation fails."""
+        captured_call = {}
+
+        def fake_smart_task(**kwargs):
+            captured_call.update(kwargs)
+            return {
+                "lint_passed": True,
+                "tests_passed": False,
+                "pytest_command": ["pytest", "tests/test_cli_commands.py"],
+            }
+
+        monkeypatch.setattr("src.tools.smart.smart_task", fake_smart_task)
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "flyto-index",
+                "task",
+                "validate",
+                "--project",
+                "flyto-indexer",
+                "--test-path",
+                "tests/test_cli_commands.py",
+            ],
+        )
+
+        with pytest.raises(SystemExit) as exc:
+            main()
+
+        assert exc.value.code == 2
+        data = json.loads(capsys.readouterr().out)
+        assert data["tests_passed"] is False
+        assert captured_call["action"] == "validate"
+        assert captured_call["run_tests"] is True
+        assert captured_call["test_path"] == "tests/test_cli_commands.py"

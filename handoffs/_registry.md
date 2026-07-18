@@ -2,6 +2,7 @@
 
 | Date | Topic | File | Status |
 | --- | --- | --- | --- |
+| 2026-07-18 | Local task workflow CLI | `2026-07-18-local-workflow-cli.md` | Active |
 | 2026-07-18 | Task path target resolution | `2026-07-18-path-resolution.md` | Active |
 | 2026-07-17 | Project-scoped git hotspots | `2026-07-17-project-scoped-git-hotspots.md` | Active |
 | 2026-07-16 | TypeScript request method extraction | `2026-07-16-typescript-request-method-extraction.md` | Active |

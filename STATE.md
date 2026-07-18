@@ -84,6 +84,11 @@
   symbols are preferred, and unmatched path-like targets return `unknown`
   without falling back to keyword or semantic search. This prevents a requested
   Flyto2 engine Go file from being planned against an unrelated Python symbol.
+- `flyto-index task {plan,gate,validate}` now exposes the guarded task workflow
+  through the local CLI, so developers can run current-source planning and gates
+  even when a long-running MCP server has not reloaded the newest indexer code.
+  `task gate` requires explicit contract/state/phase input and exits non-zero
+  when denied.
 
 ## Release Blockers
 
@@ -107,6 +112,7 @@
 | Tests | `pytest tests/ -v` | Functional coverage |
 | Verify | `flyto-index verify . --full-scan --strict --json` | Self-verification |
 | Build | `python -m build` | Package integrity |
+| Local task workflow | `python -m src.cli task plan --project flyto-engine --target /Users/chester/flytohub/flyto-engine/cmd/worker/kb_deep_scan_loop.go --description "..."` | Current-source task planning outside a stale MCP server |
 | Flyto2 release packet | `python -m src.cli flyto2-release-packet /Users/chester/flytohub --health-report config/flyto2/health-baseline-2026-06-21.json --json` | Workspace inventory, deliverables, blockers, readiness verdict |
 | Flyto2 fresh packet | `python -m src.cli flyto2-release-packet /Users/chester/flytohub --health-report config/flyto2/health-baseline-2026-06-21.json --fresh-evidence-dir reports/flyto2-9h-2026-06-22 --require-fresh --run-start <iso8601> --json` | Nine-hour fresh evidence gate |
 | Flyto2 open-core split | `python -m src.cli flyto2-open-core-audit /Users/chester/flytohub --json` | Community package whitelist, protected path, denied-content gate |

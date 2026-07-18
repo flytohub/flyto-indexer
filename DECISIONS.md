@@ -1,5 +1,17 @@
 # Decisions
 
+## 2026-07-18 - Task workflow has a local CLI fallback
+
+Decision: expose the guarded `task` workflow as
+`flyto-index task {plan,gate,validate}` in addition to MCP. The CLI reuses
+`smart_task`, accepts exact file/symbol targets, supports JSON or JSON-file
+gate inputs, and exits non-zero when gates or validation fail.
+
+Reason: long-running MCP servers can keep stale Python code loaded after an
+indexer fix. Large Flyto2 engine/frontend refactors need a current-source
+fallback that preserves the same plan/gate/validate discipline instead of
+forcing developers to either restart tooling or bypass task gates.
+
 ## 2026-07-18 - Task planning resolves explicit paths before symbol search
 
 Decision: `task(action="plan")` treats path-like targets as high-confidence
