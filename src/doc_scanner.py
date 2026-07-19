@@ -21,7 +21,7 @@ _SKIP_DIRS = frozenset({
     ".venv", "venv", ".pytest_cache", ".flyto-index", ".flyto",
     ".tox", ".mypy_cache", ".ruff_cache", "target", "out", ".next",
     ".nuxt", ".output", "coverage", ".cache", ".parcel-cache",
-    "bower_components", ".eggs", "egg-info",
+    "bower_components", ".eggs", "egg-info", "~",
 })
 
 # README section keywords to detect
@@ -217,7 +217,7 @@ def _check_inline_doc_coverage(project_path: Path) -> float:
     ]
 
     if not documentable:
-        return 0.0
+        return 1.0  # No indexed functions/classes; inline docstrings are not applicable.
 
     documented = sum(1 for s in documentable if s.get("summary", "").strip())
     return documented / len(documentable)

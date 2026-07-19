@@ -15,6 +15,8 @@ from src.cli import cmd_verify, cmd_verify_baseline, cmd_verify_workspace
 import src.verify as verify_module
 from src.verify import (
     _classify_product_surfaces,
+    _check_ci_closed_loop,
+    _check_context_loop,
     _check_cross_project_contract,
     _check_dynamic_validation_plan,
     _check_impact_loop,
@@ -121,6 +123,69 @@ def _write_indexer_package_config(root: Path):
         "\"config/rules\" = \"flyto_indexer/config/rules\"\n",
         encoding="utf-8",
     )
+
+
+def test_context_and_impact_pass_when_no_symbols_are_indexed():
+    engine = SimpleNamespace(index=SimpleNamespace(symbols={}))
+    checks = []
+
+    def add_check(name, status, summary, metrics=None):
+        checks.append({
+            "name": name,
+            "status": status,
+            "summary": summary,
+            "metrics": metrics or {},
+        })
+
+    _check_context_loop(engine, None, add_check)
+    _check_impact_loop(engine, None, add_check)
+
+    assert [check["status"] for check in checks] == ["pass", "pass"]
+    assert checks[0]["metrics"] == {"symbols": 0}
+    assert checks[1]["metrics"] == {"symbols": 0}
+
+
+def test_ci_closed_loop_accepts_flutter_commands(tmp_path):
+    workflow = tmp_path / ".github" / "workflows" / "ci.yml"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text(
+        "name: CI\n"
+        "jobs:\n"
+        "  flutter:\n"
+        "    steps:\n"
+        "      - run: flutter analyze\n"
+        "      - run: flutter test\n"
+        "      - run: flutter build apk --debug\n"
+        "      - run: flyto-index verify . --json\n",
+        encoding="utf-8",
+    )
+    checks = []
+
+    def add_check(name, status, summary, metrics=None):
+        checks.append({
+            "name": name,
+            "status": status,
+            "summary": summary,
+            "metrics": metrics or {},
+        })
+
+    _check_ci_closed_loop(tmp_path, add_check)
+
+    assert checks == [{
+        "name": "ci_closed_loop",
+        "status": "pass",
+        "summary": "CI runs the verify/test/build loop",
+        "metrics": {
+            "files": [".github/workflows/ci.yml"],
+            "required": {
+                "verify": True,
+                "tests": True,
+                "lint": True,
+                "build": True,
+            },
+            "missing": [],
+        },
+    }]
 
 
 def _write_backend_index(root: Path, routes: list[tuple[str, str]]):

@@ -772,6 +772,14 @@ def _match_single_project_api_calls(api_defs: list[dict[str, Any]], api_calls: l
 def _check_context_loop(engine: IndexEngine, query: str | None, add_check) -> None:
     chosen_query = query or _pick_context_query(engine)
     if not chosen_query:
+        if not (getattr(getattr(engine, "index", None), "symbols", {}) or {}):
+            add_check(
+                "context_loop",
+                "pass",
+                "No indexed symbols; context lookup not applicable",
+                metrics={"symbols": 0},
+            )
+            return
         add_check("context_loop", "warn", "No queryable symbol found")
         return
 
@@ -788,6 +796,14 @@ def _check_context_loop(engine: IndexEngine, query: str | None, add_check) -> No
 def _check_impact_loop(engine: IndexEngine, symbol: str | None, add_check) -> None:
     chosen_symbol = symbol or _pick_impact_symbol(engine)
     if not chosen_symbol:
+        if not (getattr(getattr(engine, "index", None), "symbols", {}) or {}):
+            add_check(
+                "impact_loop",
+                "pass",
+                "No indexed symbols; impact lookup not applicable",
+                metrics={"symbols": 0},
+            )
+            return
         add_check("impact_loop", "warn", "No impactable symbol found")
         return
 
@@ -1045,12 +1061,15 @@ def _check_ci_closed_loop(root: Path, add_check) -> None:
         )),
         "tests": any(token in lowered_with_scripts for token in (
             "pytest", "vitest", "npm test", "npm run test", "pnpm test", "yarn test", "go test",
+            "flutter test", "dart test",
         )),
         "lint": any(token in lowered_with_scripts for token in (
             "ruff", "mypy", "eslint", "npm run lint", "pnpm lint", "yarn lint", "golangci-lint",
+            "flutter analyze", "dart analyze",
         )),
         "build": any(token in lowered_with_scripts for token in (
             "python -m build", "npm run build", "pnpm build", "yarn build", "go build", "cargo build",
+            "flutter build", "dart compile",
         )),
     }
     if project_name == "flyto-indexer":

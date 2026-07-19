@@ -530,15 +530,23 @@ class TypeScriptScanner(BaseScanner):
         r'(?:app|router|server)\.(get|post|put|patch|delete|options|head|all)\s*\(\s*[\'"]([^\'"]+)[\'"]',
         re.IGNORECASE,
     )
+    _BACKEND_ROUTE_PREFIX_RE = re.compile(
+        r'(?:app|router|server)\.(?:get|post|put|patch|delete|options|head|all)\s*\(\s*$',
+        re.IGNORECASE,
+    )
 
     def _extract_backend_routes(self, content: str, cleaned: str, lines: list[str],
                                 rel_path: str, symbols: list[Symbol]) -> None:
         """Detect Express/Hono/Fastify backend route definitions.
-        Uses cleaned source to avoid matching inside comments/strings."""
-        for match in self._BACKEND_ROUTE_PATTERN.finditer(cleaned):
+        Matches the original source so route string literals remain visible, and
+        checks the tokenizer-cleaned prefix to avoid comments or strings."""
+        for match in self._BACKEND_ROUTE_PATTERN.finditer(content):
+            prefix = cleaned[match.start():match.start(2)]
+            if not self._BACKEND_ROUTE_PREFIX_RE.search(prefix):
+                continue
             method = match.group(1).upper()
             path = match.group(2)
-            start_line = cleaned[:match.start()].count('\n') + 1
+            start_line = content[:match.start()].count('\n') + 1
 
             after = content[match.end():]
             handler_match = re.match(r'\s*,\s*(\w+)', after)
@@ -794,6 +802,8 @@ class TypeScriptScanner(BaseScanner):
 
                 if url.rstrip('/') == "/api":
                     continue
+                if self._is_backend_route_definition(content, match):
+                    continue
                 if is_fallback and url in seen_non_fallback_urls:
                     continue
                 key = (method, url)
@@ -823,6 +833,11 @@ class TypeScriptScanner(BaseScanner):
         line_start = content.rfind('\n', 0, match.start()) + 1
         prefix = content[line_start:match.start()]
         return bool(self._MSW_HANDLER_PREFIX_RE.search(prefix))
+
+    def _is_backend_route_definition(self, content: str, match: re.Match) -> bool:
+        line_start = content.rfind('\n', 0, match.start()) + 1
+        prefix = content[line_start:match.start()]
+        return bool(self._BACKEND_ROUTE_PREFIX_RE.search(prefix))
 
     def _build_function_ranges(
         self, symbols: list, rel_path: str

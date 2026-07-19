@@ -126,6 +126,35 @@ def handler():
 # TypeScript API call detection
 # =============================================================================
 
+class TestTypeScriptBackendRouteDetection:
+    """Test TypeScript backend route extraction."""
+
+    def test_router_get_route_becomes_api_symbol_not_frontend_call(self, ts_scanner):
+        code = """
+const router = createRouter()
+router.get('/api/v1/overview/dashboard', getOverviewDashboard)
+"""
+        symbols, deps = ts_scanner.scan_file(Path("routes.ts"), code)
+        api_syms = [s for s in symbols if s.symbol_type == SymbolType.API]
+        api_deps = [d for d in deps if d.dep_type == DependencyType.API_CALLS]
+
+        assert len(api_syms) == 1
+        assert api_syms[0].name == "GET /api/v1/overview/dashboard"
+        assert api_syms[0].metadata["method"] == "GET"
+        assert api_deps == []
+
+    def test_route_like_comment_is_not_api_symbol(self, ts_scanner):
+        code = """
+// router.get('/api/v1/comment-only', handler)
+const path = '/api/v1/real-call'
+fetch(path)
+"""
+        symbols, _ = ts_scanner.scan_file(Path("comments.ts"), code)
+        api_syms = [s for s in symbols if s.symbol_type == SymbolType.API]
+
+        assert api_syms == []
+
+
 class TestTypeScriptAPICallDetection:
     """Test TypeScript fetch/axios API call detection."""
 
