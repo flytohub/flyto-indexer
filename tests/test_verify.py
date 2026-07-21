@@ -8,10 +8,12 @@ from argparse import Namespace
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.cli import cmd_verify, cmd_verify_baseline, cmd_verify_workspace
+from src.cli import cmd_verify, cmd_verify_baseline, cmd_verify_workspace, main
 import src.verify as verify_module
 from src.verify import (
     _classify_product_surfaces,
@@ -537,6 +539,23 @@ def test_cmd_verify_json(tmp_path):
     ))
 
     assert result["pass"] is True
+
+
+def test_verify_cli_json_fails_closed_and_preserves_report(tmp_path, monkeypatch, capsys):
+    missing_project = tmp_path / "missing"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["flyto-index", "verify", str(missing_project), "--strict", "--json"],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        main()
+
+    assert exc.value.code == 2
+    report = json.loads(capsys.readouterr().out)
+    assert report["pass"] is False
+    assert report["summary"]["fail"] == 1
 
 
 def test_cmd_verify_saves_baseline(tmp_path):

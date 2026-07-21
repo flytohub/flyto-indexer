@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+- Made `verify`, `verify-workspace`, and `verify-baseline` fail closed with exit
+  code 2 when JSON output reports `pass: false`, while preserving the complete
+  machine-readable report on stdout for CI evidence collection.
+
 ## [2.14.2] - 2026-07-21
 
 ### Fixed

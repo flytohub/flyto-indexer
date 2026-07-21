@@ -589,6 +589,13 @@ def main():
         else:
             print(json.dumps(result, indent=2, ensure_ascii=False))
 
+        if (
+            args.command in {"verify", "verify-workspace", "verify-baseline"}
+            and isinstance(result, dict)
+            and result.get("pass") is False
+        ):
+            sys.exit(2)
+
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
