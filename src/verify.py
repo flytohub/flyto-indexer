@@ -75,7 +75,17 @@ _HIGH_RISK_CHANGE_EXEMPTIONS = (
     ".env.sample",
     ".env.template",
 )
-_CONTRACT_SOURCE_EXTENSIONS = {".ts", ".tsx", ".js", ".jsx", ".go", ".py"}
+_CONTRACT_SOURCE_EXTENSIONS = {
+    ".astro",
+    ".go",
+    ".js",
+    ".jsx",
+    ".py",
+    ".svelte",
+    ".ts",
+    ".tsx",
+    ".vue",
+}
 _CONTRACT_SKIP_PARTS = {"__tests__", "__mocks__", "tests", "test", "fixtures"}
 _CONTRACT_SKIP_SUFFIXES = (".test", ".spec")
 _CONTRACT_SURFACE_TERMS = (

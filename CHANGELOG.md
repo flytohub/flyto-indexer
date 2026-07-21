@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Fixed
+- Included Vue, Svelte, and Astro single-file components in verify-time source
+  reference and API contract discovery. Imported Vue components no longer
+  produce false `single_project_islands` findings when the dependency scanner
+  misses a template/script edge.
 - Made `verify`, `verify-workspace`, and `verify-baseline` fail closed with exit
   code 2 when JSON output reports `pass: false`, while preserving the complete
   machine-readable report on stdout for CI evidence collection.

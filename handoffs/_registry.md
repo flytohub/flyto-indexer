@@ -2,6 +2,7 @@
 
 | Date | Topic | File | Status |
 | --- | --- | --- | --- |
+| 2026-07-22 | Frontend SFC island accuracy | `2026-07-22-frontend-sfc-island-accuracy.md` | Active |
 | 2026-07-21 | Public package boundary and runtime parity | `2026-07-21-public-package-boundary.md` | Active |
 | 2026-07-18 | Local task workflow CLI | `2026-07-18-local-workflow-cli.md` | Active |
 | 2026-07-18 | Task path target resolution | `2026-07-18-path-resolution.md` | Active |

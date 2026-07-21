@@ -13,6 +13,9 @@
 - Product API closure is limited to `/api/v1/**`; `/api/mock/**` fixtures are
   excluded while real API calls still require indexed route or OpenAPI proof.
 - TypeScript custom request wrappers preserve their actual HTTP method.
+- Single-project island fallback discovery reads Vue, Svelte, and Astro source
+  in addition to TS/JS/Go/Python, so real SFC imports count as inbound product
+  edges instead of false orphan findings.
 - Explicit task paths resolve inside the selected project and fail closed when
   absent instead of falling back to a similarly named symbol elsewhere.
 - Package version reporting is derived from `pyproject.toml` in source mode and
@@ -24,6 +27,10 @@
   policies and layer rules cannot be silently skipped in installed builds.
   Missing or malformed policy parsing now fails verification closed, and the
   wheel CI smoke loads and evaluates a real rule in an isolated environment.
+- Latest local verification: `1655 passed, 1 skipped`; Ruff passed; mypy found
+  no issues in 129 source files; sdist/wheel build passed; strict self-verify
+  passed 18/18. The rebuilt installed CLI also made Flyto2 Cloud strict full
+  verify pass 18/18 with zero single-project islands.
 
 ## Release Blockers
 

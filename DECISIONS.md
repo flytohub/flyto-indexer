@@ -1,5 +1,16 @@
 # Decisions
 
+## 2026-07-22 - Island fallback covers frontend single-file components
+
+Decision: verify-time source-name and API contract fallback scans Vue, Svelte,
+and Astro files alongside TS, JS, Go, and Python. Typed dependency edges remain
+authoritative; text references only prevent a component from being called an
+island when another non-test source file names it.
+
+Reason: framework SFC import/template edges are not always represented in the
+language-neutral graph. Excluding SFC source produced a confirmed false orphan
+for a Vue component that was imported and rendered by a view.
+
 ## 2026-07-21 - Public indexer excludes product release policy
 
 Decision: keep this repository limited to reusable code intelligence. Product

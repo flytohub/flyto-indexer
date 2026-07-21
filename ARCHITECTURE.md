@@ -36,6 +36,10 @@
   string-literal `/api/vN/**` fallback patterns. Fallback patterns may discover
   otherwise-hidden calls, but must not overwrite a real method-bearing wrapper
   call for the same normalized path.
+- Source-reference fallback covers Vue, Svelte, and Astro single-file
+  components as plain static text. It never executes frontend source; component
+  names and API literals only supplement typed dependency edges when framework
+  parsing cannot resolve an import.
 
 ## Deployment / Edition
 

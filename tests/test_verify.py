@@ -944,6 +944,40 @@ def test_single_project_islands_accepts_lazy_imported_component(tmp_path):
     assert check["metrics"]["island_count"] == 0
 
 
+def test_single_project_islands_accepts_vue_imported_component(tmp_path):
+    component = tmp_path / "src" / "components" / "common" / "ReportDialog.vue"
+    page = tmp_path / "src" / "views" / "TemplateDetail.vue"
+    component.parent.mkdir(parents=True)
+    page.parent.mkdir(parents=True)
+    component.write_text(
+        "<template><dialog>Report</dialog></template>\n",
+        encoding="utf-8",
+    )
+    page.write_text(
+        "<template><ReportDialog /></template>\n"
+        "<script setup>\n"
+        "import ReportDialog from '../components/common/ReportDialog.vue'\n"
+        "</script>\n",
+        encoding="utf-8",
+    )
+    sid = "demo:src/components/common/ReportDialog.vue:component:ReportDialog"
+    checks = _run_single_project_island_check(
+        {
+            sid: {
+                "path": "src/components/common/ReportDialog.vue",
+                "type": "component",
+                "name": "ReportDialog",
+                "ref_count": 0,
+            },
+        },
+        project_root=tmp_path,
+    )
+
+    check = checks["single_project_islands"]
+    assert check["status"] == "pass"
+    assert check["metrics"]["island_count"] == 0
+
+
 def test_single_project_islands_ignores_plain_helpers():
     sid = "demo:src/utils/math.ts:function:sum"
     checks = _run_single_project_island_check({
