@@ -69,7 +69,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install --upgrade build
       - run: python -m build
-      - name: Verify wheel has no runtime dependencies
+      - name: Verify wheel runtime dependency boundary
         run: |
           python - <<'PY'
           import glob
@@ -84,13 +84,35 @@ jobs:
               line for line in metadata.splitlines()
               if line.startswith("Requires-Dist:") and "extra ==" not in line
           ]
-          assert runtime_requires == [], runtime_requires
+          assert runtime_requires == ["Requires-Dist: pyyaml>=6.0.3"], runtime_requires
           PY
-      - name: No-deps wheel smoke test
+      - name: Wheel policy smoke test
         run: |
           python -m venv /tmp/flyto-wheel-smoke
-          /tmp/flyto-wheel-smoke/bin/python -m pip install --no-deps dist/*.whl
+          /tmp/flyto-wheel-smoke/bin/python -m pip install dist/*.whl
           /tmp/flyto-wheel-smoke/bin/flyto-index --help
+          /tmp/flyto-wheel-smoke/bin/python - <<'PY'
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+
+          from flyto_indexer.analyzer.rules import check_rules
+
+          with TemporaryDirectory() as tmpdir:
+              root = Path(tmpdir)
+              (root / ".flyto-rules.yaml").write_text(
+                  "architecture:\n"
+                  "  - rule: no debug prints\n"
+                  "    grep_deny:\n"
+                  "      - pattern: debug_print\\(\n"
+                  "        glob: '*.py'\n",
+                  encoding="utf-8",
+              )
+              (root / "app.py").write_text("print('ok')\n", encoding="utf-8")
+              result = check_rules(root)
+              assert result["total_rules"] == 1, result
+              assert result["rules_checked"] == 1, result
+              assert result["total_violations"] == 0, result
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: dist-${{ github.sha }}

@@ -1,4 +1,4 @@
-"""Tests for the no-dependency verification gate."""
+"""Tests for the verification and runtime-dependency gates."""
 
 import os
 import json
@@ -89,10 +89,11 @@ def _write_indexer_ci(root: Path):
         "      - run: python -m build\n"
         "      - run: |\n"
         "          python - <<'PY'\n"
-        "          runtime_requires = []\n"
+        "          runtime_requires = ['Requires-Dist: pyyaml>=6.0.3']\n"
         "          assert 'Requires-Dist:'\n"
         "          PY\n"
-        "      - run: pip install --no-deps dist/*.whl && flyto-index --help\n",
+        "      - name: Wheel policy smoke test\n"
+        "        run: pip install dist/*.whl && flyto-index --help && echo total_rules\n",
         encoding="utf-8",
     )
 
@@ -109,7 +110,7 @@ def _write_indexer_package_config(root: Path):
         "[project]\n"
         "name = \"flyto-indexer\"\n"
         "requires-python = \">=3.11\"\n"
-        "dependencies = []\n"
+        "dependencies = [\"PyYAML>=6.0.3\"]\n"
         "license-files = [\"LICENSE\", \"NOTICE\"]\n\n"
         "[project.scripts]\n"
         "flyto-index = \"flyto_indexer.cli:main\"\n\n"
@@ -464,6 +465,17 @@ def test_run_verification_fails_runtime_dependencies(tmp_path):
     checks = {check["name"]: check for check in result["checks"]}
     assert result["pass"] is False
     assert checks["runtime_dependencies"]["status"] == "fail"
+
+
+def test_run_verification_allows_indexer_policy_parser_dependency(tmp_path):
+    _write_project(tmp_path, dependency="PyYAML>=6.0.3", project_name="flyto-indexer")
+    _write_indexer_ci(tmp_path)
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["runtime_dependencies"]["status"] == "pass"
+    assert checks["runtime_dependencies"]["metrics"]["dependency_count"] == 1
 
 
 def test_run_verification_allows_dependencies_for_other_projects(tmp_path):
@@ -1211,7 +1223,7 @@ def test_verify_rules_policy_fails_layer_violation(tmp_path):
 
 
 def test_no_external_runtime_and_ci_closed_loop_pass_for_indexer(tmp_path):
-    _write_project(tmp_path, project_name="flyto-indexer")
+    _write_project(tmp_path, project_name="flyto-indexer", dependency="PyYAML>=6.0.3")
     _write_indexer_ci(tmp_path)
 
     result = run_verification(tmp_path, full_scan=True)

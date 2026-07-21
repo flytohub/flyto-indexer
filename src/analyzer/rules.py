@@ -72,26 +72,27 @@ def _find_rules_file(project_root: Path) -> Path | None:
 
 
 def load_rules(project_root: Path) -> dict | None:
-    """Load and parse .flyto-rules.yaml. Returns None if not found or yaml unavailable."""
+    """Load and parse a project policy, failing closed when it cannot be evaluated."""
     rules_path = _find_rules_file(project_root)
     if not rules_path:
         return None
 
     try:
         import yaml
-    except ImportError:
-        logger.debug("PyYAML not installed; skipping rules")
-        return None
+    except ImportError as exc:
+        raise RuntimeError(
+            f"PyYAML is required to evaluate project policy {rules_path}"
+        ) from exc
 
     try:
         with open(rules_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
-        if not isinstance(data, dict):
-            return None
-        return data
-    except Exception as e:
-        logger.debug("Failed to load %s: %s", rules_path, e)
-        return None
+    except (OSError, yaml.YAMLError) as exc:
+        raise ValueError(f"Failed to load project policy {rules_path}: {exc}") from exc
+
+    if not isinstance(data, dict):
+        raise ValueError(f"Project policy {rules_path} must contain a YAML mapping")
+    return data
 
 
 # ── Rule checking engine ───────────────────────────────────────────────────

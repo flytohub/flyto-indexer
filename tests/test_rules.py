@@ -3,6 +3,7 @@
 import tempfile
 import textwrap
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -73,6 +74,38 @@ class TestLoadRules:
             (idx_dir / "rules.yaml").write_text(yaml.dump({"version": 2, "source": "index"}))
             data = load_rules(root)
             assert data["source"] == "root"
+
+    def test_malformed_policy_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / ".flyto-rules.yaml").write_text("architecture: [", encoding="utf-8")
+
+            with pytest.raises(ValueError, match="Failed to load project policy"):
+                load_rules(root)
+
+    def test_non_mapping_policy_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / ".flyto-rules.yaml").write_text("- not\n- a\n- mapping\n", encoding="utf-8")
+
+            with pytest.raises(ValueError, match="must contain a YAML mapping"):
+                load_rules(root)
+
+    def test_missing_yaml_dependency_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = _make_project(tmpdir, {"version": 1})
+            real_import = __import__
+
+            def import_without_yaml(name, *args, **kwargs):
+                if name == "yaml":
+                    raise ImportError("blocked for test")
+                return real_import(name, *args, **kwargs)
+
+            with (
+                patch("builtins.__import__", side_effect=import_without_yaml),
+                pytest.raises(RuntimeError, match="PyYAML is required"),
+            ):
+                load_rules(root)
 
 
 # ── glob_deny ───────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 Architecture-level audit tests for flyto-indexer.
 
 These tests verify structural guarantees that customers and integrators care about:
-  1. Zero external dependencies (pure stdlib)
+  1. Minimal, explicitly allowlisted runtime dependencies
   2. Data sovereignty — source code NEVER leaves the machine
   3. Export contract — output matches what flyto-engine expects
   4. Module boundaries — no circular imports, clear layering
@@ -36,13 +36,12 @@ sys.path.insert(0, str(SRC_DIR))
 import pytest
 
 # ===========================================================================
-# SECTION 1: ZERO EXTERNAL DEPENDENCIES
+# SECTION 1: MINIMAL EXTERNAL DEPENDENCIES
 # ===========================================================================
 
 
-class TestZeroDependency:
-    """Verify the project uses ONLY Python stdlib — no pip-installed packages
-    in production code paths."""
+class TestDependencyBoundary:
+    """Keep production dependencies minimal and explicitly allowlisted."""
 
     # Allowlist: modules that ARE in stdlib (commonly confused with third-party)
     STDLIB_ALLOWLIST = {
@@ -175,11 +174,11 @@ class TestZeroDependency:
         assert not violations, (
             f"Found {len(violations)} external dependency imports in production code:\n"
             + "\n".join(violations)
-            + "\n\nflyto-indexer must remain zero-dependency (pure stdlib)."
+            + "\n\nOnly explicitly guarded or allowlisted production imports are permitted."
         )
 
-    def test_pyproject_has_no_runtime_dependencies(self):
-        """pyproject.toml must not list any runtime dependencies."""
+    def test_pyproject_has_only_policy_parser_runtime_dependency(self):
+        """The structured policy parser is the only runtime dependency."""
         pyproject = SRC_DIR.parent / "pyproject.toml"
         if not pyproject.exists():
             pytest.skip("pyproject.toml not found")
@@ -189,10 +188,7 @@ class TestZeroDependency:
             import tomli as tomllib  # type: ignore[no-redef]  # Python 3.10 compat
         data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
         deps = data.get("project", {}).get("dependencies", [])
-        assert deps == [] or deps is None or len(deps) == 0, (
-            f"pyproject.toml lists runtime dependencies: {deps}\n"
-            "flyto-indexer must have zero runtime deps."
-        )
+        assert deps == ["PyYAML>=6.0.3"], f"Unexpected runtime dependencies: {deps}"
 
     def test_no_subprocess_shell_true(self):
         """No subprocess call with shell=True in production code (injection risk).

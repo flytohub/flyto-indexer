@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## [2.14.2] - 2026-07-21
+
+### Fixed
+- Made project policy evaluation fail closed instead of reporting a false
+  `0 rules / 0 layers` pass when PyYAML is absent or the policy is malformed.
+  PyYAML is now a runtime dependency, and malformed/non-mapping policies have
+  regression coverage.
+
 ## [2.14.1] - 2026-07-21
 
 ### Added

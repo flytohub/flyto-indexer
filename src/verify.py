@@ -375,19 +375,25 @@ def _check_runtime_dependencies(root: Path, add_check) -> None:
     deps = data.get("project", {}).get("dependencies", [])
     project_name = data.get("project", {}).get("name", root.name)
     requires_python = data.get("project", {}).get("requires-python", "")
-    if project_name == "flyto-indexer" and deps:
+    expected_indexer_dependencies = ["PyYAML>=6.0.3"]
+    if project_name == "flyto-indexer" and deps != expected_indexer_dependencies:
         add_check(
             "runtime_dependencies",
             "fail",
-            "Runtime dependencies must stay empty for the no-external-deps contract",
-            metrics={"project": project_name, "dependencies": deps, "requires_python": requires_python},
+            "Runtime dependencies violate the indexer allowlist",
+            metrics={
+                "project": project_name,
+                "dependencies": deps,
+                "expected_dependencies": expected_indexer_dependencies,
+                "requires_python": requires_python,
+            },
         )
         return
 
     add_check(
         "runtime_dependencies",
         "pass",
-        "Runtime dependencies are empty" if not deps else "Runtime dependencies recorded",
+        "Runtime dependency boundary passed",
         metrics={"project": project_name, "dependency_count": len(deps), "requires_python": requires_python},
     )
 
@@ -947,19 +953,22 @@ def _check_no_external_runtime(root: Path, add_check) -> None:
 
     _ci_files, ci_text = _read_ci_files(root)
     lowered_ci = ci_text.lower()
-    has_no_deps_smoke = "--no-deps" in lowered_ci and "flyto-index --help" in lowered_ci
+    expected_dependencies = ["PyYAML>=6.0.3"]
+    has_policy_smoke = "wheel policy smoke test" in lowered_ci and "total_rules" in lowered_ci
     has_metadata_assertion = "requires-dist" in lowered_ci and "runtime_requires" in lowered_ci
 
     problems = []
-    if dependencies:
-        problems.append("runtime dependencies are not empty")
-    if not has_no_deps_smoke:
-        problems.append("CI does not run a no-deps wheel smoke")
+    if dependencies != expected_dependencies:
+        problems.append(
+            f"runtime dependencies must be exactly {expected_dependencies}, got {dependencies}"
+        )
+    if not has_policy_smoke:
+        problems.append("CI does not run an isolated wheel policy smoke")
     if not has_metadata_assertion:
         problems.append("CI does not assert wheel runtime metadata")
 
     status = "pass"
-    if dependencies:
+    if dependencies != expected_dependencies:
         status = "fail"
     elif problems:
         status = "warn"
@@ -967,12 +976,14 @@ def _check_no_external_runtime(root: Path, add_check) -> None:
     add_check(
         "no_external_runtime",
         status,
-        "flyto-indexer keeps zero runtime dependencies" if not problems else "No-external-runtime guard is incomplete",
+        "flyto-indexer runtime dependency boundary passed"
+        if not problems else "Runtime dependency guard is incomplete",
         metrics={
             "project": project_name,
             "dependency_count": len(dependencies),
+            "expected_dependencies": expected_dependencies,
             "optional_dependency_groups": sorted(optional.keys()) if isinstance(optional, dict) else [],
-            "ci_no_deps_smoke": has_no_deps_smoke,
+            "ci_policy_smoke": has_policy_smoke,
             "ci_metadata_assertion": has_metadata_assertion,
             "problems": problems,
         },
@@ -1013,6 +1024,7 @@ def _check_package_integrity(root: Path, add_check) -> None:
 
     required = {
         "hatchling_backend": data.get("build-system", {}).get("build-backend") == "hatchling.build",
+        "policy_parser_dependency": project.get("dependencies") == ["PyYAML>=6.0.3"],
         "wheel_src_package": "src" in wheel_packages,
         "wheel_src_remap": isinstance(wheel_sources, dict) and wheel_sources.get("src") == "flyto_indexer",
         "rule_corpus_force_include": isinstance(force_include, dict)
@@ -1075,7 +1087,11 @@ def _check_ci_closed_loop(root: Path, add_check) -> None:
     if project_name == "flyto-indexer":
         required.update({
             "sarif_report": "--report-format sarif" in lowered,
-            "no_deps_wheel": "--no-deps" in lowered and "flyto-index --help" in lowered,
+            "wheel_policy_smoke": (
+                "wheel policy smoke test" in lowered
+                and "flyto-index --help" in lowered
+                and "total_rules" in lowered
+            ),
         })
 
     missing = sorted(name for name, present in required.items() if not present)

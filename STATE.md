@@ -20,6 +20,10 @@
   active runtime version.
 - `scripts/install-local-cli.sh` installs the current checkout into an isolated
   venv and verifies that the executable version matches the checkout.
+- Version 2.14.2 declares PyYAML as the sole runtime dependency so project
+  policies and layer rules cannot be silently skipped in installed builds.
+  Missing or malformed policy parsing now fails verification closed, and the
+  wheel CI smoke loads and evaluates a real rule in an isolated environment.
 
 ## Release Blockers
 
