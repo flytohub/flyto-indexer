@@ -2,20 +2,19 @@
 
 ## Now
 
-- Keep verify useful for Flyto2's multi-repo audit loops.
+- Keep verify useful across single-repo and multi-repo audit loops.
 - Keep project memory, architecture, and handoff docs enforced in CI.
 - Preserve local-only operation for default audit and verification paths.
 
 ## Next
 
-- Improve workspace-level verification across frontend, engine, core, admin, and
-  provider repos.
-- Expand enterprise checks for airgap dependency boundaries, generated-index
-  hygiene, and no-egress assumptions.
+- Improve workspace-level verification across mixed-language repositories.
+- Expand airgap dependency boundaries, generated-index hygiene, and no-egress
+  checks without encoding product-specific edition policy.
 - Add richer contract drift reporting for capability, API, and route schemas.
 
 ## Later
 
-- Add signed baseline support for enterprise evidence packs.
+- Add optional signed verification baselines.
 - Add deeper language server call hierarchy coverage where local LSPs are
   available.

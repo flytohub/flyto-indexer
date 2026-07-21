@@ -23,6 +23,8 @@ import sys
 import time
 from pathlib import Path
 
+from . import __version__
+
 
 def _ensure_gitignore(directory: Path):
     """Create .gitignore with '*' in a generated directory if it doesn't exist."""
@@ -77,6 +79,7 @@ def main():
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # init
@@ -1283,7 +1286,7 @@ def cmd_tools(args):
 
     return {
         "binary": "flyto-index",
-        "version": "0.1.0",
+        "version": __version__,
         "generatedAt": now,
         "usage": "flyto-index <command> [args]",
         "commands": commands,

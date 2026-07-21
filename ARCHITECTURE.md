@@ -42,8 +42,11 @@
 - Developer mode runs from source in the local workspace.
 - CI mode installs the package and runs verify gates without network-required
   services.
-- Enterprise mode must support private repositories and airgapped source scans
-  with local-only analysis.
+- Installed mode runs from an isolated environment and reports its active
+  package version so callers can detect stale runtimes.
+- Airgapped mode keeps scans local and does not require a hosted control plane.
+- Product editions, commercial feature policy, and release orchestration are
+  outside this repository.
 
 ## Trust Boundary
 

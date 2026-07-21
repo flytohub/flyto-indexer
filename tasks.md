@@ -2,8 +2,9 @@
 
 ## Open
 
-- Add workspace verify recipes for Flyto2's five primary repos.
-- Add stricter generated-artifact ignore checks for packaged enterprise scans.
+- Add reusable workspace verification examples that do not encode private
+  product topology.
+- Add stricter generated-artifact ignore checks for packaged source scans.
 - Add docs examples for custom layer, taint, and capability rules.
 
 ## Watch
@@ -15,3 +16,5 @@
 ## Done
 
 - Bootstrapped project memory skeleton and lint gate.
+- Removed product release policy from the public package boundary.
+- Added observable runtime version and verified local installation.

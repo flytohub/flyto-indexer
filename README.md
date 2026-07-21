@@ -139,8 +139,6 @@ flyto-index verify . --baseline .flyto-baselines/flyto-indexer.json --regression
 flyto-index verify-workspace . --changed-only --base origin/main
 flyto-index verify . --report verify.sarif --report-format sarif
 flyto-index verify-baseline compare . --baseline .flyto-baselines/flyto-indexer.json
-flyto-index flyto2-product-gate /Users/chester/flytohub --health-report config/flyto2/health-baseline-2026-06-21.json
-flyto-index flyto2-memory-bootstrap /Users/chester/flytohub --apply
 flyto-index impact MySharedSymbol --path .
 flyto-index context --path . --query "auth routes query keys"
 flyto-index secrets . --json
@@ -154,11 +152,8 @@ runtime dependency drift, package manifest drift, suspicious baselines, or MCP
 tool/runtime drift. Use `--baseline` with `--regression-only` when a project has
 known warnings but new AI-generated regressions must still be blocked.
 
-Use `flyto2-product-gate` for the Flyto2 workspace release gate. It validates
-the five product lines, repo classification, project memory, and health targets
-before a release can be considered production-ready.
-Use `flyto2-memory-bootstrap` to create missing project-memory, workflow, and
-handoff files from the same manifest without overwriting existing files.
+Product edition policy, commercial packaging, and company release orchestration
+are intentionally outside this public, reusable code-intelligence package.
 
 ## Contributing
 
@@ -214,7 +209,8 @@ flyto-index setup-claude .
 
 ```bash
 git clone https://github.com/flytohub/flyto-indexer.git
-cd flyto-indexer && pip install -e .
+./flyto-indexer/scripts/install-local-cli.sh
+flyto-index --version
 flyto-index setup .
 ```
 </details>

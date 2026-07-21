@@ -2,7 +2,11 @@
 
 ## Unreleased
 
+## [2.14.1] - 2026-07-21
+
 ### Added
+- Added source-aware package version resolution, `flyto-index --version`, and a
+  verified isolated local installer so stale executables are detectable.
 - Added `flyto-index task {plan,gate,validate}` as a local CLI entrypoint for
   the same guarded task workflow exposed through MCP. The command supports
   repeatable `--target`, comma-separated `--targets`, JSON/file-backed
@@ -10,6 +14,9 @@
   validation exits suitable for shell and CI use.
 
 ### Fixed
+- Completed the 2.14.0 public-package boundary: removed the remaining product
+  release modules, manifests, evidence generators, and product deployment docs
+  after moving the still-used workspace CI audit to its private owner.
 - Made `task(action="plan")` path target resolution fail closed. Existing
   absolute and project-relative file targets now resolve by exact path within
   the requested project before any keyword/semantic search. If a path-like
