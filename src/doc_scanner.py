@@ -176,6 +176,8 @@ def _declared_module_roots(project_path: Path) -> list[Path] | None:
 def _check_module_doc_coverage(project_path: Path) -> float:
     """Check source-owning directories for a README or documented __init__.py."""
     module_roots = _declared_module_roots(project_path)
+    if module_roots == []:
+        return 1.0  # An explicit empty list declares that the repository has no source modules.
     if module_roots is None:
         module_roots = []
         try:

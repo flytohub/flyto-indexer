@@ -73,6 +73,8 @@ exclusions affect documentation scoring only, never source or security scans.
 Docs-only repositories with no runtime environment can set
 `documentation.configuration_not_applicable` to `true`; this suppresses the
 `.env.example` recommendation without weakening source or security checks.
+They can also set `documentation.module_roots` to an empty list when the
+repository intentionally has no source-owning module directories.
 
 Repositories that mix source code with top-level content directories can set
 `documentation.module_roots` in `docs/documentation-manifest.json`. The scanner

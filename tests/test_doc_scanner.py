@@ -64,7 +64,12 @@ def test_docs_only_repository_can_declare_configuration_not_applicable(tmp_path)
     docs = tmp_path / "docs"
     docs.mkdir()
     (docs / "documentation-manifest.json").write_text(
-        json.dumps({"documentation": {"configuration_not_applicable": True}}),
+        json.dumps({
+            "documentation": {
+                "configuration_not_applicable": True,
+                "module_roots": [],
+            }
+        }),
         encoding="utf-8",
     )
     index_dir = tmp_path / ".flyto-index"
@@ -78,7 +83,9 @@ def test_docs_only_repository_can_declare_configuration_not_applicable(tmp_path)
 
     assert not result.has_env_example
     assert not any(".env.example" in suggestion for suggestion in result.suggestions)
-    assert result.overall_score == 67
+    assert result.module_doc_coverage == 1.0
+    assert not any("top-level modules" in suggestion for suggestion in result.suggestions)
+    assert result.overall_score == 82
 
 
 def test_source_reference_counts_exact_local_symbol_links(tmp_path):

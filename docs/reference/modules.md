@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **144 Python modules**, **57,232 lines**, and **1,683 class/function/method declarations**.
+Generated inventory: **144 Python modules**, **57,234 lines**, and **1,683 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -59,7 +59,7 @@ Generated inventory: **144 Python modules**, **57,232 lines**, and **1,683 class
 | [`src/dependency_resolver.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_resolver.py#L1) | 510 | 18 | `logging, models` | Dependency resolution mixin for IndexEngine. |
 | [`src/dependency_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_scanner.py#L1) | 1263 | 34 | `dataclasses, datetime, json, logging, os, pathlib, re, safe_xml, tomli, tomllib, typing, xml` | Dependency/package version scanner — extracts external package dependencies from manifest files across multiple ecosystems. |
 | [`src/diff_impact.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/diff_impact.py#L1) | 367 | 9 | `index_store, os, pathlib, re, signature, subprocess, tools, typing` | Diff-based Impact Analysis — parse git diff, match changed hunks to indexed symbols, classify change type (signature vs body), and run impact analysis. |
-| [`src/doc_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L1) | 533 | 12 | `dataclasses, fnmatch, gzip, json, logging, os, pathlib, re, typing` | Documentation Coverage Scanner — analyze documentation completeness. |
+| [`src/doc_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L1) | 535 | 12 | `dataclasses, fnmatch, gzip, json, logging, os, pathlib, re, typing` | Documentation Coverage Scanner — analyze documentation completeness. |
 | [`src/dockerfile_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_scanner.py#L1) | 240 | 3 | `logging, os, pathlib, re, rule_loader` | Dockerfile & IaC Scanner — detect security misconfigurations in Dockerfiles and docker-compose files. |
 | [`src/embedding.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/embedding.py#L1) | 96 | 5 | `logging, pathlib, sentence_transformers, typing` | Embedding-based semantic search — optional hybrid layer. |
 | [`src/engine.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L1) | 715 | 21 | `context, datetime, dependency_resolver, glob, index_store, indexer, json, logging, models, pathlib, reverse_index, safe_io` | Main indexing engine - orchestrates the entire flow. |
