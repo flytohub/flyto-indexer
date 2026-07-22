@@ -2,7 +2,24 @@
 
 ## Unreleased
 
+### Added
+- Added a structured documentation hub, feature guide, CLI and MCP guides,
+  configuration and verification runbooks, security model, technical
+  whitepaper, and machine-readable feature coverage manifest.
+- Added generated references for every non-test Python declaration, CLI
+  command and argument, smart and granular MCP schema, local HTTP operation,
+  scanner default, environment reader, and built-in rule file.
+- Added CI drift checks for generated references and MCP/package versions.
+
 ### Fixed
+- Synchronized MCP registry metadata and runtime initialization with package
+  version 2.14.2.
+- Made every shipped rule-corpus YAML file parse in a regression test and fixed
+  unquoted IaC guidance values that were invalid YAML.
+- Corrected README claims about the active MCP surface and optional LLM data
+  handling.
+- Marked the production `TestMapper` class as non-test so pytest does not emit
+  a false collection warning when test modules import it.
 - Included Vue, Svelte, and Astro single-file components in verify-time source
   reference and API contract discovery. Imported Vue components no longer
   produce false `single_project_islands` findings when the dependency scanner

@@ -13,6 +13,11 @@
 - The indexer reports risk and evidence. It does not mutate product code unless
   a caller explicitly applies a separate edit.
 
+The detailed ownership and dependency map is maintained in
+`docs/architecture-map.md`. Every non-test Python declaration is linked from
+`docs/reference/python-api.md`; adapter contracts have dedicated CLI, MCP, and
+HTTP references.
+
 ## Data Flow
 
 1. Scanner walks the repository and extracts files, symbols, imports, routes,
@@ -51,6 +56,26 @@
 - Airgapped mode keeps scans local and does not require a hosted control plane.
 - Product editions, commercial feature policy, and release orchestration are
   outside this repository.
+
+## Interface Adapters
+
+- `src/cli.py` translates shell arguments and exit-code requirements into core
+  service calls.
+- `src/mcp_server.py` handles stdio JSON-RPC, protocol negotiation, rate limits,
+  tool listing, and dispatch.
+- `src/api_server.py` provides a separate localhost bridge described by its
+  embedded OpenAPI contract.
+- `src/__init__.py` exports the stable Python package entry surface.
+
+Adapters compose shared scanners, analyzers, indexes, and tools; lower layers
+must not import protocol entrypoints. `.flyto-rules.yaml` encodes that direction.
+
+## Documentation Contract
+
+`scripts/generate-reference.py` derives interface references from AST,
+registries, OpenAPI data, defaults, environment readers, and rule files.
+`docs/documentation-manifest.json` maps broader feature surfaces to source,
+durable explanation, and test evidence. CI rejects either kind of drift.
 
 ## Trust Boundary
 

@@ -123,6 +123,11 @@ Flyto2 Indexer exposes the tools AI agents need before they make a risky edit:
 | `scan_documentation` | Checks README quality, module docs, config docs, and contribution files. |
 | `verify` | Runs the local closed-loop gate before an agent finishes or a PR merges. |
 
+See the [feature guide](docs/FEATURES.md), [MCP integration guide](docs/MCP.md),
+and source-backed [tool reference](docs/reference/mcp-tools.md) for every
+published tool, input schema, compatibility definition, and implementation
+location.
+
 ## Usage
 
 Use `flyto-index verify` as the default gate before an AI agent finishes a code
@@ -441,7 +446,10 @@ Server-side enforcement blocks skipping gates.
 
 ## Tools
 
-5 smart tools. Each one auto-enriches results with related data — no need to pick between dozens of granular tools.
+Five core tools cover the normal inspect-before-edit workflow. Focused smart
+tools add verification, security, licensing, documentation, framework, call
+hierarchy, PR-risk, and repository-policy operations without forcing clients to
+work through the granular compatibility surface.
 
 | Tool | What it answers | Auto-enrichment |
 |------|----------------|-----------------|
@@ -464,7 +472,10 @@ Server-side enforcement blocks skipping gates.
 
 **`structure`** replaces: `list_projects`, `list_apis`, `list_categories`, `dependency_graph`, `check_api_contracts`, `contract_drift`, `extract_type_schema`
 
-All legacy tools remain available in dispatch for backward compatibility and execution plan steps.
+All granular compatibility tools remain available in dispatch for backward
+compatibility and execution-plan steps. The generated
+[MCP reference](docs/reference/mcp-tools.md) records the current counts and
+schemas directly from the registries.
 
 </details>
 
@@ -523,7 +534,11 @@ flyto-index setup . --remove              # Uninstall
 
 ## Privacy
 
-100% local. No code is sent anywhere. Delete `.flyto-index/` to clean up completely.
+Core indexing, search, impact, policy, and verification run locally and require
+no hosted service. Optional LSP enrichment starts local language servers. The
+optional LLM auditor can send selected analysis input to its configured
+provider and is disabled unless explicitly configured. Delete `.flyto-index/`
+to remove generated index data. See the [security model](docs/SECURITY_MODEL.md).
 
 ## Limitations
 

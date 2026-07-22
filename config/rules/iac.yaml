@@ -356,7 +356,7 @@ rules:
     severity: HIGH
     pattern: 'run:\s*[^\n]*\$\{\{\s*github\.event\.(?:issue\.title|issue\.body|pull_request\.title|pull_request\.body|pull_request\.head\.ref|comment\.body|head_commit\.message)'
     title: Script injection via attacker-controlled GitHub context
-    guideline: Move ${{ github.event.X }} into env: then use $X in run:. Direct interpolation is shell injection.
+    guideline: "Move ${{ github.event.X }} into env, then use $X in run. Direct interpolation is shell injection."
 
   - id: GHA_SECRET_ECHO
     framework: github_actions
@@ -377,7 +377,7 @@ rules:
     severity: HIGH
     pattern: 'permissions:\s*write-all'
     title: Workflow grants write-all to GITHUB_TOKEN
-    guideline: Replace permissions: write-all with explicit per-scope grants (contents: read, pull-requests: write, etc.).
+    guideline: "Replace permissions: write-all with explicit per-scope grants (contents: read, pull-requests: write, etc.)."
 
   - id: GHA_SELF_HOSTED_PUBLIC
     framework: github_actions

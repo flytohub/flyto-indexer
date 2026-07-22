@@ -45,7 +45,7 @@ def git_repo(tmp_path):
     repo = str(tmp_path / "repo")
     os.makedirs(repo)
     _git(["init"], repo)
-    _git(["config", "user.email", "test@test.com"], repo)
+    _git(["config", "user.email", "dev@flyto2.com"], repo)
     _git(["config", "user.name", "Test User"], repo)
 
     # Commit 1 — initial

@@ -26,6 +26,8 @@ _TEST_DIRS = {'tests', 'test', '__tests__', '__test__', 'spec', 'specs'}
 class TestMapper:
     """Bidirectional source ↔ test file mapper."""
 
+    __test__ = False
+
     def __init__(self, index: dict):
         self._index = index
         self._source_to_test: dict[str, str] = {}

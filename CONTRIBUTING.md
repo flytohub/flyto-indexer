@@ -5,18 +5,17 @@ Thanks for your interest in contributing!
 ## Getting Started
 
 ```bash
-# Clone the repo
 git clone https://github.com/flytohub/flyto-indexer.git
 cd flyto-indexer
 
-# Install in dev mode
-pip install -e ".[dev]"
+pip install ".[dev]"
 
-# Run tests
 pytest tests/ -v
 
-# Run linting
-ruff check src/
+# Run release checks
+python3 scripts/sync-version.py --check
+python3 scripts/generate-reference.py --check
+ruff check src/ tests/ scripts/
 mypy src/
 ```
 
@@ -35,7 +34,7 @@ mypy src/
 
 ## Code Style
 
-- Python 3.10+ compatible (no walrus operator assumptions, no 3.12+ f-string features)
+- Python 3.11+ compatible; keep syntax valid for every version declared in `pyproject.toml`
 - Use `ruff` for linting and formatting
 - Keep it simple — standard library only for core functionality
 - Write tests for new features
@@ -45,7 +44,7 @@ mypy src/
 1. Fork the repo and create your branch from `main`
 2. Add tests for any new functionality
 3. Make sure all tests pass: `pytest tests/ -v`
-4. Make sure linting passes: `ruff check src/`
+4. Run the full gate in [docs/VERIFICATION.md](docs/VERIFICATION.md#indexer-release-gate)
 5. Submit your PR with a clear description of what and why
 
 ## Adding a New Language Parser
@@ -57,6 +56,21 @@ mypy src/
 5. Register the scanner in the scanner factory
 
 See `src/scanner/python.py` for a reference implementation.
+
+## Documentation Changes
+
+Update the durable guide that owns the behavior and add or revise its entry in
+`docs/documentation-manifest.json`. Public Python declarations, CLI arguments,
+MCP schemas, HTTP operations, defaults, environment variables, and built-in
+rule files are generated from source:
+
+```bash
+python3 scripts/generate-reference.py
+python3 scripts/generate-reference.py --check
+```
+
+Do not hand-edit `docs/reference/`. If the package version changes, run
+`python3 scripts/sync-version.py` and commit all synchronized manifests.
 
 ## Questions?
 

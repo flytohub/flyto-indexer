@@ -17,12 +17,14 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check project memory docs
         run: bash scripts/lint-project-memory.sh
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: python -m pip install --upgrade pip
-      - run: pip install ruff mypy
-      - run: ruff check src/
+      - run: pip install ".[dev]"
+      - run: python scripts/sync-version.py --check
+      - run: python scripts/generate-reference.py --check
+      - run: ruff check src/ tests/ scripts/
       - run: mypy src/
 
   test:
@@ -33,7 +35,7 @@ jobs:
         python-version: ['3.11', '3.12']
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip
@@ -52,7 +54,7 @@ jobs:
     needs: [lint, test]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: python -m pip install --upgrade pip
@@ -64,7 +66,7 @@ jobs:
     needs: [lint, test, verify]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: python -m pip install --upgrade build

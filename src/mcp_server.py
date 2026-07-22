@@ -28,6 +28,11 @@ import time as _time
 from collections import deque
 from typing import Any, Optional
 
+try:
+    from .version import __version__
+except ImportError:  # Direct source execution.
+    from version import __version__
+
 logger = logging.getLogger("flyto-indexer.mcp")
 
 
@@ -314,7 +319,7 @@ def handle_request(request: dict):
             "serverInfo": {
                 "name": "flyto-indexer",
                 "title": "Flyto2 Code Indexer",
-                "version": "2.3.0",
+                "version": __version__,
                 "description": "Code analysis MCP server — impact analysis, dependency tracking, dead code detection, security scanning, and code health scoring across any project.",
                 "websiteUrl": "https://github.com/flytohub/flyto-indexer",
             },

@@ -1373,7 +1373,7 @@ def test_change_hygiene_warns_on_high_risk_paths(tmp_path):
     subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
     subprocess.run(["git", "-C", str(tmp_path), "add", "."], capture_output=True, check=True)
     subprocess.run(
-        ["git", "-C", str(tmp_path), "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+        ["git", "-C", str(tmp_path), "-c", "user.email=dev@flyto2.com", "-c", "user.name=Test", "commit", "-m", "init"],
         capture_output=True,
         check=True,
     )
@@ -1391,7 +1391,7 @@ def test_change_hygiene_allows_env_example(tmp_path):
     subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
     subprocess.run(["git", "-C", str(tmp_path), "add", "."], capture_output=True, check=True)
     subprocess.run(
-        ["git", "-C", str(tmp_path), "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+        ["git", "-C", str(tmp_path), "-c", "user.email=dev@flyto2.com", "-c", "user.name=Test", "commit", "-m", "init"],
         capture_output=True,
         check=True,
     )
@@ -1411,7 +1411,7 @@ def test_change_hygiene_fails_generated_dist_by_default(tmp_path):
     subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
     subprocess.run(["git", "-C", str(tmp_path), "add", "."], capture_output=True, check=True)
     subprocess.run(
-        ["git", "-C", str(tmp_path), "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+        ["git", "-C", str(tmp_path), "-c", "user.email=dev@flyto2.com", "-c", "user.name=Test", "commit", "-m", "init"],
         capture_output=True,
         check=True,
     )
@@ -1437,7 +1437,7 @@ def test_change_hygiene_allows_policy_owned_generated_dist(tmp_path):
     subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
     subprocess.run(["git", "-C", str(tmp_path), "add", "."], capture_output=True, check=True)
     subprocess.run(
-        ["git", "-C", str(tmp_path), "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+        ["git", "-C", str(tmp_path), "-c", "user.email=dev@flyto2.com", "-c", "user.name=Test", "commit", "-m", "init"],
         capture_output=True,
         check=True,
     )
@@ -1493,7 +1493,7 @@ def test_workspace_changed_only_skips_clean_git_project(tmp_path):
     subprocess.run(["git", "init", str(project)], capture_output=True, check=True)
     subprocess.run(["git", "-C", str(project), "add", "."], capture_output=True, check=True)
     subprocess.run(
-        ["git", "-C", str(project), "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+        ["git", "-C", str(project), "-c", "user.email=dev@flyto2.com", "-c", "user.name=Test", "commit", "-m", "init"],
         capture_output=True,
         check=True,
     )
@@ -1515,7 +1515,7 @@ def test_workspace_changed_only_detects_untracked_files(tmp_path):
     subprocess.run(["git", "init", str(project)], capture_output=True, check=True)
     subprocess.run(["git", "-C", str(project), "add", "."], capture_output=True, check=True)
     subprocess.run(
-        ["git", "-C", str(project), "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+        ["git", "-C", str(project), "-c", "user.email=dev@flyto2.com", "-c", "user.name=Test", "commit", "-m", "init"],
         capture_output=True,
         check=True,
     )
@@ -1543,7 +1543,7 @@ def test_workspace_changed_only_workspace_checks_ignore_skipped_projects(tmp_pat
         subprocess.run(["git", "init", str(project)], capture_output=True, check=True)
         subprocess.run(["git", "-C", str(project), "add", "."], capture_output=True, check=True)
         subprocess.run(
-            ["git", "-C", str(project), "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+            ["git", "-C", str(project), "-c", "user.email=dev@flyto2.com", "-c", "user.name=Test", "commit", "-m", "init"],
             capture_output=True,
             check=True,
         )

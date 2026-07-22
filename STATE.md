@@ -27,10 +27,17 @@
   policies and layer rules cannot be silently skipped in installed builds.
   Missing or malformed policy parsing now fails verification closed, and the
   wheel CI smoke loads and evaluates a real rule in an isolated environment.
-- Latest local verification: `1655 passed, 1 skipped`; Ruff passed; mypy found
-  no issues in 129 source files; sdist/wheel build passed; strict self-verify
-  passed 18/18. The rebuilt installed CLI also made Flyto2 Cloud strict full
-  verify pass 18/18 with zero single-project islands.
+- Durable user, operator, security, architecture, and whitepaper documentation
+  links to a generated source reference covering 144 non-test Python modules,
+  1,679 declarations, 36 CLI commands, 20 published MCP tools, 47 granular
+  compatibility definitions, seven local HTTP operations, eight environment
+  variables, and eight built-in rule files.
+- Package, MCP registry, and MCP initialization versions are synchronized and
+  enforced by tests and CI. Every built-in rule YAML file is parsed in tests.
+- Latest local verification: `1658 passed, 1 skipped`; Ruff passed across
+  source, tests, and scripts; mypy found no issues in 130 source files;
+  sdist/wheel build and isolated wheel smoke passed; strict self-verify passed
+  18/18 with 223 files, 3,706 scanned symbols, and zero warnings.
 
 ## Release Blockers
 
@@ -44,7 +51,9 @@
 | Gate | Command | Scope |
 | --- | --- | --- |
 | Project memory | `bash scripts/lint-project-memory.sh` | Required docs, handoffs, headings, secret-like material |
-| Lint | `ruff check src tests` | Python style and static checks |
+| Generated docs | `python3 scripts/generate-reference.py --check` | Source-backed API, CLI, MCP, HTTP, configuration, and rule references |
+| Version metadata | `python3 scripts/sync-version.py --check` | Package, registry manifest, and runtime version parity |
+| Lint | `ruff check src tests scripts` | Python style and static checks |
 | Types | `mypy src` | Type consistency |
 | Tests | `pytest tests -v` | Functional and regression coverage |
 | Verify | `python -m src.cli verify . --full-scan --strict --json` | Self-verification from current source |

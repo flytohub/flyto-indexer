@@ -1,0 +1,146 @@
+{
+  "$schema": "https://docs.flyto2.com/schemas/documentation-contract-v1.json",
+  "schema_version": 1,
+  "repository": "flyto-indexer",
+  "status": "active",
+  "audiences": ["AI coding tool users", "MCP integrators", "security engineers", "CI operators", "Flyto2 contributors"],
+  "documentation": {
+    "index": "docs/README.md",
+    "architecture": "ARCHITECTURE.md",
+    "state": "STATE.md",
+    "security": "SECURITY.md",
+    "changelog": "CHANGELOG.md",
+    "feature_reference": "docs/FEATURES.md"
+  },
+  "source_areas": [
+    {
+      "id": "index-and-search-core",
+      "description": "Owns filesystem scanning, language extraction, symbol models, incremental indexes, lexical search, semantic search, and dependency resolution.",
+      "paths": ["src/engine.py", "src/models.py", "src/scanner/**", "src/indexer/**", "src/index_store.py", "src/search_index.py", "src/semantic.py", "src/dependency_resolver.py"],
+      "documentation": ["docs/FEATURES.md#index-and-search", "docs/WHITEPAPER.md#index-model", "docs/reference/modules.md", "docs/reference/python-api.md"]
+    },
+    {
+      "id": "context-impact-contracts",
+      "description": "Owns bounded context, project profiles, reference and call graphs, Git diff impact, API extraction, and cross-project contract drift.",
+      "paths": ["src/context/**", "src/profile/**", "src/engine.py", "src/diff_impact.py", "src/lsp/**", "src/tools/references.py", "src/analyzer/api_consistency.py", "src/analyzer/api_drift.py"],
+      "documentation": ["docs/FEATURES.md#context-and-project-profiles", "docs/FEATURES.md#impact-and-call-graphs", "docs/FEATURES.md#api-and-contract-drift", "ARCHITECTURE.md#product-api-contract-detection"]
+    },
+    {
+      "id": "quality-security-policy",
+      "description": "Owns deterministic quality, security, taint, secret, license, IaC, architecture, documentation, and AI-agent policy analysis.",
+      "paths": ["src/analyzer/**", "src/auditor/**", "src/quality.py", "src/secret_scanner.py", "src/license_scanner.py", "src/iac_scanner.py", "config/rules/**"],
+      "documentation": ["docs/FEATURES.md#quality-and-security-audits", "docs/SECURITY_MODEL.md", "docs/CONFIGURATION.md#repository-policy", "docs/reference/configuration.md"]
+    },
+    {
+      "id": "task-and-verification",
+      "description": "Owns task planning and phase gates, repository and workspace verification, baselines, PR risk, test mapping, and structured release evidence.",
+      "paths": ["src/tools/task_analysis.py", "src/execution_guard.py", "src/verify.py", "src/pr_analyzer.py", "src/test_mapper.py", "src/tools/smart.py"],
+      "documentation": ["docs/FEATURES.md#task-workflow", "docs/FEATURES.md#verification-and-baselines", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"]
+    },
+    {
+      "id": "cli-mcp-http-interfaces",
+      "description": "Owns command-line parsing, MCP protocol negotiation and dispatch, smart and compatibility tool schemas, and the optional localhost HTTP contract.",
+      "paths": ["src/cli.py", "src/mcp_server.py", "src/api_server.py", "src/tool_registry/**", "src/tools/**"],
+      "documentation": ["docs/CLI.md", "docs/MCP.md", "docs/reference/cli.md", "docs/reference/mcp-tools.md", "docs/reference/http-api.md"]
+    },
+    {
+      "id": "package-and-automation",
+      "description": "Owns package metadata, version synchronization, generated reference material, local installation, build scripts, CI verification, and PyPI publication.",
+      "paths": ["pyproject.toml", "server.json", ".mcp/server.json", "scripts/**", ".github/workflows/**"],
+      "documentation": ["docs/VERIFICATION.md#indexer-release-gate", "CONTRIBUTING.md", "docs/reference/README.md", "docs/reference/configuration.md"]
+    }
+  ],
+  "feature_surfaces": [
+    {
+      "id": "local-code-index",
+      "title": "Local code index and search",
+      "kind": "library",
+      "status": "active",
+      "description": "Builds incremental or full local indexes and provides lexical and semantic discovery without requiring a hosted service.",
+      "source": ["src/engine.py", "src/scanner/**", "src/indexer/**", "src/search_index.py", "src/semantic.py"],
+      "documentation": ["docs/FEATURES.md#index-and-search", "docs/WHITEPAPER.md#evidence-pipeline", "docs/reference/python-api.md"],
+      "tests": ["tests/test_engine.py", "tests/test_incremental.py", "tests/test_semantic.py", "tests/test_symbol_index.py"]
+    },
+    {
+      "id": "impact-and-contract-analysis",
+      "title": "Impact and contract analysis",
+      "kind": "library",
+      "status": "active",
+      "description": "Maps callers, transitive blast radius, likely tests, cross-project dependencies, APIs, and route-call contract drift.",
+      "source": ["src/engine.py", "src/diff_impact.py", "src/lsp/call_graph.py", "src/tools/references.py", "src/analyzer/api_consistency.py", "src/analyzer/api_drift.py"],
+      "documentation": ["docs/FEATURES.md#impact-and-call-graphs", "docs/FEATURES.md#api-and-contract-drift", "ARCHITECTURE.md#product-api-contract-detection"],
+      "tests": ["tests/test_diff_impact.py", "tests/test_cross_language_api.py", "tests/test_call_sites_layer4.py"]
+    },
+    {
+      "id": "quality-security-audits",
+      "title": "Quality and security audits",
+      "kind": "library",
+      "status": "active",
+      "description": "Analyzes quality, security, secrets, taint, licenses, infrastructure, documentation, architecture, and agent policy using local evidence.",
+      "source": ["src/analyzer/**", "src/auditor/**", "src/quality.py", "config/rules/**"],
+      "documentation": ["docs/FEATURES.md#quality-and-security-audits", "docs/SECURITY_MODEL.md", "docs/reference/configuration.md"],
+      "tests": ["tests/test_quality_health.py", "tests/test_taint.py", "tests/test_agent_policy.py", "tests/test_rule_corpus_yaml.py", "tests/test_rules.py"]
+    },
+    {
+      "id": "repository-policy",
+      "title": "Repository-owned policy",
+      "kind": "configuration",
+      "status": "active",
+      "description": "Loads architecture, file-placement, pattern, layer, and taint policy from reviewed repository YAML and fails closed on malformed enforcement data.",
+      "source": ["src/rule_loader.py", "src/analyzer/rules.py", "src/analyzer/layers.py", "src/analyzer/taint_dsl.py", ".flyto-rules.yaml"],
+      "documentation": ["docs/CONFIGURATION.md#repository-policy", "docs/FEATURES.md#repository-policy", "docs/reference/configuration.md"],
+      "tests": ["tests/test_rules.py", "tests/test_taint.py", "tests/test_architecture.py"]
+    },
+    {
+      "id": "task-and-release-gates",
+      "title": "Task and release gates",
+      "kind": "workflow",
+      "status": "active",
+      "description": "Produces task plans, enforces phase evidence, validates changes, verifies repositories and workspaces, and compares reviewed baselines.",
+      "source": ["src/tools/task_analysis.py", "src/execution_guard.py", "src/verify.py", "src/tools/smart.py"],
+      "documentation": ["docs/FEATURES.md#task-workflow", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"],
+      "tests": ["tests/test_task_analysis.py", "tests/test_verify.py", "tests/test_validation.py"]
+    },
+    {
+      "id": "command-line-interface",
+      "title": "Command-line interface",
+      "kind": "cli",
+      "status": "active",
+      "description": "Exposes setup, scan, context, impact, audit, policy, inventory, verification, baseline, export, and integration workflows to shells and CI.",
+      "source": ["src/cli.py"],
+      "documentation": ["docs/CLI.md", "docs/reference/cli.md"],
+      "tests": ["tests/test_cli_commands.py", "tests/test_version.py"]
+    },
+    {
+      "id": "mcp-server",
+      "title": "MCP server and tools",
+      "kind": "api",
+      "status": "active",
+      "description": "Publishes compact smart tools over stdio JSON-RPC while retaining granular compatibility definitions for dispatch and integrations.",
+      "source": ["src/mcp_server.py", "src/tool_registry/**", "src/tools/**"],
+      "documentation": ["docs/MCP.md", "docs/reference/mcp-tools.md"],
+      "tests": ["tests/test_mcp_server.py", "tests/test_mcp_integration.py", "tests/test_mcp_security.py", "tests/test_tool_registry.py"]
+    },
+    {
+      "id": "local-http-api",
+      "title": "Local HTTP bridge",
+      "kind": "api",
+      "status": "active",
+      "description": "Provides a separate localhost JSON and OpenAPI bridge for search, file, impact, category, API, and index-statistics queries.",
+      "source": ["src/api_server.py"],
+      "documentation": ["docs/FEATURES.md#integration-surfaces", "docs/reference/http-api.md"],
+      "tests": ["tests/test_api_server.py"]
+    },
+    {
+      "id": "source-backed-reference",
+      "title": "Source-backed documentation",
+      "kind": "content",
+      "status": "generated",
+      "description": "Generates exhaustive module, declaration, CLI, MCP, HTTP, configuration, environment, and rule-corpus references and rejects drift in CI.",
+      "source": ["scripts/generate-reference.py", "scripts/sync-version.py"],
+      "documentation": ["docs/README.md#generated-reference", "docs/reference/README.md"],
+      "tests": ["tests/test_version_metadata.py"],
+      "verification": ["python3 scripts/generate-reference.py --check", "python3 scripts/sync-version.py --check"]
+    }
+  ]
+}

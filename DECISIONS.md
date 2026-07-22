@@ -1,5 +1,24 @@
 # Decisions
 
+## 2026-07-22 - Interface documentation is generated from source
+
+Decision: non-test Python declarations, CLI arguments, MCP registries, local
+OpenAPI operations, defaults, environment readers, and built-in rule files are
+rendered by `scripts/generate-reference.py` and checked in CI.
+
+Reason: hand-maintained counts and interface tables drifted from the package;
+source-backed generation keeps exhaustive detail reviewable without turning the
+README into an implementation dump.
+
+## 2026-07-22 - One package version feeds every runtime manifest
+
+Decision: `pyproject.toml` is the release-version authority;
+`scripts/sync-version.py` checks the MCP registry manifests, while
+`src/version.py` resolves source and installed modes.
+
+Reason: clients must be able to detect stale MCP installations and registry
+metadata must not advertise a different build.
+
 ## 2026-07-22 - Island fallback covers frontend single-file components
 
 Decision: verify-time source-name and API contract fallback scans Vue, Svelte,

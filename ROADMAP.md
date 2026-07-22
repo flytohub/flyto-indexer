@@ -3,7 +3,8 @@
 ## Now
 
 - Keep verify useful across single-repo and multi-repo audit loops.
-- Keep project memory, architecture, and handoff docs enforced in CI.
+- Keep source-backed interface references and the documentation contract
+  enforced in CI.
 - Preserve local-only operation for default audit and verification paths.
 
 ## Next
@@ -12,6 +13,8 @@
 - Expand airgap dependency boundaries, generated-index hygiene, and no-egress
   checks without encoding product-specific edition policy.
 - Add richer contract drift reporting for capability, API, and route schemas.
+- Improve generated references with language-specific public/private filtering
+  while retaining the exhaustive maintainer inventory.
 
 ## Later
 
