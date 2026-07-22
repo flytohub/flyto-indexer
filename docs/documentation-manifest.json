@@ -10,6 +10,7 @@
     "state": "STATE.md",
     "security": "SECURITY.md",
     "changelog": "CHANGELOG.md",
+    "whitepaper": "docs/WHITEPAPER.md",
     "feature_reference": "docs/FEATURES.md",
     "source_reference": "docs/reference/python-api.md",
     "source_reference_exclude": ["tests/**"],
