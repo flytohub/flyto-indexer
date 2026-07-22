@@ -2,7 +2,7 @@
 
 # Python API Reference
 
-Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **1,683 declarations across 128 files**.
+Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **1,684 declarations across 128 files**.
 
 ## `analyze.py`
 
@@ -854,18 +854,18 @@ Every declared class, function, nested function, and method in the package, supp
 
 | Kind | Signature | Responsibility | Source |
 |---|---|---|---|
-| class | `class DocCoverageResult` | The declaration and linked implementation are authoritative. | [`src/doc_scanner.py:42`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L42) |
-| function | `def _score_readme(project_path: Path) -> tuple&#91;int, list&#91;str&#93;&#93;` | Score README quality. | [`src/doc_scanner.py:57`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L57) |
-| function | `def _check_api_doc_coverage(project_path: Path) -> float` | Check what percentage of API routes have docstrings. | [`src/doc_scanner.py:113`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L113) |
-| function | `def _declared_module_roots(project_path: Path) -> list&#91;Path&#93; \| None` | Return manifest-scoped source roots, or None for automatic discovery. | [`src/doc_scanner.py:148`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L148) |
-| function | `def _check_module_doc_coverage(project_path: Path) -> float` | Check source-owning directories for a README or documented __init__.py. | [`src/doc_scanner.py:176`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L176) |
-| function | `def _source_reference_locations(project_path: Path) -> set&#91;tuple&#91;str, int&#93;&#93;` | Load source locations linked by declared, repository-local reference docs. | [`src/doc_scanner.py:224`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L224) |
-| function | `def _source_reference_exclusions(project_path: Path) -> tuple&#91;str, ...&#93;` | Return repository-relative globs excluded from source-reference scoring. | [`src/doc_scanner.py:289`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L289) |
-| function | `def _check_symbol_doc_coverage(project_path: Path) -> tuple&#91;float, float, float&#93;` | Measure inline, source-reference, and combined symbol documentation. | [`src/doc_scanner.py:316`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L316) |
-| function | `def _check_env_example(project_path: Path) -> tuple&#91;bool, bool&#93;` | Check if .env.example exists and has comments. | [`src/doc_scanner.py:376`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L376) |
-| function | `def _configuration_not_applicable(project_path: Path) -> bool` | Return whether a docs-only repository declares no runtime configuration. | [`src/doc_scanner.py:394`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L394) |
-| function | `def scan_documentation(project_path: str \| Path) -> DocCoverageResult` | Scan a project for documentation coverage. | [`src/doc_scanner.py:408`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L408) |
-| function | `def format_doc_scan(result: DocCoverageResult) -> str` | Format documentation coverage results as human-readable text. | [`src/doc_scanner.py:504`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L504) |
+| class | `class DocCoverageResult` | The declaration and linked implementation are authoritative. | [`src/doc_scanner.py:43`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L43) |
+| function | `def _score_readme(project_path: Path) -> tuple&#91;int, list&#91;str&#93;&#93;` | Score README quality. | [`src/doc_scanner.py:58`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L58) |
+| function | `def _check_api_doc_coverage(project_path: Path) -> float` | Check what percentage of API routes have docstrings. | [`src/doc_scanner.py:114`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L114) |
+| function | `def _declared_module_roots(project_path: Path) -> list&#91;Path&#93; \| None` | Return manifest-scoped source roots, or None for automatic discovery. | [`src/doc_scanner.py:149`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L149) |
+| function | `def _check_module_doc_coverage(project_path: Path) -> float` | Check source-owning directories for a README or documented __init__.py. | [`src/doc_scanner.py:177`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L177) |
+| function | `def _source_reference_locations(project_path: Path) -> set&#91;tuple&#91;str, int&#93;&#93;` | Load source locations linked by declared, repository-local reference docs. | [`src/doc_scanner.py:225`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L225) |
+| function | `def _source_reference_exclusions(project_path: Path) -> tuple&#91;str, ...&#93;` | Return repository-relative globs excluded from source-reference scoring. | [`src/doc_scanner.py:291`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L291) |
+| function | `def _check_symbol_doc_coverage(project_path: Path) -> tuple&#91;float, float, float&#93;` | Measure inline, source-reference, and combined symbol documentation. | [`src/doc_scanner.py:318`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L318) |
+| function | `def _check_env_example(project_path: Path) -> tuple&#91;bool, bool&#93;` | Check if .env.example exists and has comments. | [`src/doc_scanner.py:378`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L378) |
+| function | `def _configuration_not_applicable(project_path: Path) -> bool` | Return whether a docs-only repository declares no runtime configuration. | [`src/doc_scanner.py:396`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L396) |
+| function | `def scan_documentation(project_path: str \| Path) -> DocCoverageResult` | Scan a project for documentation coverage. | [`src/doc_scanner.py:410`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L410) |
+| function | `def format_doc_scan(result: DocCoverageResult) -> str` | Format documentation coverage results as human-readable text. | [`src/doc_scanner.py:506`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L506) |
 
 ## `src/dockerfile_scanner.py`
 
@@ -1667,11 +1667,12 @@ Every declared class, function, nested function, and method in the package, supp
 | method | `def TypeScriptScanner._extract_jsdoc(self, content: str, pos: int) -> str` | Extract JSDoc comments | [`src/scanner/typescript.py:739`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L739) |
 | method | `def TypeScriptScanner._normalize_api_url(url: str) -> str` | Normalize API URL: strip query params, replace template vars with *. | [`src/scanner/typescript.py:779`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L779) |
 | method | `def TypeScriptScanner._extract_api_calls(self, content: str) -> list&#91;dict&#93;` | Extract frontend HTTP API calls (fetch, axios, $http, etc.) | [`src/scanner/typescript.py:785`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L785) |
-| method | `def TypeScriptScanner._is_msw_handler_definition(self, content: str, match: re.Match) -> bool` | The declaration and linked implementation are authoritative. | [`src/scanner/typescript.py:828`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L828) |
-| method | `def TypeScriptScanner._is_backend_route_definition(self, content: str, match: re.Match) -> bool` | The declaration and linked implementation are authoritative. | [`src/scanner/typescript.py:840`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L840) |
-| method | `def TypeScriptScanner._build_function_ranges(self, symbols: list, rel_path: str) -> list&#91;tuple&#91;int, int, str&#93;&#93;` | Build (start_line, end_line, symbol_id) list from extracted symbols. | [`src/scanner/typescript.py:845`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L845) |
-| method | `def TypeScriptScanner._find_enclosing_function(self, line: int, func_ranges: list&#91;tuple&#91;int, int, str&#93;&#93;, file_source_id: str) -> str` | Find symbol ID of the function enclosing the given line. | [`src/scanner/typescript.py:860`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L860) |
-| method | `def TypeScriptScanner._extract_calls(self, content: str, cleaned: str) -> list&#91;dict&#93;` | Extract function calls using cleaned source to avoid false positives from strings and comments. | [`src/scanner/typescript.py:872`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L872) |
+| method | `def TypeScriptScanner._is_non_call_api_literal(content: str, match: re.Match) -> bool` | Reject API-looking validation strings that are not request arguments. | [`src/scanner/typescript.py:831`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L831) |
+| method | `def TypeScriptScanner._is_msw_handler_definition(self, content: str, match: re.Match) -> bool` | The declaration and linked implementation are authoritative. | [`src/scanner/typescript.py:851`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L851) |
+| method | `def TypeScriptScanner._is_backend_route_definition(self, content: str, match: re.Match) -> bool` | The declaration and linked implementation are authoritative. | [`src/scanner/typescript.py:863`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L863) |
+| method | `def TypeScriptScanner._build_function_ranges(self, symbols: list, rel_path: str) -> list&#91;tuple&#91;int, int, str&#93;&#93;` | Build (start_line, end_line, symbol_id) list from extracted symbols. | [`src/scanner/typescript.py:868`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L868) |
+| method | `def TypeScriptScanner._find_enclosing_function(self, line: int, func_ranges: list&#91;tuple&#91;int, int, str&#93;&#93;, file_source_id: str) -> str` | Find symbol ID of the function enclosing the given line. | [`src/scanner/typescript.py:883`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L883) |
+| method | `def TypeScriptScanner._extract_calls(self, content: str, cleaned: str) -> list&#91;dict&#93;` | Extract function calls using cleaned source to avoid false positives from strings and comments. | [`src/scanner/typescript.py:895`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L895) |
 
 ## `src/scanner/vue.py`
 

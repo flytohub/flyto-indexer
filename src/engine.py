@@ -220,7 +220,7 @@ class IndexEngine(
             ignore_patterns=[
                 "node_modules", "__pycache__", ".git", "dist", "build",
                 ".venv", "venv", ".pytest_cache", ".flyto-index", ".flyto",
-                ".vitepress/cache",
+                ".vitepress/cache", ".next", ".open-next", ".nuxt", ".output",
             ]
         )
 

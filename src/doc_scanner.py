@@ -13,6 +13,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+from urllib.parse import unquote
 
 logger = logging.getLogger("flyto-indexer.doc-scanner")
 
@@ -20,7 +21,7 @@ logger = logging.getLogger("flyto-indexer.doc-scanner")
 _SKIP_DIRS = frozenset({
     "node_modules", ".git", "vendor", "__pycache__", "dist", "dist-next", "build",
     ".venv", "venv", ".pytest_cache", ".flyto-index", ".flyto",
-    ".tox", ".mypy_cache", ".ruff_cache", "target", "out", ".next",
+    ".tox", ".mypy_cache", ".ruff_cache", "target", "out", ".next", ".open-next",
     ".nuxt", ".output", "coverage", ".cache", ".parcel-cache",
     "bower_components", ".eggs", "egg-info", "~",
 })
@@ -271,11 +272,12 @@ def _source_reference_locations(project_path: Path) -> set[tuple[str, int]]:
                 source_target, separator, line_text = target.rpartition("#L")
                 if not separator or not line_text.isdigit():
                     continue
-                github_match = github_pattern.fullmatch(source_target)
+                decoded_target = unquote(source_target)
+                github_match = github_pattern.fullmatch(decoded_target)
                 source_path = (
                     project_path / github_match.group(1)
                     if github_match
-                    else reference_path.parent / source_target
+                    else reference_path.parent / decoded_target
                 ).resolve()
                 try:
                     relative = source_path.relative_to(project_path).as_posix()

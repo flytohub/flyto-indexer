@@ -326,21 +326,21 @@ class VueScanner(BaseScanner):
         lines = script.splitlines()
 
         # function xxx()
-        for match in re.finditer(r'^\s*(async\s+)?function\s+(\w+)\s*\(', cleaned, re.MULTILINE):
+        for match in re.finditer(r'^[ \t]*(async\s+)?function\s+(\w+)\s*\(', cleaned, re.MULTILINE):
             func_name = match.group(2)
             start_line_idx = cleaned[:match.start()].count('\n')
             end_line_idx = self._find_block_end(lines, start_line_idx)
             content = "\n".join(lines[start_line_idx:end_line_idx + 1])
             functions.append({
                 "name": func_name,
-                "start_line": offset + start_line_idx + 1,
-                "end_line": offset + end_line_idx + 1,
+                "start_line": offset + start_line_idx,
+                "end_line": offset + end_line_idx,
                 "content": content,
             })
 
         # const xxx = () => or const xxx = async () =>
         for match in re.finditer(
-            r'^\s*const\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::\s*[^=]+)?\s*=>',
+            r'^[ \t]*const\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::\s*[^=]+)?\s*=>',
             cleaned, re.MULTILINE,
         ):
             func_name = match.group(1)
@@ -349,8 +349,8 @@ class VueScanner(BaseScanner):
             content = "\n".join(lines[start_line_idx:end_line_idx + 1])
             functions.append({
                 "name": func_name,
-                "start_line": offset + start_line_idx + 1,
-                "end_line": offset + end_line_idx + 1,
+                "start_line": offset + start_line_idx,
+                "end_line": offset + end_line_idx,
                 "content": content,
             })
 

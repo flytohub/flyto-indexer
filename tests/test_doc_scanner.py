@@ -217,6 +217,46 @@ def test_source_reference_accepts_canonical_github_link(tmp_path):
     assert result.symbol_doc_coverage == 1.0
 
 
+def test_source_reference_decodes_dynamic_route_paths(tmp_path):
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    source_dir = tmp_path / "app" / "[locale]"
+    source_dir.mkdir(parents=True)
+    (source_dir / "page.tsx").write_text(
+        "export function generateMetadata() { return {} }\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "documentation-manifest.json").write_text(
+        json.dumps({"documentation": {"source_reference": "docs/api.md"}}),
+        encoding="utf-8",
+    )
+    (docs / "api.md").write_text(
+        "[`generateMetadata`](../app/%5Blocale%5D/page.tsx#L1)\n",
+        encoding="utf-8",
+    )
+    index_dir = tmp_path / ".flyto-index"
+    index_dir.mkdir()
+    (index_dir / "index.json").write_text(
+        json.dumps({
+            "symbols": {
+                "demo:app/[locale]/page.tsx:function:generateMetadata": {
+                    "type": "function",
+                    "path": "app/[locale]/page.tsx",
+                    "start_line": 1,
+                    "summary": "",
+                },
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    result = scan_documentation(tmp_path)
+
+    assert result.source_reference_coverage == 1.0
+    assert result.symbol_doc_coverage == 1.0
+
+
 def test_source_reference_expands_repository_local_globs(tmp_path):
     src = tmp_path / "src"
     src.mkdir()

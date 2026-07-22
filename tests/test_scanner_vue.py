@@ -113,6 +113,21 @@ class TestVueScannerFunctions:
         assert len(funcs) >= 1
         func_names = [f.name for f in funcs]
         assert "handleClick" in func_names
+        handle_click = next(function for function in funcs if function.name == "handleClick")
+        assert handle_click.start_line == 10
+
+    def test_function_line_starts_at_declaration_after_comment(self, scanner):
+        source = """<template><div /></template>
+<script setup>
+// Explains the handler.
+function handleError() {}
+</script>
+"""
+
+        symbols, _ = scanner.scan_file(Path("ErrorPanel.vue"), source)
+
+        function = next(symbol for symbol in symbols if symbol.name == "handleError")
+        assert function.start_line == 4
 
 
 class TestVueScannerPropsEmits:

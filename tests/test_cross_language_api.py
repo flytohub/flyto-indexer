@@ -235,7 +235,10 @@ fetch('/api/v1/real-users')
         assert api_deps[0].metadata["method"] == "GET"
 
     def test_api_root_string_checks_are_not_frontend_api_calls(self, ts_scanner):
-        code = "if (target.includes('/api/')) return 'rest_api'\n"
+        code = """
+if (target.includes('/api/')) return 'rest_api'
+if (!route.startsWith('/api/v1/')) fail(`route must start with /api/v1/: ${route}`)
+"""
         _, deps = ts_scanner.scan_file(Path("classifier.ts"), code)
         api_deps = [d for d in deps if d.dep_type == DependencyType.API_CALLS]
         assert api_deps == []

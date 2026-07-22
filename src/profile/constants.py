@@ -9,7 +9,7 @@ import re
 SKIP_DIRS = frozenset({
     "node_modules", ".git", "vendor", "__pycache__", "dist", "build",
     ".venv", "venv", ".pytest_cache", ".flyto-index", ".flyto",
-    ".tox", ".mypy_cache", ".ruff_cache", "target", "out", ".next",
+    ".tox", ".mypy_cache", ".ruff_cache", "target", "out", ".next", ".open-next",
     ".nuxt", ".output", "coverage", ".cache", ".parcel-cache",
     "bower_components", ".eggs", "egg-info",
     # Go module cache and vendor

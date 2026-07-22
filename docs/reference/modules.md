@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **144 Python modules**, **57,234 lines**, and **1,683 class/function/method declarations**.
+Generated inventory: **144 Python modules**, **57,259 lines**, and **1,684 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -59,7 +59,7 @@ Generated inventory: **144 Python modules**, **57,234 lines**, and **1,683 class
 | [`src/dependency_resolver.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_resolver.py#L1) | 510 | 18 | `logging, models` | Dependency resolution mixin for IndexEngine. |
 | [`src/dependency_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_scanner.py#L1) | 1263 | 34 | `dataclasses, datetime, json, logging, os, pathlib, re, safe_xml, tomli, tomllib, typing, xml` | Dependency/package version scanner — extracts external package dependencies from manifest files across multiple ecosystems. |
 | [`src/diff_impact.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/diff_impact.py#L1) | 367 | 9 | `index_store, os, pathlib, re, signature, subprocess, tools, typing` | Diff-based Impact Analysis — parse git diff, match changed hunks to indexed symbols, classify change type (signature vs body), and run impact analysis. |
-| [`src/doc_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L1) | 535 | 12 | `dataclasses, fnmatch, gzip, json, logging, os, pathlib, re, typing` | Documentation Coverage Scanner — analyze documentation completeness. |
+| [`src/doc_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L1) | 537 | 12 | `dataclasses, fnmatch, gzip, json, logging, os, pathlib, re, typing, urllib` | Documentation Coverage Scanner — analyze documentation completeness. |
 | [`src/dockerfile_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_scanner.py#L1) | 240 | 3 | `logging, os, pathlib, re, rule_loader` | Dockerfile & IaC Scanner — detect security misconfigurations in Dockerfiles and docker-compose files. |
 | [`src/embedding.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/embedding.py#L1) | 96 | 5 | `logging, pathlib, sentence_transformers, typing` | Embedding-based semantic search — optional hybrid layer. |
 | [`src/engine.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L1) | 715 | 21 | `context, datetime, dependency_resolver, glob, index_store, indexer, json, logging, models, pathlib, reverse_index, safe_io` | Main indexing engine - orchestrates the entire flow. |
@@ -113,7 +113,7 @@ Generated inventory: **144 Python modules**, **57,234 lines**, and **1,683 class
 | [`src/scanner/python.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/python.py#L1) | 546 | 17 | `ast, base, models, pathlib, scanner, typing` | Python scanner using AST analysis. |
 | [`src/scanner/rust.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/rust.py#L1) | 460 | 13 | `base, models, pathlib, re, scanner` | Rust scanner using regex-based parsing. |
 | [`src/scanner/tokenizer.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/tokenizer.py#L1) | 282 | 3 | `re` | Lightweight token-aware text processing for scanners. |
-| [`src/scanner/typescript.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L1) | 908 | 17 | `base, models, pathlib, re, scanner, tokenizer` | TypeScript/JavaScript scanner using token-aware regex parsing. |
+| [`src/scanner/typescript.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L1) | 931 | 18 | `base, models, pathlib, re, scanner, tokenizer` | TypeScript/JavaScript scanner using token-aware regex parsing. |
 | [`src/scanner/vue.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/vue.py#L1) | 583 | 13 | `base, models, pathlib, re, scanner, tokenizer, typing` | Vue SFC (Single File Component) scanner. |
 | [`src/search_documents.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/search_documents.py#L1) | 93 | 7 | `__future__, collections, typing` | Search-document builders shared by BM25 and semantic indexes. |
 | [`src/search_index.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/search_index.py#L1) | 98 | 4 | `bm25, search_documents, semantic` | Search-index mixin for IndexEngine. |

@@ -792,6 +792,8 @@ class TypeScriptScanner(BaseScanner):
             for match in pattern.finditer(content):
                 if self._is_msw_handler_definition(content, match):
                     continue
+                if is_fallback and self._is_non_call_api_literal(content, match):
+                    continue
                 groups = match.groups()
                 if len(groups) == 1:
                     method = "GET"
@@ -824,6 +826,27 @@ class TypeScriptScanner(BaseScanner):
                 })
 
         return results
+
+    @staticmethod
+    def _is_non_call_api_literal(content: str, match: re.Match) -> bool:
+        """Reject API-looking validation strings that are not request arguments."""
+        prefix = content[max(0, match.start() - 160):match.start()]
+        call = re.search(r"([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*\(\s*$", prefix)
+        if call is None:
+            return True
+        callee = re.sub(r"\s+", "", call.group(1)).lower()
+        terminal = callee.rsplit(".", 1)[-1]
+        return terminal in {
+            "assert",
+            "endswith",
+            "error",
+            "expect",
+            "fail",
+            "includes",
+            "log",
+            "startswith",
+            "warn",
+        }
 
     def _is_msw_handler_definition(self, content: str, match: re.Match) -> bool:
         if not self._MSW_IMPORT_RE.search(content):
