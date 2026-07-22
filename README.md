@@ -164,7 +164,7 @@ are intentionally outside this public, reusable code-intelligence package.
 
 Flyto2 Indexer works without credentials. Repository policy lives in
 `.flyto-rules.yaml`; MCP transport and optional analyzer settings are described
-in [`docs/configuration.md`](docs/configuration.md). The generated
+in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md). The generated
 [`docs/reference/configuration.md`](docs/reference/configuration.md) lists every
 environment variable, scanner default, and built-in rule source.
 
