@@ -931,6 +931,8 @@ def _check_weak_scanners(root: Path, add_check) -> None:
             "overall_score": docs.overall_score,
             "readme_score": docs.readme_score,
             "inline_doc_coverage": round(docs.inline_doc_coverage, 3),
+            "source_reference_coverage": round(docs.source_reference_coverage, 3),
+            "symbol_doc_coverage": round(docs.symbol_doc_coverage, 3),
             "suggestions": len(docs.suggestions),
         },
     )

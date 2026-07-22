@@ -54,6 +54,10 @@ Audits cover complexity, duplication, dead code, stale code, coverage gaps,
 secrets, license posture, vulnerable patterns, taint flows, infrastructure as
 code, AI-agent policy, documentation, dependency health, and git hotspots.
 Static analysis never intentionally imports or executes the target project.
+Documentation scoring reports inline summaries separately from generated
+source-reference coverage. An external reference counts only when its manifest
+declares the reference file and the Markdown link resolves inside the target
+repository to the exact indexed declaration line.
 
 Primary implementation: `src/analyzer/`, `src/auditor/`, `src/quality.py`, and
 the rule corpus under `config/rules/`.

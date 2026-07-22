@@ -10,7 +10,8 @@
     "state": "STATE.md",
     "security": "SECURITY.md",
     "changelog": "CHANGELOG.md",
-    "feature_reference": "docs/FEATURES.md"
+    "feature_reference": "docs/FEATURES.md",
+    "source_reference": "docs/reference/python-api.md"
   },
   "source_areas": [
     {

@@ -44,6 +44,8 @@ class DocCoverageResult:
     api_doc_coverage: float      # 0.0-1.0 (% of API routes with docstrings)
     module_doc_coverage: float   # 0.0-1.0 (% of top dirs with README)
     inline_doc_coverage: float   # 0.0-1.0 (% of functions with summary)
+    source_reference_coverage: float  # 0.0-1.0 (% linked from generated source docs)
+    symbol_doc_coverage: float   # 0.0-1.0 (% documented inline or by source link)
     has_env_example: bool
     has_changelog: bool
     has_contributing: bool
@@ -183,13 +185,69 @@ def _check_module_doc_coverage(project_path: Path) -> float:
     return documented / len(top_dirs)
 
 
-def _check_inline_doc_coverage(project_path: Path) -> float:
-    """Check what percentage of functions/classes have docstrings (from index)."""
+def _source_reference_locations(project_path: Path) -> set[tuple[str, int]]:
+    """Load source locations linked by declared, repository-local reference docs."""
+    manifest_path = project_path / "docs" / "documentation-manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return set()
+    if not isinstance(manifest, dict):
+        return set()
+
+    documentation = manifest.get("documentation")
+    if not isinstance(documentation, dict):
+        return set()
+    references = documentation.get("source_reference", [])
+    if isinstance(references, str):
+        references = [references]
+    if not isinstance(references, list):
+        return set()
+
+    locations: set[tuple[str, int]] = set()
+    repository = manifest.get("repository", project_path.name)
+    if not isinstance(repository, str) or not repository:
+        repository = project_path.name
+    link_pattern = re.compile(r"\]\((?:<([^>\n]+)>|([^\s)\n]+))\)")
+    github_pattern = re.compile(
+        rf"https://github\.com/[^/]+/{re.escape(str(repository))}/blob/[^/]+/(.+)"
+    )
+    for reference in references:
+        if not isinstance(reference, str):
+            continue
+        reference_path = (project_path / reference).resolve()
+        try:
+            reference_path.relative_to(project_path)
+            content = reference_path.read_text(encoding="utf-8", errors="ignore")
+        except (OSError, ValueError):
+            continue
+        for angle_target, plain_target in link_pattern.findall(content):
+            target = (angle_target or plain_target).strip()
+            source_target, separator, line_text = target.rpartition("#L")
+            if not separator or not line_text.isdigit():
+                continue
+            github_match = github_pattern.fullmatch(source_target)
+            source_path = (
+                project_path / github_match.group(1)
+                if github_match
+                else reference_path.parent / source_target
+            ).resolve()
+            try:
+                relative = source_path.relative_to(project_path).as_posix()
+            except ValueError:
+                continue
+            if source_path.is_file():
+                locations.add((relative, int(line_text)))
+    return locations
+
+
+def _check_symbol_doc_coverage(project_path: Path) -> tuple[float, float, float]:
+    """Measure inline, source-reference, and combined symbol documentation."""
     import gzip
 
     index_dir = project_path / ".flyto-index"
     if not index_dir.exists():
-        return 0.0
+        return 0.0, 0.0, 0.0
 
     # Load index
     index = {}
@@ -203,10 +261,10 @@ def _check_inline_doc_coverage(project_path: Path) -> float:
             if json_path.exists():
                 index = json.loads(json_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
-        return 0.0
+        return 0.0, 0.0, 0.0
 
     if not index:
-        return 0.0
+        return 0.0, 0.0, 0.0
 
     symbols = index.get("symbols", {})
     # Only count functions, methods, and classes
@@ -217,10 +275,25 @@ def _check_inline_doc_coverage(project_path: Path) -> float:
     ]
 
     if not documentable:
-        return 1.0  # No indexed functions/classes; inline docstrings are not applicable.
+        return 1.0, 1.0, 1.0  # No indexed functions/classes; documentation is not applicable.
 
-    documented = sum(1 for s in documentable if s.get("summary", "").strip())
-    return documented / len(documentable)
+    reference_locations = _source_reference_locations(project_path)
+    inline = [bool(s.get("summary", "").strip()) for s in documentable]
+    referenced = []
+    for symbol in documentable:
+        try:
+            location = (symbol.get("path", ""), int(symbol.get("start_line", 0)))
+        except (TypeError, ValueError):
+            referenced.append(False)
+            continue
+        referenced.append(location in reference_locations)
+    inline_coverage = sum(inline) / len(documentable)
+    reference_coverage = sum(referenced) / len(documentable)
+    combined_coverage = sum(
+        has_inline or has_reference
+        for has_inline, has_reference in zip(inline, referenced)
+    ) / len(documentable)
+    return inline_coverage, reference_coverage, combined_coverage
 
 
 def _check_env_example(project_path: Path) -> tuple[bool, bool]:
@@ -276,9 +349,11 @@ def scan_documentation(project_path: str | Path) -> DocCoverageResult:
         suggestions.append("Add README or docstring to top-level modules")
 
     # 4. Inline doc coverage
-    inline_doc_coverage = _check_inline_doc_coverage(project_path)
-    if inline_doc_coverage < 0.3:
-        suggestions.append("Add docstrings to functions and classes")
+    inline_doc_coverage, source_reference_coverage, symbol_doc_coverage = (
+        _check_symbol_doc_coverage(project_path)
+    )
+    if symbol_doc_coverage < 0.3:
+        suggestions.append("Add docstrings or source-linked reference entries to functions and classes")
 
     # 5. Config docs
     has_env, env_has_comments = _check_env_example(project_path)
@@ -304,12 +379,12 @@ def scan_documentation(project_path: str | Path) -> DocCoverageResult:
     )
 
     # Calculate overall score (weighted average)
-    # README: 30%, API docs: 20%, Module docs: 15%, Inline docs: 25%, Config: 10%
+    # README: 30%, API docs: 20%, Module docs: 15%, Symbol docs: 25%, Config: 10%
     overall = int(
         readme_score * 0.30
         + api_doc_coverage * 100 * 0.20
         + module_doc_coverage * 100 * 0.15
-        + inline_doc_coverage * 100 * 0.25
+        + symbol_doc_coverage * 100 * 0.25
         + (100 if has_env else 0) * 0.10
     )
     # Bonus for changelog and contributing
@@ -324,6 +399,8 @@ def scan_documentation(project_path: str | Path) -> DocCoverageResult:
         api_doc_coverage=round(api_doc_coverage, 3),
         module_doc_coverage=round(module_doc_coverage, 3),
         inline_doc_coverage=round(inline_doc_coverage, 3),
+        source_reference_coverage=round(source_reference_coverage, 3),
+        symbol_doc_coverage=round(symbol_doc_coverage, 3),
         has_env_example=has_env,
         has_changelog=has_changelog,
         has_contributing=has_contributing,
@@ -349,6 +426,8 @@ def format_doc_scan(result: DocCoverageResult) -> str:
     lines.append(f"  API doc coverage: {result.api_doc_coverage:.0%}")
     lines.append(f"  Module doc coverage: {result.module_doc_coverage:.0%}")
     lines.append(f"  Inline doc coverage: {result.inline_doc_coverage:.0%}")
+    lines.append(f"  Source reference coverage: {result.source_reference_coverage:.0%}")
+    lines.append(f"  Combined symbol coverage: {result.symbol_doc_coverage:.0%}")
     lines.append("")
 
     lines.append(f"  .env.example: {'yes' if result.has_env_example else 'no'}")

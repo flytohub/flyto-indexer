@@ -138,6 +138,8 @@ def scan_documentation(project_path: Path) -> dict:
             "api_doc_coverage": r.api_doc_coverage,
             "module_doc_coverage": r.module_doc_coverage,
             "inline_doc_coverage": r.inline_doc_coverage,
+            "source_reference_coverage": r.source_reference_coverage,
+            "symbol_doc_coverage": r.symbol_doc_coverage,
             "has_env_example": r.has_env_example,
             "has_changelog": r.has_changelog,
             "has_contributing": r.has_contributing,

@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **144 Python modules**, **57,051 lines**, and **1,679 class/function/method declarations**.
+Generated inventory: **144 Python modules**, **57,136 lines**, and **1,680 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -59,7 +59,7 @@ Generated inventory: **144 Python modules**, **57,051 lines**, and **1,679 class
 | [`src/dependency_resolver.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_resolver.py#L1) | 510 | 18 | `logging, models` | Dependency resolution mixin for IndexEngine. |
 | [`src/dependency_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_scanner.py#L1) | 1263 | 34 | `dataclasses, datetime, json, logging, os, pathlib, re, safe_xml, tomli, tomllib, typing, xml` | Dependency/package version scanner — extracts external package dependencies from manifest files across multiple ecosystems. |
 | [`src/diff_impact.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/diff_impact.py#L1) | 367 | 9 | `index_store, os, pathlib, re, signature, subprocess, tools, typing` | Diff-based Impact Analysis — parse git diff, match changed hunks to indexed symbols, classify change type (signature vs body), and run impact analysis. |
-| [`src/doc_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L1) | 364 | 8 | `dataclasses, gzip, json, logging, os, pathlib, re, typing` | Documentation Coverage Scanner — analyze documentation completeness. |
+| [`src/doc_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L1) | 443 | 9 | `dataclasses, gzip, json, logging, os, pathlib, re, typing` | Documentation Coverage Scanner — analyze documentation completeness. |
 | [`src/dockerfile_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_scanner.py#L1) | 240 | 3 | `logging, os, pathlib, re, rule_loader` | Dockerfile & IaC Scanner — detect security misconfigurations in Dockerfiles and docker-compose files. |
 | [`src/embedding.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/embedding.py#L1) | 96 | 5 | `logging, pathlib, sentence_transformers, typing` | Embedding-based semantic search — optional hybrid layer. |
 | [`src/engine.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L1) | 714 | 21 | `context, datetime, dependency_resolver, glob, index_store, indexer, json, logging, models, pathlib, reverse_index, safe_io` | Main indexing engine - orchestrates the entire flow. |
@@ -97,7 +97,7 @@ Generated inventory: **144 Python modules**, **57,051 lines**, and **1,679 class
 | [`src/profile/health.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/profile/health.py#L1) | 423 | 20 | `analyzer, doc_scanner, logging, pathlib, re, subprocess, typing` | Health scoring dimensions — security, complexity, dead code, coverage, docs. |
 | [`src/profile/import_usage.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/profile/import_usage.py#L1) | 156 | 4 | `__future__, pathlib, re, typing` | Per-package import usage extraction. |
 | [`src/profile/index_extract.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/profile/index_extract.py#L1) | 541 | 18 | `analyzer, collections, constants, gzip, json, logging, os, pathlib, re, typing` | Index-based data extraction — API, models, graph, complexity, reachability. |
-| [`src/profile/scanners.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/profile/scanners.py#L1) | 235 | 12 | `analyzer, dependency_scanner, doc_scanner, dockerfile_scanner, framework_detector, git_secret_scanner, iac_scanner, index_extract, license_scanner, logging, pathlib, rule_loader` | Scanner wrappers — each returns a dict, swallowing failures to keep profile robust. |
+| [`src/profile/scanners.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/profile/scanners.py#L1) | 237 | 12 | `analyzer, dependency_scanner, doc_scanner, dockerfile_scanner, framework_detector, git_secret_scanner, iac_scanner, index_extract, license_scanner, logging, pathlib, rule_loader` | Scanner wrappers — each returns a dict, swallowing failures to keep profile robust. |
 | [`src/project_profile.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/project_profile.py#L1) | 11 | 0 | `profile` | Project Profile — backward-compatibility shim. |
 | [`src/quality.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/quality.py#L1) | 822 | 10 | `analyzer, datetime, index_store, logging, pathlib, subprocess, tools` | Code Quality Tools — complexity, duplicates, security, staleness, health score, refactoring. |
 | [`src/resolver.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/resolver.py#L1) | 377 | 15 | `collections, os, re, typing` | Symbol Resolver - Resolves raw call names to actual symbol IDs. |
@@ -124,7 +124,7 @@ Generated inventory: **144 Python modules**, **57,051 lines**, and **1,679 class
 | [`src/synonyms.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/synonyms.py#L1) | 76 | 1 | `re` | Programming concept synonyms for semantic-like search expansion. |
 | [`src/test_mapper.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/test_mapper.py#L1) | 174 | 8 | `re, typing` | Test File Mapper — source ↔ test file bidirectional mapping. |
 | [`src/tool_registry/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/__init__.py#L1) | 26 | 0 | `dispatch, mcp_tools, smart_tools, vscode_tools` | tool_registry — tool definitions, schemas, and dispatch subpackage. |
-| [`src/tool_registry/dispatch.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/dispatch.py#L1) | 473 | 3 | `lazy_imports, lsp, os, pathlib, typing` | Unified tool dispatch — single entry point for all tool execution. |
+| [`src/tool_registry/dispatch.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/dispatch.py#L1) | 475 | 3 | `lazy_imports, lsp, os, pathlib, typing` | Unified tool dispatch — single entry point for all tool execution. |
 | [`src/tool_registry/lazy_imports.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/lazy_imports.py#L1) | 182 | 22 | `analyzer, dependency_scanner, diff_impact, doc_scanner, framework_detector, license_scanner, pr_analyzer, project_profile, quality, secret_scanner, tools, verify` | Lazy import helpers for tool dispatch. |
 | [`src/tool_registry/mcp_tools.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L1) | 953 | 0 | `typing` | MCP Tool Definitions (canonical source). |
 | [`src/tool_registry/smart_tools.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L1) | 701 | 0 | `typing` | Smart Tools — consolidated entry points exposed to MCP. |
@@ -147,6 +147,6 @@ Generated inventory: **144 Python modules**, **57,051 lines**, and **1,679 class
 | [`src/tools/trace.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/trace.py#L1) | 233 | 7 | `collections, index_store, logging, typing` | Call path tracing — find execution paths through the call graph. |
 | [`src/tools/type_contracts.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/type_contracts.py#L1) | 1103 | 26 | `ast, index_store, re, typing` | Cross-repo Type Contract checking for flyto-indexer MCP server. |
 | [`src/tools/validation.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L1) | 220 | 3 | `index_store, pathlib, re, shlex, subprocess` | Post-change validation — run ruff (lint) and pytest on a project. |
-| [`src/verify.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/verify.py#L1) | 2784 | 113 | `__future__, analyzer, doc_scanner, engine, fnmatch, hashlib, html, index_store, json, mcp_server, models, pathlib` | Self-contained verification gate for flyto-indexer. |
+| [`src/verify.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/verify.py#L1) | 2786 | 113 | `__future__, analyzer, doc_scanner, engine, fnmatch, hashlib, html, index_store, json, mcp_server, models, pathlib` | Self-contained verification gate for flyto-indexer. |
 | [`src/version.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/version.py#L1) | 25 | 1 | `importlib, pathlib, tomllib` | Resolve the Flyto2 Indexer package version in source and installed modes. |
 | [`src/watcher.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/watcher.py#L1) | 184 | 7 | `dataclasses, index_store, os, pathlib, typing` | File Change Watcher — polling-based change detection. |

@@ -12,6 +12,9 @@
 - Added CI drift checks for generated references and MCP/package versions.
 
 ### Fixed
+- Count generated API references only when their repository-local source links
+  resolve to the exact indexed declaration line; report inline, external, and
+  combined symbol-documentation coverage separately.
 - Synchronized MCP registry metadata and runtime initialization with package
   version 2.14.2.
 - Made every shipped rule-corpus YAML file parse in a regression test and fixed

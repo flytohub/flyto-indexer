@@ -120,7 +120,7 @@ Flyto2 Indexer exposes the tools AI agents need before they make a risky edit:
 | `impact` | Shows references, blast radius, cross-project usage, and related tests. |
 | `structure` | Maps APIs, packages, dependencies, conventions, and type contracts. |
 | `audit` | Scores security, complexity, dead code, coverage, and git hotspots. |
-| `scan_documentation` | Checks README quality, module docs, config docs, and contribution files. |
+| `scan_documentation` | Checks README, module, config, inline, and exact source-linked reference coverage. |
 | `verify` | Runs the local closed-loop gate before an agent finishes or a PR merges. |
 
 See the [feature guide](docs/FEATURES.md), [MCP integration guide](docs/MCP.md),
