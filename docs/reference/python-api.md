@@ -2,7 +2,7 @@
 
 # Python API Reference
 
-Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **1,681 declarations across 128 files**.
+Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **1,682 declarations across 128 files**.
 
 ## `analyze.py`
 
@@ -854,16 +854,17 @@ Every declared class, function, nested function, and method in the package, supp
 
 | Kind | Signature | Responsibility | Source |
 |---|---|---|---|
-| class | `class DocCoverageResult` | The declaration and linked implementation are authoritative. | [`src/doc_scanner.py:41`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L41) |
-| function | `def _score_readme(project_path: Path) -> tuple&#91;int, list&#91;str&#93;&#93;` | Score README quality. | [`src/doc_scanner.py:56`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L56) |
-| function | `def _check_api_doc_coverage(project_path: Path) -> float` | Check what percentage of API routes have docstrings. | [`src/doc_scanner.py:112`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L112) |
-| function | `def _declared_module_roots(project_path: Path) -> list&#91;Path&#93; \| None` | Return manifest-scoped source roots, or None for automatic discovery. | [`src/doc_scanner.py:147`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L147) |
-| function | `def _check_module_doc_coverage(project_path: Path) -> float` | Check source-owning directories for a README or documented __init__.py. | [`src/doc_scanner.py:175`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L175) |
-| function | `def _source_reference_locations(project_path: Path) -> set&#91;tuple&#91;str, int&#93;&#93;` | Load source locations linked by declared, repository-local reference docs. | [`src/doc_scanner.py:221`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L221) |
-| function | `def _check_symbol_doc_coverage(project_path: Path) -> tuple&#91;float, float, float&#93;` | Measure inline, source-reference, and combined symbol documentation. | [`src/doc_scanner.py:286`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L286) |
-| function | `def _check_env_example(project_path: Path) -> tuple&#91;bool, bool&#93;` | Check if .env.example exists and has comments. | [`src/doc_scanner.py:341`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L341) |
-| function | `def scan_documentation(project_path: str \| Path) -> DocCoverageResult` | Scan a project for documentation coverage. | [`src/doc_scanner.py:359`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L359) |
-| function | `def format_doc_scan(result: DocCoverageResult) -> str` | Format documentation coverage results as human-readable text. | [`src/doc_scanner.py:454`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L454) |
+| class | `class DocCoverageResult` | The declaration and linked implementation are authoritative. | [`src/doc_scanner.py:42`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L42) |
+| function | `def _score_readme(project_path: Path) -> tuple&#91;int, list&#91;str&#93;&#93;` | Score README quality. | [`src/doc_scanner.py:57`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L57) |
+| function | `def _check_api_doc_coverage(project_path: Path) -> float` | Check what percentage of API routes have docstrings. | [`src/doc_scanner.py:113`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L113) |
+| function | `def _declared_module_roots(project_path: Path) -> list&#91;Path&#93; \| None` | Return manifest-scoped source roots, or None for automatic discovery. | [`src/doc_scanner.py:148`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L148) |
+| function | `def _check_module_doc_coverage(project_path: Path) -> float` | Check source-owning directories for a README or documented __init__.py. | [`src/doc_scanner.py:176`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L176) |
+| function | `def _source_reference_locations(project_path: Path) -> set&#91;tuple&#91;str, int&#93;&#93;` | Load source locations linked by declared, repository-local reference docs. | [`src/doc_scanner.py:222`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L222) |
+| function | `def _source_reference_exclusions(project_path: Path) -> tuple&#91;str, ...&#93;` | Return repository-relative globs excluded from source-reference scoring. | [`src/doc_scanner.py:287`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L287) |
+| function | `def _check_symbol_doc_coverage(project_path: Path) -> tuple&#91;float, float, float&#93;` | Measure inline, source-reference, and combined symbol documentation. | [`src/doc_scanner.py:314`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L314) |
+| function | `def _check_env_example(project_path: Path) -> tuple&#91;bool, bool&#93;` | Check if .env.example exists and has comments. | [`src/doc_scanner.py:374`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L374) |
+| function | `def scan_documentation(project_path: str \| Path) -> DocCoverageResult` | Scan a project for documentation coverage. | [`src/doc_scanner.py:392`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L392) |
+| function | `def format_doc_scan(result: DocCoverageResult) -> str` | Format documentation coverage results as human-readable text. | [`src/doc_scanner.py:487`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L487) |
 
 ## `src/dockerfile_scanner.py`
 

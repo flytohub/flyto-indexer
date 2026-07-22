@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- Added traversal-safe `documentation.source_reference_exclude` globs for
+  vendored dependencies and fixtures documented by another repository.
 - Added repository-local glob support for generated source-reference pages in
   `documentation.source_reference`.
 - Added a structured documentation hub, feature guide, CLI and MCP guides,

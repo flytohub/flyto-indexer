@@ -238,6 +238,82 @@ def test_source_reference_expands_repository_local_globs(tmp_path):
     assert result.symbol_doc_coverage == 1.0
 
 
+def test_source_reference_excludes_declared_vendored_symbols(tmp_path):
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "vendor" / "dependency").mkdir(parents=True)
+    (tmp_path / "src/service.py").write_text("def owned():\n    pass\n", encoding="utf-8")
+    (tmp_path / "vendor/dependency/tool.py").write_text(
+        "def external():\n    pass\n", encoding="utf-8"
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "documentation-manifest.json").write_text(
+        json.dumps({
+            "documentation": {
+                "source_reference": "docs/api.md",
+                "source_reference_exclude": ["vendor/**"],
+            },
+        }),
+        encoding="utf-8",
+    )
+    (docs / "api.md").write_text(
+        "[`owned`](../src/service.py#L1)\n",
+        encoding="utf-8",
+    )
+    index_dir = tmp_path / ".flyto-index"
+    index_dir.mkdir()
+    (index_dir / "index.json").write_text(
+        json.dumps({
+            "symbols": {
+                "demo:src/service.py:function:owned": {
+                    "type": "function", "path": "src/service.py", "start_line": 1, "summary": "",
+                },
+                "demo:vendor/dependency/tool.py:function:external": {
+                    "type": "function", "path": "vendor/dependency/tool.py", "start_line": 1, "summary": "",
+                },
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    result = scan_documentation(tmp_path)
+
+    assert result.source_reference_coverage == 1.0
+    assert result.symbol_doc_coverage == 1.0
+
+
+def test_source_reference_rejects_parent_exclusion_glob(tmp_path):
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src/service.py").write_text("def owned():\n    pass\n", encoding="utf-8")
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "documentation-manifest.json").write_text(
+        json.dumps({
+            "documentation": {"source_reference_exclude": ["../**", "/tmp/**"]},
+        }),
+        encoding="utf-8",
+    )
+    index_dir = tmp_path / ".flyto-index"
+    index_dir.mkdir()
+    (index_dir / "index.json").write_text(
+        json.dumps({
+            "symbols": {
+                "demo:src/service.py:function:owned": {
+                    "type": "function", "path": "src/service.py", "start_line": 1, "summary": "",
+                },
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    result = scan_documentation(tmp_path)
+
+    assert result.source_reference_coverage == 0.0
+    assert result.symbol_doc_coverage == 0.0
+
+
 def test_source_reference_ignores_absolute_globs(tmp_path):
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "service.py").write_text("def run():\n    pass\n", encoding="utf-8")

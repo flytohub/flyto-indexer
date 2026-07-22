@@ -5,6 +5,7 @@ Pure Python stdlib, no external dependencies. Checks README quality,
 API docstrings, module documentation, inline docs, and config docs.
 """
 
+import fnmatch
 import json
 import logging
 import os
@@ -283,6 +284,33 @@ def _source_reference_locations(project_path: Path) -> set[tuple[str, int]]:
     return locations
 
 
+def _source_reference_exclusions(project_path: Path) -> tuple[str, ...]:
+    """Return repository-relative globs excluded from source-reference scoring."""
+    manifest_path = project_path / "docs" / "documentation-manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return ()
+    if not isinstance(manifest, dict):
+        return ()
+    documentation = manifest.get("documentation")
+    if not isinstance(documentation, dict):
+        return ()
+    patterns = documentation.get("source_reference_exclude", [])
+    if isinstance(patterns, str):
+        patterns = [patterns]
+    if not isinstance(patterns, list):
+        return ()
+    return tuple(
+        pattern
+        for pattern in patterns
+        if isinstance(pattern, str)
+        and pattern.strip()
+        and not Path(pattern).is_absolute()
+        and ".." not in Path(pattern).parts
+    )
+
+
 def _check_symbol_doc_coverage(project_path: Path) -> tuple[float, float, float]:
     """Measure inline, source-reference, and combined symbol documentation."""
     import gzip
@@ -311,9 +339,14 @@ def _check_symbol_doc_coverage(project_path: Path) -> tuple[float, float, float]
     symbols = index.get("symbols", {})
     # Only count functions, methods, and classes
     documentable_types = {"function", "method", "class", "composable"}
+    exclusions = _source_reference_exclusions(project_path)
     documentable = [
         s for s in symbols.values()
         if s.get("type") in documentable_types
+        and not any(
+            fnmatch.fnmatchcase(str(s.get("path", "")), pattern)
+            for pattern in exclusions
+        )
     ]
 
     if not documentable:

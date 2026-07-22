@@ -66,6 +66,10 @@ repository to the exact indexed declaration line.
 `documentation.source_reference` accepts repository-local file paths or glob
 patterns, allowing large generated references to stay split into navigable
 pages without losing exact symbol coverage accounting.
+`documentation.source_reference_exclude` accepts repository-relative globs for
+vendored dependencies and fixtures whose authoritative reference belongs to
+another repository. Absolute paths and parent traversal are ignored;
+exclusions affect documentation scoring only, never source or security scans.
 
 Repositories that mix source code with top-level content directories can set
 `documentation.module_roots` in `docs/documentation-manifest.json`. The scanner

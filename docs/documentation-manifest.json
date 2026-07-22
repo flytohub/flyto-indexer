@@ -12,6 +12,7 @@
     "changelog": "CHANGELOG.md",
     "feature_reference": "docs/FEATURES.md",
     "source_reference": "docs/reference/python-api.md",
+    "source_reference_exclude": ["tests/**"],
     "module_roots": ["src", "scripts", "config"]
   },
   "source_areas": [
