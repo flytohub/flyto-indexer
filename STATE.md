@@ -44,10 +44,10 @@
   instead of misclassifying locale and content directories as software modules.
 - Package, MCP registry, and MCP initialization versions are synchronized and
   enforced by tests and CI. Every built-in rule YAML file is parsed in tests.
-- Latest local verification: `1664 passed, 1 skipped`; Ruff passed across
+- Latest local verification: `1668 passed, 1 skipped, 1 deselected`; Ruff passed across
   source, tests, and scripts; mypy found no issues in 130 source files;
   sdist/wheel build and isolated wheel smoke passed; strict self-verify passed
-  18/18 with 223 files, 3,714 scanned symbols, and zero warnings.
+  18/18 with 223 files, 3,716 scanned symbols, and zero warnings.
 
 ## Release Blockers
 

@@ -11,6 +11,10 @@ output directory, summary limits, and impact/context bounds. Treat the shipped
 file as package defaults. Put repository-specific enforcement in
 `.flyto-rules.yaml` rather than editing installed package data.
 
+The default scan ignores generated dependency and build trees, including
+`node_modules`, `dist`, `build`, and `.vitepress/cache`, while retaining
+authored `.vitepress` configuration and theme files.
+
 ## Repository Policy
 
 Create `.flyto-rules.yaml` in the target repository:

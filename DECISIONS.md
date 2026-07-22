@@ -1,5 +1,17 @@
 # Decisions
 
+## 2026-07-23 - Index authored module variants, not VitePress caches
+
+Decision: the TypeScript scanner accepts `.mjs`, `.cjs`, `.mts`, and `.cts`
+alongside the standard JavaScript and TypeScript extensions. Repository scans
+exclude `.vitepress/cache/` while retaining authored `.vitepress` configuration
+and theme source.
+
+Reason: modern documentation and frontend repositories place executable build,
+SEO, and automation code in module-variant files. Counting generated VitePress
+dependency bundles instead hid that code and produced misleading symbol and
+documentation-coverage results.
+
 ## 2026-07-22 - Interface documentation is generated from source
 
 Decision: non-test Python declarations, CLI arguments, MCP registries, local

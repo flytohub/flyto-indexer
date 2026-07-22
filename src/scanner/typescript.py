@@ -38,7 +38,10 @@ class TypeScriptScanner(BaseScanner):
     - imports
     """
 
-    supported_extensions = [".ts", ".tsx", ".js", ".jsx"]
+    supported_extensions = [
+        ".ts", ".tsx", ".mts", ".cts",
+        ".js", ".jsx", ".mjs", ".cjs",
+    ]
 
     def scan_file(self, file_path: Path, content: str) -> tuple[list[Symbol], list[Dependency]]:
         """Scan a TypeScript/JavaScript file"""

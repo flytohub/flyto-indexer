@@ -21,10 +21,19 @@ class TestTypeScriptScannerBasic:
     """Test basic scanner setup."""
 
     def test_supported_extensions(self, scanner):
-        assert ".ts" in scanner.supported_extensions
-        assert ".tsx" in scanner.supported_extensions
-        assert ".js" in scanner.supported_extensions
-        assert ".jsx" in scanner.supported_extensions
+        assert set(scanner.supported_extensions) == {
+            ".ts", ".tsx", ".mts", ".cts",
+            ".js", ".jsx", ".mjs", ".cjs",
+        }
+
+    @pytest.mark.parametrize("extension", [".mts", ".cts", ".mjs", ".cjs"])
+    def test_module_variant_is_scanned(self, scanner, extension):
+        symbols, _ = scanner.scan_file(
+            Path(f"config{extension}"),
+            "export function configure() { return true; }\n",
+        )
+
+        assert [symbol.name for symbol in symbols] == ["configure"]
 
     def test_empty_file(self, scanner):
         symbols, deps = scanner.scan_file(Path("test.ts"), "")

@@ -25,6 +25,7 @@ scan:
     - .pytest_cache
     - .mypy_cache
     - .flyto-index
+    - .vitepress/cache
     - "*.min.js"
     - "*.min.css"
 

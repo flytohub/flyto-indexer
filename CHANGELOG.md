@@ -14,6 +14,9 @@
 - Added CI drift checks for generated references and MCP/package versions.
 
 ### Fixed
+- Indexed `.mjs`, `.cjs`, `.mts`, and `.cts` source files and excluded generated
+  `.vitepress/cache/` bundles, so VitePress projects measure authored runtime
+  code instead of dependency-cache symbols.
 - Let documentation-heavy repositories declare source-owning
   `documentation.module_roots`; documentation coverage no longer treats every
   top-level locale or content directory as an undocumented software module.

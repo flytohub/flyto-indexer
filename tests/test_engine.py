@@ -389,6 +389,20 @@ class TestEngineScan:
         for sym in engine.index.symbols.values():
             assert "node_modules" not in sym.path
 
+    def test_scan_ignores_vitepress_cache_but_keeps_theme_source(self, tmp_path):
+        """Generated VitePress dependencies must not replace authored site code."""
+        project_dir = _create_project(tmp_path, {
+            ".vitepress/theme/index.ts": "export function authoredTheme(): void {}",
+            ".vitepress/cache/deps/generated.ts": "export function generatedCache(): void {}",
+        })
+
+        engine = IndexEngine("test", project_dir, tmp_path / ".index")
+        engine.scan(incremental=False)
+
+        symbol_names = {symbol.name for symbol in engine.index.symbols.values()}
+        assert "authoredTheme" in symbol_names
+        assert "generatedCache" not in symbol_names
+
     def test_scan_skips_large_files(self, tmp_path):
         """Files larger than 1MB should be skipped with an error entry."""
         project_dir = _create_project(tmp_path, {

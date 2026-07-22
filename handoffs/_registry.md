@@ -2,6 +2,7 @@
 
 | Date | Topic | File | Status |
 | --- | --- | --- | --- |
+| 2026-07-23 | Module variants and VitePress cache exclusion | `2026-07-23-module-variant-indexing.md` | Active |
 | 2026-07-22 | Source reference coverage | `2026-07-22-source-reference-coverage.md` | Active |
 | 2026-07-22 | Frontend SFC island accuracy | `2026-07-22-frontend-sfc-island-accuracy.md` | Active |
 | 2026-07-21 | Public package boundary and runtime parity | `2026-07-21-public-package-boundary.md` | Active |

@@ -219,7 +219,8 @@ class IndexEngine(
             extensions,
             ignore_patterns=[
                 "node_modules", "__pycache__", ".git", "dist", "build",
-                ".venv", "venv", ".pytest_cache", ".flyto-index", ".flyto"
+                ".venv", "venv", ".pytest_cache", ".flyto-index", ".flyto",
+                ".vitepress/cache",
             ]
         )
 

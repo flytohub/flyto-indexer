@@ -12,6 +12,11 @@ local `.flyto-index/` graph. Incremental scans reuse unchanged data; `--full`
 rebuilds it. `search` combines lexical and semantic ranking and enriches results
 with callers and neighboring symbols.
 
+JavaScript and TypeScript coverage includes CommonJS, ECMAScript module, and
+typed module variants (`.cjs`, `.mjs`, `.cts`, and `.mts`) in addition to the
+standard extensions. Authored VitePress config and theme source is indexed,
+while generated `.vitepress/cache/` dependency bundles are excluded.
+
 Primary implementation: `src/engine.py`, `src/scanner/`, `src/indexer/`,
 `src/index_store.py`, and `src/tools/search.py`.
 

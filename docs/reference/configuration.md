@@ -8,7 +8,7 @@
 |---|---|---|
 | `project.name` | `"auto"` | [`config/default.yaml:1`](https://github.com/flytohub/flyto-indexer/blob/main/config/default.yaml#L1) |
 | `scan.languages` | `&#91;"python", "vue", "typescript", "javascript"&#93;` | [`config/default.yaml:1`](https://github.com/flytohub/flyto-indexer/blob/main/config/default.yaml#L1) |
-| `scan.ignore_patterns` | `&#91;"node_modules", "__pycache__", ".git", "dist", "build", ".venv", "venv", ".pytest_cache", ".mypy_cache", ".flyto-index", "*.min.js", "*.min.css"&#93;` | [`config/default.yaml:1`](https://github.com/flytohub/flyto-indexer/blob/main/config/default.yaml#L1) |
+| `scan.ignore_patterns` | `&#91;"node_modules", "__pycache__", ".git", "dist", "build", ".venv", "venv", ".pytest_cache", ".mypy_cache", ".flyto-index", ".vitepress/cache", "*.min.js", "*.min.css"&#93;` | [`config/default.yaml:1`](https://github.com/flytohub/flyto-indexer/blob/main/config/default.yaml#L1) |
 | `scan.max_file_size` | `1048576` | [`config/default.yaml:1`](https://github.com/flytohub/flyto-indexer/blob/main/config/default.yaml#L1) |
 | `index.output_dir` | `".flyto-index"` | [`config/default.yaml:1`](https://github.com/flytohub/flyto-indexer/blob/main/config/default.yaml#L1) |
 | `index.generate_outline` | `true` | [`config/default.yaml:1`](https://github.com/flytohub/flyto-indexer/blob/main/config/default.yaml#L1) |

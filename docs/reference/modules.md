@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **144 Python modules**, **57,178 lines**, and **1,681 class/function/method declarations**.
+Generated inventory: **144 Python modules**, **57,183 lines**, and **1,681 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -62,7 +62,7 @@ Generated inventory: **144 Python modules**, **57,178 lines**, and **1,681 class
 | [`src/doc_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L1) | 485 | 10 | `dataclasses, gzip, json, logging, os, pathlib, re, typing` | Documentation Coverage Scanner — analyze documentation completeness. |
 | [`src/dockerfile_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_scanner.py#L1) | 240 | 3 | `logging, os, pathlib, re, rule_loader` | Dockerfile & IaC Scanner — detect security misconfigurations in Dockerfiles and docker-compose files. |
 | [`src/embedding.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/embedding.py#L1) | 96 | 5 | `logging, pathlib, sentence_transformers, typing` | Embedding-based semantic search — optional hybrid layer. |
-| [`src/engine.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L1) | 714 | 21 | `context, datetime, dependency_resolver, glob, index_store, indexer, json, logging, models, pathlib, reverse_index, safe_io` | Main indexing engine - orchestrates the entire flow. |
+| [`src/engine.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L1) | 715 | 21 | `context, datetime, dependency_resolver, glob, index_store, indexer, json, logging, models, pathlib, reverse_index, safe_io` | Main indexing engine - orchestrates the entire flow. |
 | [`src/execution_guard.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/execution_guard.py#L1) | 255 | 16 | `time, typing` | Execution Guard — server-side enforcement for task execution plans. |
 | [`src/flyto_output.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/flyto_output.py#L1) | 706 | 12 | `collections, datetime, engine, flyto_tags, json, models, pathlib` | Generate per-project .flyto/ folder (Schema v1). |
 | [`src/flyto_tags.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/flyto_tags.py#L1) | 529 | 18 | `ast, collections, datetime, json, models, pathlib, re` | Generate .flyto/tags/symbol_tags.jsonl — unified tag system. |
@@ -71,7 +71,7 @@ Generated inventory: **144 Python modules**, **57,178 lines**, and **1,681 class
 | [`src/iac_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/iac_scanner.py#L1) | 918 | 19 | `dataclasses, logging, os, pathlib, re, typing` | IaC Scanner — security checks for Terraform, Kubernetes, Docker Compose configs. |
 | [`src/index_store.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L1) | 576 | 20 | `bm25, gzip, json, logging, lsp, os, pathlib, safe_io, search_documents, semantic, session, sys` | Index store — centralized index loading, caching, and content management. |
 | [`src/indexer/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/indexer/__init__.py#L1) | 17 | 0 | `incremental` | Indexer module exports. |
-| [`src/indexer/incremental.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/indexer/incremental.py#L1) | 262 | 20 | `dataclasses, hashlib, json, models, os, pathlib, typing` | Incremental indexing - only update what changed. |
+| [`src/indexer/incremental.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/indexer/incremental.py#L1) | 263 | 20 | `dataclasses, hashlib, json, models, os, pathlib, typing` | Incremental indexing - only update what changed. |
 | [`src/license_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/license_scanner.py#L1) | 372 | 11 | `dataclasses, dependency_scanner, json, logging, os, pathlib, re, rule_loader, tomli, tomllib, typing` | License Scanner — detect project license and dependency licenses. |
 | [`src/lsp/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/lsp/__init__.py#L1) | 29 | 0 | `cache, call_graph, manager, resolver, workspace_symbols` | LSP integration for flyto-indexer — optional type-aware code intelligence. |
 | [`src/lsp/cache.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/lsp/cache.py#L1) | 82 | 10 | `dataclasses, logging, os, pathlib, typing` | LSP response cache — mtime-keyed, session-scoped. |
@@ -113,7 +113,7 @@ Generated inventory: **144 Python modules**, **57,178 lines**, and **1,681 class
 | [`src/scanner/python.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/python.py#L1) | 546 | 17 | `ast, base, models, pathlib, scanner, typing` | Python scanner using AST analysis. |
 | [`src/scanner/rust.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/rust.py#L1) | 460 | 13 | `base, models, pathlib, re, scanner` | Rust scanner using regex-based parsing. |
 | [`src/scanner/tokenizer.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/tokenizer.py#L1) | 282 | 3 | `re` | Lightweight token-aware text processing for scanners. |
-| [`src/scanner/typescript.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L1) | 905 | 17 | `base, models, pathlib, re, scanner, tokenizer` | TypeScript/JavaScript scanner using token-aware regex parsing. |
+| [`src/scanner/typescript.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L1) | 908 | 17 | `base, models, pathlib, re, scanner, tokenizer` | TypeScript/JavaScript scanner using token-aware regex parsing. |
 | [`src/scanner/vue.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/vue.py#L1) | 583 | 13 | `base, models, pathlib, re, scanner, tokenizer, typing` | Vue SFC (Single File Component) scanner. |
 | [`src/search_documents.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/search_documents.py#L1) | 93 | 7 | `__future__, collections, typing` | Search-document builders shared by BM25 and semantic indexes. |
 | [`src/search_index.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/search_index.py#L1) | 98 | 4 | `bm25, search_documents, semantic` | Search-index mixin for IndexEngine. |

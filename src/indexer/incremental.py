@@ -224,7 +224,8 @@ def scan_directory_hashes(
     """
     ignore_patterns = ignore_patterns or [
         "node_modules", "__pycache__", ".git", "dist", "build",
-        ".venv", "venv", ".pytest_cache", ".mypy_cache"
+        ".venv", "venv", ".pytest_cache", ".mypy_cache",
+        ".vitepress/cache",
     ]
 
     ignore_set = set(ignore_patterns)
