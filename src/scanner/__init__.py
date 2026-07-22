@@ -2,6 +2,7 @@
 
 try:
     from .base import BaseScanner, ScanResult
+    from .dart import DartScanner
     from .go import GoScanner
     from .java import JavaScanner
     from .python import PythonScanner
@@ -10,6 +11,7 @@ try:
     from .vue import VueScanner
 except ImportError:
     from scanner.base import BaseScanner, ScanResult
+    from scanner.dart import DartScanner
     from scanner.go import GoScanner
     from scanner.java import JavaScanner
     from scanner.python import PythonScanner
@@ -20,6 +22,7 @@ except ImportError:
 __all__ = [
     "BaseScanner",
     "ScanResult",
+    "DartScanner",
     "PythonScanner",
     "VueScanner",
     "TypeScriptScanner",

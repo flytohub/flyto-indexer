@@ -2,7 +2,11 @@
 
 ## Unreleased
 
+## [2.15.0] - 2026-07-23
+
 ### Added
+- Added dependency-free Dart and Flutter indexing for widgets, classes,
+  constructors, methods, getters, functions, type declarations, and imports.
 - Added docs-only CI recognition for Markdown lint, link tests, and
   documentation builds, plus an explicit `configuration_not_applicable`
   documentation contract and empty `module_roots` support.
@@ -19,6 +23,9 @@
 - Added CI drift checks for generated references and MCP/package versions.
 
 ### Fixed
+- Classified workspace frontend/backend roles from indexed UI and API evidence,
+  ignored API base URLs, and scoped browser validation to repositories that
+  actually own platform-loop registries.
 - Indexed `.mjs`, `.cjs`, `.mts`, and `.cts` source files and excluded generated
   `.vitepress/cache/` bundles, so VitePress projects measure authored runtime
   code instead of dependency-cache symbols.

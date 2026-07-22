@@ -494,6 +494,7 @@ schemas directly from the registries.
 | Python | AST | Functions, classes, methods, decorators, API routes |
 | TypeScript/JS | Custom | Functions, classes, interfaces, types, API calls |
 | Vue | SFC | Components, composables, emits, props |
+| Dart | Token-aware | Flutter widgets, classes, constructors, methods, getters, functions, imports |
 | Go | Custom | Functions, structs, methods, interfaces, embeddings, type aliases, const/var, impl tracking |
 | Rust | Custom | Functions, structs, impl blocks, traits |
 | Java | Custom | Classes, methods, interfaces, annotations |

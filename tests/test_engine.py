@@ -138,7 +138,7 @@ class TestEngineInit:
         project_dir.mkdir()
         engine = IndexEngine("test", project_dir, tmp_path / ".index")
 
-        assert len(engine.scanners) == 6
+        assert len(engine.scanners) == 7
         scanner_types = [type(s).__name__ for s in engine.scanners]
         assert "PythonScanner" in scanner_types
         assert "TypeScriptScanner" in scanner_types
@@ -146,6 +146,7 @@ class TestEngineInit:
         assert "GoScanner" in scanner_types
         assert "RustScanner" in scanner_types
         assert "JavaScanner" in scanner_types
+        assert "DartScanner" in scanner_types
 
     def test_init_sets_project_name(self, tmp_path):
         """Engine stores the project name correctly."""
@@ -324,6 +325,19 @@ class TestEngineScan:
         assert result["files_scanned"] >= 2
         languages = set(s.language for s in engine.index.symbols.values())
         assert "python" in languages
+
+    def test_scan_dart_project(self, tmp_path):
+        """Flutter source is indexed with component and method symbols."""
+        engine = _make_engine(tmp_path, {
+            "lib/main.dart": "class HomePage extends StatelessWidget {\n  Widget build(context) { return this; }\n}\n",
+        })
+
+        result = engine.scan(incremental=False)
+        names = {symbol.name for symbol in engine.index.symbols.values()}
+
+        assert result["files_scanned"] == 1
+        assert "HomePage" in names
+        assert "HomePage.build" in names
 
     def test_scan_empty_directory(self, tmp_path):
         """Scanning an empty directory produces zero results without error."""

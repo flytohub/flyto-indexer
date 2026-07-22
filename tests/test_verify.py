@@ -26,7 +26,10 @@ from src.verify import (
     _check_product_loop_closure,
     _check_single_project_islands,
     _extract_openapi_json_api_contracts,
+    _extract_api_calls_from_text,
     _git_changed_paths,
+    _looks_like_backend,
+    _looks_like_frontend,
     _normalize_api_path,
     _project_has_changes,
     format_verification,
@@ -704,6 +707,64 @@ def test_cross_project_contract_matches_frontend_to_backend(tmp_path):
     assert by_name["cross_project_contract"]["metrics"]["matched_calls"] == 1
 
 
+def test_contract_roles_use_real_symbols_instead_of_generic_src_layout(tmp_path):
+    library = tmp_path / "design-tokens"
+    (library / "src").mkdir(parents=True)
+    (library / "package.json").write_text('{"name":"design-tokens"}\n', encoding="utf-8")
+    (library / "src" / "colors.js").write_text("export const red = '#f00';\n", encoding="utf-8")
+
+    backend = tmp_path / "cloud"
+    _write_backend_index(backend, [("GET", "/api/v1/projects")])
+
+    assert not _looks_like_frontend(library)
+    assert _looks_like_backend(backend)
+
+
+def test_frontend_contract_excludes_backend_python_and_base_url(tmp_path):
+    project = tmp_path / "hybrid"
+    frontend = project / "src" / "frontend"
+    backend = project / "src" / "backend"
+    frontend.mkdir(parents=True)
+    backend.mkdir(parents=True)
+    (project / "package.json").write_text('{"name":"hybrid"}\n', encoding="utf-8")
+    (frontend / "client.ts").write_text(
+        "const base = '/api/v1';\nconst users = '/api/v1/users';\n",
+        encoding="utf-8",
+    )
+    (backend / "routes.py").write_text("ROUTE = '/api/v1/internal-only'\n", encoding="utf-8")
+
+    calls = _extract_api_calls_from_text((frontend / "client.ts").read_text(encoding="utf-8"))
+
+    assert [call["path"] for call in calls] == ["/api/v1/users"]
+    assert _looks_like_frontend(project)
+
+
+def test_contract_roles_ignore_indexed_test_fixtures(tmp_path):
+    project = tmp_path / "scanner"
+    index_dir = project / ".flyto-index"
+    index_dir.mkdir(parents=True)
+    (index_dir / "index.json").write_text(
+        json.dumps({
+            "symbols": {
+                "fixture-component": {
+                    "path": "tests/fixtures/demo.vue",
+                    "type": "component",
+                    "name": "Demo",
+                },
+                "fixture-api": {
+                    "path": "tests/fixtures/api.js",
+                    "type": "api",
+                    "name": "GET /api/v1/demo",
+                },
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    assert not _looks_like_frontend(project)
+    assert not _looks_like_backend(project)
+
+
 def test_cross_project_contract_matches_company_scope_org_template(tmp_path):
     frontend = tmp_path / "frontend"
     backend = tmp_path / "backend"
@@ -859,6 +920,18 @@ def test_dynamic_validation_plan_passes_with_smoke_recipe_and_guards(tmp_path):
     exposure = check["metrics"]["projects"][0]["surfaces"]["exposure"]
     assert exposure["browser_routes"] == ["footprint.graph"]
     assert exposure["browser_recipe_files"] == ["footprint-full-loop.yaml"]
+
+
+def test_dynamic_validation_plan_ignores_frontends_without_platform_loop_contract(tmp_path):
+    frontend = tmp_path / "ordinary-frontend"
+    _write_frontend_loop_index(frontend)
+    checks = []
+
+    _check_dynamic_validation_plan([frontend], checks)
+
+    check = checks[0]
+    assert check["status"] == "pass"
+    assert check["metrics"]["frontend_projects"] == []
 
 
 def test_dynamic_validation_plan_warns_for_missing_recipe_and_invalid_route(tmp_path):

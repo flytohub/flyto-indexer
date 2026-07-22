@@ -6,12 +6,12 @@
     "url": "https://github.com/flytohub/flyto-indexer",
     "source": "github"
   },
-  "version": "2.14.2",
+  "version": "2.15.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "flyto-indexer",
-      "version": "2.14.2",
+      "version": "2.15.0",
       "transport": {
         "type": "stdio"
       }

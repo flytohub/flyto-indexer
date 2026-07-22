@@ -86,6 +86,17 @@ _CONTRACT_SOURCE_EXTENSIONS = {
     ".tsx",
     ".vue",
 }
+_FRONTEND_CONTRACT_SOURCE_EXTENSIONS = {
+    ".astro",
+    ".dart",
+    ".js",
+    ".jsx",
+    ".svelte",
+    ".ts",
+    ".tsx",
+    ".vue",
+}
+_FRONTEND_INDEX_SYMBOL_TYPES = {"component", "route", "store", "composable"}
 _CONTRACT_SKIP_PARTS = {"__tests__", "__mocks__", "tests", "test", "fixtures"}
 _CONTRACT_SKIP_SUFFIXES = (".test", ".spec")
 _CONTRACT_SURFACE_TERMS = (
@@ -1572,7 +1583,7 @@ def _classify_product_surfaces(text: str) -> list[str]:
 
 
 def _check_dynamic_validation_plan(projects: list[Path], checks: list[dict[str, Any]]) -> None:
-    frontend_projects = [project for project in projects if _looks_like_frontend(project)]
+    frontend_projects = [project for project in projects if _has_dynamic_validation_contract(project)]
     if not frontend_projects:
         checks.append({
             "name": "dynamic_validation_plan",
@@ -1816,20 +1827,43 @@ def _string_list(value: Any) -> list[str]:
 
 
 def _looks_like_frontend(project: Path) -> bool:
-    package_json = project / "package.json"
-    return package_json.exists() and ((project / "src-next").exists() or (project / "src").exists())
+    if _project_has_index_symbol_types(project, _FRONTEND_INDEX_SYMBOL_TYPES):
+        return True
+    calls, _terms = _extract_frontend_contract_signals(project)
+    if calls and ((project / "package.json").is_file() or (project / "pubspec.yaml").is_file()):
+        return True
+    return (project / "pubspec.yaml").is_file() and (project / "lib").is_dir()
 
 
 def _looks_like_backend(project: Path) -> bool:
-    return (project / "go.mod").exists() or (project / "api").exists() or (project / "internal").exists()
+    return _project_has_index_symbol_types(project, {"api"})
+
+
+def _project_has_index_symbol_types(project: Path, symbol_types: set[str]) -> bool:
+    index = _load_index_json(project)
+    symbols = index.get("symbols") or {}
+    values = symbols.values() if isinstance(symbols, dict) else symbols
+    return any(
+        _symbol_type(symbol) in symbol_types
+        and not _is_contract_skipped_path(_symbol_path(symbol))
+        for symbol in values
+    )
+
+
+def _has_dynamic_validation_contract(project: Path) -> bool:
+    registry_root = project / "docs" / "platform-loops"
+    return any(
+        (registry_root / name).is_file()
+        for name in ("navbar-smoke-registry.json", "platform-loop-registry.json")
+    )
 
 
 def _extract_frontend_contract_signals(project: Path) -> tuple[list[dict[str, Any]], dict[str, int]]:
     calls: list[dict[str, Any]] = []
     terms: dict[str, int] = {}
-    roots = [path for path in (project / "src-next", project / "src") if path.exists()]
+    roots = [path for path in (project / "src-next", project / "src", project / "lib") if path.exists()]
     for root in roots:
-        for path in _iter_contract_source_files(root):
+        for path in _iter_contract_source_files(root, extensions=_FRONTEND_CONTRACT_SOURCE_EXTENSIONS):
             rel = str(path.relative_to(project))
             try:
                 text = path.read_text(encoding="utf-8", errors="ignore")
@@ -1893,6 +1927,8 @@ def _extract_api_calls_from_text(text: str) -> list[dict[str, Any]]:
     comment_pattern = re.compile(r"\b(?P<method>GET|POST|PUT|PATCH|DELETE)\s+(?P<path>/api/v1/[^\s,;`'\")]+)")
     for match in string_pattern.finditer(text):
         raw = match.group("value")
+        if _strip_url_to_api_path(raw).rstrip("/") == "/api/v1":
+            continue
         method = _infer_http_method(text[max(0, match.start() - 100):match.start()])
         calls.append({
             "method": method,
@@ -1911,9 +1947,10 @@ def _extract_api_calls_from_text(text: str) -> list[dict[str, Any]]:
     return _dedupe_contract_items(calls)
 
 
-def _iter_contract_source_files(root: Path):
+def _iter_contract_source_files(root: Path, *, extensions: set[str] | None = None):
+    allowed_extensions = extensions or _CONTRACT_SOURCE_EXTENSIONS
     for path in root.rglob("*"):
-        if not path.is_file() or path.suffix not in _CONTRACT_SOURCE_EXTENSIONS:
+        if not path.is_file() or path.suffix not in allowed_extensions:
             continue
         if _is_contract_skipped_path(str(path)):
             continue

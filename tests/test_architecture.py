@@ -97,7 +97,7 @@ class TestDependencyBoundary:
         "maintenance", "data_flow", "trace", "validation", "conventions",
         "coverage_intel", "git_intel", "staleness", "change_patterns",
         "context_budget", "type_contracts",
-        "python", "typescript", "go", "vue", "java", "rust",
+        "python", "typescript", "go", "vue", "java", "rust", "dart",
     }
 
     def _collect_src_files(self) -> list[Path]:

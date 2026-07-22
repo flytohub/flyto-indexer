@@ -22,6 +22,7 @@ from .indexer import IncrementalIndexer, scan_directory_hashes
 from .models import Dependency, DependencyType, FileManifest, ProjectIndex, Symbol, SymbolType
 from .reverse_index import ReverseIndexMixin
 from .scanner import (
+    DartScanner,
     GoScanner,
     JavaScanner,
     PythonScanner,
@@ -185,6 +186,7 @@ class IndexEngine(
         # Initialize components
         self.scanners = [
             PythonScanner(project_name),
+            DartScanner(project_name),
             VueScanner(project_name),
             TypeScriptScanner(project_name),
             GoScanner(project_name),

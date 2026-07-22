@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **144 Python modules**, **57,259 lines**, and **1,684 class/function/method declarations**.
+Generated inventory: **145 Python modules**, **57,694 lines**, and **1,703 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -62,7 +62,7 @@ Generated inventory: **144 Python modules**, **57,259 lines**, and **1,684 class
 | [`src/doc_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L1) | 537 | 12 | `dataclasses, fnmatch, gzip, json, logging, os, pathlib, re, typing, urllib` | Documentation Coverage Scanner — analyze documentation completeness. |
 | [`src/dockerfile_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_scanner.py#L1) | 240 | 3 | `logging, os, pathlib, re, rule_loader` | Dockerfile & IaC Scanner — detect security misconfigurations in Dockerfiles and docker-compose files. |
 | [`src/embedding.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/embedding.py#L1) | 96 | 5 | `logging, pathlib, sentence_transformers, typing` | Embedding-based semantic search — optional hybrid layer. |
-| [`src/engine.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L1) | 715 | 21 | `context, datetime, dependency_resolver, glob, index_store, indexer, json, logging, models, pathlib, reverse_index, safe_io` | Main indexing engine - orchestrates the entire flow. |
+| [`src/engine.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L1) | 717 | 21 | `context, datetime, dependency_resolver, glob, index_store, indexer, json, logging, models, pathlib, reverse_index, safe_io` | Main indexing engine - orchestrates the entire flow. |
 | [`src/execution_guard.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/execution_guard.py#L1) | 255 | 16 | `time, typing` | Execution Guard — server-side enforcement for task execution plans. |
 | [`src/flyto_output.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/flyto_output.py#L1) | 706 | 12 | `collections, datetime, engine, flyto_tags, json, models, pathlib` | Generate per-project .flyto/ folder (Schema v1). |
 | [`src/flyto_tags.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/flyto_tags.py#L1) | 529 | 18 | `ast, collections, datetime, json, models, pathlib, re` | Generate .flyto/tags/symbol_tags.jsonl — unified tag system. |
@@ -106,8 +106,9 @@ Generated inventory: **144 Python modules**, **57,259 lines**, and **1,684 class
 | [`src/safe_io.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/safe_io.py#L1) | 102 | 4 | `json, logging, os, pathlib, sys, tempfile` | Safe I/O utilities — atomic writes and structured logging. |
 | [`src/safe_xml.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/safe_xml.py#L1) | 206 | 8 | `pathlib, re, typing, xml` | Safe XML parsing — hardened against XXE and entity-expansion ("billion laughs") denial-of-service. |
 | [`src/sbom_export.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/sbom_export.py#L1) | 771 | 16 | `datetime, dependency_scanner, json, license_scanner, logging, os, pathlib, re, tomllib, uuid` | SBOM Export — generate CycloneDX 1.5 JSON Software Bill of Materials. |
-| [`src/scanner/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/__init__.py#L1) | 29 | 0 | `base, go, java, python, rust, scanner, typescript, vue` | Scanner module exports. |
+| [`src/scanner/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/__init__.py#L1) | 32 | 0 | `base, dart, go, java, python, rust, scanner, typescript, vue` | Scanner module exports. |
 | [`src/scanner/base.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/base.py#L1) | 96 | 12 | `abc, datetime, hashlib, models, pathlib` | Base scanner class for code analysis. |
+| [`src/scanner/dart.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/dart.py#L1) | 392 | 17 | `__future__, base, models, pathlib, re, scanner, tokenizer` | Dart scanner for Flutter applications and standalone Dart packages. |
 | [`src/scanner/go.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/go.py#L1) | 829 | 22 | `base, models, pathlib, re, scanner, tokenizer` | Go scanner using token-aware regex parsing. |
 | [`src/scanner/java.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/java.py#L1) | 533 | 14 | `base, models, pathlib, re, scanner` | Java scanner using regex-based parsing. |
 | [`src/scanner/python.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/python.py#L1) | 546 | 17 | `ast, base, models, pathlib, scanner, typing` | Python scanner using AST analysis. |
@@ -147,6 +148,6 @@ Generated inventory: **144 Python modules**, **57,259 lines**, and **1,684 class
 | [`src/tools/trace.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/trace.py#L1) | 233 | 7 | `collections, index_store, logging, typing` | Call path tracing — find execution paths through the call graph. |
 | [`src/tools/type_contracts.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/type_contracts.py#L1) | 1103 | 26 | `ast, index_store, re, typing` | Cross-repo Type Contract checking for flyto-indexer MCP server. |
 | [`src/tools/validation.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L1) | 220 | 3 | `index_store, pathlib, re, shlex, subprocess` | Post-change validation — run ruff (lint) and pytest on a project. |
-| [`src/verify.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/verify.py#L1) | 2787 | 113 | `__future__, analyzer, doc_scanner, engine, fnmatch, hashlib, html, index_store, json, mcp_server, models, pathlib` | Self-contained verification gate for flyto-indexer. |
+| [`src/verify.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/verify.py#L1) | 2824 | 115 | `__future__, analyzer, doc_scanner, engine, fnmatch, hashlib, html, index_store, json, mcp_server, models, pathlib` | Self-contained verification gate for flyto-indexer. |
 | [`src/version.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/version.py#L1) | 25 | 1 | `importlib, pathlib, tomllib` | Resolve the Flyto2 Indexer package version in source and installed modes. |
-| [`src/watcher.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/watcher.py#L1) | 184 | 7 | `dataclasses, index_store, os, pathlib, typing` | File Change Watcher — polling-based change detection. |
+| [`src/watcher.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/watcher.py#L1) | 185 | 7 | `dataclasses, index_store, os, pathlib, typing` | File Change Watcher — polling-based change detection. |

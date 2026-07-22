@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 _SUPPORTED_EXTENSIONS = {
+    ".dart",
     ".py", ".vue", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java",
 }
 
