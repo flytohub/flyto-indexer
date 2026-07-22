@@ -1085,15 +1085,16 @@ def _check_ci_closed_loop(root: Path, add_check) -> None:
         )),
         "tests": any(token in lowered_with_scripts for token in (
             "pytest", "vitest", "npm test", "npm run test", "pnpm test", "yarn test", "go test",
-            "flutter test", "dart test",
+            "flutter test", "dart test", "markdown-link-check", "test markdown links",
         )),
         "lint": any(token in lowered_with_scripts for token in (
             "ruff", "mypy", "eslint", "npm run lint", "pnpm lint", "yarn lint", "golangci-lint",
-            "flutter analyze", "dart analyze",
+            "flutter analyze", "dart analyze", "markdownlint", "lint markdown",
         )),
         "build": any(token in lowered_with_scripts for token in (
             "python -m build", "npm run build", "pnpm build", "yarn build", "go build", "cargo build",
-            "flutter build", "dart compile",
+            "flutter build", "dart compile", "mkdocs build", "sphinx-build",
+            "build documentation", "documentation bundle",
         )),
     }
     if project_name == "flyto-indexer":

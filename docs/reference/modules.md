@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **144 Python modules**, **57,216 lines**, and **1,682 class/function/method declarations**.
+Generated inventory: **144 Python modules**, **57,232 lines**, and **1,683 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -59,7 +59,7 @@ Generated inventory: **144 Python modules**, **57,216 lines**, and **1,682 class
 | [`src/dependency_resolver.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_resolver.py#L1) | 510 | 18 | `logging, models` | Dependency resolution mixin for IndexEngine. |
 | [`src/dependency_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_scanner.py#L1) | 1263 | 34 | `dataclasses, datetime, json, logging, os, pathlib, re, safe_xml, tomli, tomllib, typing, xml` | Dependency/package version scanner — extracts external package dependencies from manifest files across multiple ecosystems. |
 | [`src/diff_impact.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/diff_impact.py#L1) | 367 | 9 | `index_store, os, pathlib, re, signature, subprocess, tools, typing` | Diff-based Impact Analysis — parse git diff, match changed hunks to indexed symbols, classify change type (signature vs body), and run impact analysis. |
-| [`src/doc_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L1) | 518 | 11 | `dataclasses, fnmatch, gzip, json, logging, os, pathlib, re, typing` | Documentation Coverage Scanner — analyze documentation completeness. |
+| [`src/doc_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L1) | 533 | 12 | `dataclasses, fnmatch, gzip, json, logging, os, pathlib, re, typing` | Documentation Coverage Scanner — analyze documentation completeness. |
 | [`src/dockerfile_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_scanner.py#L1) | 240 | 3 | `logging, os, pathlib, re, rule_loader` | Dockerfile & IaC Scanner — detect security misconfigurations in Dockerfiles and docker-compose files. |
 | [`src/embedding.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/embedding.py#L1) | 96 | 5 | `logging, pathlib, sentence_transformers, typing` | Embedding-based semantic search — optional hybrid layer. |
 | [`src/engine.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L1) | 715 | 21 | `context, datetime, dependency_resolver, glob, index_store, indexer, json, logging, models, pathlib, reverse_index, safe_io` | Main indexing engine - orchestrates the entire flow. |
@@ -147,6 +147,6 @@ Generated inventory: **144 Python modules**, **57,216 lines**, and **1,682 class
 | [`src/tools/trace.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/trace.py#L1) | 233 | 7 | `collections, index_store, logging, typing` | Call path tracing — find execution paths through the call graph. |
 | [`src/tools/type_contracts.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/type_contracts.py#L1) | 1103 | 26 | `ast, index_store, re, typing` | Cross-repo Type Contract checking for flyto-indexer MCP server. |
 | [`src/tools/validation.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L1) | 220 | 3 | `index_store, pathlib, re, shlex, subprocess` | Post-change validation — run ruff (lint) and pytest on a project. |
-| [`src/verify.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/verify.py#L1) | 2786 | 113 | `__future__, analyzer, doc_scanner, engine, fnmatch, hashlib, html, index_store, json, mcp_server, models, pathlib` | Self-contained verification gate for flyto-indexer. |
+| [`src/verify.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/verify.py#L1) | 2787 | 113 | `__future__, analyzer, doc_scanner, engine, fnmatch, hashlib, html, index_store, json, mcp_server, models, pathlib` | Self-contained verification gate for flyto-indexer. |
 | [`src/version.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/version.py#L1) | 25 | 1 | `importlib, pathlib, tomllib` | Resolve the Flyto2 Indexer package version in source and installed modes. |
 | [`src/watcher.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/watcher.py#L1) | 184 | 7 | `dataclasses, index_store, os, pathlib, typing` | File Change Watcher — polling-based change detection. |

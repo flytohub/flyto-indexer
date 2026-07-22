@@ -389,6 +389,20 @@ def _check_env_example(project_path: Path) -> tuple[bool, bool]:
     return False, False
 
 
+def _configuration_not_applicable(project_path: Path) -> bool:
+    """Return whether a docs-only repository declares no runtime configuration."""
+    manifest_path = project_path / "docs" / "documentation-manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+    documentation = manifest.get("documentation") if isinstance(manifest, dict) else None
+    return bool(
+        isinstance(documentation, dict)
+        and documentation.get("configuration_not_applicable") is True
+    )
+
+
 def scan_documentation(project_path: str | Path) -> DocCoverageResult:
     """
     Scan a project for documentation coverage.
@@ -432,10 +446,11 @@ def scan_documentation(project_path: str | Path) -> DocCoverageResult:
 
     # 5. Config docs
     has_env, env_has_comments = _check_env_example(project_path)
-    if not has_env:
+    configuration_not_applicable = _configuration_not_applicable(project_path)
+    if not has_env and not configuration_not_applicable:
         # Check if project uses env vars
         suggestions.append("Add .env.example with documented environment variables")
-    elif not env_has_comments:
+    elif has_env and not env_has_comments:
         suggestions.append("Add comments to .env.example explaining each variable")
 
     # 6. Changelog
@@ -460,7 +475,7 @@ def scan_documentation(project_path: str | Path) -> DocCoverageResult:
         + api_doc_coverage * 100 * 0.20
         + module_doc_coverage * 100 * 0.15
         + symbol_doc_coverage * 100 * 0.25
-        + (100 if has_env else 0) * 0.10
+        + (100 if has_env or configuration_not_applicable else 0) * 0.10
     )
     # Bonus for changelog and contributing
     if has_changelog:

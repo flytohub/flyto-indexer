@@ -56,6 +56,31 @@ def test_no_documentable_symbols_is_not_penalized(tmp_path):
     assert not any("functions and classes" in suggestion for suggestion in result.suggestions)
 
 
+def test_docs_only_repository_can_declare_configuration_not_applicable(tmp_path):
+    (tmp_path / "README.md").write_text(
+        "# Demo\n\n## Installation\n\nNone.\n\n## Usage\n\nRead the docs.\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "documentation-manifest.json").write_text(
+        json.dumps({"documentation": {"configuration_not_applicable": True}}),
+        encoding="utf-8",
+    )
+    index_dir = tmp_path / ".flyto-index"
+    index_dir.mkdir()
+    (index_dir / "index.json").write_text(
+        json.dumps({"project": "demo", "symbols": {}}),
+        encoding="utf-8",
+    )
+
+    result = scan_documentation(tmp_path)
+
+    assert not result.has_env_example
+    assert not any(".env.example" in suggestion for suggestion in result.suggestions)
+    assert result.overall_score == 67
+
+
 def test_source_reference_counts_exact_local_symbol_links(tmp_path):
     (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
     (tmp_path / "src").mkdir()

@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- Added docs-only CI recognition for Markdown lint, link tests, and
+  documentation builds, plus an explicit `configuration_not_applicable`
+  documentation contract.
 - Added traversal-safe `documentation.source_reference_exclude` globs for
   vendored dependencies and fixtures documented by another repository.
 - Added repository-local glob support for generated source-reference pages in

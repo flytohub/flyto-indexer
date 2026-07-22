@@ -70,6 +70,9 @@ pages without losing exact symbol coverage accounting.
 vendored dependencies and fixtures whose authoritative reference belongs to
 another repository. Absolute paths and parent traversal are ignored;
 exclusions affect documentation scoring only, never source or security scans.
+Docs-only repositories with no runtime environment can set
+`documentation.configuration_not_applicable` to `true`; this suppresses the
+`.env.example` recommendation without weakening source or security checks.
 
 Repositories that mix source code with top-level content directories can set
 `documentation.module_roots` in `docs/documentation-manifest.json`. The scanner

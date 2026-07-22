@@ -191,6 +191,34 @@ def test_ci_closed_loop_accepts_flutter_commands(tmp_path):
     }]
 
 
+def test_ci_closed_loop_accepts_documentation_commands(tmp_path):
+    workflow = tmp_path / ".github" / "workflows" / "docs.yml"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text(
+        "name: Docs\n"
+        "jobs:\n"
+        "  docs:\n"
+        "    steps:\n"
+        "      - name: Lint Markdown\n"
+        "        run: git diff --check\n"
+        "      - name: Test Markdown links\n"
+        "        run: test -s README.md\n"
+        "      - name: Build documentation bundle\n"
+        "        run: tar -czf docs.tar.gz docs\n"
+        "      - run: flyto-index verify . --json\n",
+        encoding="utf-8",
+    )
+    checks = []
+
+    def add_check(name, status, summary, metrics=None):
+        checks.append({"name": name, "status": status, "summary": summary, "metrics": metrics or {}})
+
+    _check_ci_closed_loop(tmp_path, add_check)
+
+    assert checks[0]["status"] == "pass"
+    assert checks[0]["metrics"]["missing"] == []
+
+
 def _write_backend_index(root: Path, routes: list[tuple[str, str]]):
     root.mkdir(parents=True, exist_ok=True)
     (root / "go.mod").write_text("module backend\n", encoding="utf-8")
