@@ -12,6 +12,9 @@
 - Added CI drift checks for generated references and MCP/package versions.
 
 ### Fixed
+- Let documentation-heavy repositories declare source-owning
+  `documentation.module_roots`; documentation coverage no longer treats every
+  top-level locale or content directory as an undocumented software module.
 - Count generated API references only when their repository-local source links
   resolve to the exact indexed declaration line; report inline, external, and
   combined symbol-documentation coverage separately.

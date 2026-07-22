@@ -197,3 +197,28 @@ def test_module_doc_coverage_ignores_tilde_home_artifact(tmp_path):
     result = scan_documentation(tmp_path)
 
     assert result.module_doc_coverage == 1.0
+
+
+def test_module_doc_coverage_uses_manifest_source_roots(tmp_path):
+    (tmp_path / "README.md").write_text("# Docs site\n", encoding="utf-8")
+    (tmp_path / "guide").mkdir()
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "README.md").write_text("# Scripts\n", encoding="utf-8")
+    vitepress = tmp_path / ".vitepress"
+    vitepress.mkdir()
+    (vitepress / "README.md").write_text("# Site runtime\n", encoding="utf-8")
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "documentation-manifest.json").write_text(
+        json.dumps({
+            "documentation": {
+                "module_roots": ["scripts", ".vitepress"],
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    result = scan_documentation(tmp_path)
+
+    assert result.module_doc_coverage == 1.0

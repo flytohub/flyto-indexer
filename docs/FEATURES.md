@@ -59,6 +59,14 @@ source-reference coverage. An external reference counts only when its manifest
 declares the reference file and the Markdown link resolves inside the target
 repository to the exact indexed declaration line.
 
+Repositories that mix source code with top-level content directories can set
+`documentation.module_roots` in `docs/documentation-manifest.json`. The scanner
+then measures README or package-docstring coverage only for those declared,
+repository-local source roots. This prevents translated pages and other content
+collections from being misclassified as undocumented software modules while
+keeping the default top-level-directory discovery for repositories without a
+manifest scope.
+
 Primary implementation: `src/analyzer/`, `src/auditor/`, `src/quality.py`, and
 the rule corpus under `config/rules/`.
 

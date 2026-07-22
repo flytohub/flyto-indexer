@@ -29,19 +29,22 @@
   wheel CI smoke loads and evaluates a real rule in an isolated environment.
 - Durable user, operator, security, architecture, and whitepaper documentation
   links to a generated source reference covering 144 non-test Python modules,
-  1,680 declarations, 36 CLI commands, 20 published MCP tools, 47 granular
+  1,681 declarations, 36 CLI commands, 20 published MCP tools, 47 granular
   compatibility definitions, seven local HTTP operations, eight environment
   variables, and eight built-in rule files.
 - Documentation scoring distinguishes inline summaries from exact source-linked
   reference entries. The latest score is 95/100 with 56% inline coverage, 45%
   source-reference coverage, and 68% combined symbol coverage; external links
   count only when they resolve to the indexed declaration inside the repository.
+- Documentation-heavy repositories can scope module README coverage with
+  `documentation.module_roots`; the scanner then measures declared source roots
+  instead of misclassifying locale and content directories as software modules.
 - Package, MCP registry, and MCP initialization versions are synchronized and
   enforced by tests and CI. Every built-in rule YAML file is parsed in tests.
-- Latest local verification: `1661 passed, 1 skipped`; Ruff passed across
+- Latest local verification: `1656 passed, 2 skipped`; Ruff passed across
   source, tests, and scripts; mypy found no issues in 130 source files;
   sdist/wheel build and isolated wheel smoke passed; strict self-verify passed
-  18/18 with 223 files, 3,710 scanned symbols, and zero warnings.
+  18/18 with 223 files, 3,712 scanned symbols, and zero warnings.
 
 ## Release Blockers
 

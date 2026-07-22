@@ -144,23 +144,56 @@ def _check_api_doc_coverage(project_path: Path) -> float:
     return documented / len(api_symbols)
 
 
-def _check_module_doc_coverage(project_path: Path) -> float:
-    """Check what percentage of top-level directories have a README or documented __init__.py."""
-    top_dirs = []
+def _declared_module_roots(project_path: Path) -> list[Path] | None:
+    """Return manifest-scoped source roots, or None for automatic discovery."""
+    manifest_path = project_path / "docs" / "documentation-manifest.json"
     try:
-        for entry in sorted(os.listdir(project_path)):
-            entry_path = project_path / entry
-            if entry_path.is_dir() and entry not in _SKIP_DIRS and not entry.startswith("."):
-                top_dirs.append(entry)
-    except OSError:
-        return 0.0
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    documentation = manifest.get("documentation")
+    if not isinstance(documentation, dict) or "module_roots" not in documentation:
+        return None
+    declared = documentation.get("module_roots")
+    if not isinstance(declared, list):
+        return []
 
-    if not top_dirs:
+    roots = []
+    for value in declared:
+        if not isinstance(value, str) or not value.strip():
+            continue
+        candidate = (project_path / value).resolve()
+        try:
+            candidate.relative_to(project_path)
+        except ValueError:
+            continue
+        if candidate.is_dir():
+            roots.append(candidate)
+    return roots
+
+
+def _check_module_doc_coverage(project_path: Path) -> float:
+    """Check source-owning directories for a README or documented __init__.py."""
+    module_roots = _declared_module_roots(project_path)
+    if module_roots is None:
+        module_roots = []
+        try:
+            for entry in sorted(os.listdir(project_path)):
+                entry_path = project_path / entry
+                if (
+                    entry_path.is_dir()
+                    and entry not in _SKIP_DIRS
+                    and not entry.startswith(".")
+                ):
+                    module_roots.append(entry_path)
+        except OSError:
+            return 0.0
+
+    if not module_roots:
         return 0.0
 
     documented = 0
-    for dirname in top_dirs:
-        dir_path = project_path / dirname
+    for dir_path in module_roots:
         # Check for README
         has_readme = any(
             (dir_path / name).is_file()
@@ -182,7 +215,7 @@ def _check_module_doc_coverage(project_path: Path) -> float:
         if has_readme or has_init_doc:
             documented += 1
 
-    return documented / len(top_dirs)
+    return documented / len(module_roots)
 
 
 def _source_reference_locations(project_path: Path) -> set[tuple[str, int]]:
