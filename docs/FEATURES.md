@@ -58,6 +58,9 @@ Documentation scoring reports inline summaries separately from generated
 source-reference coverage. An external reference counts only when its manifest
 declares the reference file and the Markdown link resolves inside the target
 repository to the exact indexed declaration line.
+`documentation.source_reference` accepts repository-local file paths or glob
+patterns, allowing large generated references to stay split into navigable
+pages without losing exact symbol coverage accounting.
 
 Repositories that mix source code with top-level content directories can set
 `documentation.module_roots` in `docs/documentation-manifest.json`. The scanner

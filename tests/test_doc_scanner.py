@@ -185,6 +185,78 @@ def test_source_reference_accepts_canonical_github_link(tmp_path):
     assert result.symbol_doc_coverage == 1.0
 
 
+def test_source_reference_expands_repository_local_globs(tmp_path):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "service.py").write_text(
+        "def first():\n    pass\n\ndef second():\n    pass\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs" / "reference"
+    docs.mkdir(parents=True)
+    (tmp_path / "docs" / "documentation-manifest.json").write_text(
+        json.dumps({
+            "documentation": {
+                "source_reference": ["docs/reference/source-*.md"],
+            },
+        }),
+        encoding="utf-8",
+    )
+    (docs / "source-a.md").write_text(
+        "[`first`](../../src/service.py#L1)\n",
+        encoding="utf-8",
+    )
+    (docs / "source-b.md").write_text(
+        "[`second`](../../src/service.py#L4)\n",
+        encoding="utf-8",
+    )
+    index_dir = tmp_path / ".flyto-index"
+    index_dir.mkdir()
+    (index_dir / "index.json").write_text(
+        json.dumps({
+            "symbols": {
+                "demo:src/service.py:function:first": {
+                    "type": "function",
+                    "path": "src/service.py",
+                    "start_line": 1,
+                    "summary": "",
+                },
+                "demo:src/service.py:function:second": {
+                    "type": "function",
+                    "path": "src/service.py",
+                    "start_line": 4,
+                    "summary": "",
+                },
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    result = scan_documentation(tmp_path)
+
+    assert result.source_reference_coverage == 1.0
+    assert result.symbol_doc_coverage == 1.0
+
+
+def test_source_reference_ignores_absolute_globs(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "service.py").write_text("def run():\n    pass\n", encoding="utf-8")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "documentation-manifest.json").write_text(
+        json.dumps({
+            "documentation": {
+                "source_reference": ["/tmp/source-*.md"],
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    result = scan_documentation(tmp_path)
+
+    assert result.source_reference_coverage == 0.0
+    assert result.symbol_doc_coverage == 0.0
+
+
 def test_module_doc_coverage_ignores_tilde_home_artifact(tmp_path):
     (tmp_path / "README.md").write_text(
         "# Demo\n\n## Installation\n\nInstall.\n\n## Usage\n\nRun.\n",

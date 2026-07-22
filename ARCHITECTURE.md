@@ -75,7 +75,10 @@ must not import protocol entrypoints. `.flyto-rules.yaml` encodes that direction
 `scripts/generate-reference.py` derives interface references from AST,
 registries, OpenAPI data, defaults, environment readers, and rule files.
 `docs/documentation-manifest.json` maps broader feature surfaces to source,
-durable explanation, and test evidence. CI rejects either kind of drift.
+durable explanation, and test evidence. Manifest-declared source references may
+use repository-local glob patterns for split generated pages; resolved files and
+their exact linked declaration targets must remain inside the indexed
+repository. CI rejects either kind of drift.
 
 ## Trust Boundary
 

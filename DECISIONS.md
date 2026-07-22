@@ -4,11 +4,14 @@
 
 Decision: non-test Python declarations, CLI arguments, MCP registries, local
 OpenAPI operations, defaults, environment readers, and built-in rule files are
-rendered by `scripts/generate-reference.py` and checked in CI.
+rendered by `scripts/generate-reference.py` and checked in CI. A target
+repository may declare one source-reference file or a repository-local glob of
+split pages; absolute and repository-escaping paths never count as evidence.
 
 Reason: hand-maintained counts and interface tables drifted from the package;
 source-backed generation keeps exhaustive detail reviewable without turning the
-README into an implementation dump.
+README into an implementation dump. Safe glob expansion lets large repositories
+retain the same exact source-line proof without creating one oversized page.
 
 ## 2026-07-22 - One package version feeds every runtime manifest
 

@@ -860,10 +860,10 @@ Every declared class, function, nested function, and method in the package, supp
 | function | `def _declared_module_roots(project_path: Path) -> list&#91;Path&#93; \| None` | Return manifest-scoped source roots, or None for automatic discovery. | [`src/doc_scanner.py:147`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L147) |
 | function | `def _check_module_doc_coverage(project_path: Path) -> float` | Check source-owning directories for a README or documented __init__.py. | [`src/doc_scanner.py:175`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L175) |
 | function | `def _source_reference_locations(project_path: Path) -> set&#91;tuple&#91;str, int&#93;&#93;` | Load source locations linked by declared, repository-local reference docs. | [`src/doc_scanner.py:221`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L221) |
-| function | `def _check_symbol_doc_coverage(project_path: Path) -> tuple&#91;float, float, float&#93;` | Measure inline, source-reference, and combined symbol documentation. | [`src/doc_scanner.py:277`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L277) |
-| function | `def _check_env_example(project_path: Path) -> tuple&#91;bool, bool&#93;` | Check if .env.example exists and has comments. | [`src/doc_scanner.py:332`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L332) |
-| function | `def scan_documentation(project_path: str \| Path) -> DocCoverageResult` | Scan a project for documentation coverage. | [`src/doc_scanner.py:350`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L350) |
-| function | `def format_doc_scan(result: DocCoverageResult) -> str` | Format documentation coverage results as human-readable text. | [`src/doc_scanner.py:445`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L445) |
+| function | `def _check_symbol_doc_coverage(project_path: Path) -> tuple&#91;float, float, float&#93;` | Measure inline, source-reference, and combined symbol documentation. | [`src/doc_scanner.py:286`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L286) |
+| function | `def _check_env_example(project_path: Path) -> tuple&#91;bool, bool&#93;` | Check if .env.example exists and has comments. | [`src/doc_scanner.py:341`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L341) |
+| function | `def scan_documentation(project_path: str \| Path) -> DocCoverageResult` | Scan a project for documentation coverage. | [`src/doc_scanner.py:359`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L359) |
+| function | `def format_doc_scan(result: DocCoverageResult) -> str` | Format documentation coverage results as human-readable text. | [`src/doc_scanner.py:454`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L454) |
 
 ## `src/dockerfile_scanner.py`
 

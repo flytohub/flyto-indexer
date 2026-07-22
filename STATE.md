@@ -36,15 +36,18 @@
   reference entries. The latest score is 95/100 with 56% inline coverage, 45%
   source-reference coverage, and 68% combined symbol coverage; external links
   count only when they resolve to the indexed declaration inside the repository.
+- Generated source-reference manifests accept repository-local glob patterns,
+  while absolute or escaping paths remain outside the documentation trust
+  boundary.
 - Documentation-heavy repositories can scope module README coverage with
   `documentation.module_roots`; the scanner then measures declared source roots
   instead of misclassifying locale and content directories as software modules.
 - Package, MCP registry, and MCP initialization versions are synchronized and
   enforced by tests and CI. Every built-in rule YAML file is parsed in tests.
-- Latest local verification: `1656 passed, 2 skipped`; Ruff passed across
+- Latest local verification: `1664 passed, 1 skipped`; Ruff passed across
   source, tests, and scripts; mypy found no issues in 130 source files;
   sdist/wheel build and isolated wheel smoke passed; strict self-verify passed
-  18/18 with 223 files, 3,712 scanned symbols, and zero warnings.
+  18/18 with 223 files, 3,714 scanned symbols, and zero warnings.
 
 ## Release Blockers
 

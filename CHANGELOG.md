@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- Added repository-local glob support for generated source-reference pages in
+  `documentation.source_reference`.
 - Added a structured documentation hub, feature guide, CLI and MCP guides,
   configuration and verification runbooks, security model, technical
   whitepaper, and machine-readable feature coverage manifest.

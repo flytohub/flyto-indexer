@@ -248,29 +248,38 @@ def _source_reference_locations(project_path: Path) -> set[tuple[str, int]]:
     for reference in references:
         if not isinstance(reference, str):
             continue
-        reference_path = (project_path / reference).resolve()
         try:
-            reference_path.relative_to(project_path)
-            content = reference_path.read_text(encoding="utf-8", errors="ignore")
-        except (OSError, ValueError):
+            reference_paths = (
+                sorted(project_path.glob(reference))
+                if any(character in reference for character in "*?[")
+                else [project_path / reference]
+            )
+        except (NotImplementedError, OSError, ValueError):
             continue
-        for angle_target, plain_target in link_pattern.findall(content):
-            target = (angle_target or plain_target).strip()
-            source_target, separator, line_text = target.rpartition("#L")
-            if not separator or not line_text.isdigit():
-                continue
-            github_match = github_pattern.fullmatch(source_target)
-            source_path = (
-                project_path / github_match.group(1)
-                if github_match
-                else reference_path.parent / source_target
-            ).resolve()
+        for reference_path in reference_paths:
+            reference_path = reference_path.resolve()
             try:
-                relative = source_path.relative_to(project_path).as_posix()
-            except ValueError:
+                reference_path.relative_to(project_path)
+                content = reference_path.read_text(encoding="utf-8", errors="ignore")
+            except (OSError, ValueError):
                 continue
-            if source_path.is_file():
-                locations.add((relative, int(line_text)))
+            for angle_target, plain_target in link_pattern.findall(content):
+                target = (angle_target or plain_target).strip()
+                source_target, separator, line_text = target.rpartition("#L")
+                if not separator or not line_text.isdigit():
+                    continue
+                github_match = github_pattern.fullmatch(source_target)
+                source_path = (
+                    project_path / github_match.group(1)
+                    if github_match
+                    else reference_path.parent / source_target
+                ).resolve()
+                try:
+                    relative = source_path.relative_to(project_path).as_posix()
+                except ValueError:
+                    continue
+                if source_path.is_file():
+                    locations.add((relative, int(line_text)))
     return locations
 
 
