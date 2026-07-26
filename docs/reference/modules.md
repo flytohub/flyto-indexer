@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **145 Python modules**, **57,796 lines**, and **1,704 class/function/method declarations**.
+Generated inventory: **145 Python modules**, **57,799 lines**, and **1,704 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -148,6 +148,6 @@ Generated inventory: **145 Python modules**, **57,796 lines**, and **1,704 class
 | [`src/tools/trace.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/trace.py#L1) | 233 | 7 | `collections, index_store, logging, typing` | Call path tracing — find execution paths through the call graph. |
 | [`src/tools/type_contracts.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/type_contracts.py#L1) | 1103 | 26 | `ast, index_store, re, typing` | Cross-repo Type Contract checking for flyto-indexer MCP server. |
 | [`src/tools/validation.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L1) | 220 | 3 | `index_store, pathlib, re, shlex, subprocess` | Post-change validation — run ruff (lint) and pytest on a project. |
-| [`src/verify.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/verify.py#L1) | 2926 | 116 | `__future__, analyzer, ast, doc_scanner, engine, fnmatch, hashlib, html, index_store, json, mcp_server, models` | Self-contained verification gate for flyto-indexer. |
+| [`src/verify.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/verify.py#L1) | 2929 | 116 | `__future__, analyzer, ast, doc_scanner, engine, fnmatch, hashlib, html, index_store, json, mcp_server, models` | Self-contained verification gate for flyto-indexer. |
 | [`src/version.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/version.py#L1) | 25 | 1 | `importlib, pathlib, tomllib` | Resolve the Flyto2 Indexer package version in source and installed modes. |
 | [`src/watcher.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/watcher.py#L1) | 185 | 7 | `dataclasses, index_store, os, pathlib, typing` | File Change Watcher — polling-based change detection. |
