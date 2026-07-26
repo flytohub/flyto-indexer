@@ -1045,6 +1045,41 @@ def test_single_project_islands_accepts_lazy_imported_component(tmp_path):
     assert check["metrics"]["island_count"] == 0
 
 
+def test_single_project_islands_accepts_imported_lower_camel_composable(tmp_path):
+    composable = tmp_path / "src" / "components" / "compounds" / "history" / "useHistoryFilters.ts"
+    view = tmp_path / "src" / "components" / "compounds" / "history" / "HistoryFeedView.tsx"
+    composable.parent.mkdir(parents=True)
+    view.parent.mkdir(parents=True, exist_ok=True)
+    composable.write_text(
+        "export function useHistoryFilters() { return { events: [] } }\n",
+        encoding="utf-8",
+    )
+    view.write_text(
+        "import { useHistoryFilters } from './useHistoryFilters'\n"
+        "export function HistoryFeedView() { return useHistoryFilters().events.length }\n",
+        encoding="utf-8",
+    )
+    sid = (
+        "demo:src/components/compounds/history/"
+        "useHistoryFilters.ts:composable:useHistoryFilters"
+    )
+    checks = _run_single_project_island_check(
+        {
+            sid: {
+                "path": "src/components/compounds/history/useHistoryFilters.ts",
+                "type": "composable",
+                "name": "useHistoryFilters",
+                "ref_count": 0,
+            },
+        },
+        project_root=tmp_path,
+    )
+
+    check = checks["single_project_islands"]
+    assert check["status"] == "pass"
+    assert check["metrics"]["island_count"] == 0
+
+
 def test_single_project_islands_accepts_vue_imported_component(tmp_path):
     component = tmp_path / "src" / "components" / "common" / "ReportDialog.vue"
     page = tmp_path / "src" / "views" / "TemplateDetail.vue"

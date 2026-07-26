@@ -620,7 +620,10 @@ def _collect_source_name_references(root: Path) -> dict[str, set[str]]:
             text = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        for name in set(re.findall(r"\b[A-Z][A-Za-z0-9_]{2,}\b", text)):
+        # Track PascalCase components and conventional useX composables.
+        for name in set(
+            re.findall(r"\b(?:[A-Z][A-Za-z0-9_]{2,}|use[A-Z][A-Za-z0-9_]{2,})\b", text)
+        ):
             refs.setdefault(name, set()).add(rel)
     return refs
 
