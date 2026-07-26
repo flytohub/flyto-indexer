@@ -8,6 +8,7 @@ impact graph, context lookup, and lightweight security scans still close.
 
 from __future__ import annotations
 
+import ast
 import json
 import html
 import fnmatch
@@ -1178,9 +1179,109 @@ def _check_change_hygiene(root: Path, add_check) -> None:
     )
 
 
+def _python_mcp_entry_points(
+    root: Path,
+) -> tuple[list[dict[str, str]], list[str]]:
+    """Resolve declared Python MCP console scripts without importing target code."""
+    pyproject = root / "pyproject.toml"
+    if not pyproject.is_file():
+        return [], []
+    try:
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, OSError):
+        return [], []
+
+    project = data.get("project", {})
+    scripts = project.get("scripts", {}) if isinstance(project, dict) else {}
+    if not isinstance(scripts, dict):
+        return [], []
+
+    entries: list[dict[str, str]] = []
+    problems: list[str] = []
+    for raw_name, raw_target in sorted(scripts.items()):
+        if not isinstance(raw_name, str) or not isinstance(raw_target, str):
+            continue
+        name = raw_name.strip()
+        target = raw_target.strip()
+        module_name, separator, callable_name = target.partition(":")
+        normalized_name = name.lower().replace("_", "-")
+        normalized_module = module_name.lower()
+        if (
+            "mcp" not in normalized_name.split("-")
+            and ".mcp" not in normalized_module
+            and not normalized_module.endswith("mcp_server")
+        ):
+            continue
+
+        if not separator or not module_name or not callable_name:
+            problems.append(f"{name}: invalid console-script target {target!r}")
+            continue
+        module_parts = module_name.split(".")
+        if not all(part.isidentifier() for part in module_parts):
+            problems.append(f"{name}: invalid Python module {module_name!r}")
+            continue
+
+        relative_path = Path(*module_parts).with_suffix(".py")
+        candidates = (root / relative_path, root / "src" / relative_path)
+        module_path = next((path for path in candidates if path.is_file()), None)
+        if module_path is None:
+            problems.append(f"{name}: module {module_name!r} does not exist")
+            continue
+
+        callable_root = callable_name.split(".", 1)[0].strip()
+        if not callable_root.isidentifier():
+            problems.append(f"{name}: invalid callable {callable_name!r}")
+            continue
+        try:
+            tree = ast.parse(module_path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError) as exc:
+            problems.append(f"{name}: cannot parse {module_name!r}: {exc}")
+            continue
+        declarations = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        }
+        if callable_root not in declarations:
+            problems.append(
+                f"{name}: callable {callable_name!r} is missing from {module_name!r}"
+            )
+            continue
+
+        entries.append({
+            "name": name,
+            "target": target,
+            "module_path": str(module_path.relative_to(root)),
+        })
+    return entries, problems
+
+
 def _check_mcp_runtime_smoke(root: Path, add_check) -> None:
-    if not (root / "src" / "mcp_server.py").exists():
+    project_name = _pyproject_name(root)
+    indexer_runtime = (
+        project_name == "flyto-indexer"
+        and (root / "src" / "mcp_server.py").is_file()
+    )
+    entry_points, entry_point_problems = _python_mcp_entry_points(root)
+
+    if not indexer_runtime and not entry_points and not entry_point_problems:
         add_check("mcp_runtime_smoke", "pass", "No MCP server module to smoke")
+        return
+    if not indexer_runtime:
+        add_check(
+            "mcp_runtime_smoke",
+            "fail" if entry_point_problems else "pass",
+            (
+                "Python MCP entry points resolve statically"
+                if not entry_point_problems
+                else "Python MCP entry-point validation found drift"
+            ),
+            metrics={
+                "mode": "static_entrypoint",
+                "entry_points": entry_points,
+                "problems": entry_point_problems,
+            },
+        )
         return
 
     try:
@@ -1222,6 +1323,7 @@ def _check_mcp_runtime_smoke(root: Path, add_check) -> None:
         "fail" if problems else "pass",
         "MCP runtime imports and protocol helpers smoke cleanly" if not problems else "MCP runtime smoke found drift",
         metrics={
+            "mode": "indexer_runtime",
             "tools": len(server_names),
             "protocol_versions": list(protocols),
             "resources": len(getattr(mcp_server, "RESOURCES", [])),

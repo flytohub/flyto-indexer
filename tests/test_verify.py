@@ -1424,6 +1424,80 @@ def test_mcp_runtime_smoke_passes_for_repo():
 
     by_name = {check["name"]: check for check in checks}
     assert by_name["mcp_runtime_smoke"]["status"] == "pass"
+    assert by_name["mcp_runtime_smoke"]["metrics"]["mode"] == "indexer_runtime"
+
+
+def test_mcp_runtime_smoke_resolves_python_console_scripts_without_importing(tmp_path):
+    (tmp_path / "flyto_ai").mkdir()
+    (tmp_path / "flyto_ai" / "mcp_server.py").write_text(
+        "raise RuntimeError('target code must not execute')\n\n"
+        "def main():\n"
+        "    return None\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "flyto_ai" / "closed_loop_mcp.py").write_text(
+        "async def async_main():\n"
+        "    return None\n\n"
+        "def main():\n"
+        "    return None\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\n"
+        "name = \"flyto-ai\"\n\n"
+        "[project.scripts]\n"
+        "flyto-ai = \"flyto_ai.cli:main\"\n"
+        "flyto-ai-mcp = \"flyto_ai.mcp_server:main\"\n"
+        "flyto-closed-loop-mcp = \"flyto_ai.closed_loop_mcp:main\"\n",
+        encoding="utf-8",
+    )
+    checks = []
+
+    def add_check(name, status, summary, *, metrics=None):
+        checks.append({
+            "name": name,
+            "status": status,
+            "summary": summary,
+            "metrics": metrics or {},
+        })
+
+    _check_mcp_runtime_smoke(tmp_path, add_check)
+
+    check = checks[0]
+    assert check["status"] == "pass"
+    assert check["summary"] == "Python MCP entry points resolve statically"
+    assert check["metrics"]["mode"] == "static_entrypoint"
+    assert [entry["name"] for entry in check["metrics"]["entry_points"]] == [
+        "flyto-ai-mcp",
+        "flyto-closed-loop-mcp",
+    ]
+    assert check["metrics"]["problems"] == []
+
+
+def test_mcp_runtime_smoke_fails_missing_python_console_script_target(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\n"
+        "name = \"broken-mcp\"\n\n"
+        "[project.scripts]\n"
+        "broken-mcp = \"broken.mcp_server:main\"\n",
+        encoding="utf-8",
+    )
+    checks = []
+
+    def add_check(name, status, summary, *, metrics=None):
+        checks.append({
+            "name": name,
+            "status": status,
+            "summary": summary,
+            "metrics": metrics or {},
+        })
+
+    _check_mcp_runtime_smoke(tmp_path, add_check)
+
+    check = checks[0]
+    assert check["status"] == "fail"
+    assert check["metrics"]["mode"] == "static_entrypoint"
+    assert "does not exist" in check["metrics"]["problems"][0]
 
 
 def test_ci_closed_loop_warns_without_verify(tmp_path):

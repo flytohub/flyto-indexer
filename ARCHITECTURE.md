@@ -86,3 +86,8 @@ Untrusted input includes repository contents, generated indexes, policy files,
 diffs, and user-provided queries. The indexer must avoid executing analyzed
 project code during static checks and must keep generated artifacts isolated
 from source commits.
+
+For external Python projects, `mcp_runtime_smoke` reads declared console
+scripts and resolves their modules and top-level callables through path checks
+and AST parsing only. Import-based runtime smoke is reserved for
+flyto-indexer's own `src.mcp_server` adapter.

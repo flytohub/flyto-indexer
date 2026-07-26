@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+- Made `mcp_runtime_smoke` discover Python MCP console scripts from
+  `pyproject.toml` and validate their module/callable targets statically,
+  instead of reporting that external projects have no MCP server.
+- Kept executable MCP runtime smoke limited to flyto-indexer's own adapter so
+  verification never imports or executes analyzed project code.
+
 ## [2.15.0] - 2026-07-23
 
 ### Added

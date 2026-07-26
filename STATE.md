@@ -10,6 +10,9 @@
 - `verify` runs graph integrity, context, impact, secret, taint, documentation,
   rules/layers, package, runtime, and working-tree checks without requiring an
   external service.
+- External Python MCP console scripts are discovered from `pyproject.toml` and
+  validated through filesystem and AST checks; only the indexer's own MCP
+  adapter receives executable runtime smoke.
 - Product API closure is limited to `/api/v1/**`; `/api/mock/**` fixtures are
   excluded while real API calls still require indexed route or OpenAPI proof.
 - TypeScript custom request wrappers preserve their actual HTTP method.
@@ -28,8 +31,8 @@
   Missing or malformed policy parsing now fails verification closed, and the
   wheel CI smoke loads and evaluates a real rule in an isolated environment.
 - Durable user, operator, security, architecture, and whitepaper documentation
-  links to a generated source reference covering 144 non-test Python modules,
-  1,681 declarations, 36 CLI commands, 20 published MCP tools, 47 granular
+  links to a generated source reference covering 145 non-test Python modules,
+  1,704 declarations, 36 CLI commands, 20 published MCP tools, 47 granular
   compatibility definitions, seven local HTTP operations, eight environment
   variables, and eight built-in rule files.
 - Documentation scoring distinguishes inline summaries from exact source-linked
@@ -44,10 +47,10 @@
   instead of misclassifying locale and content directories as software modules.
 - Package, MCP registry, and MCP initialization versions are synchronized and
   enforced by tests and CI. Every built-in rule YAML file is parsed in tests.
-- Latest local verification: `1668 passed, 1 skipped, 1 deselected`; Ruff passed across
-  source, tests, and scripts; mypy found no issues in 130 source files;
+- Latest local verification: `1687 passed, 1 skipped`; Ruff passed across
+  source, tests, and scripts; mypy found no issues in 131 source files;
   sdist/wheel build and isolated wheel smoke passed; strict self-verify passed
-  18/18 with 223 files, 3,716 scanned symbols, and zero warnings.
+  18/18 with 225 files, 3,758 scanned symbols, and zero warnings.
 
 ## Release Blockers
 

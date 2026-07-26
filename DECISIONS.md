@@ -1,5 +1,16 @@
 # Decisions
 
+## 2026-07-26 - External MCP verification stays static
+
+Decision: for an analyzed Python project, discover MCP console scripts from
+`pyproject.toml` and validate the referenced module and top-level callable with
+filesystem checks and AST parsing. Only flyto-indexer's own MCP adapter receives
+an import-based runtime smoke.
+
+Reason: reporting "No MCP server module" for packaged MCP entry points hid
+real configuration drift, while importing an external target would violate the
+indexer's untrusted-repository boundary.
+
 ## 2026-07-23 - Index authored module variants, not VitePress caches
 
 Decision: the TypeScript scanner accepts `.mjs`, `.cjs`, `.mts`, and `.cts`
