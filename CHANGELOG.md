@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Fixed
+- Changed MCP task-gate guidance from terminating on `pass=false` to a
+  required-actions remediation loop that re-runs the same gate until it passes,
+  with regression coverage for initialize, plan, and tool metadata contracts.
 - Made `mcp_runtime_smoke` discover Python MCP console scripts from
   `pyproject.toml` and validate their module/callable targets statically,
   instead of reporting that external projects have no MCP server.

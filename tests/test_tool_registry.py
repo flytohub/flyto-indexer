@@ -63,6 +63,15 @@ class TestMCPTools:
         assert "analyze_task" in names
         assert "validate_changes" in names
 
+    def test_task_tool_documents_gate_remediation_loop(self):
+        from tool_registry import SMART_TOOLS
+
+        task_tool = next(tool for tool in SMART_TOOLS if tool["name"] == "task")
+        description = task_tool["description"]
+        assert "required_actions" in description
+        assert "re-run the same gate until pass=true" in description
+        assert "pass=false, STOP" not in description
+
 
 # ===========================================================================
 # INDEXER_TOOL_NAMES (auto-derived)

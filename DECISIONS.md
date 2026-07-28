@@ -1,5 +1,16 @@
 # Decisions
 
+## 2026-07-28 - Gate failure starts remediation, not termination
+
+Decision: MCP initialize, plan, and task-tool contracts define `pass=false` as
+a phase-local remediation loop. Agents must complete every available
+`required_actions` item, set the exact requested `current_state` keys, and
+re-run the same gate until `pass=true`.
+
+Reason: a safety gate exists to prevent an unsafe transition while directing
+the missing analysis or review. Treating it as task termination abandons the
+closed loop and defeats the safety control.
+
 ## 2026-07-26 - External MCP verification stays static
 
 Decision: for an analyzed Python project, discover MCP console scripts from

@@ -1045,5 +1045,49 @@ class TestSummaryTruncation:
         assert len(result["results"][0]["summary"]) <= 150
 
 
+class TestGateRemediationContract:
+    """Gate failures must trigger remediation, not terminate the task."""
+
+    @pytest.mark.parametrize("compound", [False, True])
+    def test_plan_directive_requires_remediation_loop(self, compound):
+        gate = {
+            "id": "gate_1",
+            "tool": "task_gate_check",
+            "args": {"next_phase": "apply_changes"},
+        }
+        if compound:
+            result = {
+                "task_profile": {"compound": True},
+                "sub_tasks": [{
+                    "intent": "bugfix",
+                    "targets": ["src/example.py"],
+                    "execution_plan": [gate],
+                }],
+            }
+        else:
+            result = {"execution_plan": [gate]}
+
+        directive = mcp_server._build_analyze_task_directive(result)
+
+        assert "required_actions" in directive
+        assert "current_state" in directive
+        assert "re-run the same gate until pass=true" in directive
+        assert "pass=false → STOP" not in directive
+
+    def test_initialize_instructions_require_remediation_loop(self):
+        with patch.object(mcp_server, "send_response") as send_response:
+            mcp_server.handle_request({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {},
+            })
+
+        instructions = send_response.call_args.args[1]["instructions"]
+        assert "required_actions" in instructions
+        assert "re-run the same gate" in instructions
+        assert "pass=false, STOP" not in instructions
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

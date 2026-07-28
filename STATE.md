@@ -7,6 +7,9 @@
   owned by private product repositories and are not shipped here.
 - CLI and MCP surfaces support indexing, context, impact, API/dependency
   closure, security checks, architecture rules, and repeatable verification.
+- MCP task guidance treats `pass=false` as a phase-local remediation loop:
+  complete `required_actions`, update the exact `current_state` keys, and
+  re-run the same gate until it passes. It is not a task-termination signal.
 - `verify` runs graph integrity, context, impact, secret, taint, documentation,
   rules/layers, package, runtime, and working-tree checks without requiring an
   external service.

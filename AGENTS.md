@@ -14,6 +14,20 @@ Before changing this repository, read `STATE.md`, `ARCHITECTURE.md`,
   fixtures, or local login details in docs, handoffs, tests, or scripts.
 - Run `bash scripts/lint-project-memory.sh` after editing project memory files.
 
+## Gate Remediation Loop
+
+- A gate result with `pass=false` blocks only the requested phase; it does not
+  terminate the task and must not be reported as task completion.
+- Do not edit or enter the blocked phase while the gate is false. Execute every
+  in-scope item in `required_actions`, update `current_state` with the exact
+  requested keys, and immediately run the same gate again. Repeat until
+  `pass=true`.
+- Missing impact, dependency, test review, or change-plan state is agent-owned
+  remediation, not a user blocker.
+- Pause for the user only when remediation requires credentials or other
+  required input, unavailable external authorization or state, or an
+  irreversible human decision.
+
 ## Flyto2 Project Memory Contract
 
 Every Flyto2 repository must keep this project-memory scaffold current:
