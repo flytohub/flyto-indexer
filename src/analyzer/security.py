@@ -9,6 +9,7 @@ Checks:
 5. Sensitive information leaks
 """
 
+import ast
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -43,6 +44,17 @@ class SecurityReport:
 
 class SecurityScanner:
     """Security scanner"""
+
+    _DETECTOR_FIXTURE_NAME_MARKERS = (
+        "PATTERN",
+        "KNOWN_FAKE",
+        "PLACEHOLDER",
+        "EXAMPLE_INDICATOR",
+        "COMMENT_LOW_SIGNAL",
+        "UNSAFE_FUNCTION",
+        "VULNERABILITY_RULE",
+        "SINKS",
+    )
 
     # Hardcoded secret patterns
     SECRET_PATTERNS = [
@@ -186,6 +198,7 @@ class SecurityScanner:
         """Scan a single file"""
         issues = []
         lines = content.split("\n")
+        detector_fixture_lines = self._detector_fixture_lines(rel_path, content)
 
         # Skip obviously non-code files
         if rel_path.endswith(('.md', '.txt', '.json', '.yaml', '.yml', '.lock')):
@@ -202,6 +215,8 @@ class SecurityScanner:
 
         for i, line in enumerate(lines):
             line_num = i + 1
+            if line_num in detector_fixture_lines:
+                continue
 
             # Skip comments (but not for secret detection)
             stripped = line.strip()
@@ -243,6 +258,8 @@ class SecurityScanner:
             # 2. SQL Injection
             for pattern, desc in self.SQL_INJECTION_PATTERNS:
                 if re.search(pattern, line, re.IGNORECASE):
+                    if self._is_sql_false_positive(line):
+                        continue
                     issues.append(SecurityIssue(
                         file_path=rel_path,
                         line=line_num,
@@ -297,6 +314,8 @@ class SecurityScanner:
                     if "*" not in langs and (lang is None or lang not in langs):
                         continue
                     if pat.search(line):
+                        if self._is_yaml_rule_false_positive(line, rule):
+                            continue
                         issues.append(SecurityIssue(
                             file_path=rel_path,
                             line=line_num,
@@ -308,6 +327,93 @@ class SecurityScanner:
                         ))
 
         return issues
+
+    @classmethod
+    def _detector_fixture_lines(cls, rel_path: str, content: str) -> set[int]:
+        """Return Python assignment lines that intentionally hold detector fixtures."""
+        if not rel_path.endswith(".py"):
+            return set()
+        try:
+            tree = ast.parse(content)
+        except (SyntaxError, ValueError):
+            return set()
+
+        fixture_lines: set[int] = set()
+        for node in ast.walk(tree):
+            names: list[str] = []
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for target in targets:
+                    names.extend(cls._assignment_names(target))
+            if not any(
+                marker in name.upper()
+                for name in names
+                for marker in cls._DETECTOR_FIXTURE_NAME_MARKERS
+            ):
+                continue
+            end_line = getattr(node, "end_lineno", node.lineno)
+            fixture_lines.update(range(node.lineno, end_line + 1))
+        return fixture_lines
+
+    @classmethod
+    def _assignment_names(cls, target: ast.expr) -> list[str]:
+        if isinstance(target, ast.Name):
+            return [target.id]
+        if isinstance(target, (ast.Tuple, ast.List)):
+            return [
+                name
+                for item in target.elts
+                for name in cls._assignment_names(item)
+            ]
+        return []
+
+    @staticmethod
+    def _is_yaml_rule_false_positive(line: str, rule: dict) -> bool:
+        """Allow broken hashes only when the line clearly describes non-security identity."""
+        if rule.get("id") == "LOG_SENSITIVE":
+            without_literals = re.sub(
+                r"""(?s)(?:[rubfRUBF]*)(["'])(?:\\.|(?!\1).)*\1""",
+                "",
+                line,
+            )
+            interpolation = re.search(
+                r"\{[^}]*(?:password|secret|token|credential)[^}]*\}",
+                line,
+                re.IGNORECASE,
+            )
+            sensitive_identifier = re.search(
+                r"(?<![\w])(?:password|passwd|secret|secret_key|api_key|"
+                r"access_token|auth_token|token|credential)(?![\w])",
+                without_literals,
+                re.IGNORECASE,
+            )
+            return not (interpolation or sensitive_identifier)
+        if rule.get("id") not in {"WEAK_HASH_MD5", "WEAK_HASH_SHA1"}:
+            return False
+        line_lower = line.lower()
+        security_context = (
+            "password", "secret", "token", "auth", "credential",
+            "signature", "signing", "certificate", "encryption",
+        )
+        if any(term in line_lower for term in security_context):
+            return False
+        identity_context = (
+            "checksum", "dedup", "duplicate", "cache", "content",
+            "chunk", "fingerprint", "etag", "file_hash", "blob_hash",
+        )
+        return any(term in line_lower for term in identity_context)
+
+    @staticmethod
+    def _is_sql_false_positive(line: str) -> bool:
+        """Require SQL syntax or an execution API, not keyword substrings."""
+        return not bool(re.search(
+            r"(?:\bSELECT\b.+\bFROM\b|\bINSERT\s+INTO\b|"
+            r"\bUPDATE\b.+\bSET\b|\bDELETE\s+FROM\b|"
+            r"\b(?:execute|executeQuery|createQuery|query)\s*\(|"
+            r"\bdb\.(?:Query|Exec)\s*\(|\bfmt\.Sprintf\s*\()",
+            line,
+            re.IGNORECASE,
+        ))
 
     def _is_placeholder(self, line: str) -> bool:
         """Check if value is a placeholder or dummy value"""

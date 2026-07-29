@@ -116,6 +116,11 @@ def _git_mod():
     return m
 
 
+def _evidence_mod():
+    from . import evidence_portfolio as m
+    return m
+
+
 def _coverage_mod():
     try:
         from . import coverage_intel as m
@@ -562,6 +567,23 @@ def smart_audit(project: str = None, focus: str = None) -> dict:
     _expand_audit_dimensions(result, should_expand, focus, project)
     _audit_supplementary(result, score_data, project)
     _truncate_audit_results(result)
+
+    evidence = _evidence_mod()
+    portfolio = _enrich(
+        "evidence_portfolio",
+        evidence.build_evidence_portfolio,
+        project=project,
+    )
+    if isinstance(portfolio, dict):
+        result["evidence_portfolio"] = portfolio
+        verdict = _enrich(
+            "audit_verdict",
+            evidence.build_audit_verdict,
+            result,
+            portfolio,
+        )
+        if isinstance(verdict, dict):
+            result["verdict"] = verdict
 
     return result
 

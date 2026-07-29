@@ -744,7 +744,20 @@ def attach_task_context(
     """Attach both lean context contracts to an existing task plan."""
     if not isinstance(task_contract, dict) or task_contract.get("error"):
         return task_contract
-    execution_plan = task_contract.get("execution_plan") or []
+    execution_plan = list(task_contract.get("execution_plan") or [])
+    if not execution_plan:
+        for index, sub_task in enumerate(task_contract.get("sub_tasks") or [], 1):
+            prefix = f"subtask_{index:02d}"
+            for step in sub_task.get("execution_plan") or []:
+                nested = dict(step)
+                nested["id"] = f"{prefix}:{step.get('id', 'step')}"
+                nested["depends_on"] = [
+                    f"{prefix}:{dependency}"
+                    for dependency in step.get("depends_on") or []
+                ]
+                nested["subtask_index"] = index
+                nested["subtask_intent"] = sub_task.get("intent")
+                execution_plan.append(nested)
     instruction_context = resolve_instruction_context(project, targets)
     ledger = build_intent_ledger(
         project,

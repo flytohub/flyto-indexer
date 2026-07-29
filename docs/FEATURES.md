@@ -51,8 +51,13 @@ reports the exact selected symbol, same-name candidates, overloads,
 indexed/name-only/unresolved reference classes, and production/test/manual
 review update sites. It analyzes the edit; it does not perform it.
 
+Diff impact also attaches a bounded local Git case file and deterministic risk
+verdict. Receipts identify commits and files without embedding patch bodies;
+lockfiles, generated output, and binaries are excluded from the evidence rank.
+
 Primary implementation: `src/engine.py`, `src/diff_impact.py`,
-`src/lsp/call_graph.py`, `src/lsp/`, and `src/tools/references.py`.
+`src/lsp/call_graph.py`, `src/lsp/`, `src/tools/evidence_portfolio.py`, and
+`src/tools/references.py`.
 
 ## API And Contract Drift
 
@@ -96,8 +101,12 @@ collections from being misclassified as undocumented software modules while
 keeping the default top-level-directory discovery for repositories without a
 manifest scope.
 
+The smart `audit` result includes the same bounded evidence portfolio plus a
+three-finding maximum verdict. Every verdict claim points back to health,
+impact, commit, file, or diff evidence already present in the result.
+
 Primary implementation: `src/analyzer/`, `src/auditor/`, `src/quality.py`, and
-the rule corpus under `config/rules/`.
+`src/tools/evidence_portfolio.py`, plus the rule corpus under `config/rules/`.
 
 ## Repository Policy
 

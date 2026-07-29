@@ -8,6 +8,7 @@ Flyto2 Indexer borrows successful mechanics, not product bulk.
 | [OpenSpec](https://github.com/Fission-AI/OpenSpec) | Plain Markdown, concrete scenarios, brownfield-first deltas | A bounded parser for existing specs; no second project tree |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Clear value statement, fast start, path-scoped project context | JIT Rules with scope, precedence, conflict checks, and fingerprints |
 | [Serena](https://github.com/oraios/serena) | A sharp symbol-level promise and semantic refactor workflow | Identity, ambiguity, unresolved-reference, and update-site preflight |
+| [Grillme](https://grillme.dev/) | Public Git history becomes a filtered, compact evidence case file before the verdict | Bounded local commit/file/diff receipts and deterministic evidence-linked verdicts; no hosted roast layer |
 
 ## Extension budget
 

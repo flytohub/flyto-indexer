@@ -50,7 +50,9 @@ search → impact → task(plan) → task(gate) → edit → task(validate) → 
 - `verify` checks the repository before the agent says done.
 
 The public smart-tool surface stays at 20 tools. Core analysis is local and
-works without external services.
+works without external services. `audit` and diff-based `impact` also return a
+bounded Git evidence portfolio and a short verdict linked to its receipts;
+lockfiles and generated artifacts are filtered before they consume context.
 
 ## What is different
 
@@ -228,7 +230,9 @@ The workflow borrows proven ideas without copying entire products:
 - path-scoped, just-in-time project context from
   [Gemini CLI](https://github.com/google-gemini/gemini-cli);
 - symbol-aware refactor preflight from
-  [Serena](https://github.com/oraios/serena).
+  [Serena](https://github.com/oraios/serena);
+- compact, evidence-first code case files from
+  [Grillme](https://grillme.dev/).
 
 What stays out of core: hosted documentation fetchers, model bindings,
 auto-editing, auto-commit, and another workflow tree. See

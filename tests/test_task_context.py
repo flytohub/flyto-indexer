@@ -187,3 +187,40 @@ def test_attach_task_context_keeps_existing_tool_surface(tmp_path):
     assert attached["intent_ledger"]["status"] == "ready"
     assert attached["task_profile"]["instruction_fingerprint"]
     assert attached["task_profile"]["intent_fingerprint"]
+
+
+def test_attach_task_context_flattens_compound_execution_plans(tmp_path):
+    _write(tmp_path, "AGENTS.md", "- Always run pytest.\n")
+    _write(tmp_path, "src/app.py", "")
+    contract = {
+        "task_profile": {
+            "project": str(tmp_path),
+            "compound": True,
+        },
+        "sub_tasks": [
+            {
+                "intent": "feature",
+                "execution_plan": _plan(),
+            },
+            {
+                "intent": "cleanup",
+                "execution_plan": _plan(),
+            },
+        ],
+    }
+
+    attached = attach_task_context(
+        contract,
+        project=str(tmp_path),
+        description="Change the app",
+        targets=["src/app.py"],
+    )
+
+    ledger = attached["intent_ledger"]
+    step_ids = [step["id"] for step in ledger["execution_plan"]]
+    assert ledger["status"] == "ready"
+    assert ledger["orphan_requirements"] == []
+    assert len(step_ids) == 4
+    assert len(set(step_ids)) == 4
+    assert step_ids[0] == "subtask_01:step_01_apply_changes"
+    assert step_ids[-1] == "subtask_02:step_02_validate"

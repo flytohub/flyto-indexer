@@ -30,6 +30,9 @@
 - Added semantic refactor preflight to `impact` for rename, move, delete, and
   signature changes, including exact identity, same-name ambiguity, overloads,
   unresolved references, and production/test/manual-review update sites.
+- Added bounded, noise-filtered local Git evidence portfolios and deterministic
+  evidence-linked verdicts to smart `audit` and diff-mode `impact`, without
+  adding a public tool, task action, runtime dependency, patch body, or upload.
 - Added dependency-free C/C++ indexing for function definitions, typedef
   structs, includes, and call edges across common source/header extensions.
 - Added multilingual robot workflow fixtures and deep unit, concurrency,
@@ -46,6 +49,12 @@
 - Extracted focused task CLI and MCP dispatch adapters while preserving every
   existing task flag, action, legacy dispatch alias, and the 20-tool public
   smart-tool surface.
+- Prevented security self-scans from reporting detector fixture constants and
+  non-security checksum hashes while retaining real secret and password-hash
+  findings; compound task plans now preserve every subtask step in the Intent
+  Ledger.
+- Included untracked source files in unstaged diff impact so newly added
+  modules participate in symbol, risk, evidence, and verdict closure.
 - Made validation respect pytest's configured `testpaths` instead of forcing
   repository-wide collection, and raised the bounded full-suite timeout to a
   configurable 900-second default.

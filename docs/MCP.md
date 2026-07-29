@@ -53,6 +53,11 @@ test and failure expectations.
 changes: selected identity, ambiguity, unresolved references, and required
 production/test/manual-review sites.
 
+`audit` and diff-mode `impact` attach a local `evidence-portfolio.v1` case file
+and `evidence-verdict.v1` summary. Both are bounded, omit patch bodies, filter
+machine-managed noise, and link each verdict finding to receipts in the same
+result. This adds no tool, action, dependency, upload, or model call.
+
 ## Protocol Behavior
 
 - Transport is newline-delimited JSON-RPC over stdin/stdout.

@@ -33,9 +33,9 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 ### `audit`
 
-Comprehensive code quality audit. Starts with a health score (0-100), then automatically expands any dimension scoring below 80 with detailed findings: - Security < 80 → shows hardcoded secrets, injection risks - Complexity < 80 → shows complex functions, duplicates - Dead code < 80 → shows unreferenced symbols - Coverage < 80 → shows untested high-impact code Always includes git hotspots (high-churn + complex files) and stale symbols (heavily referenced but not modified in 180+ days). Use 'f...
+Comprehensive code quality audit. Starts with a health score (0-100), then automatically expands any dimension scoring below 80 with detailed findings: - Security < 80 → shows hardcoded secrets, injection risks - Complexity < 80 → shows complex functions, duplicates - Dead code < 80 → shows unreferenced symbols - Coverage < 80 → shows untested high-impact code Always includes git hotspots (high-churn + complex files) and stale symbols (heavily referenced but not modified in 180+ days), plus a...
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:92`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L92).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:94`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L94).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -46,7 +46,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Interrogate, plan, gate-check, or validate code changes. Four actions: 1. grill: Build a persistent evidence-backed decision tree before planning. Repository-owned facts are resolved from the code index; human decisions are ordered by confidence and value-of-information, then asked one at a time with a recommendation and bounded adversarial review. Frozen v2 contracts include content-addressed evidence snapshots, selective-reopen metadata, acceptance criteria, ADR Markdown, and a machine-read...
 
-Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:122`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L122).
+Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:125`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L125).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -76,7 +76,7 @@ Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_r
 
 Explore project structure, APIs, dependencies, and type contracts. Focus modes: - (default/overview): lists all projects with symbol/file counts + index status - apis: all API endpoints + categories + contract drift detection - dependencies: import/dependent graph for a file or symbol - packages: external package dependencies with versions from manifest files - types: type schemas + cross-project contract drift - conventions: naming styles, patterns, imports, error handling conventions - chan...
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:272`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L272).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:275`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L275).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -89,7 +89,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Run the closed-loop project verification gate. This combines scan/index integrity, context lookup, impact graph validation, secret scan, taint scan, documentation score, agent-instruction hygiene, and generated-index ignore checks in one call. Use this after AI-generated code changes, before commits, and before merging branches. It is intentionally no-external-dependency and local-only. With strict=true, warnings are promoted to failures for CI-style gating.
 
-Annotations: `readOnlyHint=false, destructiveHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:314`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L314).
+Annotations: `readOnlyHint=false, destructiveHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:317`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L317).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -106,7 +106,7 @@ Annotations: `readOnlyHint=false, destructiveHint=false, openWorldHint=false`. D
 
 Run the closed-loop verification gate across a workspace of projects and aggregate the result. Use this for multi-repo AI sessions where frontend, backend, engine, and tooling must stay coherent instead of being checked as isolated islands. If projects is omitted, immediate child directories that look like projects are discovered. With baseline_dir and regression_only=true, existing warnings can be tolerated while newly-worse checks fail the workspace.
 
-Annotations: `readOnlyHint=false, destructiveHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:368`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L368).
+Annotations: `readOnlyHint=false, destructiveHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:371`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L371).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -124,7 +124,7 @@ Annotations: `readOnlyHint=false, destructiveHint=false, openWorldHint=false`. D
 
 Scan project source files for hardcoded secrets using regex patterns. Detects AWS keys, API tokens, private keys, database URLs, GitHub/GitLab/Slack/Stripe tokens, JWTs, Google API keys, Firebase keys, and generic passwords/secrets. Skips test files, lockfiles, node_modules, .git, binary files, and .min.js. Each finding includes: file path, line number, pattern name, severity (critical/high/medium), and a masked value (first 4 chars visible). No external API calls — pure regex-based local ana...
 
-Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/smart_tools.py:428`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L428).
+Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/smart_tools.py:431`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L431).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -134,7 +134,7 @@ Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_reg
 
 Detect project license and collect dependency license information. 1. Reads LICENSE/LICENCE files in project root and detects type via keyword matching (MIT, Apache-2.0, GPL-3.0, BSD, ISC, MPL-2.0, Unlicense, etc.). 2. Reads license field from package.json, pyproject.toml, Cargo.toml, composer.json. 3. Collects dependency license info from node_modules where available. 4. Warns if any copyleft license (GPL/AGPL/LGPL) is detected. No external API calls — reads local files only.
 
-Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/smart_tools.py:452`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L452).
+Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/smart_tools.py:455`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L455).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -144,7 +144,7 @@ Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_reg
 
 Analyze documentation completeness and quality. Checks: - README quality (0-100): existence, length, key sections (install, usage, API, contributing) - API doc coverage: % of API routes with docstrings (from index) - Module doc coverage: % of top-level dirs with README or __init__.py docstring - Inline doc coverage: % of functions/classes with docstrings (from index) - Config docs: .env.example existence and comments - CHANGELOG and CONTRIBUTING existence Returns overall score (0-100) and act...
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:476`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L476).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:479`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L479).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -154,7 +154,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Generate a comprehensive project profile — a single structured snapshot of everything about a project: file structure, languages, API routes, data models, dependencies, symbol counts, module connections, entry points, infrastructure signals, git metadata, and detected architectural patterns. Works with or without a pre-built index (index adds API routes, models, symbols, and module graph; without it you still get filesystem, deps, git, and patterns). Use this to: - Onboard to an unfamiliar co...
 
-Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/smart_tools.py:503`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L503).
+Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/smart_tools.py:506`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L506).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -165,7 +165,7 @@ Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_reg
 
 Analyze a PR or changeset for risk. Parses git diff, detects risk factors (API routes, auth/security, database/migrations, config changes, breaking changes), cross-references with the code index to find affected files and symbols, and suggests test files to run. Risk score 0-100 with level: low (<20), medium (20-44), high (45-69), critical (70+). Modes: - No base, no staged: analyze uncommitted changes - base='main': analyze changes vs main branch - staged=true: only staged changes Returns: r...
 
-Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/smart_tools.py:536`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L536).
+Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/smart_tools.py:539`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L539).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -177,7 +177,7 @@ Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_reg
 
 Detect which frameworks a project uses and extract framework-specific conventions. Supported frameworks: - Python: FastAPI, Django, Flask - JS/TS: Next.js, Nuxt, React, Vue, Express, NestJS - Go: Gin, Echo, Fiber, Chi - Rust: Actix, Axum - Mobile: Flutter, React Native - Desktop: Tauri, Electron For each detected framework, returns: name, version, type (api/spa/ssr/mobile/desktop), conventions (ORM, auth, state management, routing), and entry points. No external API calls — reads local manife...
 
-Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/smart_tools.py:574`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L574).
+Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/smart_tools.py:577`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L577).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -187,7 +187,7 @@ Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_reg
 
 Walk the LSP-resolved incoming-call graph for a symbol, up to a bounded depth. Unlike `impact_analysis` (which uses the regex-built reverse_index), this traversal is type-aware — same-named functions in different modules do not collide. Requires an LSP server for the file's language (pyright / typescript-language-server / gopls / rust-analyzer). Returns empty results and does not raise when LSP is unavailable — in that case, fall back to `impact_analysis`. Use for: high-stakes refactors where...
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:602`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L602).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:605`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L605).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -202,7 +202,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Walk the project's import graph and flag edges that violate the layer rules declared in .flyto-rules.yaml (layers + cross_imports_deny). Use this before a refactor to catch architecture drift, or after generating code to verify the AI did not cross a forbidden layer. The 'audit' tool already includes this check — call check_layers directly only when you need a focused layer report. Supported languages: Python (.py), TypeScript/JavaScript (.ts .tsx .js .jsx .mjs .cjs), Vue (.vue), Go (.go — re...
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:635`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L635).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:638`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L638).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -212,7 +212,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Declare a project-specific taint source in .flyto-rules.yaml (taint.sources). Use this when the project has custom request/input channels that the default rules don't cover — e.g., a custom SDK wrapper, a message bus payload accessor, or a framework-specific getter. The next taint analysis run picks it up automatically. Built-in defaults (Flask/FastAPI/Express/Gin) keep working; your rule is merged on top.
 
-Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:661`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L661).
+Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:664`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L664).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -225,7 +225,7 @@ Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_r
 
 Declare a project-specific taint sink in .flyto-rules.yaml (taint.sinks). Use this to mark dangerous functions that must not receive untrusted data — e.g., a custom shell-out helper, a template renderer without auto-escape, or a deserializer. The taint engine flags any flow from a source to this sink (unless a sanitizer intervenes).
 
-Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:684`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L684).
+Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:687`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L687).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -239,7 +239,7 @@ Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_r
 
 Declare a project-specific sanitizer in .flyto-rules.yaml (taint.sanitizers). Use this when the project wraps or renames a sanitizer (e.g., custom escape helper, in-house `safe_html()`) so the taint engine stops reporting false positives on flows that go through it. `cleanses` lets you target specific vulnerability types (e.g., ['rce']) or use ['*'] to cleanse all.
 
-Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:707`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L707).
+Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:710`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L710).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -251,7 +251,7 @@ Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_r
 
 Show every source / sink / sanitizer declared in .flyto-rules.yaml (taint:). Built-in defaults are NOT included — this is the delta the project has added. Use before editing taint rules to see what's already in place, or to audit which custom sources/sinks the project has accumulated over time.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:732`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L732).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:735`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L735).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -261,7 +261,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Write a new layer definition into .flyto-rules.yaml. Use this to persist an architectural constraint the user just corrected — for example, when the user says 'ui must not import db directly', encode it here so every future agent and CI run enforces it automatically. Prefer either can_import (whitelist of allowed peer layers) or cannot_import (blacklist). Paths are glob patterns; first-matching layer wins for each file.
 
-Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:750`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L750).
+Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:753`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L753).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|

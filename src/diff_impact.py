@@ -115,6 +115,47 @@ def _run_git_diff(root: str, mode: str, base: str) -> str:
         return ""
 
 
+def _untracked_file_changes(root: str) -> Dict[str, List[Tuple[int, int]]]:
+    """Represent untracked source files as full-file ranges for unstaged impact."""
+    try:
+        result = subprocess.run(
+            [
+                "git", "-C", root, "ls-files", "--others",
+                "--exclude-standard", "-z",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=root,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return {}
+    if result.returncode != 0:
+        return {}
+
+    root_path = Path(root).resolve()
+    changes: Dict[str, List[Tuple[int, int]]] = {}
+    for raw_path in result.stdout.split("\0"):
+        if not raw_path:
+            continue
+        candidate = (root_path / raw_path).resolve()
+        try:
+            candidate.relative_to(root_path)
+        except ValueError:
+            continue
+        if not candidate.is_file():
+            continue
+        line_count = 1
+        try:
+            if candidate.stat().st_size <= 2_000_000:
+                text = candidate.read_text(encoding="utf-8", errors="replace")
+                line_count = max(1, len(text.splitlines()))
+        except OSError:
+            pass
+        changes[raw_path.replace("\\", "/")] = [(1, line_count)]
+    return changes
+
+
 def _parse_unified_diff(diff_text: str) -> Dict[str, List[Tuple[int, int]]]:
     """Parse unified diff (--unified=0) output to {file: [(start, end), ...]}.
 
@@ -245,6 +286,32 @@ def _classify_risk(caller_count: int, change_type: str) -> str:
         return "high"
 
 
+def _attach_evidence(
+    result: dict,
+    git_root: str,
+    mode: str,
+    base: str,
+    changed_paths: list[str],
+) -> dict:
+    """Attach bounded Git receipts without changing the public impact input."""
+    try:
+        from .tools import evidence_portfolio
+    except ImportError:
+        try:
+            from tools import evidence_portfolio
+        except ImportError:
+            return result
+    portfolio = evidence_portfolio.build_evidence_portfolio(
+        project=git_root,
+        mode=mode,
+        base=base,
+        changed_paths=changed_paths,
+    )
+    result["evidence_portfolio"] = portfolio
+    result["verdict"] = evidence_portfolio.build_impact_verdict(result, portfolio)
+    return result
+
+
 def impact_from_diff(
     mode: str = "unstaged",
     base: str = "",
@@ -276,18 +343,18 @@ def impact_from_diff(
 
     # Run git diff
     diff_text = _run_git_diff(git_root, mode, base)
-    if not diff_text:
-        return {
+    file_changes = _parse_unified_diff(diff_text) if diff_text else {}
+    if mode == "unstaged":
+        file_changes.update(_untracked_file_changes(git_root))
+    if not file_changes:
+        return _attach_evidence({
             "mode": mode,
             "total_changed_files": 0,
             "total_changed_symbols": 0,
             "symbols": [],
             "summary": {"high_risk": 0, "moderate_risk": 0, "low_risk": 0, "safe": 0},
             "next_action": "No changes detected." if mode == "unstaged" else f"No changes in {mode} mode.",
-        }
-
-    # Parse diff into file → hunk ranges
-    file_changes = _parse_unified_diff(diff_text)
+        }, git_root, mode, base, [])
 
     # Match hunks to indexed symbols
     changed_symbols = _match_symbols_to_changes(project, file_changes)
@@ -356,7 +423,7 @@ def impact_from_diff(
     else:
         next_action = "No indexed symbols affected by this diff."
 
-    return {
+    return _attach_evidence({
         "mode": mode,
         "base": base or "(default)",
         "total_changed_files": len(file_changes),
@@ -364,4 +431,4 @@ def impact_from_diff(
         "symbols": symbols_with_impact,
         "summary": risk_summary,
         "next_action": next_action,
-    }
+    }, git_root, mode, base, sorted(file_changes))

@@ -55,7 +55,9 @@ SMART_TOOLS: list = [
             "- Test file mapping for affected code\n"
             "- Semantic preflight for rename/move/delete/signature changes\n"
             "- Call path tracing (entry points → target)\n"
-            "- Relevance-scored references (recency, confidence, proximity)"
+            "- Relevance-scored references (recency, confidence, proximity)\n"
+            "Diff mode also returns a bounded, noise-filtered local Git evidence portfolio "
+            "and a concise verdict whose claims link to source receipts."
         ),
         "inputSchema": {
             "type": "object",
@@ -101,7 +103,8 @@ SMART_TOOLS: list = [
             "- Dead code < 80 → shows unreferenced symbols\n"
             "- Coverage < 80 → shows untested high-impact code\n\n"
             "Always includes git hotspots (high-churn + complex files) and stale symbols "
-            "(heavily referenced but not modified in 180+ days).\n"
+            "(heavily referenced but not modified in 180+ days), plus a bounded, "
+            "noise-filtered local Git evidence portfolio and evidence-linked verdict.\n"
             "Use 'focus' to force expansion of a specific dimension regardless of score."
         ),
         "inputSchema": {
