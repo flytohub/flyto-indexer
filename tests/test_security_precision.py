@@ -2,20 +2,20 @@
 
 from src.analyzer.security import SecurityScanner
 
+_FAKE_AWS_KEY = "AKIA" + "ABCDEFGHIJKLMNOP"
+
 
 def _scan(tmp_path, source: str):
     return SecurityScanner(tmp_path).scan_file("src/example.py", source)
 
 
 def test_detector_pattern_and_known_fake_assignments_are_not_findings(tmp_path):
-    issues = _scan(
-        tmp_path,
-        """
+    source = """
 SECRET_PATTERNS = [
     (r"AKIA[0-9A-Z]{16}", "AWS Access Key"),
 ]
 KNOWN_FAKE_SECRET_VALUES = {
-    "AKIAABCDEFGHIJKLMNOP",
+    "__FAKE_AWS_KEY__",
 }
 UNSAFE_FUNCTIONS = [
     (r"eval\\(", "eval()", "arbitrary execution"),
@@ -26,7 +26,10 @@ VULNERABILITY_RULES = [
 SINKS = {
     "rce": [("eval(", "critical", "avoid arbitrary execution")],
 }
-""",
+"""
+    issues = _scan(
+        tmp_path,
+        source.replace("__FAKE_AWS_KEY__", _FAKE_AWS_KEY),
     )
 
     assert issues == []
@@ -35,7 +38,7 @@ SINKS = {
 def test_real_secret_outside_detector_fixture_is_still_detected(tmp_path):
     issues = _scan(
         tmp_path,
-        'aws_access_key = "AKIAABCDEFGHIJKLMNOP"\n',
+        f'aws_access_key = "{_FAKE_AWS_KEY}"\n',
     )
 
     assert any(issue.category == "hardcoded_secret" for issue in issues)

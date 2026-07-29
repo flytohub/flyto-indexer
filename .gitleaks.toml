@@ -22,3 +22,12 @@ paths = [
 regexes = [
   '''AKIAI44QH8DHBR3WZLPQ''',
 ]
+
+[[allowlists]]
+description = "AWS-shaped precision fixture committed before runtime assembly"
+paths = [
+  '''tests/test_security_precision\.py''',
+]
+regexes = [
+  '''AKIAABCDEFGHIJKLMNOP''',
+]
