@@ -107,6 +107,31 @@ class TestConcurrentReindexSkips:
         assert len(skipped) >= 1, f"Expected at least one skip, got: {results}"
         assert len(ran) >= 1, f"Expected at least one run, got: {results}"
 
+    def test_live_reindex_does_not_reacquire_owned_lock(self):
+        import index_store
+        from tools.maintenance import _perform_live_reindex
+
+        result = {}
+
+        def run_reindex():
+            result["value"] = _perform_live_reindex(project="test-project")
+
+        empty_index = {
+            "projects": [],
+            "project_roots": {},
+        }
+        engine_module = MagicMock()
+        engine_module.IndexEngine = MagicMock()
+        with patch("tools.maintenance.load_index", return_value=empty_index), \
+             patch.dict("sys.modules", {"engine": engine_module}):
+            worker = threading.Thread(target=run_reindex, daemon=True)
+            worker.start()
+            worker.join(timeout=1)
+
+        assert not worker.is_alive(), "Live reindex deadlocked while invalidating caches"
+        assert result["value"]["reindexed"] == 0
+        assert not index_store._reindex_lock.locked()
+
 
 class TestConcurrentLoadIndex:
     """Multiple threads calling load_index() simultaneously."""

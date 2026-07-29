@@ -17,12 +17,14 @@ _MARKDOWN_COMPONENT_TAG_RE = re.compile(r"<([A-Z][A-Za-z0-9]*)\b")
 try:
     from ..index_store import (
         INDEX_DIR, load_index, load_project_map, get_symbol_content_text,
-        invalidate_caches, _get_session_store, _discover_index_dirs, _load_single_index,
+        invalidate_caches, _invalidate_caches_unlocked, _get_session_store,
+        _discover_index_dirs, _load_single_index,
     )
 except ImportError:
     from index_store import (
         INDEX_DIR, load_index, load_project_map, get_symbol_content_text,
-        invalidate_caches, _get_session_store, _discover_index_dirs, _load_single_index,
+        invalidate_caches, _invalidate_caches_unlocked, _get_session_store,
+        _discover_index_dirs, _load_single_index,
     )
 
 try:
@@ -762,7 +764,7 @@ def _perform_live_reindex_unlocked(project=None):
         except Exception as e:
             reindex_results.append({"project": proj, "error": str(e)})
 
-    invalidate_caches()
+    _invalidate_caches_unlocked()
     return {
         "reindexed": len([r for r in reindex_results if "error" not in r]),
         "errors": len([r for r in reindex_results if "error" in r]),
