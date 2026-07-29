@@ -64,15 +64,18 @@ COPY --from=build /wheels/*.whl /tmp/
 
 # Pin semgrep + checkov versions explicitly so the image is reproducible across
 # CI rebuilds. Update the pins when W2-BE-ADAPTERS tests are rerun against new
-# releases.
+# releases. Semgrep 1.170 declares MCP 1.23.3, which is affected by
+# CVE-2026-59950. MCP 1.29.0 preserves the v1 FastMCP layout used by Semgrep;
+# keep the tested security override exact until Semgrep updates its dependency.
 RUN pip install --upgrade pip "setuptools==83.0.0" \
     && pip install \
         /tmp/*.whl \
         "semgrep==1.170.0" \
         "checkov==3.3.8" \
         "protobuf>=6.33.5,<7" \
-    && pip install --upgrade "mcp>=1.28.1" \
+    && pip install --upgrade "mcp==1.29.0" \
     && rm -f /tmp/*.whl \
+    && python -c "from mcp.server.fastmcp import FastMCP; assert FastMCP" \
     && semgrep --version \
     && checkov --version
 
