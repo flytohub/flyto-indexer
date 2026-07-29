@@ -5,15 +5,31 @@ Usage:
     validate_changes(project="flyto-indexer", run_tests=True)
 """
 
-import subprocess
+import os
 import re
 import shlex
+import subprocess
 from pathlib import Path
 
 try:
     from ..index_store import load_index
 except ImportError:
     from index_store import load_index
+
+
+DEFAULT_PYTEST_TIMEOUT_SECONDS = 900
+MIN_PYTEST_TIMEOUT_SECONDS = 30
+MAX_PYTEST_TIMEOUT_SECONDS = 3600
+
+
+def _pytest_timeout_seconds() -> int:
+    """Return a bounded timeout suitable for full stress/subprocess suites."""
+    raw = os.environ.get("FLYTO_INDEXER_PYTEST_TIMEOUT", "").strip()
+    try:
+        configured = int(raw) if raw else DEFAULT_PYTEST_TIMEOUT_SECONDS
+    except ValueError:
+        configured = DEFAULT_PYTEST_TIMEOUT_SECONDS
+    return max(MIN_PYTEST_TIMEOUT_SECONDS, min(configured, MAX_PYTEST_TIMEOUT_SECONDS))
 
 
 def _run_ruff(project_root: str) -> dict:
@@ -86,17 +102,19 @@ def _run_pytest(project_root: str, test_path: str = None) -> dict:
     cmd = ["python", "-m", "pytest"]
     if test_path:
         cmd.extend(shlex.split(test_path))
-    else:
-        cmd.append(".")
+    # With no explicit target, let pytest honor testpaths from pyproject.toml,
+    # pytest.ini, tox.ini, or setup.cfg. Passing "." overrides that contract
+    # and can accidentally collect example scripts named test_*.py.
     cmd.extend(["-x", "--tb=short", "-q"])
 
     try:
+        timeout_seconds = _pytest_timeout_seconds()
         proc = subprocess.run(
             cmd,
             cwd=project_root,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=timeout_seconds,
         )
         output = (proc.stdout or "") + (proc.stderr or "")
         result["output"] = output[:3000]
@@ -132,7 +150,9 @@ def _run_pytest(project_root: str, test_path: str = None) -> dict:
         return result
     except subprocess.TimeoutExpired:
         result["status"] = "error"
-        result["output"] = "pytest timed out after 120 seconds"
+        result["output"] = (
+            f"pytest timed out after {_pytest_timeout_seconds()} seconds"
+        )
         return result
     except Exception as e:
         result["status"] = "error"

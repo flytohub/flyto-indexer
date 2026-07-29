@@ -245,6 +245,7 @@ def mcp_server(tmp_path_factory):
 
     env = os.environ.copy()
     env["FLYTO_INDEX_DIR"] = str(index_dir)
+    env["FLYTO_INDEXER_GRILL_DIR"] = str(index_dir / "grill-state")
     # Ensure Python can find the src package
     env["PYTHONPATH"] = str(REPO_ROOT)
 
@@ -434,6 +435,99 @@ class TestToolCalls:
         data = json.loads(content[0]["text"])
         project_names = [p["project"] for p in data.get("projects", [])]
         assert TEST_PROJECT in project_names
+
+    def test_task_grill_real_mcp_closed_loop(self, mcp_server):
+        """Run start → repository fact → answer → freeze through JSON-RPC."""
+        decisions = [
+            {
+                "id": "login_exists",
+                "kind": "fact",
+                "severity": "critical",
+                "question": "Is authentication implementation indexed?",
+                "recommendation": "Resolve it from repository evidence.",
+                "evidence_queries": ["login_user"],
+            },
+            {
+                "id": "failure_policy",
+                "kind": "decision",
+                "severity": "critical",
+                "prerequisites": ["login_exists"],
+                "question": "驗證失敗時應該怎麼處理？",
+                "recommendation": "Fail closed and preserve auditable evidence.",
+            },
+        ]
+        start_resp = _call(
+            mcp_server,
+            "tools/call",
+            {
+                "name": "task",
+                "arguments": {
+                    "action": "grill",
+                    "grill_action": "start",
+                    "description": "Harden authentication failure handling",
+                    "project": TEST_PROJECT,
+                    "decisions": decisions,
+                    "locale": "und",
+                },
+            },
+        )
+        started = json.loads(start_resp["result"]["content"][0]["text"])
+        assert started["resolved_from_code"] == ["login_exists"]
+        assert started["next_question"]["id"] == "failure_policy"
+        assert started["next_question"]["question"].startswith("驗證")
+
+        answer_resp = _call(
+            mcp_server,
+            "tools/call",
+            {
+                "name": "task",
+                "arguments": {
+                    "action": "grill",
+                    "grill_action": "answer",
+                    "grill_session_id": started["session_id"],
+                    "decision_id": "failure_policy",
+                    "accept_recommendation": True,
+                    "request_id": "mcp-e2e-answer-1",
+                },
+            },
+        )
+        answered = json.loads(answer_resp["result"]["content"][0]["text"])
+        assert answered["readiness"]["ready_to_freeze"] is True
+
+        freeze_resp = _call(
+            mcp_server,
+            "tools/call",
+            {
+                "name": "task",
+                "arguments": {
+                    "action": "grill",
+                    "grill_action": "freeze",
+                    "grill_session_id": started["session_id"],
+                },
+            },
+        )
+        frozen = json.loads(freeze_resp["result"]["content"][0]["text"])
+        assert frozen["pass"] is True
+        assert frozen["contract"]["status"] == "frozen"
+        assert len(frozen["contract"]["fingerprint"]) == 64
+
+        mutation_resp = _call(
+            mcp_server,
+            "tools/call",
+            {
+                "name": "task",
+                "arguments": {
+                    "action": "grill",
+                    "grill_action": "answer",
+                    "grill_session_id": started["session_id"],
+                    "decision_id": "failure_policy",
+                    "answer": "mutate frozen decision",
+                },
+            },
+        )
+        mutation = json.loads(mutation_resp["result"]["content"][0]["text"])
+        assert mutation["pass"] is False
+        assert "cannot answer a frozen" in mutation["error"]
 
     def test_verify_project(self, mcp_server, tmp_path):
         """verify runs the closed-loop gate through the MCP server."""

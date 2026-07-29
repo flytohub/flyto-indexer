@@ -50,6 +50,23 @@ def _load_json_object_arg(value: str | None, arg_name: str) -> dict | None:
     return data
 
 
+def _load_json_array_arg(value: str | None, arg_name: str) -> list | None:
+    """Parse a JSON array from an inline value or readable file path."""
+    if not value:
+        return None
+
+    raw = value.strip()
+    if not raw.startswith("["):
+        candidate = Path(value)
+        if candidate.exists():
+            raw = candidate.read_text(encoding="utf-8")
+
+    data = json.loads(raw)
+    if not isinstance(data, list):
+        raise ValueError(f"{arg_name} must be a JSON array")
+    return data
+
+
 def _collect_task_targets(targets: list[str] | None, target_groups: list[str] | None) -> list[str]:
     """Collect repeatable --target and comma-separated --targets values."""
     collected: list[str] = []
@@ -117,13 +134,13 @@ def main():
     # task
     task_parser = subparsers.add_parser(
         "task",
-        help="Run local task plan/gate/validate workflow",
+        help="Run local task grill/plan/gate/validate workflow",
         description=(
-            "Run the same plan, gate, and validate workflow exposed by the MCP "
+            "Run the same grill, plan, gate, and validate workflow exposed by the MCP "
             "task tool. Useful when a long-running MCP server has stale source."
         ),
     )
-    task_parser.add_argument("action", choices=["plan", "gate", "validate"], help="Task workflow action")
+    task_parser.add_argument("action", choices=["grill", "plan", "gate", "validate"], help="Task workflow action")
     task_parser.add_argument("--description", default="", help="Task description for plan")
     task_parser.add_argument("--target", action="append", default=[], help="Target file or symbol. Repeatable")
     task_parser.add_argument("--targets", action="append", default=[], help="Comma-separated target files or symbols")
@@ -134,6 +151,22 @@ def main():
     task_parser.add_argument("--next-phase", help="Gate phase to enter, e.g. inspect, assess, implement, verify")
     task_parser.add_argument("--test-path", help="Test file or directory for validate")
     task_parser.add_argument("--no-tests", action="store_true", help="Skip pytest during validate")
+    task_parser.add_argument(
+        "--grill-action",
+        choices=["start", "answer", "status", "freeze", "discard"],
+        default="start",
+        help="Grill session operation (default: start)",
+    )
+    task_parser.add_argument("--grill-session-id", help="Grill session to resume or attach to plan")
+    task_parser.add_argument("--decisions", help="Decision array as inline JSON or a JSON file")
+    task_parser.add_argument("--decision-id", help="Decision to answer")
+    task_parser.add_argument("--answer", help="Decision answer in any language")
+    task_parser.add_argument("--selected-option", help="Stable selected option ID")
+    task_parser.add_argument("--accept-recommendation", action="store_true", help="Use the recommended answer")
+    task_parser.add_argument("--mode", choices=["interactive", "batch"], default="interactive", help="Grill question mode")
+    task_parser.add_argument("--locale", default="und", help="BCP-47 language metadata (default: und)")
+    task_parser.add_argument("--max-questions", type=int, default=8, help="Batch/frontier limit (1-20)")
+    task_parser.add_argument("--request-id", help="Idempotency key for a grill answer")
 
     # context
     context_parser = subparsers.add_parser(
@@ -1016,12 +1049,13 @@ def cmd_describe(args):
 
 
 def cmd_task(args):
-    """Run local task plan/gate/validate workflow through smart_task."""
+    """Run local task grill/plan/gate/validate workflow through smart_task."""
     from .tools.smart import smart_task
 
     targets = _collect_task_targets(args.target, args.targets)
     task_contract = _load_json_object_arg(args.task_contract, "--task-contract")
     current_state = _load_json_object_arg(args.current_state, "--current-state")
+    decisions = _load_json_array_arg(args.decisions, "--decisions")
 
     if args.action == "gate":
         if task_contract is None:
@@ -1030,6 +1064,20 @@ def cmd_task(args):
             raise ValueError("task gate requires --current-state")
         if not args.next_phase:
             raise ValueError("task gate requires --next-phase")
+    if args.action == "grill":
+        if args.grill_action == "start" and not args.description.strip():
+            raise ValueError("task grill start requires --description")
+        if args.grill_action != "start" and not args.grill_session_id:
+            raise ValueError(
+                f"task grill {args.grill_action} requires --grill-session-id"
+            )
+        if args.grill_action == "answer":
+            if not args.decision_id:
+                raise ValueError("task grill answer requires --decision-id")
+            if not args.accept_recommendation and not args.answer:
+                raise ValueError(
+                    "task grill answer requires --answer or --accept-recommendation"
+                )
 
     result = smart_task(
         action=args.action,
@@ -1042,6 +1090,17 @@ def cmd_task(args):
         project=args.project,
         run_tests=not args.no_tests,
         test_path=args.test_path,
+        grill_action=args.grill_action,
+        grill_session_id=args.grill_session_id,
+        decisions=decisions,
+        decision_id=args.decision_id,
+        answer=args.answer,
+        selected_option=args.selected_option,
+        accept_recommendation=args.accept_recommendation,
+        mode=args.mode,
+        locale=args.locale,
+        max_questions=args.max_questions,
+        request_id=args.request_id,
     )
 
     should_fail = bool(result.get("error"))
@@ -1052,6 +1111,12 @@ def cmd_task(args):
             should_fail = True
         if result.get("pass") is False:
             should_fail = True
+    if (
+        args.action == "grill"
+        and args.grill_action == "freeze"
+        and result.get("pass") is False
+    ):
+        should_fail = True
 
     if should_fail:
         print(json.dumps(result, indent=2, ensure_ascii=False))
@@ -1120,10 +1185,10 @@ def cmd_tools(args):
         },
         {
             "name": "task",
-            "summary": "Run local plan, gate, or validate workflow with the latest source",
+            "summary": "Run local grill, plan, gate, or validate workflow with the latest source",
             "args": [
-                {"name": "action", "type": "string", "required": True, "description": "plan, gate, or validate"},
-                {"name": "--description", "type": "string", "required": False, "description": "Task description for plan"},
+                {"name": "action", "type": "string", "required": True, "description": "grill, plan, gate, or validate"},
+                {"name": "--description", "type": "string", "required": False, "description": "Task description for grill start or plan"},
                 {"name": "--target", "type": "string[]", "required": False, "description": "Target file or symbol. Repeatable"},
                 {"name": "--targets", "type": "string[]", "required": False, "description": "Comma-separated target files or symbols"},
                 {"name": "--intent", "type": "string", "required": False, "default": "refactor", "description": "refactor, bugfix, feature, cleanup, or migration"},
@@ -1133,10 +1198,24 @@ def cmd_tools(args):
                 {"name": "--next-phase", "type": "string", "required": False, "description": "Gate phase to enter"},
                 {"name": "--test-path", "type": "string", "required": False, "description": "Test path for validate"},
                 {"name": "--no-tests", "type": "boolean", "required": False, "default": False, "description": "Skip pytest during validate"},
+                {"name": "--grill-action", "type": "string", "required": False, "default": "start", "description": "start, answer, status, freeze, or discard"},
+                {"name": "--grill-session-id", "type": "string", "required": False, "description": "Session to resume or attach to plan"},
+                {"name": "--decisions", "type": "json[]|string", "required": False, "description": "Decision array or JSON file path"},
+                {"name": "--decision-id", "type": "string", "required": False, "description": "Frontier decision to answer"},
+                {"name": "--answer", "type": "string", "required": False, "description": "Decision answer in any language"},
+                {"name": "--selected-option", "type": "string", "required": False, "description": "Stable option ID"},
+                {"name": "--accept-recommendation", "type": "boolean", "required": False, "default": False, "description": "Accept recommended answer"},
+                {"name": "--mode", "type": "string", "required": False, "default": "interactive", "description": "interactive or batch"},
+                {"name": "--locale", "type": "string", "required": False, "default": "und", "description": "BCP-47 metadata"},
+                {"name": "--max-questions", "type": "integer", "required": False, "default": 8, "description": "Batch/frontier cap (1-20)"},
+                {"name": "--request-id", "type": "string", "required": False, "description": "Answer idempotency key"},
             ],
             "outputs": [],
             "side_effects": ["validate may run ruff and pytest"],
             "examples": [
+                "flyto-index task grill --grill-action start --description 'add robot adapter' --decisions decisions.json",
+                "flyto-index task grill --grill-action answer --grill-session-id grill_... --decision-id scope --accept-recommendation",
+                "flyto-index task grill --grill-action freeze --grill-session-id grill_...",
                 "flyto-index task plan --project flyto-engine --description 'split worker' --target cmd/worker/main.go",
                 "flyto-index task gate --next-phase apply_changes --task-contract contract.json --current-state state.json",
                 "flyto-index task validate --project flyto-indexer --test-path tests/test_cli_commands.py",

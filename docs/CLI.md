@@ -29,13 +29,18 @@ and `describe` to manage a file's semantic description. Use `profile`, `deps`,
 ## Change Planning
 
 ```bash
+flyto-index task grill --grill-action start \
+  --description "change token validation"
 flyto-index task plan --description "change token validation" --targets src/auth.py
 flyto-index pr-risk .
 flyto-index check . --max-affected 20
 ```
 
-`task` maintains local workflow state. `check` and `pr-risk` inspect Git
-changes; they do not push, merge, or modify remote state.
+`task grill` can resolve repository facts, ask dependency-ordered decisions,
+freeze a fingerprinted contract, and attach it to a later plan. `task`
+maintains local workflow state. `check` and `pr-risk` inspect Git changes; they
+do not push, merge, or modify remote state. The complete acceptance path is in
+the [Decision Grill test protocol](GRILL_TESTING.md).
 
 ## Security And Policy
 

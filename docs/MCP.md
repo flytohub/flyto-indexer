@@ -27,7 +27,7 @@ The server publishes a compact smart-tool surface. Start with:
 - `search` for code discovery;
 - `impact` before changing a symbol or diff;
 - `audit` for quality and security findings;
-- `task` for plan, gate, and validate phases;
+- `task` for decision grilling, plan, gate, and validate phases;
 - `structure` for APIs, dependencies, packages, types, and conventions;
 - `verify` or `verify_workspace` to close an implementation loop.
 
@@ -37,6 +37,13 @@ definitions remain in the registry for compatibility and internal dispatch but
 are not all advertised to clients. The generated
 [MCP tool reference](reference/mcp-tools.md) is authoritative for names,
 schemas, annotations, and source locations.
+
+`task(action="grill")` keeps the public tool surface stable while providing
+persistent start, answer, status, freeze, and discard operations. A frozen
+contract can be attached to `task(action="plan")`; `task(action="gate")`
+validates its fingerprint before the existing phase gates. See the
+[Decision Grill test protocol](GRILL_TESTING.md) for the real JSON-RPC closure
+test and failure expectations.
 
 ## Protocol Behavior
 

@@ -39,6 +39,24 @@ def mock_search():
 
 
 @pytest.fixture
+def mock_grill():
+    with patch("tools.smart._grill_mod") as m:
+        mod = MagicMock()
+        mod.run_grill.return_value = {
+            "session_id": "grill_aaaaaaaaaaaaaaaaaaaaaaaa",
+            "next_question": {"id": "scope"},
+        }
+        mod.validate_decision_contract.return_value = {"pass": True}
+        mod.export_decision_contract.return_value = {
+            "version": "flyto.decision-contract.v1",
+            "status": "frozen",
+            "fingerprint": "abc",
+        }
+        m.return_value = mod
+        yield mod
+
+
+@pytest.fixture
 def mock_refs():
     with patch("tools.smart._refs_mod") as m:
         mod = MagicMock()
@@ -307,6 +325,68 @@ class TestSmartTask:
     def test_unknown_action(self):
         result = smart_task(action="unknown")
         assert "error" in result
+
+    def test_grill_action_keeps_one_high_level_tool_surface(
+        self, mock_grill, mock_search
+    ):
+        decisions = [
+            {
+                "id": "scope",
+                "question": "Which scope?",
+                "recommendation": "Use the smallest safe scope.",
+            }
+        ]
+        result = smart_task(
+            action="grill",
+            grill_action="start",
+            description="robot adapter",
+            project="flyto-robotics",
+            decisions=decisions,
+            locale="zh-TW",
+        )
+
+        assert result["next_question"]["id"] == "scope"
+        kwargs = mock_grill.run_grill.call_args.kwargs
+        assert kwargs["operation"] == "start"
+        assert kwargs["decisions"] == decisions
+        assert kwargs["locale"] == "zh-TW"
+        evidence = kwargs["fact_resolver"]("adapter registry", "flyto-robotics")
+        assert evidence["results"]
+        mock_search.search_by_keyword.assert_called_once_with(
+            query="adapter registry",
+            max_results=5,
+            project="flyto-robotics",
+            include_content=False,
+        )
+
+    def test_plan_attaches_frozen_decision_contract(self, mock_task, mock_grill):
+        result = smart_task(
+            action="plan",
+            description="add adapter",
+            targets=["src/adapter.py"],
+            grill_session_id="grill_aaaaaaaaaaaaaaaaaaaaaaaa",
+        )
+
+        assert result["decision_contract"]["status"] == "frozen"
+        assert result["task_profile"]["decision_session_id"].startswith("grill_")
+        mock_grill.export_decision_contract.assert_called_once()
+
+    def test_gate_fails_before_legacy_gate_when_decision_contract_is_invalid(
+        self, mock_task, mock_grill
+    ):
+        mock_grill.validate_decision_contract.return_value = {
+            "pass": False,
+            "reason_codes": ["DECISION_CONTRACT_TAMPERED"],
+        }
+
+        result = smart_task(
+            action="gate",
+            task_contract={"decision_contract": {"status": "frozen"}},
+            next_phase="apply_changes",
+        )
+
+        assert result["pass"] is False
+        mock_task.task_gate_check.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

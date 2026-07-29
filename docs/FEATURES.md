@@ -19,6 +19,10 @@ while generated `.vitepress/cache/` dependency bundles are excluded.
 Dart coverage indexes Flutter widget classes, ordinary classes, constructors,
 methods, getters, top-level functions, enums, mixins, extensions, and import or
 export directives without requiring a local Dart SDK.
+C and common C++ coverage indexes function definitions, typedef structs,
+includes, and call edges across `.c`, `.h`, `.cc`, `.cpp`, `.cxx`, `.hh`,
+`.hpp`, and `.hxx` without requiring Clang. It is a dependency-free structural
+indexer, not a replacement for compiler-accurate preprocessing.
 
 Primary implementation: `src/engine.py`, `src/scanner/`, `src/indexer/`,
 `src/index_store.py`, and `src/tools/search.py`.
@@ -102,13 +106,65 @@ See [Configuration](CONFIGURATION.md#repository-policy) and the generated
 
 ## Task Workflow
 
-The `task` workflow supports planning, phase gates, and post-change validation.
-Plans include risk dimensions, constraints, affected locations, tests, and
-co-change evidence. Gates reject missing evidence rather than claiming a phase
-is complete.
+The `task` workflow supports evidence-backed decision interrogation, planning,
+phase gates, and post-change validation. `task(action="grill")` keeps the
+LLM-visible tool surface small while composing internal decision atoms:
+
+- `start` creates a persistent dependency-ordered decision tree.
+- repository-owned facts are resolved from indexed symbols and are never
+  redirected to the user;
+- repository evidence uses normalized exact matching by default so unrelated
+  fuzzy hits cannot satisfy a critical fact; controlled `all_terms` and
+  explicit trusted-resolver policies are available;
+- `answer` accepts only a currently reachable frontier decision and supports
+  idempotency keys;
+- interactive mode returns exactly one question and a recommendation; explicit
+  batch mode returns a bounded frontier;
+- `freeze` fails closed on unresolved blocking decisions or structured option
+  contradictions;
+- the frozen contract is fingerprinted, immutable, and attachable to
+  `task(action="plan")` through `grill_session_id`;
+- `task(action="gate")` validates the fingerprint and decision completeness
+  before applying the existing implementation gates.
+
+Questions and answers are arbitrary Unicode. `locale` is metadata only;
+decision IDs, severities, status, prerequisites, and evidence remain canonical,
+so the workflow is not tied to a model provider or language.
+
+Sessions default to `~/.flyto-indexer/grill` with private directory/file
+permissions. Set `FLYTO_INDEXER_GRILL_DIR` to select an explicit runtime state
+directory, including isolated CI and test environments.
+
+Example CLI sequence:
+
+```bash
+flyto-index task grill --grill-action start \
+  --description "Add a safe robot adapter" \
+  --decisions decisions.json
+
+flyto-index task grill --grill-action answer \
+  --grill-session-id grill_... \
+  --decision-id failure_policy \
+  --accept-recommendation \
+  --request-id answer-failure-policy-v1
+
+flyto-index task grill --grill-action freeze \
+  --grill-session-id grill_...
+
+flyto-index task plan \
+  --description "Add a safe robot adapter" \
+  --target src/adapter.py \
+  --grill-session-id grill_...
+```
+
+Plans continue to include risk dimensions, constraints, affected locations,
+tests, and co-change evidence. Gates reject missing evidence rather than
+claiming a phase is complete.
 
 Primary implementation: `src/tools/task_analysis.py`, `src/execution_guard.py`,
-and `src/tools/smart.py`.
+`src/tools/grill.py`, and `src/tools/smart.py`.
+The [Decision Grill test protocol](GRILL_TESTING.md) maps the real
+mixed-language fixture, CLI, MCP, persistence, concurrency, and tamper gates.
 
 ## Verification And Baselines
 

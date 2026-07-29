@@ -14,6 +14,8 @@ the path that matches the work you need to do.
 | Connect an AI coding client | [MCP guide](MCP.md) |
 | Configure scanning, policies, and LSP | [Configuration](CONFIGURATION.md) |
 | Run local and CI release gates | [Verification](VERIFICATION.md) |
+| Reproduce the Decision Grill closed loop | [Decision Grill test protocol](GRILL_TESTING.md) |
+| Review the dated Decision Grill evidence | [Decision Grill closure report](GRILL_TEST_REPORT_2026-07-29.md) |
 | Evaluate data handling and threats | [Security model](SECURITY_MODEL.md) |
 | Understand the design and evidence model | [Technical whitepaper](WHITEPAPER.md) |
 

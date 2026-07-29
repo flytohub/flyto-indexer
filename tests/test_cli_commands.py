@@ -469,6 +469,84 @@ class TestCLIDispatch:
         assert captured_call["intent"] == "refactor"
         assert captured_call["project"] == "flyto-engine"
 
+    def test_task_grill_dispatch_loads_decision_fixture(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """Grill CLI should pass structured, multilingual decisions to smart_task."""
+        decisions_path = tmp_path / "decisions.json"
+        decisions_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "id": "safety",
+                        "question": "遇到人時要怎麼處理？",
+                        "recommendation": "立即停止並請求人員確認。",
+                    }
+                ],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        captured_call = {}
+
+        def fake_smart_task(**kwargs):
+            captured_call.update(kwargs)
+            return {
+                "session_id": "grill_aaaaaaaaaaaaaaaaaaaaaaaa",
+                "next_question": kwargs["decisions"][0],
+            }
+
+        monkeypatch.setattr("src.tools.smart.smart_task", fake_smart_task)
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "flyto-index",
+                "task",
+                "grill",
+                "--grill-action",
+                "start",
+                "--description",
+                "機器人院內運送",
+                "--decisions",
+                str(decisions_path),
+                "--locale",
+                "zh-TW",
+                "--project",
+                "flyto-robotics",
+            ],
+        )
+
+        main()
+
+        data = json.loads(capsys.readouterr().out)
+        assert data["next_question"]["question"] == "遇到人時要怎麼處理？"
+        assert captured_call["action"] == "grill"
+        assert captured_call["grill_action"] == "start"
+        assert captured_call["locale"] == "zh-TW"
+
+    def test_task_grill_answer_requires_answer_or_recommendation(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "flyto-index",
+                "task",
+                "grill",
+                "--grill-action",
+                "answer",
+                "--grill-session-id",
+                "grill_aaaaaaaaaaaaaaaaaaaaaaaa",
+                "--decision-id",
+                "scope",
+            ],
+        )
+
+        with pytest.raises(SystemExit) as exc:
+            main()
+
+        assert exc.value.code == 1
+
     def test_task_gate_dispatch_loads_json_files_and_fails_closed(
         self, tmp_path, monkeypatch, capsys
     ):

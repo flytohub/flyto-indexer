@@ -452,6 +452,39 @@ Scores risk across 6 dimensions and generates an execution plan:
 Each step has pre-filled arguments — AI follows the data structure, not prompts.
 Server-side enforcement blocks skipping gates.
 
+### Decision Grill — resolve hidden decisions before the plan
+
+`task(action="grill")` adds a persistent pre-plan decision gate without adding
+another MCP tool for the LLM to choose. It resolves repository facts from the
+index, asks only reachable human decisions, returns one question plus a
+recommended answer in interactive mode, and blocks freezing until critical
+decisions and contradictions are closed.
+
+```text
+task(action="grill", grill_action="start", description="Add robot adapter")
+  → repository facts resolved from Python / TypeScript / C symbols
+  → one next_question + recommendation
+
+task(action="grill", grill_action="answer",
+     grill_session_id="grill_...", decision_id="failure_policy",
+     accept_recommendation=true, request_id="answer-v1")
+
+task(action="grill", grill_action="freeze",
+     grill_session_id="grill_...")
+  → immutable decision contract + SHA-256 fingerprint
+
+task(action="plan", grill_session_id="grill_...", ...)
+  → plan carries the frozen decision contract
+```
+
+Questions and answers can use any language. Stable IDs, prerequisites,
+severities, evidence, and fingerprints remain provider- and language-neutral.
+Repository-owned facts are never turned into questions for the user.
+Exact normalized evidence matching is the fail-closed default, so a merely
+similar fuzzy search result cannot silently resolve a critical fact. See the
+[closed-loop test protocol](docs/GRILL_TESTING.md) for the mixed Python,
+TypeScript, and C test data and acceptance matrix.
+
 ## Tools
 
 Five core tools cover the normal inspect-before-edit workflow. Focused smart
@@ -464,7 +497,7 @@ work through the granular compatibility surface.
 | `search` | "Find code by name or description" | Merges BM25 + semantic search, attaches callers and file context |
 | `impact` | "What breaks if I change this?" | References + blast radius + cross-project + test files in one call |
 | `audit` | "How healthy is this project?" | Health score (0-100), auto-expands weak dimensions, taint analysis, rules compliance |
-| `task` | "Plan, gate-check, or validate changes" | Risk scoring, execution plans, linter + tests |
+| `task` | "Interrogate, plan, gate-check, or validate changes" | Decision tree + evidence + fingerprint, risk scoring, execution plans, linter + tests |
 | `structure` | "Show me the project layout" | Projects, APIs, dependencies, type contracts |
 
 <details>
@@ -476,7 +509,8 @@ work through the granular compatibility surface.
 
 **`audit`** replaces: `code_health_score`, `security_scan`, `taint_analysis`, `rules_check`, `find_dead_code`, `find_complex_functions`, `find_duplicates`, `suggest_refactoring`, `find_stale_files`, `find_todos`, `coverage_gaps`
 
-**`task`** replaces: `analyze_task`, `task_gate_check`, `validate_changes`
+**`task`** replaces: separate decision-interview tooling, `analyze_task`,
+`task_gate_check`, and `validate_changes`
 
 **`structure`** replaces: `list_projects`, `list_apis`, `list_categories`, `dependency_graph`, `check_api_contracts`, `contract_drift`, `extract_type_schema`
 
@@ -495,6 +529,7 @@ schemas directly from the registries.
 | TypeScript/JS | Custom | Functions, classes, interfaces, types, API calls |
 | Vue | SFC | Components, composables, emits, props |
 | Dart | Token-aware | Flutter widgets, classes, constructors, methods, getters, functions, imports |
+| C/C++ | Token-aware | Function definitions, typedef structs, includes, call edges |
 | Go | Custom | Functions, structs, methods, interfaces, embeddings, type aliases, const/var, impl tracking |
 | Rust | Custom | Functions, structs, impl blocks, traits |
 | Java | Custom | Classes, methods, interfaces, annotations |

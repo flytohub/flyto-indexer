@@ -61,6 +61,14 @@ def _task_mod():
     return m
 
 
+def _grill_mod():
+    try:
+        from . import grill as m
+    except ImportError:
+        import grill as m
+    return m
+
+
 def _validation_mod():
     try:
         from . import validation as m
@@ -547,7 +555,7 @@ def smart_audit(project: str = None, focus: str = None) -> dict:
 # 4. task — plan / gate / validate workflow
 # ---------------------------------------------------------------------------
 
-def _task_plan(description, targets, intent, project):
+def _task_plan(description, targets, intent, project, grill_session_id=None):
     """Handle task action='plan': analyze task and attach co-change suggestions."""
     task = _task_mod()
     result = task.analyze_task(
@@ -562,6 +570,19 @@ def _task_plan(description, targets, intent, project):
                             target_files=targets, project=project)
         if isinstance(cochanges, dict) and cochanges.get("suggestions"):
             result["cochange_suggestions"] = cochanges
+    if isinstance(result, dict) and grill_session_id:
+        try:
+            decision_contract = _grill_mod().export_decision_contract(grill_session_id)
+        except ValueError as exc:
+            return {
+                "pass": False,
+                "decision": "blocked",
+                "error": str(exc),
+                "reason_codes": ["DECISION_CONTRACT_NOT_READY"],
+                "required_actions": ["complete_and_freeze_grill_session"],
+            }
+        result["decision_contract"] = decision_contract
+        result.setdefault("task_profile", {})["decision_session_id"] = grill_session_id
     return result
 
 
@@ -584,22 +605,60 @@ def smart_task(action: str, description: str = "", targets: list = None,
                intent: str = "refactor", task_contract: dict = None,
                next_phase: str = None, current_state: dict = None,
                project: str = None, run_tests: bool = True,
-               test_path: str = None) -> dict:
-    """Unified task workflow: plan, gate check, or validate."""
+               test_path: str = None, grill_action: str = "start",
+               grill_session_id: str = None, decisions: list = None,
+               decision_id: str = None, answer: str = None,
+               selected_option: str = None, accept_recommendation: bool = False,
+               mode: str = "interactive", locale: str = "und",
+               max_questions: int = 8, request_id: str = None) -> dict:
+    """Unified task workflow: grill, plan, gate check, or validate."""
+    if action == "grill":
+        return _grill_mod().run_grill(
+            operation=grill_action,
+            description=description,
+            project=project,
+            decisions=decisions,
+            mode=mode,
+            locale=locale,
+            max_questions=max_questions,
+            session_id=grill_session_id,
+            decision_id=decision_id,
+            answer=answer,
+            selected_option=selected_option,
+            accept_recommendation=accept_recommendation,
+            request_id=request_id,
+            fact_resolver=lambda query, scoped_project: _search_mod().search_by_keyword(
+                query=query,
+                max_results=5,
+                project=scoped_project,
+                include_content=False,
+            ),
+        )
+
     if action == "plan":
-        return _task_plan(description, targets, intent, project)
+        return _task_plan(description, targets, intent, project, grill_session_id)
 
     if action == "gate":
+        decision_gate = _grill_mod().validate_decision_contract(task_contract or {})
+        if not decision_gate.get("pass"):
+            return decision_gate
+        derived_state = dict(current_state or {})
+        if (task_contract or {}).get("decision_contract"):
+            derived_state["decision_completeness_done"] = True
         return _task_mod().task_gate_check(
             task_contract=task_contract or {},
             next_phase=next_phase,
-            current_state=current_state or {},
+            current_state=derived_state,
         )
 
     if action == "validate":
         return _task_validate(project, run_tests, test_path)
 
-    return {"error": f"Unknown action: {action}. Use 'plan', 'gate', or 'validate'."}
+    return {
+        "error": (
+            f"Unknown action: {action}. Use 'grill', 'plan', 'gate', or 'validate'."
+        )
+    }
 
 
 # ---------------------------------------------------------------------------

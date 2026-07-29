@@ -2,7 +2,26 @@
 
 ## Unreleased
 
+### Added
+- Added `task(action="grill")`, a persistent, provider- and language-neutral
+  pre-plan decision workflow with repository fact resolution, dependency
+  frontiers, one-question interactive mode, bounded batch mode, recommended
+  answers, idempotent updates, contradiction detection, readiness scoring,
+  fail-closed freeze, immutable fingerprinted contracts, and plan/gate
+  integration.
+- Added dependency-free C/C++ indexing for function definitions, typedef
+  structs, includes, and call edges across common source/header extensions.
+- Added multilingual robot workflow fixtures and deep unit, concurrency,
+  security, real-index, CLI, dispatch, persistence, tamper, and MCP subprocess
+  coverage for the complete decision loop.
+
 ### Fixed
+- Made repository fact resolution require normalized exact evidence by default,
+  added explicit alternate policies, serialized session updates across POSIX
+  processes, and made an incomplete CLI freeze exit non-zero.
+- Made validation respect pytest's configured `testpaths` instead of forcing
+  repository-wide collection, and raised the bounded full-suite timeout to a
+  configurable 900-second default.
 - Changed MCP task-gate guidance from terminating on `pass=false` to a
   required-actions remediation loop that re-runs the same gate until it passes,
   with regression coverage for initialize, plan, and tool metadata contracts.

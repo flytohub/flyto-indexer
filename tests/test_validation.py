@@ -11,6 +11,71 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.tools import validation
 
 
+def test_run_pytest_without_explicit_path_defers_to_pytest_config(
+    monkeypatch, tmp_path
+):
+    captured = {}
+
+    def fake_run(cmd, cwd, capture_output, text, timeout):
+        captured["cmd"] = cmd
+        return SimpleNamespace(returncode=0, stdout="1 passed in 0.01s", stderr="")
+
+    monkeypatch.setattr(validation.subprocess, "run", fake_run)
+
+    result = validation._run_pytest(str(tmp_path))
+
+    assert result["status"] == "pass"
+    assert captured["cmd"] == [
+        "python",
+        "-m",
+        "pytest",
+        "-x",
+        "--tb=short",
+        "-q",
+    ]
+
+
+def test_pytest_timeout_is_configurable_and_bounded(monkeypatch):
+    monkeypatch.setenv("FLYTO_INDEXER_PYTEST_TIMEOUT", "45")
+    assert validation._pytest_timeout_seconds() == 45
+
+    monkeypatch.setenv("FLYTO_INDEXER_PYTEST_TIMEOUT", "not-a-number")
+    assert (
+        validation._pytest_timeout_seconds()
+        == validation.DEFAULT_PYTEST_TIMEOUT_SECONDS
+    )
+
+    monkeypatch.setenv("FLYTO_INDEXER_PYTEST_TIMEOUT", "1")
+    assert validation._pytest_timeout_seconds() == validation.MIN_PYTEST_TIMEOUT_SECONDS
+
+    monkeypatch.setenv("FLYTO_INDEXER_PYTEST_TIMEOUT", "99999")
+    assert validation._pytest_timeout_seconds() == validation.MAX_PYTEST_TIMEOUT_SECONDS
+
+
+def test_run_pytest_honors_configured_testpaths(tmp_path):
+    tests_dir = tmp_path / "tests"
+    examples_dir = tmp_path / "examples"
+    tests_dir.mkdir()
+    examples_dir.mkdir()
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.pytest.ini_options]\ntestpaths = ["tests"]\n',
+        encoding="utf-8",
+    )
+    (tests_dir / "test_ok.py").write_text(
+        "def test_ok():\n    assert True\n",
+        encoding="utf-8",
+    )
+    (examples_dir / "test_example.py").write_text(
+        "def test_example(missing_fixture):\n    assert missing_fixture\n",
+        encoding="utf-8",
+    )
+
+    result = validation._run_pytest(str(tmp_path))
+
+    assert result["status"] == "pass"
+    assert result["passed"] == 1
+
+
 def test_run_pytest_splits_multiple_test_paths(monkeypatch, tmp_path):
     captured = {}
 

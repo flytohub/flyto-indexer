@@ -117,19 +117,24 @@ SMART_TOOLS: list = [
         "title": "Task Workflow",
         "annotations": {"readOnlyHint": False, "openWorldHint": False},
         "description": (
-            "Plan, gate-check, or validate code changes. Three actions:\n\n"
-            "1. plan: Analyze a task before starting — returns risk dimensions (0-10), "
+            "Interrogate, plan, gate-check, or validate code changes. Four actions:\n\n"
+            "1. grill: Build a persistent evidence-backed decision tree before planning. "
+            "Repository-owned facts are resolved from the code index; human decisions are "
+            "asked one at a time with a recommendation. Critical unresolved decisions and "
+            "contradictions fail closed. Operations: start, answer, status, freeze, discard.\n"
+            "2. plan: Analyze a task before starting — returns risk dimensions (0-10), "
             "constraints, step-by-step execution plan, and co-change suggestions "
-            "(files that historically change together with the targets).\n"
-            "2. gate: Check if you can proceed to the next phase. Server-side enforcement "
+            "(files that historically change together with the targets). A frozen "
+            "grill_session_id attaches a tamper-evident decision contract.\n"
+            "3. gate: Check if you can proceed to the next phase. Server-side enforcement "
             "blocks skipping required gates. If pass=false, execute every required_actions "
             "item, update current_state with the exact requested keys, and immediately "
             "re-run the same gate until pass=true. Do not enter the blocked phase or edit "
             "while the gate is false; ask the user only for unavailable authorization, "
             "required input, or an external state change.\n"
-            "3. validate: Run ruff linter + pytest after making changes. Auto-attaches "
+            "4. validate: Run ruff linter + pytest after making changes. Auto-attaches "
             "untested change analysis if tests fail.\n\n"
-            "Workflow: plan → (follow execution steps) → gate → (edit code) → validate"
+            "Workflow: grill → freeze → plan → gate → edit → validate"
         ),
         "inputSchema": {
             "type": "object",
@@ -137,7 +142,7 @@ SMART_TOOLS: list = [
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["plan", "gate", "validate"],
+                    "enum": ["grill", "plan", "gate", "validate"],
                     "description": "Workflow action to perform",
                 },
                 "description": {
@@ -179,6 +184,66 @@ SMART_TOOLS: list = [
                 "test_path": {
                     "type": "string",
                     "description": "(validate) Specific test file or directory",
+                },
+                "grill_action": {
+                    "type": "string",
+                    "enum": ["start", "answer", "status", "freeze", "discard"],
+                    "description": "(grill) Stateful operation. Default: start",
+                    "default": "start",
+                },
+                "grill_session_id": {
+                    "type": "string",
+                    "description": "(grill/plan) Session to resume or attach after freeze",
+                },
+                "decisions": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": (
+                        "(grill start) Optional provider/language-neutral decision nodes. "
+                        "Each node declares id, question, recommendation, severity, "
+                        "prerequisites, options, and optional repository evidence queries."
+                    ),
+                },
+                "decision_id": {
+                    "type": "string",
+                    "description": "(grill answer) Frontier decision to resolve",
+                },
+                "answer": {
+                    "type": "string",
+                    "description": "(grill answer) User decision in any language",
+                },
+                "selected_option": {
+                    "type": "string",
+                    "description": "(grill answer) Stable option ID for contradiction checks",
+                },
+                "accept_recommendation": {
+                    "type": "boolean",
+                    "description": "(grill answer) Accept the server recommendation as the answer",
+                    "default": False,
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["interactive", "batch"],
+                    "description": "(grill start) One-question or explicitly batched frontier",
+                    "default": "interactive",
+                },
+                "locale": {
+                    "type": "string",
+                    "description": (
+                        "(grill start) BCP-47 metadata only; questions may use any language"
+                    ),
+                    "default": "und",
+                },
+                "max_questions": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20,
+                    "description": "(grill start) Batch/frontier cap",
+                    "default": 8,
+                },
+                "request_id": {
+                    "type": "string",
+                    "description": "(grill answer) Idempotency key",
                 },
             },
         },

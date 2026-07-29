@@ -2,7 +2,7 @@
 
 # Python API Reference
 
-Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **1,704 declarations across 129 files**.
+Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **1,752 declarations across 131 files**.
 
 ## `analyze.py`
 
@@ -706,51 +706,52 @@ Every declared class, function, nested function, and method in the package, supp
 |---|---|---|---|
 | function | `def _ensure_gitignore(directory: Path)` | Create .gitignore with '*' in a generated directory if it doesn't exist. | [`src/cli.py:29`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L29) |
 | function | `def _load_json_object_arg(value: str \| None, arg_name: str) -> dict \| None` | Parse a JSON object from an inline value or readable file path. | [`src/cli.py:36`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L36) |
-| function | `def _collect_task_targets(targets: list&#91;str&#93; \| None, target_groups: list&#91;str&#93; \| None) -> list&#91;str&#93;` | Collect repeatable --target and comma-separated --targets values. | [`src/cli.py:53`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L53) |
-| function | `def main()` | The declaration and linked implementation are authoritative. | [`src/cli.py:68`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L68) |
-| function | `def cmd_init(args)` | Initialize .flyto/ in a project directory. | [`src/cli.py:604`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L604) |
-| function | `def _status_from_modern_index(project_path: Path) -> dict \| None` | Build status from the primary .flyto-index/index.json format. | [`src/cli.py:712`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L712) |
-| function | `def _status_from_legacy_flyto(project_path: Path) -> dict \| None` | Build status from the legacy .flyto/ metadata format. | [`src/cli.py:757`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L757) |
-| function | `def cmd_status(args)` | Show index status for a project. | [`src/cli.py:812`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L812) |
-| function | `def cmd_scan(args)` | Execute scan command | [`src/cli.py:868`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L868) |
-| function | `def cmd_impact(args)` | Execute impact command | [`src/cli.py:882`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L882) |
-| function | `def cmd_context(args)` | Execute context command | [`src/cli.py:895`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L895) |
-| function | `def cmd_outline(args)` | Execute outline command | [`src/cli.py:913`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L913) |
-| function | `def cmd_brief(args)` | Generate or display .flyto/brief.md. | [`src/cli.py:924`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L924) |
-| function | `def cmd_describe(args)` | Read or write file descriptions in .flyto/descriptions.jsonl. | [`src/cli.py:933`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L933) |
-| function | `def cmd_task(args)` | Run local task plan/gate/validate workflow through smart_task. | [`src/cli.py:1018`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1018) |
-| function | `def cmd_tools(args)` | Output structured JSON describing all available CLI commands and their arguments. | [`src/cli.py:1063`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1063) |
-| function | `def cmd_install_hook(args)` | Install or remove git post-commit hook for auto-reindexing. | [`src/cli.py:1312`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1312) |
-| function | `def cmd_demo(args)` | Quick 30-second value demo: scan + impact analysis. | [`src/cli.py:1379`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1379) |
-| function | `def _configure_mcp_settings(remove=False)` | Add or remove flyto-indexer from ~/.claude/settings.json. | [`src/cli.py:1512`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1512) |
-| function | `def cmd_setup(args)` | One command setup: scan + CLAUDE.md + MCP config. | [`src/cli.py:1559`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1559) |
-| function | `def cmd_setup_claude(args)` | Add flyto-indexer instructions to CLAUDE.md. | [`src/cli.py:1601`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1601) |
-| function | `def cmd_deps(args)` | Scan and list all external package dependencies. | [`src/cli.py:1654`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1654) |
-| function | `def cmd_profile(args)` | Generate a comprehensive project profile. | [`src/cli.py:1673`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1673) |
-| function | `def cmd_export(args)` | Export scan results as a single JSON bundle for flyto-engine upload. | [`src/cli.py:1693`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1693) |
-| function | `def cmd_secrets(args)` | Scan project for hardcoded secrets. | [`src/cli.py:1817`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1817) |
-| function | `def cmd_license(args)` | Detect project and dependency licenses. | [`src/cli.py:1843`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1843) |
-| function | `def cmd_docs(args)` | Analyze documentation coverage. | [`src/cli.py:1862`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1862) |
-| function | `def cmd_pr_risk(args)` | Analyze PR/changeset risk. | [`src/cli.py:1881`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1881) |
-| function | `def cmd_sbom(args)` | Export SBOM in CycloneDX 1.5 format. | [`src/cli.py:1903`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1903) |
-| function | `def cmd_framework(args)` | Detect project frameworks. | [`src/cli.py:1930`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1930) |
-| function | `def cmd_layers(args)` | Check architecture layer rules (import graph). | [`src/cli.py:1948`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1948) |
-| function | `def cmd_add_layer(args)` | Write a layer definition into .flyto-rules.yaml. | [`src/cli.py:1998`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1998) |
-| function | `def cmd_add_taint_source(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2021`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2021) |
-| function | `def cmd_add_taint_sink(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2037`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2037) |
-| function | `def cmd_add_taint_sanitizer(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2054`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2054) |
-| function | `def cmd_list_taint_rules(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2073`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2073) |
-| function | `def _detect_changed_files(args, engine, project_path)` | Detect changed files via git diff (if --base given) or index staleness. | [`src/cli.py:2084`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2084) |
-| function | `def _compute_symbol_impact(changed_files, engine)` | For each changed file, find symbols and compute impact chains. | [`src/cli.py:2122`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2122) |
-| function | `def _format_check_output(output, symbol_details, args)` | Print check results as JSON or human-readable text. | [`src/cli.py:2157`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2157) |
-| function | `def cmd_call_sites(args)` | Emit per-package call sites + local call graph as JSON. | [`src/cli.py:2184`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2184) |
-| function | `def cmd_agent_audit(args)` | AI-agent security policy audit. | [`src/cli.py:2258`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2258) |
-| function | `def cmd_taint(args)` | Analyze data flow / taint tracking. | [`src/cli.py:2305`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2305) |
-| function | `def cmd_check(args)` | CI-friendly impact check — exits non-zero when changes are risky. | [`src/cli.py:2394`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2394) |
-| function | `def cmd_verify(args)` | Run the no-external-dependency verification gate. | [`src/cli.py:2437`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2437) |
-| function | `def cmd_verify_workspace(args)` | Run verification across a workspace. | [`src/cli.py:2468`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2468) |
-| function | `def cmd_verify_baseline(args)` | Create, compare, or update a verification baseline. | [`src/cli.py:2495`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2495) |
-| function | `def _write_verify_report(path: str, content: str) -> None` | The declaration and linked implementation are authoritative. | [`src/cli.py:2523`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2523) |
+| function | `def _load_json_array_arg(value: str \| None, arg_name: str) -> list \| None` | Parse a JSON array from an inline value or readable file path. | [`src/cli.py:53`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L53) |
+| function | `def _collect_task_targets(targets: list&#91;str&#93; \| None, target_groups: list&#91;str&#93; \| None) -> list&#91;str&#93;` | Collect repeatable --target and comma-separated --targets values. | [`src/cli.py:70`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L70) |
+| function | `def main()` | The declaration and linked implementation are authoritative. | [`src/cli.py:85`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L85) |
+| function | `def cmd_init(args)` | Initialize .flyto/ in a project directory. | [`src/cli.py:637`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L637) |
+| function | `def _status_from_modern_index(project_path: Path) -> dict \| None` | Build status from the primary .flyto-index/index.json format. | [`src/cli.py:745`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L745) |
+| function | `def _status_from_legacy_flyto(project_path: Path) -> dict \| None` | Build status from the legacy .flyto/ metadata format. | [`src/cli.py:790`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L790) |
+| function | `def cmd_status(args)` | Show index status for a project. | [`src/cli.py:845`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L845) |
+| function | `def cmd_scan(args)` | Execute scan command | [`src/cli.py:901`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L901) |
+| function | `def cmd_impact(args)` | Execute impact command | [`src/cli.py:915`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L915) |
+| function | `def cmd_context(args)` | Execute context command | [`src/cli.py:928`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L928) |
+| function | `def cmd_outline(args)` | Execute outline command | [`src/cli.py:946`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L946) |
+| function | `def cmd_brief(args)` | Generate or display .flyto/brief.md. | [`src/cli.py:957`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L957) |
+| function | `def cmd_describe(args)` | Read or write file descriptions in .flyto/descriptions.jsonl. | [`src/cli.py:966`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L966) |
+| function | `def cmd_task(args)` | Run local task grill/plan/gate/validate workflow through smart_task. | [`src/cli.py:1051`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1051) |
+| function | `def cmd_tools(args)` | Output structured JSON describing all available CLI commands and their arguments. | [`src/cli.py:1128`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1128) |
+| function | `def cmd_install_hook(args)` | Install or remove git post-commit hook for auto-reindexing. | [`src/cli.py:1391`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1391) |
+| function | `def cmd_demo(args)` | Quick 30-second value demo: scan + impact analysis. | [`src/cli.py:1458`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1458) |
+| function | `def _configure_mcp_settings(remove=False)` | Add or remove flyto-indexer from ~/.claude/settings.json. | [`src/cli.py:1591`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1591) |
+| function | `def cmd_setup(args)` | One command setup: scan + CLAUDE.md + MCP config. | [`src/cli.py:1638`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1638) |
+| function | `def cmd_setup_claude(args)` | Add flyto-indexer instructions to CLAUDE.md. | [`src/cli.py:1680`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1680) |
+| function | `def cmd_deps(args)` | Scan and list all external package dependencies. | [`src/cli.py:1733`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1733) |
+| function | `def cmd_profile(args)` | Generate a comprehensive project profile. | [`src/cli.py:1752`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1752) |
+| function | `def cmd_export(args)` | Export scan results as a single JSON bundle for flyto-engine upload. | [`src/cli.py:1772`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1772) |
+| function | `def cmd_secrets(args)` | Scan project for hardcoded secrets. | [`src/cli.py:1896`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1896) |
+| function | `def cmd_license(args)` | Detect project and dependency licenses. | [`src/cli.py:1922`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1922) |
+| function | `def cmd_docs(args)` | Analyze documentation coverage. | [`src/cli.py:1941`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1941) |
+| function | `def cmd_pr_risk(args)` | Analyze PR/changeset risk. | [`src/cli.py:1960`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1960) |
+| function | `def cmd_sbom(args)` | Export SBOM in CycloneDX 1.5 format. | [`src/cli.py:1982`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1982) |
+| function | `def cmd_framework(args)` | Detect project frameworks. | [`src/cli.py:2009`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2009) |
+| function | `def cmd_layers(args)` | Check architecture layer rules (import graph). | [`src/cli.py:2027`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2027) |
+| function | `def cmd_add_layer(args)` | Write a layer definition into .flyto-rules.yaml. | [`src/cli.py:2077`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2077) |
+| function | `def cmd_add_taint_source(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2100`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2100) |
+| function | `def cmd_add_taint_sink(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2116`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2116) |
+| function | `def cmd_add_taint_sanitizer(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2133`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2133) |
+| function | `def cmd_list_taint_rules(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2152`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2152) |
+| function | `def _detect_changed_files(args, engine, project_path)` | Detect changed files via git diff (if --base given) or index staleness. | [`src/cli.py:2163`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2163) |
+| function | `def _compute_symbol_impact(changed_files, engine)` | For each changed file, find symbols and compute impact chains. | [`src/cli.py:2201`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2201) |
+| function | `def _format_check_output(output, symbol_details, args)` | Print check results as JSON or human-readable text. | [`src/cli.py:2236`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2236) |
+| function | `def cmd_call_sites(args)` | Emit per-package call sites + local call graph as JSON. | [`src/cli.py:2263`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2263) |
+| function | `def cmd_agent_audit(args)` | AI-agent security policy audit. | [`src/cli.py:2337`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2337) |
+| function | `def cmd_taint(args)` | Analyze data flow / taint tracking. | [`src/cli.py:2384`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2384) |
+| function | `def cmd_check(args)` | CI-friendly impact check — exits non-zero when changes are risky. | [`src/cli.py:2473`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2473) |
+| function | `def cmd_verify(args)` | Run the no-external-dependency verification gate. | [`src/cli.py:2516`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2516) |
+| function | `def cmd_verify_workspace(args)` | Run verification across a workspace. | [`src/cli.py:2547`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2547) |
+| function | `def cmd_verify_baseline(args)` | Create, compare, or update a verification baseline. | [`src/cli.py:2574`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2574) |
+| function | `def _write_verify_report(path: str, content: str) -> None` | The declaration and linked implementation are authoritative. | [`src/cli.py:2602`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2602) |
 
 ## `src/context/loader.py`
 
@@ -889,27 +890,27 @@ Every declared class, function, nested function, and method in the package, supp
 
 | Kind | Signature | Responsibility | Source |
 |---|---|---|---|
-| function | `def _ensure_gitignore(directory: Path)` | Create .gitignore with '*' in a generated directory if it doesn't exist. | [`src/engine.py:45`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L45) |
-| function | `def _ensure_ide_exclude(project_root: Path)` | Auto-exclude .flyto-index/ and .flyto/ from IDE file watchers. | [`src/engine.py:52`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L52) |
-| function | `def _ensure_jetbrains_exclude(ide_root: Path, project_root: Path)` | Add excludeFolder entries to JetBrains .iml files. | [`src/engine.py:72`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L72) |
-| function | `def _ensure_vscode_exclude(project_root: Path)` | Add entries to .vscode/settings.json files.watcherExclude. | [`src/engine.py:126`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L126) |
-| class | `class IndexEngine(DependencyResolverMixin, ReverseIndexMixin, SearchIndexMixin)` | Indexing engine | [`src/engine.py:162`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L162) |
-| method | `def IndexEngine.__init__(self, project_name: str, project_root: Path, index_dir: Optional&#91;Path&#93;=None)` | The declaration and linked implementation are authoritative. | [`src/engine.py:176`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L176) |
-| method | `def IndexEngine.scan(self, incremental: bool=True) -> dict` | Scan project, build/update index | [`src/engine.py:201`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L201) |
-| method | `def IndexEngine.impact(self, symbol_id: str, max_depth: int=3) -> dict` | Query impact scope | [`src/engine.py:318`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L318) |
-| method | `def IndexEngine.context(self, query: Optional&#91;str&#93;=None, paths: Optional&#91;list&#91;str&#93;&#93;=None, symbols: Optional&#91;list&#91;str&#93;&#93;=None, level: str='auto') -> dict` | Get context (from shallow to deep) | [`src/engine.py:363`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L363) |
-| method | `def IndexEngine.outline(self) -> str` | Generate project outline (L0) as text | [`src/engine.py:435`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L435) |
-| method | `def IndexEngine._get_scanner(self, file_path: Path)` | Get the matching scanner | [`src/engine.py:449`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L449) |
-| method | `def IndexEngine._resolve_symbol_id(self, symbol_id: str) -> Optional&#91;str&#93;` | Resolve symbol ID (supports short format) | [`src/engine.py:456`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L456) |
-| method | `def IndexEngine._symbol_ref(self, symbol_id: str) -> dict` | Return a stable symbol reference, even for reverse-index-only IDs. | [`src/engine.py:474`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L474) |
-| method | `def IndexEngine._file_symbol_for_manifest(self, manifest: FileManifest) -> Symbol` | Create the canonical file-level symbol used by import dependencies. | [`src/engine.py:502`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L502) |
-| method | `def IndexEngine._language_for_path(path: Path) -> str` | Infer a stable language label from a source path. | [`src/engine.py:519`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L519) |
-| method | `def IndexEngine._load_or_create_index(self) -> ProjectIndex` | Load or create index | [`src/engine.py:534`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L534) |
-| method | `def IndexEngine._create_empty_index(self) -> ProjectIndex` | Create empty index | [`src/engine.py:545`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L545) |
-| method | `def IndexEngine._update_index(self, result: ScanResult, changes=None)` | Update index | [`src/engine.py:552`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L552) |
-| method | `def IndexEngine._save_index(self, separate_content: bool=True)` | Save index | [`src/engine.py:593`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L593) |
-| method | `def IndexEngine._deserialize_index(self, data: dict) -> ProjectIndex` | Deserialize index from JSON | [`src/engine.py:642`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L642) |
-| method | `def IndexEngine._load_content_file(self, content_file: Path) -> dict` | Load content from JSONL file. | [`src/engine.py:705`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L705) |
+| function | `def _ensure_gitignore(directory: Path)` | Create .gitignore with '*' in a generated directory if it doesn't exist. | [`src/engine.py:46`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L46) |
+| function | `def _ensure_ide_exclude(project_root: Path)` | Auto-exclude .flyto-index/ and .flyto/ from IDE file watchers. | [`src/engine.py:53`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L53) |
+| function | `def _ensure_jetbrains_exclude(ide_root: Path, project_root: Path)` | Add excludeFolder entries to JetBrains .iml files. | [`src/engine.py:73`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L73) |
+| function | `def _ensure_vscode_exclude(project_root: Path)` | Add entries to .vscode/settings.json files.watcherExclude. | [`src/engine.py:127`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L127) |
+| class | `class IndexEngine(DependencyResolverMixin, ReverseIndexMixin, SearchIndexMixin)` | Indexing engine | [`src/engine.py:163`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L163) |
+| method | `def IndexEngine.__init__(self, project_name: str, project_root: Path, index_dir: Optional&#91;Path&#93;=None)` | The declaration and linked implementation are authoritative. | [`src/engine.py:177`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L177) |
+| method | `def IndexEngine.scan(self, incremental: bool=True) -> dict` | Scan project, build/update index | [`src/engine.py:203`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L203) |
+| method | `def IndexEngine.impact(self, symbol_id: str, max_depth: int=3) -> dict` | Query impact scope | [`src/engine.py:320`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L320) |
+| method | `def IndexEngine.context(self, query: Optional&#91;str&#93;=None, paths: Optional&#91;list&#91;str&#93;&#93;=None, symbols: Optional&#91;list&#91;str&#93;&#93;=None, level: str='auto') -> dict` | Get context (from shallow to deep) | [`src/engine.py:365`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L365) |
+| method | `def IndexEngine.outline(self) -> str` | Generate project outline (L0) as text | [`src/engine.py:437`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L437) |
+| method | `def IndexEngine._get_scanner(self, file_path: Path)` | Get the matching scanner | [`src/engine.py:451`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L451) |
+| method | `def IndexEngine._resolve_symbol_id(self, symbol_id: str) -> Optional&#91;str&#93;` | Resolve symbol ID (supports short format) | [`src/engine.py:458`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L458) |
+| method | `def IndexEngine._symbol_ref(self, symbol_id: str) -> dict` | Return a stable symbol reference, even for reverse-index-only IDs. | [`src/engine.py:476`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L476) |
+| method | `def IndexEngine._file_symbol_for_manifest(self, manifest: FileManifest) -> Symbol` | Create the canonical file-level symbol used by import dependencies. | [`src/engine.py:504`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L504) |
+| method | `def IndexEngine._language_for_path(path: Path) -> str` | Infer a stable language label from a source path. | [`src/engine.py:521`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L521) |
+| method | `def IndexEngine._load_or_create_index(self) -> ProjectIndex` | Load or create index | [`src/engine.py:536`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L536) |
+| method | `def IndexEngine._create_empty_index(self) -> ProjectIndex` | Create empty index | [`src/engine.py:547`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L547) |
+| method | `def IndexEngine._update_index(self, result: ScanResult, changes=None)` | Update index | [`src/engine.py:554`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L554) |
+| method | `def IndexEngine._save_index(self, separate_content: bool=True)` | Save index | [`src/engine.py:595`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L595) |
+| method | `def IndexEngine._deserialize_index(self, data: dict) -> ProjectIndex` | Deserialize index from JSON | [`src/engine.py:644`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L644) |
+| method | `def IndexEngine._load_content_file(self, content_file: Path) -> dict` | Load content from JSONL file. | [`src/engine.py:707`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L707) |
 
 ## `src/execution_guard.py`
 
@@ -1256,12 +1257,12 @@ Every declared class, function, nested function, and method in the package, supp
 | function | `def _get_prompt(name: str, arguments: dict=None) -> dict` | Generate a prompt template with pre-filled tool calls. | [`src/mcp_server.py:193`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L193) |
 | function | `def _read_resource(uri: str) -> dict` | Read an MCP resource by URI. | [`src/mcp_server.py:252`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L252) |
 | function | `def handle_request(request: dict)` | Handle MCP request. | [`src/mcp_server.py:301`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L301) |
-| function | `def _handle_tool_call(id: Any, params: dict)` | Handle tools/call — extracted from handle_request for clarity. | [`src/mcp_server.py:394`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L394) |
-| function | `def _build_analyze_task_directive(result: dict) -> str` | Build the enforcement directive appended to analyze_task results. | [`src/mcp_server.py:466`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L466) |
-| class | `class _IndexStoreProxy(_types.ModuleType)` | The declaration and linked implementation are authoritative. | [`src/mcp_server.py:588`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L588) |
-| function | `def _IndexStoreProxy.__setattr__(self, name, value)` | The declaration and linked implementation are authoritative. | [`src/mcp_server.py:589`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L589) |
-| function | `def _IndexStoreProxy.__getattr__(self, name)` | The declaration and linked implementation are authoritative. | [`src/mcp_server.py:595`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L595) |
-| function | `def main()` | MCP Server main program. | [`src/mcp_server.py:608`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L608) |
+| function | `def _handle_tool_call(id: Any, params: dict)` | Handle tools/call — extracted from handle_request for clarity. | [`src/mcp_server.py:398`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L398) |
+| function | `def _build_analyze_task_directive(result: dict) -> str` | Build the enforcement directive appended to analyze_task results. | [`src/mcp_server.py:470`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L470) |
+| class | `class _IndexStoreProxy(_types.ModuleType)` | The declaration and linked implementation are authoritative. | [`src/mcp_server.py:600`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L600) |
+| function | `def _IndexStoreProxy.__setattr__(self, name, value)` | The declaration and linked implementation are authoritative. | [`src/mcp_server.py:601`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L601) |
+| function | `def _IndexStoreProxy.__getattr__(self, name)` | The declaration and linked implementation are authoritative. | [`src/mcp_server.py:607`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L607) |
+| function | `def main()` | MCP Server main program. | [`src/mcp_server.py:620`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L620) |
 
 ## `src/models.py`
 
@@ -1556,6 +1557,17 @@ Every declared class, function, nested function, and method in the package, supp
 | method | `def ScanResult.add_file_result(self, symbols: list&#91;Symbol&#93;, dependencies: list&#91;Dependency&#93;, manifest: FileManifest)` | The declaration and linked implementation are authoritative. | [`src/scanner/base.py:77`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/base.py#L77) |
 | method | `def ScanResult.add_error(self, file_path: str, error: str)` | The declaration and linked implementation are authoritative. | [`src/scanner/base.py:87`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/base.py#L87) |
 | method | `def ScanResult.summary(self) -> dict` | The declaration and linked implementation are authoritative. | [`src/scanner/base.py:90`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/base.py#L90) |
+
+## `src/scanner/c.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| class | `class CScanner(BaseScanner)` | Extract C/C++ functions, typedef structs, includes, and call edges. | [`src/scanner/c.py:24`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/c.py#L24) |
+| method | `def CScanner.scan_file(self, file_path: Path, content: str) -> tuple&#91;list&#91;Symbol&#93;, list&#91;Dependency&#93;&#93;` | The declaration and linked implementation are authoritative. | [`src/scanner/c.py:60`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/c.py#L60) |
+| method | `def CScanner._scan_includes(self, content: str, file_source_id: str, dependencies: list&#91;Dependency&#93;) -> None` | The declaration and linked implementation are authoritative. | [`src/scanner/c.py:80`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/c.py#L80) |
+| method | `def CScanner._scan_typedef_structs(self, content: str, cleaned: str, rel_path: str, language: str, symbols: list&#91;Symbol&#93;) -> None` | The declaration and linked implementation are authoritative. | [`src/scanner/c.py:100`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/c.py#L100) |
+| method | `def CScanner._scan_functions(self, content: str, cleaned: str, rel_path: str, language: str, symbols: list&#91;Symbol&#93;, dependencies: list&#91;Dependency&#93;) -> None` | The declaration and linked implementation are authoritative. | [`src/scanner/c.py:150`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/c.py#L150) |
+| method | `def CScanner._split_params(raw: str) -> list&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/scanner/c.py:204`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/c.py#L204) |
 
 ## `src/scanner/dart.py`
 
@@ -1987,6 +1999,50 @@ Every declared class, function, nested function, and method in the package, supp
 | function | `def git_churn(path: Optional&#91;str&#93;=None, project: Optional&#91;str&#93;=None, days: int=90) -> dict` | Measure code churn (insertions/deletions) for a file or project. | [`src/tools/git_intel.py:410`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/git_intel.py#L410) |
 | function | `def git_risk_commits(project: Optional&#91;str&#93;=None, days: int=30, max_results: int=15) -> dict` | Score recent commits by risk heuristics. | [`src/tools/git_intel.py:531`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/git_intel.py#L531) |
 
+## `src/tools/grill.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| class | `class GrillError(ValueError)` | Fail-closed error returned by the public runner. | [`src/tools/grill.py:51`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L51) |
+| function | `def _now() -> str` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:55`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L55) |
+| function | `def _canonical_json(value: Any) -> str` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:59`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L59) |
+| function | `def _fingerprint(value: Any) -> str` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:63`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L63) |
+| function | `def _bounded_text(value: Any, field: str, *, required: bool=False, limit: int=4000) -> str` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:67`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L67) |
+| function | `def _state_dir() -> Path` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:80`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L80) |
+| function | `def _store_lock(path: Path) -> threading.RLock` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:87`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L87) |
+| function | `def _default_decisions(description: str) -> list&#91;dict&#93;` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:93`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L93) |
+| function | `def _normalize_option(raw: Any, decision_id: str, index: int) -> dict` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:141`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L141) |
+| function | `def _normalize_decisions(raw_decisions: Any, description: str) -> list&#91;dict&#93;` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:159`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L159) |
+| function | `def _validate_graph(decisions: list&#91;dict&#93;) -> None` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:240`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L240) |
+| function | `def _validate_graph.visit(node_id: str) -> None` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:251`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L251) |
+| function | `def _find_node(session: dict, decision_id: str) -> dict` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:266`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L266) |
+| function | `def _resolved_ids(session: dict) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:273`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L273) |
+| function | `def _frontier(session: dict) -> list&#91;dict&#93;` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:277`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L277) |
+| function | `def _repository_blockers(session: dict) -> list&#91;dict&#93;` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:288`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L288) |
+| function | `def _normalized_search_text(value: Any) -> str` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:299`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L299) |
+| function | `def _evidence_matches(item: dict, query: str, resolution_policy: str) -> bool` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:303`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L303) |
+| function | `def _compact_evidence(result: dict, query: str, resolution_policy: str) -> list&#91;dict&#93;` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:323`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L323) |
+| function | `def _resolve_facts(session: dict, fact_resolver: FactResolver \| None) -> None` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:348`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L348) |
+| function | `def _contradictions(session: dict) -> list&#91;dict&#93;` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:375`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L375) |
+| function | `def _readiness(session: dict) -> dict` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:404`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L404) |
+| function | `def _question_view(node: dict) -> dict` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:429`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L429) |
+| function | `def _response(session: dict) -> dict` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:448`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L448) |
+| class | `class GrillSessionStore` | Atomic JSON persistence for resumable decision sessions. | [`src/tools/grill.py:486`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L486) |
+| method | `def GrillSessionStore.__init__(self, root: Path \| None=None)` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:489`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L489) |
+| method | `def GrillSessionStore._path(self, session_id: str) -> Path` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:493`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L493) |
+| method | `def GrillSessionStore._ensure_private_root(self) -> None` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:498`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L498) |
+| method | `def GrillSessionStore.transaction(self, session_id: str) -> Iterator&#91;None&#93;` | Serialize a session update across threads and POSIX processes. | [`src/tools/grill.py:506`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L506) |
+| method | `def GrillSessionStore.load(self, session_id: str) -> dict` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:523`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L523) |
+| method | `def GrillSessionStore.save(self, session: dict) -> None` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:538`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L538) |
+| function | `def _new_session(description: str, project: str \| None, decisions: Any, mode: str, locale: str, max_questions: int) -> dict` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:556`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L556) |
+| function | `def _append_history(session: dict, event: dict) -> None` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:591`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L591) |
+| function | `def _answer(session: dict, decision_id: str, answer: Any, selected_option: str \| None, accept_recommendation: bool, request_id: str \| None) -> None` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:599`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L599) |
+| function | `def _contract_material(session: dict) -> dict` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:662`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L662) |
+| function | `def _freeze(session: dict) -> None` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:691`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L691) |
+| function | `def validate_decision_contract(task_contract: dict) -> dict` | Validate an embedded frozen decision contract without trusting caller state. | [`src/tools/grill.py:707`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L707) |
+| function | `def export_decision_contract(session_id: str, store: GrillSessionStore \| None=None) -> dict` | The declaration and linked implementation are authoritative. | [`src/tools/grill.py:749`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L749) |
+| function | `def run_grill(operation: str='start', *, description: str='', project: str \| None=None, decisions: Any=None, mode: str='interactive', locale: str='und', max_questions: int=8, session_id: str \| None=None, decision_id: str \| None=None, answer: Any=None, selected_option: str \| None=None, accept_recommendation: bool=False, request_id: str \| None=None, fact_resolver: FactResolver \| None=None, store: GrillSessionStore \| None=None) -> dict` | Run one deterministic step of a decision-interrogation session. | [`src/tools/grill.py:759`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L759) |
+
 ## `src/tools/maintenance.py`
 
 | Kind | Signature | Responsibility | Source |
@@ -2083,39 +2139,40 @@ Every declared class, function, nested function, and method in the package, supp
 | function | `def _info_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:40`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L40) |
 | function | `def _maint_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:48`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L48) |
 | function | `def _task_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:56`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L56) |
-| function | `def _validation_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:64`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L64) |
-| function | `def _quality_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:72`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L72) |
-| function | `def _diff_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:80`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L80) |
-| function | `def _git_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:88`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L88) |
-| function | `def _coverage_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:96`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L96) |
-| function | `def _type_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:104`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L104) |
-| function | `def _trace_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:112`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L112) |
-| function | `def _change_patterns_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:120`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L120) |
-| function | `def _conventions_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:128`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L128) |
-| function | `def _staleness_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:136`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L136) |
-| function | `def _context_budget_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:144`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L144) |
-| function | `def _data_flow_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:152`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L152) |
-| function | `def _enrich(label: str, func, *args, **kwargs)` | Call an enrichment function, log and swallow errors. | [`src/tools/smart.py:160`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L160) |
-| function | `def _truncate_list(data: dict, key: str, max_items: int=20)` | Truncate a list field in-place, adding has_more flag. | [`src/tools/smart.py:169`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L169) |
-| function | `def _truncate_structure_lists(result: dict)` | Truncate apis and categories in structure results for LLM consumption. | [`src/tools/smart.py:178`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L178) |
-| function | `def smart_search(query: str, project: str=None, include_content: bool=False) -> dict` | Run BM25 + semantic search, auto-attach callers and file context for top results. | [`src/tools/smart.py:220`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L220) |
-| function | `def _smart_impact_diff(mode: str, project: str=None) -> dict` | Handle diff mode: analyze uncommitted changes. | [`src/tools/smart.py:297`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L297) |
-| function | `def _impact_core_analysis(target: str, change_type: str) -> dict` | Run core reference and impact analysis for a target symbol. | [`src/tools/smart.py:319`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L319) |
-| function | `def _impact_auto_enrich(result: dict, target: str)` | Auto-attach cross-project impact, test file, call paths, and context budget. | [`src/tools/smart.py:348`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L348) |
-| function | `def _truncate_impact_results(result: dict)` | Cap impact result lists for LLM consumption. | [`src/tools/smart.py:386`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L386) |
-| function | `def _smart_impact_symbol(target: str, change_type: str='modify') -> dict` | Handle symbol mode: analyze specific target. | [`src/tools/smart.py:397`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L397) |
-| function | `def smart_impact(target: str=None, mode: str=None, change_type: str='modify', project: str=None) -> dict` | Analyze impact of a change. | [`src/tools/smart.py:408`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L408) |
-| function | `def _audit_reindex(project)` | Force incremental reindex before audit to ensure fresh data. | [`src/tools/smart.py:426`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L426) |
-| function | `def _audit_health_score(project)` | Compute health score, returns (result_dict, score_data, breakdown). | [`src/tools/smart.py:437`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L437) |
-| function | `def _determine_dimensions_to_expand(focus, breakdown)` | Determine which audit dimensions need expansion. | [`src/tools/smart.py:453`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L453) |
-| function | `def _expand_audit_dimensions(result, should_expand, focus, project)` | Expand weak dimensions with detailed findings. | [`src/tools/smart.py:464`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L464) |
-| function | `def _audit_supplementary(result, score_data, project)` | Add git hotspots, stale symbols, and refactoring suggestions. | [`src/tools/smart.py:502`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L502) |
-| function | `def _truncate_audit_results(result)` | Cap all list fields for LLM consumption. | [`src/tools/smart.py:520`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L520) |
-| function | `def smart_audit(project: str=None, focus: str=None) -> dict` | Code health audit. | [`src/tools/smart.py:532`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L532) |
-| function | `def _task_plan(description, targets, intent, project)` | Handle task action='plan': analyze task and attach co-change suggestions. | [`src/tools/smart.py:550`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L550) |
-| function | `def _task_validate(project, run_tests, test_path)` | Handle task action='validate': run validation and attach untested changes on failure. | [`src/tools/smart.py:568`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L568) |
-| function | `def smart_task(action: str, description: str='', targets: list=None, intent: str='refactor', task_contract: dict=None, next_phase: str=None, current_state: dict=None, project: str=None, run_tests: bool=True, test_path: str=None) -> dict` | Unified task workflow: plan, gate check, or validate. | [`src/tools/smart.py:583`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L583) |
-| function | `def smart_structure(project: str=None, focus: str=None, symbol_id: str=None, path: str=None) -> dict` | Project structure overview. | [`src/tools/smart.py:609`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L609) |
+| function | `def _grill_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:64`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L64) |
+| function | `def _validation_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:72`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L72) |
+| function | `def _quality_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:80`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L80) |
+| function | `def _diff_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:88`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L88) |
+| function | `def _git_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:96`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L96) |
+| function | `def _coverage_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:104`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L104) |
+| function | `def _type_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:112`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L112) |
+| function | `def _trace_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:120`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L120) |
+| function | `def _change_patterns_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:128`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L128) |
+| function | `def _conventions_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:136`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L136) |
+| function | `def _staleness_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:144`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L144) |
+| function | `def _context_budget_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:152`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L152) |
+| function | `def _data_flow_mod()` | The declaration and linked implementation are authoritative. | [`src/tools/smart.py:160`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L160) |
+| function | `def _enrich(label: str, func, *args, **kwargs)` | Call an enrichment function, log and swallow errors. | [`src/tools/smart.py:168`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L168) |
+| function | `def _truncate_list(data: dict, key: str, max_items: int=20)` | Truncate a list field in-place, adding has_more flag. | [`src/tools/smart.py:177`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L177) |
+| function | `def _truncate_structure_lists(result: dict)` | Truncate apis and categories in structure results for LLM consumption. | [`src/tools/smart.py:186`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L186) |
+| function | `def smart_search(query: str, project: str=None, include_content: bool=False) -> dict` | Run BM25 + semantic search, auto-attach callers and file context for top results. | [`src/tools/smart.py:228`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L228) |
+| function | `def _smart_impact_diff(mode: str, project: str=None) -> dict` | Handle diff mode: analyze uncommitted changes. | [`src/tools/smart.py:305`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L305) |
+| function | `def _impact_core_analysis(target: str, change_type: str) -> dict` | Run core reference and impact analysis for a target symbol. | [`src/tools/smart.py:327`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L327) |
+| function | `def _impact_auto_enrich(result: dict, target: str)` | Auto-attach cross-project impact, test file, call paths, and context budget. | [`src/tools/smart.py:356`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L356) |
+| function | `def _truncate_impact_results(result: dict)` | Cap impact result lists for LLM consumption. | [`src/tools/smart.py:394`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L394) |
+| function | `def _smart_impact_symbol(target: str, change_type: str='modify') -> dict` | Handle symbol mode: analyze specific target. | [`src/tools/smart.py:405`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L405) |
+| function | `def smart_impact(target: str=None, mode: str=None, change_type: str='modify', project: str=None) -> dict` | Analyze impact of a change. | [`src/tools/smart.py:416`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L416) |
+| function | `def _audit_reindex(project)` | Force incremental reindex before audit to ensure fresh data. | [`src/tools/smart.py:434`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L434) |
+| function | `def _audit_health_score(project)` | Compute health score, returns (result_dict, score_data, breakdown). | [`src/tools/smart.py:445`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L445) |
+| function | `def _determine_dimensions_to_expand(focus, breakdown)` | Determine which audit dimensions need expansion. | [`src/tools/smart.py:461`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L461) |
+| function | `def _expand_audit_dimensions(result, should_expand, focus, project)` | Expand weak dimensions with detailed findings. | [`src/tools/smart.py:472`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L472) |
+| function | `def _audit_supplementary(result, score_data, project)` | Add git hotspots, stale symbols, and refactoring suggestions. | [`src/tools/smart.py:510`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L510) |
+| function | `def _truncate_audit_results(result)` | Cap all list fields for LLM consumption. | [`src/tools/smart.py:528`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L528) |
+| function | `def smart_audit(project: str=None, focus: str=None) -> dict` | Code health audit. | [`src/tools/smart.py:540`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L540) |
+| function | `def _task_plan(description, targets, intent, project, grill_session_id=None)` | Handle task action='plan': analyze task and attach co-change suggestions. | [`src/tools/smart.py:558`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L558) |
+| function | `def _task_validate(project, run_tests, test_path)` | Handle task action='validate': run validation and attach untested changes on failure. | [`src/tools/smart.py:589`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L589) |
+| function | `def smart_task(action: str, description: str='', targets: list=None, intent: str='refactor', task_contract: dict=None, next_phase: str=None, current_state: dict=None, project: str=None, run_tests: bool=True, test_path: str=None, grill_action: str='start', grill_session_id: str=None, decisions: list=None, decision_id: str=None, answer: str=None, selected_option: str=None, accept_recommendation: bool=False, mode: str='interactive', locale: str='und', max_questions: int=8, request_id: str=None) -> dict` | Unified task workflow: grill, plan, gate check, or validate. | [`src/tools/smart.py:604`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L604) |
+| function | `def smart_structure(project: str=None, focus: str=None, symbol_id: str=None, path: str=None) -> dict` | Project structure overview. | [`src/tools/smart.py:668`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L668) |
 
 ## `src/tools/staleness.py`
 
@@ -2210,9 +2267,10 @@ Every declared class, function, nested function, and method in the package, supp
 
 | Kind | Signature | Responsibility | Source |
 |---|---|---|---|
-| function | `def _run_ruff(project_root: str) -> dict` | Run ruff check on project root. | [`src/tools/validation.py:19`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L19) |
-| function | `def _run_pytest(project_root: str, test_path: str=None) -> dict` | Run pytest on project root. | [`src/tools/validation.py:76`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L76) |
-| function | `def validate_changes(project: str=None, run_tests: bool=True, test_path: str=None) -> dict` | Run code quality checks (ruff) and tests (pytest) on a project. | [`src/tools/validation.py:143`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L143) |
+| function | `def _pytest_timeout_seconds() -> int` | Return a bounded timeout suitable for full stress/subprocess suites. | [`src/tools/validation.py:25`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L25) |
+| function | `def _run_ruff(project_root: str) -> dict` | Run ruff check on project root. | [`src/tools/validation.py:35`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L35) |
+| function | `def _run_pytest(project_root: str, test_path: str=None) -> dict` | Run pytest on project root. | [`src/tools/validation.py:92`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L92) |
+| function | `def validate_changes(project: str=None, run_tests: bool=True, test_path: str=None) -> dict` | Run code quality checks (ruff) and tests (pytest) on a project. | [`src/tools/validation.py:163`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L163) |
 
 ## `src/verify.py`
 

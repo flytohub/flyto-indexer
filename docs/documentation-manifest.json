@@ -38,8 +38,8 @@
     {
       "id": "task-and-verification",
       "description": "Owns task planning and phase gates, repository and workspace verification, baselines, PR risk, test mapping, and structured release evidence.",
-      "paths": ["src/tools/task_analysis.py", "src/execution_guard.py", "src/verify.py", "src/pr_analyzer.py", "src/test_mapper.py", "src/tools/smart.py"],
-      "documentation": ["docs/FEATURES.md#task-workflow", "docs/FEATURES.md#verification-and-baselines", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"]
+      "paths": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/execution_guard.py", "src/verify.py", "src/pr_analyzer.py", "src/test_mapper.py", "src/tools/smart.py"],
+      "documentation": ["docs/FEATURES.md#task-workflow", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/FEATURES.md#verification-and-baselines", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"]
     },
     {
       "id": "cli-mcp-http-interfaces",
@@ -100,10 +100,10 @@
       "title": "Task and release gates",
       "kind": "workflow",
       "status": "active",
-      "description": "Produces task plans, enforces phase evidence, validates changes, verifies repositories and workspaces, and compares reviewed baselines.",
-      "source": ["src/tools/task_analysis.py", "src/execution_guard.py", "src/verify.py", "src/tools/smart.py"],
-      "documentation": ["docs/FEATURES.md#task-workflow", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"],
-      "tests": ["tests/test_task_analysis.py", "tests/test_verify.py", "tests/test_validation.py"]
+      "description": "Resolves evidence-backed decisions, produces task plans, enforces phase evidence, validates changes, verifies repositories and workspaces, and compares reviewed baselines.",
+      "source": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/execution_guard.py", "src/verify.py", "src/tools/smart.py"],
+      "documentation": ["docs/FEATURES.md#task-workflow", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"],
+      "tests": ["tests/test_grill.py", "tests/test_grill_deep.py", "tests/test_grill_real_data.py", "tests/test_grill_cli_e2e.py", "tests/test_task_analysis.py", "tests/test_verify.py", "tests/test_validation.py"]
     },
     {
       "id": "command-line-interface",

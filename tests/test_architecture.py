@@ -53,6 +53,7 @@ class TestDependencyBoundary:
         "contextlib", "traceback", "argparse", "datetime", "uuid",
         "string", "struct", "base64", "signal", "inspect", "importlib",
         "unittest", "pprint", "csv", "glob", "stat", "platform", "shlex",
+        "fcntl",
         "xml.etree.ElementTree", "xml.etree",
         "sqlite3",
     }
@@ -96,7 +97,7 @@ class TestDependencyBoundary:
         "smart", "search", "references", "task_analysis", "code_info",
         "maintenance", "data_flow", "trace", "validation", "conventions",
         "coverage_intel", "git_intel", "staleness", "change_patterns",
-        "context_budget", "type_contracts",
+        "context_budget", "type_contracts", "grill",
         "python", "typescript", "go", "vue", "java", "rust", "dart",
     }
 
@@ -121,9 +122,28 @@ class TestDependencyBoundary:
                     for alias in node.names:
                         results.append((alias.name.split(".")[0], node.lineno, guarded))
                 elif node.module:
-                    root = node.module.split(".")[0]
+                    # AST keeps the module name for ``from .c`` and
+                    # ``from ..tools import grill``. Preserve their relative
+                    # identity instead of misclassifying c/grill as external.
+                    root = "" if node.level else node.module.split(".")[0]
                     results.append((root, node.lineno, guarded))
         return results
+
+    def test_relative_imports_remain_internal(self, tmp_path):
+        module = tmp_path / "relative_imports.py"
+        module.write_text(
+            "from .c import CScanner\n"
+            "from ..tools import grill\n"
+            "import fcntl\n"
+            "import third_party_example\n",
+            encoding="utf-8",
+        )
+
+        imports = [name for name, _line, _guarded in self._extract_imports(module)]
+
+        assert imports == ["", "", "fcntl", "third_party_example"]
+        assert "fcntl" in self.STDLIB_ALLOWLIST
+        assert "third_party_example" not in self.STDLIB_ALLOWLIST
 
     def _is_guarded(self, tree: ast.AST, target: ast.AST) -> bool:
         """Check if an import is guarded (inside try/except OR inside a function body).

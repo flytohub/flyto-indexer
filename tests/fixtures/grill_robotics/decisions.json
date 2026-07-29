@@ -1,0 +1,52 @@
+[
+  {
+    "id": "estop_implementation",
+    "kind": "fact",
+    "severity": "critical",
+    "blocking": true,
+    "question": "Is there a deterministic emergency-stop implementation?",
+    "recommendation": "Resolve this from the indexed repository instead of asking the user.",
+    "evidence_queries": ["emergency_stop"],
+    "resolution_policy": "exact_match"
+  },
+  {
+    "id": "adapter_contract",
+    "kind": "fact",
+    "severity": "high",
+    "blocking": true,
+    "question": "Is there a robot adapter capability contract?",
+    "recommendation": "Resolve the adapter interface from indexed symbols.",
+    "evidence_queries": ["RobotAdapter"],
+    "resolution_policy": "exact_match"
+  },
+  {
+    "id": "execution_policy",
+    "kind": "decision",
+    "severity": "critical",
+    "blocking": true,
+    "prerequisites": ["estop_implementation", "adapter_contract"],
+    "question": "LLM 信心不足時，機器人應該怎麼處理？",
+    "recommendation": "停止移動、保存證據，並請求人員確認；不得猜測馬達控制。",
+    "rationale": "這是產品安全政策，不能由程式碼或索引替使用者決定。"
+  },
+  {
+    "id": "route_policy",
+    "kind": "decision",
+    "severity": "high",
+    "blocking": true,
+    "prerequisites": ["execution_policy"],
+    "question": "How should blue, yellow, and purple route segments be composed?",
+    "recommendation": "Compile them into ordered, validated capability steps with a stop condition.",
+    "rationale": "The route is a workflow, not direct LLM motor output."
+  },
+  {
+    "id": "verification_evidence",
+    "kind": "decision",
+    "severity": "high",
+    "blocking": true,
+    "prerequisites": ["route_policy"],
+    "question": "Welche Nachweise muss das Freigabe-Gate verlangen?",
+    "recommendation": "Require unit, integration, MCP subprocess, persistence, tamper, and multilingual evidence.",
+    "rationale": "Question text is intentionally multilingual; canonical IDs remain language neutral."
+  }
+]

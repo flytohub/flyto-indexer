@@ -138,7 +138,7 @@ class TestEngineInit:
         project_dir.mkdir()
         engine = IndexEngine("test", project_dir, tmp_path / ".index")
 
-        assert len(engine.scanners) == 7
+        assert len(engine.scanners) == 8
         scanner_types = [type(s).__name__ for s in engine.scanners]
         assert "PythonScanner" in scanner_types
         assert "TypeScriptScanner" in scanner_types
@@ -250,6 +250,27 @@ class TestEngineScan:
         assert result["files_scanned"] >= 1
         assert result["symbols_found"] >= 2  # greet and add
         assert result["errors"] == 0
+
+    def test_scan_c_project_exposes_safety_symbols(self, tmp_path):
+        """C safety primitives should be available to repository fact resolution."""
+        engine = _make_engine(
+            tmp_path,
+            {
+                "safety.c": (
+                    "#include <stdbool.h>\n"
+                    "void emergency_stop(bool *enabled) {\n"
+                    "    if (enabled != 0) { *enabled = false; }\n"
+                    "}\n"
+                ),
+            },
+        )
+
+        result = engine.scan(incremental=False)
+        names = {symbol.name for symbol in engine.index.symbols.values()}
+
+        assert result["errors"] == 0
+        assert "emergency_stop" in names
+        assert result["symbols_found"] >= 1
 
     def test_scan_returns_correct_structure(self, tmp_path):
         """scan() returns dict with expected keys."""

@@ -72,6 +72,24 @@ class TestMCPTools:
         assert "re-run the same gate until pass=true" in description
         assert "pass=false, STOP" not in description
 
+    def test_task_tool_exposes_grill_without_expanding_tool_count(self):
+        from tool_registry import SMART_TOOLS
+
+        task_tool = next(tool for tool in SMART_TOOLS if tool["name"] == "task")
+        properties = task_tool["inputSchema"]["properties"]
+
+        assert "grill" in properties["action"]["enum"]
+        assert properties["grill_action"]["enum"] == [
+            "start",
+            "answer",
+            "status",
+            "freeze",
+            "discard",
+        ]
+        assert properties["locale"]["default"] == "und"
+        assert properties["max_questions"]["maximum"] == 20
+        assert len(SMART_TOOLS) == 20
+
 
 # ===========================================================================
 # INDEXER_TOOL_NAMES (auto-derived)
