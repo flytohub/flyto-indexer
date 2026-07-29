@@ -168,9 +168,9 @@ MCP_TOOLS: list = [
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
         "description": (
             "Preview the impact of editing a symbol before making changes. "
-            "Shows all call sites with actual code lines, risk assessment, and suggestions. "
-            "Use this BEFORE renaming, deleting, or changing a function/class signature. "
-            "change_type: rename, delete, signature_change, add_param, modify."
+            "Shows exact symbol identity, same-name ambiguity, call sites, unresolved "
+            "dynamic references, required update/test sites, and risk. "
+            "Use before a rename, move, delete, or signature change."
         ),
         "inputSchema": {
             "type": "object",
@@ -181,9 +181,16 @@ MCP_TOOLS: list = [
                 },
                 "change_type": {
                     "type": "string",
-                    "enum": ["rename", "delete", "signature_change", "add_param", "modify"],
+                    "enum": [
+                        "rename",
+                        "move",
+                        "delete",
+                        "signature_change",
+                        "add_param",
+                        "modify",
+                    ],
                     "default": "modify",
-                    "description": "Type of change: rename, delete, signature_change, add_param, modify",
+                    "description": "Type of change to preflight",
                 },
             },
             "required": ["symbol_id"],

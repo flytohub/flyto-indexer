@@ -38,12 +38,20 @@ are not all advertised to clients. The generated
 [MCP tool reference](reference/mcp-tools.md) is authoritative for names,
 schemas, annotations, and source locations.
 
-`task(action="grill")` keeps the public tool surface stable while providing
-persistent start, answer, status, freeze, and discard operations. A frozen
-contract can be attached to `task(action="plan")`; `task(action="gate")`
-validates its fingerprint before the existing phase gates. See the
+`task(action="plan")` automatically attaches target-scoped JIT Rules and an
+Intent Ledger. `gate` checks their fingerprints and conflicts. `validate`
+checks requirement coverage, diff scope, proofs, Ruff, and pytest.
+
+`task(action="grill")` adds persistent decision closure without another public
+tool. A frozen v2 contract adds evidence freshness, decision-to-diff
+conformance, ADR/audit artifacts, and privacy-preserving outcome learning.
+Existing v1 contracts remain valid. See the
 [Decision Grill test protocol](GRILL_TESTING.md) for the real JSON-RPC closure
 test and failure expectations.
+
+`impact` adds semantic preflight for rename, move, delete, and signature
+changes: selected identity, ambiguity, unresolved references, and required
+production/test/manual-review sites.
 
 ## Protocol Behavior
 

@@ -13,6 +13,7 @@ from .lazy_imports import (
     _doc_scanner, _verify, _pr_analyzer, _framework_detector, _smart,
     _layers_mod, _taint_dsl_mod,
 )
+from .task_dispatch import dispatch_task
 
 
 def _call_hierarchy_dispatch(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -331,29 +332,7 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             project=args.get("project"),
             focus=args.get("focus"),
         ),
-        "task": lambda args: _smart().smart_task(
-            action=args.get("action", "plan"),
-            description=args.get("description", ""),
-            targets=args.get("targets"),
-            intent=args.get("intent", "refactor"),
-            task_contract=args.get("task_contract"),
-            next_phase=args.get("next_phase"),
-            current_state=args.get("current_state"),
-            project=args.get("project"),
-            run_tests=args.get("run_tests", True),
-            test_path=args.get("test_path"),
-            grill_action=args.get("grill_action", "start"),
-            grill_session_id=args.get("grill_session_id"),
-            decisions=args.get("decisions"),
-            decision_id=args.get("decision_id"),
-            answer=args.get("answer"),
-            selected_option=args.get("selected_option"),
-            accept_recommendation=args.get("accept_recommendation", False),
-            mode=args.get("mode", "interactive"),
-            locale=args.get("locale", "und"),
-            max_questions=args.get("max_questions", 8),
-            request_id=args.get("request_id"),
-        ),
+        "task": dispatch_task,
         "structure": lambda args: _smart().smart_structure(
             project=args.get("project"),
             focus=args.get("focus"),

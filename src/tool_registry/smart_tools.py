@@ -53,7 +53,7 @@ SMART_TOOLS: list = [
             "Auto-enriches with:\n"
             "- Cross-project impact (if multiple projects indexed)\n"
             "- Test file mapping for affected code\n"
-            "- Edit preview for rename/delete/signature changes\n"
+            "- Semantic preflight for rename/move/delete/signature changes\n"
             "- Call path tracing (entry points → target)\n"
             "- Relevance-scored references (recency, confidence, proximity)"
         ),
@@ -71,7 +71,14 @@ SMART_TOOLS: list = [
                 },
                 "change_type": {
                     "type": "string",
-                    "enum": ["modify", "rename", "delete", "signature_change", "add_param"],
+                    "enum": [
+                        "modify",
+                        "rename",
+                        "move",
+                        "delete",
+                        "signature_change",
+                        "add_param",
+                    ],
                     "description": "Type of change planned (default: modify). Affects edit preview detail.",
                     "default": "modify",
                 },
@@ -120,20 +127,26 @@ SMART_TOOLS: list = [
             "Interrogate, plan, gate-check, or validate code changes. Four actions:\n\n"
             "1. grill: Build a persistent evidence-backed decision tree before planning. "
             "Repository-owned facts are resolved from the code index; human decisions are "
-            "asked one at a time with a recommendation. Critical unresolved decisions and "
-            "contradictions fail closed. Operations: start, answer, status, freeze, discard.\n"
-            "2. plan: Analyze a task before starting — returns risk dimensions (0-10), "
-            "constraints, step-by-step execution plan, and co-change suggestions "
-            "(files that historically change together with the targets). A frozen "
-            "grill_session_id attaches a tamper-evident decision contract.\n"
+            "ordered by confidence and value-of-information, then asked one at a time with "
+            "a recommendation and bounded adversarial review. Frozen v2 contracts include "
+            "content-addressed evidence snapshots, selective-reopen metadata, acceptance "
+            "criteria, ADR Markdown, and a machine-readable audit artifact. Critical "
+            "unresolved decisions and contradictions fail closed. Operations: start, "
+            "answer, status, freeze, discard.\n"
+            "2. plan: Build one change contract: risk, target-scoped agent instructions, "
+            "requirement-to-plan traceability, and co-change evidence. A frozen "
+            "grill_session_id also attaches the decision contract.\n"
             "3. gate: Check if you can proceed to the next phase. Server-side enforcement "
             "blocks skipping required gates. If pass=false, execute every required_actions "
             "item, update current_state with the exact requested keys, and immediately "
             "re-run the same gate until pass=true. Do not enter the blocked phase or edit "
             "while the gate is false; ask the user only for unavailable authorization, "
             "required input, or an external state change.\n"
-            "4. validate: Run ruff linter + pytest after making changes. Auto-attaches "
-            "untested change analysis if tests fail.\n\n"
+            "4. validate: Run ruff + pytest after making changes. When task_contract is "
+            "provided, also verify instruction/spec freshness, requirement coverage, "
+            "declared proof results, and decision-to-diff conformance. The result is recorded in a "
+            "privacy-preserving local outcome store to calibrate future confidence. "
+            "Auto-attaches untested change analysis if validation fails.\n\n"
             "Workflow: grill → freeze → plan → gate → edit → validate"
         ),
         "inputSchema": {
@@ -162,7 +175,11 @@ SMART_TOOLS: list = [
                 },
                 "task_contract": {
                     "type": "object",
-                    "description": "(gate) The task contract from a previous plan action",
+                    "description": (
+                        "(gate/validate) The task contract from a previous plan action. "
+                        "Validate uses its frozen decision contract for the closed-loop "
+                        "freshness and diff-conformance gate."
+                    ),
                 },
                 "next_phase": {
                     "type": "string",
@@ -201,7 +218,11 @@ SMART_TOOLS: list = [
                     "description": (
                         "(grill start) Optional provider/language-neutral decision nodes. "
                         "Each node declares id, question, recommendation, severity, "
-                        "prerequisites, options, and optional repository evidence queries."
+                        "prerequisites, options, and optional repository evidence queries. "
+                        "Advanced nodes may declare confidence (0-1), decision_cost (1-10), "
+                        "reversibility, failure_conditions, adversarial_review, and acceptance "
+                        "{expected_paths, forbidden_paths, expected_symbols, "
+                        "forbidden_symbols, assertions, proof_commands}."
                     ),
                 },
                 "decision_id": {

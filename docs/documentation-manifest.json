@@ -27,7 +27,7 @@
       "id": "context-impact-contracts",
       "description": "Owns bounded context, project profiles, reference and call graphs, Git diff impact, API extraction, and cross-project contract drift.",
       "paths": ["src/context/**", "src/profile/**", "src/engine.py", "src/diff_impact.py", "src/lsp/**", "src/tools/references.py", "src/analyzer/api_consistency.py", "src/analyzer/api_drift.py"],
-      "documentation": ["docs/FEATURES.md#context-and-project-profiles", "docs/FEATURES.md#impact-and-call-graphs", "docs/FEATURES.md#api-and-contract-drift", "ARCHITECTURE.md#product-api-contract-detection"]
+      "documentation": ["docs/FEATURES.md#context-and-project-profiles", "docs/FEATURES.md#impact-and-call-graphs", "docs/FEATURES.md#api-and-contract-drift", "docs/DESIGN_REFERENCES.md", "ARCHITECTURE.md#product-api-contract-detection"]
     },
     {
       "id": "quality-security-policy",
@@ -38,8 +38,8 @@
     {
       "id": "task-and-verification",
       "description": "Owns task planning and phase gates, repository and workspace verification, baselines, PR risk, test mapping, and structured release evidence.",
-      "paths": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/execution_guard.py", "src/verify.py", "src/pr_analyzer.py", "src/test_mapper.py", "src/tools/smart.py"],
-      "documentation": ["docs/FEATURES.md#task-workflow", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/FEATURES.md#verification-and-baselines", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"]
+      "paths": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/task_context.py", "src/execution_guard.py", "src/verify.py", "src/pr_analyzer.py", "src/test_mapper.py", "src/tools/smart.py"],
+      "documentation": ["docs/FEATURES.md#task-workflow", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/DESIGN_REFERENCES.md", "docs/FEATURES.md#verification-and-baselines", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"]
     },
     {
       "id": "cli-mcp-http-interfaces",
@@ -72,8 +72,8 @@
       "status": "active",
       "description": "Maps callers, transitive blast radius, likely tests, cross-project dependencies, APIs, and route-call contract drift.",
       "source": ["src/engine.py", "src/diff_impact.py", "src/lsp/call_graph.py", "src/tools/references.py", "src/analyzer/api_consistency.py", "src/analyzer/api_drift.py"],
-      "documentation": ["docs/FEATURES.md#impact-and-call-graphs", "docs/FEATURES.md#api-and-contract-drift", "ARCHITECTURE.md#product-api-contract-detection"],
-      "tests": ["tests/test_diff_impact.py", "tests/test_cross_language_api.py", "tests/test_call_sites_layer4.py"]
+      "documentation": ["docs/FEATURES.md#impact-and-call-graphs", "docs/FEATURES.md#api-and-contract-drift", "docs/DESIGN_REFERENCES.md", "ARCHITECTURE.md#product-api-contract-detection"],
+      "tests": ["tests/test_diff_impact.py", "tests/test_cross_language_api.py", "tests/test_call_sites_layer4.py", "tests/test_semantic_preflight.py"]
     },
     {
       "id": "quality-security-audits",
@@ -101,9 +101,9 @@
       "kind": "workflow",
       "status": "active",
       "description": "Resolves evidence-backed decisions, produces task plans, enforces phase evidence, validates changes, verifies repositories and workspaces, and compares reviewed baselines.",
-      "source": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/execution_guard.py", "src/verify.py", "src/tools/smart.py"],
-      "documentation": ["docs/FEATURES.md#task-workflow", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"],
-      "tests": ["tests/test_grill.py", "tests/test_grill_deep.py", "tests/test_grill_real_data.py", "tests/test_grill_cli_e2e.py", "tests/test_task_analysis.py", "tests/test_verify.py", "tests/test_validation.py"]
+      "source": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/task_context.py", "src/execution_guard.py", "src/verify.py", "src/tools/smart.py"],
+      "documentation": ["docs/FEATURES.md#task-workflow", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/DESIGN_REFERENCES.md", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"],
+      "tests": ["tests/test_grill.py", "tests/test_grill_deep.py", "tests/test_grill_evidence.py", "tests/test_grill_conformance.py", "tests/test_grill_outcomes.py", "tests/test_grill_real_data.py", "tests/test_grill_cli_e2e.py", "tests/test_task_context.py", "tests/test_task_adapters.py", "tests/test_task_analysis.py", "tests/test_verify.py", "tests/test_validation.py"]
     },
     {
       "id": "command-line-interface",
@@ -111,7 +111,7 @@
       "kind": "cli",
       "status": "active",
       "description": "Exposes setup, scan, context, impact, audit, policy, inventory, verification, baseline, export, and integration workflows to shells and CI.",
-      "source": ["src/cli.py"],
+      "source": ["src/cli.py", "src/task_cli.py"],
       "documentation": ["docs/CLI.md", "docs/reference/cli.md"],
       "tests": ["tests/test_cli_commands.py", "tests/test_version.py"]
     },

@@ -32,15 +32,19 @@ and `describe` to manage a file's semantic description. Use `profile`, `deps`,
 flyto-index task grill --grill-action start \
   --description "change token validation"
 flyto-index task plan --description "change token validation" --targets src/auth.py
+flyto-index task validate --project . --task-contract task-contract.json
 flyto-index pr-risk .
 flyto-index check . --max-affected 20
 ```
 
-`task grill` can resolve repository facts, ask dependency-ordered decisions,
-freeze a fingerprinted contract, and attach it to a later plan. `task`
-maintains local workflow state. `check` and `pr-risk` inspect Git changes; they
-do not push, merge, or modify remote state. The complete acceptance path is in
-the [Decision Grill test protocol](GRILL_TESTING.md).
+`task plan` adds target-scoped JIT Rules and an Intent Ledger without extra
+flags. `task grill` optionally freezes unresolved human decisions with evidence
+and ADR artifacts. Pass the plan through `--task-contract` during validation to
+require rule/spec freshness, requirement and diff coverage, Ruff, pytest, and
+allowlisted proof results. Unsupported proof commands are never executed.
+`check` and `pr-risk` inspect Git changes; they do not push or merge. The
+complete acceptance path is in the
+[Decision Grill test protocol](GRILL_TESTING.md).
 
 ## Security And Policy
 

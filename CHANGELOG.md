@@ -9,6 +9,27 @@
   answers, idempotent updates, contradiction detection, readiness scoring,
   fail-closed freeze, immutable fingerprinted contracts, and plan/gate
   integration.
+- Upgraded new Grill sessions and contracts to v2 with confidence calibration,
+  value-of-information frontier ordering, decision cost and reversibility,
+  bounded adversarial/counterfactual review, machine-readable acceptance
+  criteria, content-addressed repository evidence snapshots, selective decision
+  reopen plans, Markdown ADRs, and compact audit artifacts. Existing v1
+  sessions and contracts remain valid.
+- Added a decision-to-diff closure gate to `task(action="validate")`. When a
+  frozen `task_contract` is supplied, validation now combines Ruff, pytest,
+  contract fingerprint and evidence-freshness checks, expected/forbidden
+  path and symbol checks, and safely allowlisted proof-result matching.
+- Added privacy-preserving local outcome learning. Closed-loop results are
+  idempotently recorded without questions, answers, or source code, then used
+  as Bayesian priors for future decision confidence and VOI ordering.
+- Added target-scoped JIT Rules and an Intent Ledger to the existing four-action
+  `task` workflow. Plans now fingerprint applicable agent instructions and map
+  bounded Markdown requirements to plan steps, changed paths, and proof;
+  gate/validate fail closed on drift, conflicts, orphan requirements, missing
+  coverage, or unplanned diff paths.
+- Added semantic refactor preflight to `impact` for rename, move, delete, and
+  signature changes, including exact identity, same-name ambiguity, overloads,
+  unresolved references, and production/test/manual-review update sites.
 - Added dependency-free C/C++ indexing for function definitions, typedef
   structs, includes, and call edges across common source/header extensions.
 - Added multilingual robot workflow fixtures and deep unit, concurrency,
@@ -19,6 +40,12 @@
 - Made repository fact resolution require normalized exact evidence by default,
   added explicit alternate policies, serialized session updates across POSIX
   processes, and made an incomplete CLI freeze exit non-zero.
+- Rejected out-of-project repository evidence during contract validation and
+  made evidence freshness use the contract's authoritative project even when
+  lint/tests run from a different project root.
+- Extracted focused task CLI and MCP dispatch adapters while preserving every
+  existing task flag, action, legacy dispatch alias, and the 20-tool public
+  smart-tool surface.
 - Made validation respect pytest's configured `testpaths` instead of forcing
   repository-wide collection, and raised the bounded full-suite timeout to a
   configurable 900-second default.
@@ -30,6 +57,9 @@
   instead of reporting that external projects have no MCP server.
 - Kept executable MCP runtime smoke limited to flyto-indexer's own adapter so
   verification never imports or executes analyzed project code.
+- Reworked the README around one value statement, one quick start, and three
+  differentiators; detailed inventories now live in the feature and generated
+  references.
 
 ## [2.15.0] - 2026-07-23
 

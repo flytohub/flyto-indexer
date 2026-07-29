@@ -46,6 +46,11 @@ Explicit paths are resolved before fuzzy symbol search. Language-server results
 can enrich static edges when a supported local LSP is available; deterministic
 parsers and text fallback remain available.
 
+For rename, move, delete, and signature changes, semantic preflight also
+reports the exact selected symbol, same-name candidates, overloads,
+indexed/name-only/unresolved reference classes, and production/test/manual
+review update sites. It analyzes the edit; it does not perform it.
+
 Primary implementation: `src/engine.py`, `src/diff_impact.py`,
 `src/lsp/call_graph.py`, `src/lsp/`, and `src/tools/references.py`.
 
@@ -106,34 +111,33 @@ See [Configuration](CONFIGURATION.md#repository-policy) and the generated
 
 ## Task Workflow
 
-The `task` workflow supports evidence-backed decision interrogation, planning,
-phase gates, and post-change validation. `task(action="grill")` keeps the
-LLM-visible tool surface small while composing internal decision atoms:
+`task` has four actions and one contract:
 
-- `start` creates a persistent dependency-ordered decision tree.
-- repository-owned facts are resolved from indexed symbols and are never
-  redirected to the user;
-- repository evidence uses normalized exact matching by default so unrelated
-  fuzzy hits cannot satisfy a critical fact; controlled `all_terms` and
-  explicit trusted-resolver policies are available;
-- `answer` accepts only a currently reachable frontier decision and supports
-  idempotency keys;
-- interactive mode returns exactly one question and a recommendation; explicit
-  batch mode returns a bounded frontier;
-- `freeze` fails closed on unresolved blocking decisions or structured option
-  contradictions;
-- the frozen contract is fingerprinted, immutable, and attachable to
-  `task(action="plan")` through `grill_session_id`;
-- `task(action="gate")` validates the fingerprint and decision completeness
-  before applying the existing implementation gates.
+```text
+grill → plan → gate → validate
+```
 
-Questions and answers are arbitrary Unicode. `locale` is metadata only;
-decision IDs, severities, status, prerequisites, and evidence remain canonical,
-so the workflow is not tied to a model provider or language.
+`plan` adds two lean, automatic layers:
 
-Sessions default to `~/.flyto-indexer/grill` with private directory/file
-permissions. Set `FLYTO_INDEXER_GRILL_DIR` to select an explicit runtime state
-directory, including isolated CI and test environments.
+- **JIT Rules** resolves only target-applicable agent instructions, applies
+  nested-path precedence, reports same-scope conflicts, and fingerprints the
+  result.
+- **Intent Ledger** maps the task and bounded Markdown requirements/scenarios
+  to plan steps, expected paths, symbols, tests, and Ruff/pytest proof.
+
+`gate` rejects stale rules/specs, unresolved conflicts, and incomplete required
+analysis. `validate` rejects orphan requirements, unplanned diff paths, missing
+requirement paths/proofs, and stale instruction/spec fingerprints.
+
+`grill` is optional decision closure for ambiguous work. It resolves repository
+facts from the index, asks one high-value question at a time, and freezes an
+immutable v2 contract with evidence snapshots, acceptance criteria, ADR, and
+audit artifacts. Changed evidence selectively reopens affected decisions.
+Outcomes are stored locally without questions, answers, or source code.
+
+Questions may use any language. IDs and contracts remain provider-neutral.
+Grill state defaults to `~/.flyto-indexer/grill`; override it with
+`FLYTO_INDEXER_GRILL_DIR`.
 
 Example CLI sequence:
 
@@ -155,16 +159,24 @@ flyto-index task plan \
   --description "Add a safe robot adapter" \
   --target src/adapter.py \
   --grill-session-id grill_...
+
+flyto-index task validate \
+  --project . \
+  --task-contract task-contract.json
 ```
 
 Plans continue to include risk dimensions, constraints, affected locations,
-tests, and co-change evidence. Gates reject missing evidence rather than
-claiming a phase is complete.
+tests, and co-change evidence. The new layers add no tool or task action.
 
 Primary implementation: `src/tools/task_analysis.py`, `src/execution_guard.py`,
-`src/tools/grill.py`, and `src/tools/smart.py`.
+`src/tools/grill.py`, `src/tools/grill_intelligence.py`,
+`src/tools/grill_evidence.py`, `src/tools/grill_conformance.py`,
+`src/tools/grill_outcomes.py`, `src/tools/task_context.py`, and
+`src/tools/smart.py`.
 The [Decision Grill test protocol](GRILL_TESTING.md) maps the real
 mixed-language fixture, CLI, MCP, persistence, concurrency, and tamper gates.
+The [design references](DESIGN_REFERENCES.md) record the borrowed mechanics and
+anti-bloat budget.
 
 ## Verification And Baselines
 

@@ -167,53 +167,57 @@ def keyword_map(call: ast.Call) -> dict[str, Any]:
 
 def cli_reference() -> str:
     path = ROOT / "src" / "cli.py"
-    tree = parse(path)
+    parser_paths = [path, ROOT / "src" / "task_cli.py"]
+    trees = {parser_path: parse(parser_path) for parser_path in parser_paths}
     commands: dict[str, dict[str, Any]] = {}
-    parser_vars: dict[str, str] = {}
     arguments: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Call):
-            continue
-        call = node.value
-        if not isinstance(call.func, ast.Attribute) or call.func.attr != "add_parser" or not call.args:
-            continue
-        name = literal(call.args[0])
-        if not isinstance(name, str):
-            continue
-        variable = next((target.id for target in node.targets if isinstance(target, ast.Name)), "")
-        metadata = keyword_map(call)
-        commands[name] = {
-            "variable": variable,
-            "help": metadata.get("help", ""),
-            "description": metadata.get("description", ""),
-            "line": node.lineno,
-            "handler": "",
-        }
-        parser_vars[variable] = name
-
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-            continue
-        if node.func.attr != "add_argument" or not isinstance(node.func.value, ast.Name):
-            continue
-        command = parser_vars.get(node.func.value.id)
-        if not command:
-            continue
-        metadata = keyword_map(node)
-        flags = [literal(item) for item in node.args]
-        arguments[command].append(
-            {
-                "flags": ", ".join(str(item) for item in flags),
-                "required": metadata.get("required", False),
-                "default": metadata.get("default", "required" if not any(str(item).startswith("-") for item in flags) else ""),
-                "choices": metadata.get("choices", ""),
+    for parser_path, parser_tree in trees.items():
+        parser_vars: dict[str, str] = {}
+        for node in ast.walk(parser_tree):
+            if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Call):
+                continue
+            call = node.value
+            if not isinstance(call.func, ast.Attribute) or call.func.attr != "add_parser" or not call.args:
+                continue
+            name = literal(call.args[0])
+            if not isinstance(name, str):
+                continue
+            variable = next((target.id for target in node.targets if isinstance(target, ast.Name)), "")
+            metadata = keyword_map(call)
+            commands[name] = {
+                "variable": variable,
                 "help": metadata.get("help", ""),
+                "description": metadata.get("description", ""),
                 "line": node.lineno,
+                "path": parser_path,
+                "handler": "",
             }
-        )
+            parser_vars[variable] = name
 
-    for node in ast.walk(tree):
+        for node in ast.walk(parser_tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            if node.func.attr != "add_argument" or not isinstance(node.func.value, ast.Name):
+                continue
+            command = parser_vars.get(node.func.value.id)
+            if not command:
+                continue
+            metadata = keyword_map(node)
+            flags = [literal(item) for item in node.args]
+            arguments[command].append(
+                {
+                    "flags": ", ".join(str(item) for item in flags),
+                    "required": metadata.get("required", False),
+                    "default": metadata.get("default", "required" if not any(str(item).startswith("-") for item in flags) else ""),
+                    "choices": metadata.get("choices", ""),
+                    "help": metadata.get("help", ""),
+                    "line": node.lineno,
+                    "path": parser_path,
+                }
+            )
+
+    for node in ast.walk(trees[path]):
         if not isinstance(node, ast.If) or not isinstance(node.test, ast.Compare):
             continue
         comparison = node.test
@@ -244,13 +248,13 @@ def cli_reference() -> str:
     for name, metadata in commands.items():
         out.append(f"## `flyto-index {name}`\n\n")
         out.append(f"{clean(metadata['description'] or metadata['help'])}\n\n")
-        out.append(f"Handler: `{metadata['handler'] or 'inline dispatch'}`. Source: {source_link(path, metadata['line'])}.\n\n")
+        out.append(f"Handler: `{metadata['handler'] or 'inline dispatch'}`. Source: {source_link(metadata['path'], metadata['line'])}.\n\n")
         out.append("| Argument | Required | Default | Choices | Purpose | Source |\n|---|---|---|---|---|---|\n")
         for item in arguments[name]:
             choices = ", ".join(map(str, item["choices"])) if isinstance(item["choices"], (list, tuple)) else item["choices"]
             out.append(
                 f"| `{code(item['flags'])}` | {'yes' if item['required'] else 'no'} | `{code(item['default'])}` | "
-                f"`{code(choices)}` | {clean(item['help'])} | {source_link(path, item['line'])} |\n"
+                f"`{code(choices)}` | {clean(item['help'])} | {source_link(item['path'], item['line'])} |\n"
             )
         out.append("\n")
     return "".join(out)
@@ -271,7 +275,7 @@ def tool_definitions(path: Path, variable: str) -> list[dict[str, Any]]:
         if assignment_value is not None:
             value = literal(assignment_value, [])
             if isinstance(value, list):
-                for item, source_node in zip(value, assignment_value.elts, strict=False):
+                for item, source_node in zip(value, assignment_value.elts):
                     if isinstance(item, dict):
                         tools.append({**item, "_line": source_node.lineno})
         elif (

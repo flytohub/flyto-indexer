@@ -631,6 +631,7 @@ def _assess_edit_risk(total, by_project, change_type):
     """
     change_risk_map = {
         "rename": ("All call sites must update the name.", ["Update all call sites in a single commit", "Use find-and-replace across all files"]),
+        "move": ("Imports and path-based references must update.", ["Update imports and re-exports together", "Review path aliases and dynamic loaders"]),
         "delete": ("All call sites will break.", ["Ensure no code depends on this before deleting", "Consider deprecation first"]),
         "signature_change": ("Call sites may need parameter updates.", ["Review each call site for compatibility", "Consider adding default parameters for backward compatibility"]),
         "add_param": ("Call sites may need to pass the new argument.", ["Add default value to new parameter if possible", "Update call sites that need the new parameter"]),
@@ -652,7 +653,7 @@ def _assess_edit_risk(total, by_project, change_type):
         risk_reason = f"{total} call sites across {len(by_project)} project(s)"
 
     # For delete/rename, risk is always elevated
-    if change_type in ("delete", "rename") and total > 0:
+    if change_type in ("delete", "rename", "move") and total > 0:
         risk = "high" if total > 3 else "moderate"
 
     return {
@@ -660,6 +661,130 @@ def _assess_edit_risk(total, by_project, change_type):
         "risk_reason": risk_reason,
         "change_description": risk_info[0],
         "suggestions": risk_info[1],
+    }
+
+
+def _symbol_identity_candidates(
+    resolved_id: str,
+    target_name: str,
+    symbols: dict,
+) -> dict:
+    """Describe exact identity, overloads, and same-name ambiguity."""
+    candidates = []
+    for candidate_id, symbol in symbols.items():
+        if symbol.get("name") != target_name:
+            continue
+        candidates.append(
+            {
+                "symbol_id": candidate_id,
+                "path": symbol.get("path", ""),
+                "type": symbol.get("type", ""),
+                "params": symbol.get("params") or [],
+                "returns": symbol.get("returns", ""),
+                "selected": candidate_id == resolved_id,
+            }
+        )
+    candidates.sort(
+        key=lambda item: (
+            not item["selected"],
+            item["path"],
+            item["type"],
+            item["symbol_id"],
+        )
+    )
+    selected_path = next(
+        (
+            item["path"]
+            for item in candidates
+            if item["selected"]
+        ),
+        "",
+    )
+    overloads = [
+        item for item in candidates if item["path"] == selected_path
+    ]
+    return {
+        "resolved_symbol_id": resolved_id,
+        "candidate_count": len(candidates),
+        "ambiguous": len(candidates) > 1,
+        "overload_count": len(overloads),
+        "candidates": candidates[:12],
+        "has_more": len(candidates) > 12,
+    }
+
+
+def _unresolved_reference_sites(
+    resolved_id: str,
+    target_name: str,
+    dependencies: dict,
+    symbols: dict,
+    seen_files: set[str],
+) -> list[dict]:
+    """Collect same-name calls that were not resolved to the selected symbol."""
+    sites = []
+    for dependency in dependencies.values():
+        raw_target = str(dependency.get("target", ""))
+        if raw_target.rsplit(".", 1)[-1] != target_name:
+            continue
+        resolved_target = dependency.get("metadata", {}).get("resolved_target", "")
+        if resolved_target == resolved_id:
+            continue
+        source_id = dependency.get("source", "")
+        source = symbols.get(source_id, {})
+        path = source.get("path", "")
+        if not path or path in seen_files:
+            continue
+        seen_files.add(path)
+        sites.append(
+            {
+                "file": path,
+                "line": dependency.get("line", 0),
+                "caller_name": source.get("name", ""),
+                "raw_target": raw_target,
+                "resolved_target": resolved_target or None,
+                "classification": (
+                    "ambiguous_same_name"
+                    if resolved_target
+                    else "dynamic_or_unresolved"
+                ),
+                "confidence": "low",
+            }
+        )
+        if len(sites) >= 20:
+            break
+    return sites
+
+
+def _required_update_sites(
+    call_sites: list[dict],
+    unresolved_sites: list[dict],
+) -> dict:
+    """Split update work into production, test, and manual-review buckets."""
+    direct_files = sorted({site["file"] for site in call_sites if site.get("file")})
+    test_files = [
+        path
+        for path in direct_files
+        if (
+            path.startswith(("test/", "tests/"))
+            or "/test/" in path
+            or "/tests/" in path
+            or Path(path).name.startswith("test_")
+            or Path(path).stem.endswith("_test")
+        )
+    ]
+    production_files = [path for path in direct_files if path not in test_files]
+    manual_review = sorted(
+        {site["file"] for site in unresolved_sites if site.get("file")}
+    )
+    return {
+        "production": production_files[:20],
+        "tests": test_files[:20],
+        "manual_review": manual_review[:20],
+        "counts": {
+            "production": len(production_files),
+            "tests": len(test_files),
+            "manual_review": len(manual_review),
+        },
     }
 
 
@@ -672,6 +797,7 @@ def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
     index = load_index()
     symbols = index.get("symbols", {})
     reverse_index = index.get("reverse_index", {})
+    dependencies = index.get("dependencies", {})
 
     resolved_id = resolve_symbol(symbol_id, symbols)
     target_symbol = symbols.get(resolved_id)
@@ -686,6 +812,14 @@ def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
         resolved_id, target_name, target_path, reverse_index, symbols
     )
     call_sites = call_sites[:30]
+    unresolved_sites = _unresolved_reference_sites(
+        resolved_id,
+        target_name,
+        dependencies,
+        symbols,
+        {site.get("file", "") for site in call_sites},
+    )
+    identity = _symbol_identity_candidates(resolved_id, target_name, symbols)
 
     # Build path->project lookup (O(N) once, not O(N*M))
     path_to_project: dict[str, str] = {}
@@ -710,7 +844,7 @@ def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
     # next_action hint for AI
     if total == 0:
         next_action = "Safe to proceed — no call sites found."
-    elif change_type in ("rename", "delete"):
+    elif change_type in ("rename", "move", "delete"):
         files_to_update = sorted({cs["file"] for cs in call_sites})
         next_action = f"Update {len(files_to_update)} file(s): {', '.join(files_to_update[:5])}"
     else:
@@ -727,6 +861,34 @@ def edit_impact_preview(symbol_id: str, change_type: str = "modify") -> dict:
         "risk_reason": risk_result["risk_reason"],
         "change_description": risk_result["change_description"],
         "suggestions": risk_result["suggestions"],
+        "semantic_preflight": {
+            "identity": identity,
+            "reference_classes": {
+                "direct_indexed": len(
+                    [
+                        site
+                        for site in call_sites
+                        if site.get("confidence") == "high"
+                    ]
+                ),
+                "name_only": len(
+                    [
+                        site
+                        for site in call_sites
+                        if site.get("confidence") != "high"
+                    ]
+                ),
+                "dynamic_or_unresolved": len(unresolved_sites),
+            },
+            "unresolved_sites": unresolved_sites,
+            "required_update_sites": _required_update_sites(
+                call_sites,
+                unresolved_sites,
+            ),
+            "manual_review_required": bool(
+                identity["ambiguous"] or unresolved_sites
+            ),
+        },
         "next_action": next_action,
     }
 

@@ -1,49 +1,21 @@
 <div align="center">
   <h1>Flyto2 Indexer</h1>
-  <p>
-    <strong>Code intelligence MCP server for AI coding agents. Know what breaks before you change it.</strong>
-  </p>
+  <p><strong>Know what breaks. Prove the fix.</strong></p>
   <p>
     <a href="https://github.com/flytohub/flyto-indexer/actions"><img src="https://github.com/flytohub/flyto-indexer/workflows/CI/badge.svg" alt="CI"></a>
     <a href="https://pypi.org/project/flyto-indexer/"><img src="https://img.shields.io/pypi/v/flyto-indexer.svg" alt="PyPI"></a>
     <a href="https://github.com/flytohub/flyto-indexer/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License"></a>
     <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+"></a>
   </p>
-  <p>
-    Open-source code intelligence MCP server for AI coding agents, refactors, pull-request review, and release gates.<br/>
-    Impact analysis, cross-project references, dependency graphs, taint checks, documentation scoring, and code health in one local tool.
-  </p>
-  <p>
-    <a href="https://flyto2.com"><strong>flyto2.com</strong></a> ·
-    <a href="https://docs.flyto2.com/indexer/">Docs</a> ·
-    <a href="https://blog.flyto2.com">Blog</a> ·
-    <a href="https://pypi.org/project/flyto-indexer/">PyPI</a> ·
-    <a href="https://www.youtube.com/@Flyto2">YouTube</a>
-  </p>
 </div>
 
----
+Flyto2 Indexer is local code intelligence for AI coding agents. It maps
+symbols, callers, APIs, tests, rules, and requirements before an edit, then
+closes the loop with lint, tests, and diff conformance.
 
-Flyto2 Indexer is built for teams that let AI agents touch real code. It gives
-Codex, Claude Code, Cursor, Windsurf, and other MCP clients a local map of your
-repository before they rename symbols, edit shared APIs, delete files, or ship a
-pull request. Grep finds text; Flyto2 Indexer answers the question that matters:
-what depends on the thing you are changing?
+No API key. No model lock-in. No source upload.
 
-Use it for AI code review, monorepo impact analysis, cross-repo dependency
-tracking, safe refactors, security taint scanning, release-readiness checks,
-documentation audits, and GitHub/GitLab merge gates. If you are looking for a
-local MCP server for AI-assisted development, this is the guardrail layer: it
-lets the agent search, inspect impact, and verify the work before it says done.
-
-Good fit if you searched for:
-
-- code intelligence MCP server
-- AI coding agent impact analysis
-- monorepo dependency graph for safe refactors
-- GitHub or GitLab merge gate for AI-generated code
-
-## Try it in 60 seconds
+## Start in 60 seconds
 
 ```bash
 pip install flyto-indexer
@@ -51,547 +23,239 @@ flyto-index setup .
 flyto-index verify . --strict
 ```
 
-That builds the local index, writes agent instructions, configures MCP for
-supported clients, and runs the same closed-loop gate Flyto2 uses before
-shipping AI-assisted code.
+`setup` builds the index and configures supported MCP clients. Then ask your
+agent:
 
-## Without Flyto2 Indexer
-
-```
-You:    "Rename validateOrder to validate_order"
-
-AI:     *renames the function*
-        *greps for "validateOrder"*
-        *finds 3 matches in the same project*
-        *misses 4 callers in the frontend repo*
-        *misses the API endpoint that routes to it*
-        *pushes broken code*
+```text
+impact(target="validateOrder", change_type="rename")
 ```
 
-## With Flyto2 Indexer
-
-```
-You:    "Rename validateOrder to validate_order"
-
-AI:     → impact(target="validateOrder", change_type="rename")
-
-        ⚠️ 7 call sites across 3 projects:
-          backend/checkout.py:42     — calls validateOrder()
-          backend/api/orders.py:18   — imports validateOrder
-          frontend/Cart.vue:55       — calls via useCheckout()
-          frontend/QuickBuy.vue:23   — calls via useCheckout()
-          mobile/OrderScreen.tsx:67  — API call to /api/validate
-          tests/test_orders.py:12    — unit test
-          tests/test_api.py:88       — integration test
-          Risk: HIGH — 3 projects affected
-          Test file: tests/test_orders.py
-          Cross-project: 2 other repos affected
-
-        *renames all 7 call sites, updates tests, pushes clean code*
+```text
+7 call sites · 3 projects · 2 test files
+Risk: high
+Manual review: 1 unresolved dynamic reference
 ```
 
-**That's the difference.** grep finds text. This finds dependencies.
+Text search finds a name. Flyto2 Indexer finds the change surface.
 
-<div align="center">
-  <img src="demo.gif" alt="Flyto2 Indexer — impact analysis before renaming" width="800">
-</div>
+## One closed loop
 
-## Install
-
-```bash
-pip install flyto-indexer
-flyto-index setup .
+```text
+search → impact → task(plan) → task(gate) → edit → task(validate) → verify
 ```
 
-That's it. One command does everything:
-1. **Scans** your project and builds the code index
-2. **Writes** `CLAUDE.md` with tool usage instructions
-3. **Configures** Claude Code MCP settings (`~/.claude/settings.json`)
+- `search` finds symbols and concepts.
+- `impact` previews blast radius, ambiguity, callers, tests, and dynamic gaps.
+- `task` carries decisions, scoped instructions, requirements, and proof.
+- `verify` checks the repository before the agent says done.
 
-Restart Claude Code and start using it. Works with any MCP client — Claude Code, Cursor, Windsurf, etc.
+The public smart-tool surface stays at 20 tools. Core analysis is local and
+works without external services.
 
-## API / MCP Tools
+## What is different
 
-Flyto2 Indexer exposes the tools AI agents need before they make a risky edit:
+### JIT Rules
 
-| Tool | What it protects |
+`task(plan)` loads only the instructions that apply to the target path:
+
+- `AGENTS.md`
+- `CLAUDE.md`
+- `GEMINI.md`
+- `QWEN.md`
+- Copilot and Cursor project rules
+
+Nested rules override broader scopes. Same-scope contradictions block the gate.
+Fingerprints detect rule changes after planning.
+
+### Intent Ledger
+
+Existing Markdown specs remain the source of truth. The plan maps:
+
+```text
+requirement → plan step → changed path → test/proof
+```
+
+Spec drift, orphan requirements, missing expected paths, and unplanned diff
+files fail closed. OpenSpec-style requirements and scenarios work without an
+OpenSpec runtime dependency.
+
+### Semantic Refactor Preflight
+
+`impact(change_type="rename"|"move"|"signature_change")` reports:
+
+- exact symbol identity and same-name candidates;
+- overload and ambiguity counts;
+- indexed, name-only, and unresolved references;
+- production, test, and manual-review update sites.
+
+Flyto2 Indexer does not edit files or become an IDE. It makes the edit contract
+precise for the agent that already does.
+
+### Decision Grill
+
+Use Grill when the task still has product or architecture decisions:
+
+```text
+task(action="grill", grill_action="start", description="Add robot adapter")
+  → one high-value question + recommendation + evidence
+
+task(action="grill", grill_action="freeze", grill_session_id="grill_...")
+  → immutable decision contract + evidence snapshot + ADR
+
+task(action="plan", grill_session_id="grill_...", ...)
+  → risk + JIT Rules + Intent Ledger + frozen decisions
+
+task(action="validate", task_contract=<plan>, project="...")
+  → Ruff + pytest + freshness + requirement/diff conformance
+```
+
+Repository facts are resolved from the index instead of being asked back to the
+user. Critical uncertainty and contradictions fail closed.
+
+## Core tools
+
+| Tool | Answer |
 | --- | --- |
-| `search` | Finds symbols and concepts across a project without guessing filenames. |
-| `impact` | Shows references, blast radius, cross-project usage, and related tests. |
-| `structure` | Maps APIs, packages, dependencies, conventions, and type contracts. |
-| `audit` | Scores security, complexity, dead code, coverage, and git hotspots. |
-| `scan_documentation` | Checks README, module, config, inline, and exact source-linked reference coverage. |
-| `verify` | Runs the local closed-loop gate before an agent finishes or a PR merges. |
+| `search` | Where is the relevant code? |
+| `impact` | What breaks if this changes? |
+| `task` | Are decisions, rules, requirements, and proof closed? |
+| `audit` | Where are the quality and security risks? |
+| `structure` | How is the project connected? |
+| `verify` | Is this repository ready to finish or merge? |
 
-See the [feature guide](docs/FEATURES.md), [MCP integration guide](docs/MCP.md),
-and source-backed [tool reference](docs/reference/mcp-tools.md) for every
-published tool, input schema, compatibility definition, and implementation
-location.
+Focused tools also cover secrets, taint, SBOM, licenses, architecture layers,
+documentation, PR risk, and workspace verification. See the
+[source-backed MCP reference](docs/reference/mcp-tools.md).
 
-## Usage
-
-Use `flyto-index verify` as the default gate before an AI agent finishes a code
-change. It runs the local indexer, validates graph integrity, checks context and
-impact loops, verifies CI/package/MCP runtime/working-tree closure, and runs the
-built-in weak scanners without Semgrep, Checkov, or network access.
+## CLI
 
 ```bash
 flyto-index scan . --full
-flyto-index verify . --strict
-flyto-index verify-workspace /Users/chester/flytohub --project flyto-code --project flyto-engine --project flyto-indexer
-flyto-index verify . --save-baseline .flyto-baselines/flyto-indexer.json --json
-flyto-index verify . --baseline .flyto-baselines/flyto-indexer.json --regression-only
-flyto-index verify-workspace . --changed-only --base origin/main
-flyto-index verify . --report verify.sarif --report-format sarif
-flyto-index verify-baseline compare . --baseline .flyto-baselines/flyto-indexer.json
-flyto-index impact MySharedSymbol --path .
+flyto-index impact useAuth --path .
 flyto-index context --path . --query "auth routes query keys"
-flyto-index secrets . --json
-flyto-index taint . --json --max-results 100
+flyto-index task plan --description "Refactor auth" --target src/auth.py
+flyto-index verify . --strict
+flyto-index verify-workspace . --changed-only --base origin/main
 ```
 
-For CI, use `verify --strict` to fail on incomplete graph closure, unresolved
-impact references, high-risk secret findings, high-risk taint flows, missing
-agent instructions, incomplete CI gates, generated/high-risk changed files,
-runtime dependency drift, package manifest drift, suspicious baselines, or MCP
-tool/runtime drift. Use `--baseline` with `--regression-only` when a project has
-known warnings but new AI-generated regressions must still be blocked.
-
-Product edition policy, commercial packaging, and company release orchestration
-are intentionally outside this public, reusable code-intelligence package.
-
-## Configuration
-
-Flyto2 Indexer works without credentials. Repository policy lives in
-`.flyto-rules.yaml`; MCP transport and optional analyzer settings are described
-in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md). The generated
-[`docs/reference/configuration.md`](docs/reference/configuration.md) lists every
-environment variable, scanner default, and built-in rule source.
-
-## Contributing
-
-Pull requests are welcome for scanners, MCP tools, docs, CI gates, and language
-support. Run the local checks before opening a PR:
-
-## Testing
+For an existing-warning baseline:
 
 ```bash
-python -m pytest
-python -m ruff check src tests
-flyto-index verify . --strict
+flyto-index verify . \
+  --save-baseline .flyto-baselines/flyto-indexer.json \
+  --json
+
+flyto-index verify . \
+  --baseline .flyto-baselines/flyto-indexer.json \
+  --regression-only
 ```
 
-Security issues should be reported to `security@flyto2.com`. General developer
-questions can go to `dev@flyto2.com` or GitHub Discussions.
+## CI
 
-Project-specific verify budgets live in `.flyto-rules.yaml` under `verify:`.
-This stays stdlib-only; the verifier reads a small no-dependency subset:
+```yaml
+- run: pip install flyto-indexer
+- run: flyto-index scan . --full
+- run: flyto-index verify . --strict
+- run: flyto-index check . --threshold medium --base main
+```
+
+Project policy lives in `.flyto-rules.yaml`:
 
 ```yaml
 verify:
   allow_warn: [docs_coverage]
   warn_as_fail: [agent_hygiene, generated_index_ignore, mcp_registry]
   min_docs_score: 60
-```
 
-<details>
-<summary>Manual setup (other MCP clients)</summary>
+layers:
+  - name: ui
+    paths: ["src/ui/**"]
+    cannot_import: [db]
 
-If your MCP client doesn't use `~/.claude/settings.json`, add this to your MCP config:
-
-```json
-{
-  "mcpServers": {
-    "flyto-indexer": {
-      "command": "python3",
-      "args": ["-m", "flyto_indexer.mcp_server"]
-    }
-  }
-}
-```
-
-Then scan and set up CLAUDE.md separately:
-```bash
-flyto-index scan .
-flyto-index setup-claude .
-```
-</details>
-
-<details>
-<summary>Run from source</summary>
-
-```bash
-git clone https://github.com/flytohub/flyto-indexer.git
-./flyto-indexer/scripts/install-local-cli.sh
-flyto-index --version
-flyto-index setup .
-```
-</details>
-
-<details>
-<summary>Uninstall</summary>
-
-```bash
-flyto-index setup . --remove
-pip uninstall flyto-indexer
-```
-</details>
-
-## What It Does
-
-### Impact Analysis — the core feature
-
-Every tool an AI already has (grep, file read, glob) finds **text**. None of them answer **"what depends on this?"**
-
-One call gives you everything — references, blast radius, cross-project impact, and test files:
-
-```
-→ impact(target="useAuth")
-
-  References: 12 across 4 projects
-    flyto-cloud:  LoginPage.vue, RegisterPage.vue, AuthGuard.ts, api.ts
-    flyto-pro:    vscode_agent/tools.py, middleware/auth.py
-    flyto-vscode: ChatHandler.ts, AuthProvider.ts
-    flyto-core:   modules/auth/login.py
-  Risk: HIGH — shared across 4 projects
-  Cross-project: 3 other repos affected
-  Test file: tests/test_auth.py
-```
-
-Works with uncommitted changes too:
-
-```
-→ impact(mode="unstaged")
-
-  3 symbols affected by your changes:
-    validate_order  — 5 callers, test: tests/test_orders.py
-    OrderSchema     — used in 2 API endpoints
-    format_receipt  — no callers (safe)
-```
-
-### Cross-Language API Tracking
-
-Python backend endpoints automatically linked to TypeScript/Vue frontend callers:
-
-```
-→ structure(focus="apis")
-
-  POST /api/checkout
-    Defined in: backend/routes/order.py (create_order)
-    Called by:   frontend/Cart.vue, frontend/api/orders.ts
-    Call count: 4
-```
-
-Detects FastAPI, Flask, Starlette decorators + `fetch()`, `axios`, `$http` calls.
-
-### Code Health & Security
-
-One call audits everything — auto-expands weak dimensions with detailed findings:
-
-```
-→ audit()
-
-  Health: 74/100 (C)
-
-  ⚠️ Security (60/100) — auto-expanded:
-    2 critical: hardcoded API keys in config.py, settings.py
-    1 high: SQL string concatenation in query.py
-
-  ⚠️ Complexity (65/100) — auto-expanded:
-    process_data() — 87 lines, depth=6 → extract sub-functions
-
-  ✓ Dead code (90/100) — passing
-  ✓ Documentation (85/100) — passing
-
-  Git hotspots: order.py (42 commits, complexity=8.5)
-
-  Refactoring suggestions:
-    [high]   process_data() → extract sub-functions
-    [medium] dead_fn() — unreferenced, 45 lines → safe to remove
-```
-
-### Taint Analysis — track data flow, not just patterns
-
-AST-based engine that tracks how untrusted data flows from sources to dangerous sinks. Unlike regex pattern matching, it follows variables through assignments, f-strings, and function calls — with sanitizer awareness to eliminate false positives.
-
-```
-→ audit(focus="security")
-
-  Taint flows detected:
-    [high] src/api/users.py:42
-      SQL injection: request.args.get('id') → cursor.execute(query)
-      Flow: request.args.get('id') → user_id → query (f-string) → cursor.execute()
-      Fix: Use parameterized query: cursor.execute(sql, params)
-
-    [critical] src/api/admin.py:18
-      RCE: request.form.get('code') → eval(code)
-      Fix: Never eval() user-controlled strings
-```
-
-- **Python**: Full AST analysis — tracks taint through assignments, f-strings, concat, for loops
-- **Cross-function**: Detects when tainted data is passed as an argument to a function with a dangerous sink
-- **JS/TS/Go**: Regex-based fallback for common taint patterns
-- **Sanitizer-aware**: `int()`, `html.escape()`, `shlex.quote()`, parameterized queries all break the taint chain
-- **Project DSL**: Declare custom sources / sinks / sanitizers in `.flyto-rules.yaml` under `taint:` (merged on top of built-in defaults; `taint_rules.yaml` is also still honored for backward compat)
-
-```yaml
-# .flyto-rules.yaml
 taint:
   sources:
     - pattern: "ctx.payload"
       language: python
-      taint_type: user_input
   sinks:
     - pattern: "dangerousEval("
       vuln_type: rce
       severity: critical
-      recommendation: "Use sandbox runner"
-  sanitizers:
-    - pattern: "safe_html("
-      cleanses: ["xss"]
 ```
-
-```bash
-flyto-index add-taint-source . --pattern "ctx.payload" --taint-type user_input
-flyto-index add-taint-sink   . --pattern "dangerousEval(" --vuln-type rce --severity critical
-flyto-index list-taint-rules .
-```
-
-### Project Rules — AI learns from your corrections
-
-`.flyto-rules.yaml` — structured, versionable project conventions that audit enforces automatically.
-
-```yaml
-# .flyto-rules.yaml
-architecture:
-  - rule: "i18n files must be in flyto-i18n/"
-    glob_deny: ["flyto-cloud/**/*.locale.json"]
-
-style:
-  - rule: "Frontend does no data processing"
-    grep_deny: [{ pattern: '\breduce\s*\(', glob: "*.vue" }]
-
-conventions:
-  - rule: "Commit messages in English"
-```
-
-When you correct the AI ("don't put i18n files there"), it auto-writes a verifiable rule — so the mistake never happens again, for any AI, any tool:
-
-```
-User corrects AI → add_rule() writes .flyto-rules.yaml → audit checks compliance
-```
-
-- `glob_deny` — files in wrong locations
-- `grep_deny` — forbidden code patterns in specific file types
-- `conventions` — text-only guidance (no automated check)
-- Rules accumulate over time — no upfront config needed
-
-### Architecture Layers — declare who may import whom
-
-Declarative layer membership + import constraints. The indexer walks the import
-graph (Python / TS / JS / Vue / Go) and flags every edge that crosses a forbidden
-boundary. No plugin, no runtime — just `.flyto-rules.yaml` and `audit`.
-
-```yaml
-layers:
-  - name: ui
-    paths: ["src/pages/**", "src/components/**"]
-    can_import: [lib, hooks, types]
-    reason: "UI is the top layer"
-
-  - name: lib
-    paths: ["src/lib/**"]
-    cannot_import: [ui]
-    reason: "lib must be UI-agnostic"
-
-  - name: db
-    paths: ["src/db/**"]
-    can_import: [types]
-
-cross_imports_deny:
-  - from: "src/features/a/**"
-    to:   "src/features/b/**"
-    reason: "features must not cross-import — use shared/"
-```
-
-```bash
-flyto-index layers .                      # human-readable report
-flyto-index layers . --json --fail-on-violation   # CI gate (exits non-zero)
-flyto-index add-layer --name ui --paths "src/ui/**" --cannot-import db
-```
-
-- `can_import` — whitelist (only these layers + self allowed)
-- `cannot_import` — blacklist (overrides the whitelist)
-- Path aliases from `tsconfig.json paths` and Go module paths from `go.mod` are resolved automatically
-- `audit` picks up layer violations with no extra flag
-
-### Task Analysis — plan before you code
-
-Scores risk across 6 dimensions and generates an execution plan:
-
-```
-→ task(action="plan", description="Rename validateOrder to validate_order", intent="refactor")
-
-  Dimensions:
-    blast_radius:      HIGH (8.0)  — 7 callers across 3 projects
-    breaking_risk:     HIGH (7.0)  — public API, used by external consumers
-    test_risk:         MEDIUM (5.0) — 2/7 callers have test coverage
-    cross_coupling:    HIGH (8.0)  — referenced in 3 projects
-    complexity:        LOW (2.0)   — straightforward rename
-    rollback_difficulty: MEDIUM (5.0) — multi-project change
-
-  Execution Plan:
-    1. scope_callers       → find_references("validateOrder")
-    2. verify_test_coverage → find_test_file("checkout.py")
-    3. check_cross_project → cross_project_impact("validateOrder")
-    4. ⛔ gate_before_plan → task_gate_check(phase="plan")
-    5. preview_changes     → edit_impact_preview("validateOrder", "rename")
-    6. ⛔ gate_before_apply → task_gate_check(phase="apply")
-```
-
-Each step has pre-filled arguments — AI follows the data structure, not prompts.
-Server-side enforcement blocks skipping gates.
-
-### Decision Grill — resolve hidden decisions before the plan
-
-`task(action="grill")` adds a persistent pre-plan decision gate without adding
-another MCP tool for the LLM to choose. It resolves repository facts from the
-index, asks only reachable human decisions, returns one question plus a
-recommended answer in interactive mode, and blocks freezing until critical
-decisions and contradictions are closed.
-
-```text
-task(action="grill", grill_action="start", description="Add robot adapter")
-  → repository facts resolved from Python / TypeScript / C symbols
-  → one next_question + recommendation
-
-task(action="grill", grill_action="answer",
-     grill_session_id="grill_...", decision_id="failure_policy",
-     accept_recommendation=true, request_id="answer-v1")
-
-task(action="grill", grill_action="freeze",
-     grill_session_id="grill_...")
-  → immutable decision contract + SHA-256 fingerprint
-
-task(action="plan", grill_session_id="grill_...", ...)
-  → plan carries the frozen decision contract
-```
-
-Questions and answers can use any language. Stable IDs, prerequisites,
-severities, evidence, and fingerprints remain provider- and language-neutral.
-Repository-owned facts are never turned into questions for the user.
-Exact normalized evidence matching is the fail-closed default, so a merely
-similar fuzzy search result cannot silently resolve a critical fact. See the
-[closed-loop test protocol](docs/GRILL_TESTING.md) for the mixed Python,
-TypeScript, and C test data and acceptance matrix.
-
-## Tools
-
-Five core tools cover the normal inspect-before-edit workflow. Focused smart
-tools add verification, security, licensing, documentation, framework, call
-hierarchy, PR-risk, and repository-policy operations without forcing clients to
-work through the granular compatibility surface.
-
-| Tool | What it answers | Auto-enrichment |
-|------|----------------|-----------------|
-| `search` | "Find code by name or description" | Merges BM25 + semantic search, attaches callers and file context |
-| `impact` | "What breaks if I change this?" | References + blast radius + cross-project + test files in one call |
-| `audit` | "How healthy is this project?" | Health score (0-100), auto-expands weak dimensions, taint analysis, rules compliance |
-| `task` | "Interrogate, plan, gate-check, or validate changes" | Decision tree + evidence + fingerprint, risk scoring, execution plans, linter + tests |
-| `structure` | "Show me the project layout" | Projects, APIs, dependencies, type contracts |
-
-<details>
-<summary>What each tool replaces</summary>
-
-**`search`** replaces: `search_code`, `semantic_search`, `fulltext_search`, `get_file_info`, `get_file_symbols`, `get_symbol_content`, `get_file_context`
-
-**`impact`** replaces: `find_references`, `impact_analysis`, `batch_impact_analysis`, `edit_impact_preview`, `cross_project_impact`, `impact_from_diff`
-
-**`audit`** replaces: `code_health_score`, `security_scan`, `taint_analysis`, `rules_check`, `find_dead_code`, `find_complex_functions`, `find_duplicates`, `suggest_refactoring`, `find_stale_files`, `find_todos`, `coverage_gaps`
-
-**`task`** replaces: separate decision-interview tooling, `analyze_task`,
-`task_gate_check`, and `validate_changes`
-
-**`structure`** replaces: `list_projects`, `list_apis`, `list_categories`, `dependency_graph`, `check_api_contracts`, `contract_drift`, `extract_type_schema`
-
-All granular compatibility tools remain available in dispatch for backward
-compatibility and execution-plan steps. The generated
-[MCP reference](docs/reference/mcp-tools.md) records the current counts and
-schemas directly from the registries.
-
-</details>
 
 ## Languages
 
-| Language | Parser | Extracts |
-|----------|--------|----------|
-| Python | AST | Functions, classes, methods, decorators, API routes |
-| TypeScript/JS | Custom | Functions, classes, interfaces, types, API calls |
-| Vue | SFC | Components, composables, emits, props |
-| Dart | Token-aware | Flutter widgets, classes, constructors, methods, getters, functions, imports |
-| C/C++ | Token-aware | Function definitions, typedef structs, includes, call edges |
-| Go | Custom | Functions, structs, methods, interfaces, embeddings, type aliases, const/var, impl tracking |
-| Rust | Custom | Functions, structs, impl blocks, traits |
-| Java | Custom | Classes, methods, interfaces, annotations |
+| Language | Indexing |
+| --- | --- |
+| Python | AST: functions, classes, methods, decorators, routes |
+| TypeScript / JavaScript | Functions, classes, interfaces, types, API calls |
+| Vue | Components, composables, props, emits |
+| Go | Functions, structs, methods, interfaces, embeddings |
+| Rust | Functions, structs, impl blocks, traits |
+| Java | Classes, methods, interfaces, annotations |
+| Dart | Widgets, classes, constructors, methods, imports |
+| C / C++ | Functions, typedef structs, includes, call edges |
 
-## How It Works
+Optional local language servers enrich references. The built-in index remains
+the dependency-free fallback.
 
-```
-flyto-index scan .
-```
+## How it works
 
-1. **Parse** — AST (Python) or regex (others) extracts every function, class, and import
-2. **Graph** — Builds dependency graph + reverse index (caller → callee)
-3. **Serve** — MCP server answers queries from the graph in memory
-4. **Incremental** — Re-scans only changed files, incrementally patches reverse_index and BM25 (10-50x faster than full rebuild)
-5. **LSP** — Optional type-aware references via pyright/tsserver/gopls/rust-analyzer (zero deps, graceful fallback)
-
-```
-.flyto-index/
-├── index.json       # Symbols + dependency graph + reverse index
-├── content.jsonl    # Source code (lazy-loaded)
-├── bm25.json        # BM25 keyword search index
-├── semantic.json    # TF-IDF + learned ConceptGraph (v2.2+)
-└── manifest.json    # Change tracking
+```text
+source → symbols → dependency graph → reverse index → MCP
+                         ↓
+              task contracts + verify
 ```
 
-## CI: Block Risky Changes
+Generated data stays under `.flyto-index/`:
 
-```yaml
-# Fail the PR if changes affect too many call sites
-- run: pip install flyto-indexer
-- run: flyto-index verify . --full-scan --strict
-- run: flyto-index check . --threshold medium --base main
+```text
+index.json      symbols and dependency graph
+content.jsonl   lazy source records
+bm25.json       keyword index
+semantic.json   local semantic index
 ```
 
-## CLI
+Delete that directory to remove generated index data.
+
+## Design choices
+
+The workflow borrows proven ideas without copying entire products:
+
+- clear spec-to-implementation traceability from
+  [GitHub Spec Kit](https://github.com/github/spec-kit);
+- plain Markdown and brownfield-first deltas from
+  [OpenSpec](https://github.com/Fission-AI/OpenSpec);
+- path-scoped, just-in-time project context from
+  [Gemini CLI](https://github.com/google-gemini/gemini-cli);
+- symbol-aware refactor preflight from
+  [Serena](https://github.com/oraios/serena).
+
+What stays out of core: hosted documentation fetchers, model bindings,
+auto-editing, auto-commit, and another workflow tree. See
+[design references](docs/DESIGN_REFERENCES.md).
+
+## Documentation
+
+- [Features](docs/FEATURES.md)
+- [CLI](docs/CLI.md)
+- [MCP](docs/MCP.md)
+- [Configuration](docs/CONFIGURATION.md)
+- [Security model](docs/SECURITY_MODEL.md)
+- [Decision Grill tests](docs/GRILL_TESTING.md)
+- [Generated references](docs/reference/)
+
+## Contributing
 
 ```bash
-flyto-index setup .                       # One command: scan + CLAUDE.md + MCP config
-flyto-index scan .                        # Index (or re-index)
-flyto-index impact useAuth --path .       # Impact analysis
-flyto-index check . --threshold medium    # CI gate
-flyto-index demo .                        # 30-second demo
-flyto-index install-hook .                # Auto-reindex on commit
-flyto-index setup . --remove              # Uninstall
+python -m ruff check src tests
+python -m pytest
+flyto-index verify . --strict
 ```
 
-## Privacy
-
-Core indexing, search, impact, policy, and verification run locally and require
-no hosted service. Optional LSP enrichment starts local language servers. The
-optional LLM auditor can send selected analysis input to its configured
-provider and is disabled unless explicitly configured. Delete `.flyto-index/`
-to remove generated index data. See the [security model](docs/SECURITY_MODEL.md).
-
-## Limitations
-
-- Static analysis only — dynamic imports and metaprogramming not tracked
-- No type inference — complex TypeScript generics simplified
-- Cross-project tracking requires all projects indexed together
+Security reports: `security@flyto2.com`.
 
 ## License
 
-[Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for attribution.
+[Apache License 2.0](LICENSE). See [NOTICE](NOTICE).
 
 <!-- mcp-name: io.github.flytohub/flyto-indexer -->

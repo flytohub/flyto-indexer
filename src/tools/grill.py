@@ -21,14 +21,30 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
+from .grill_intelligence import (
+    DecisionIntelligenceError,
+    enrich_decision,
+    finalize_adversarial_review,
+)
+from .grill_evidence import (
+    capture_evidence_snapshot,
+    check_evidence_freshness,
+    decision_audit_artifact,
+    render_adr,
+    selective_reopen_plan,
+)
+from .grill_outcomes import OutcomeStore, load_outcome_priors
+
 try:
     import fcntl as _fcntl
 except ImportError:  # pragma: no cover - Windows has no fcntl
     _fcntl = None
 
 
-SCHEMA_VERSION = "flyto.grill-session.v1"
-CONTRACT_VERSION = "flyto.decision-contract.v1"
+SCHEMA_VERSION = "flyto.grill-session.v2"
+CONTRACT_VERSION = "flyto.decision-contract.v2"
+LEGACY_SCHEMA_VERSIONS = {"flyto.grill-session.v1"}
+LEGACY_CONTRACT_VERSIONS = {"flyto.decision-contract.v1"}
 VALID_OPERATIONS = {"start", "answer", "status", "freeze", "discard"}
 VALID_MODES = {"interactive", "batch"}
 VALID_KINDS = {"decision", "fact"}
@@ -156,7 +172,13 @@ def _normalize_option(raw: Any, decision_id: str, index: int) -> dict:
     }
 
 
-def _normalize_decisions(raw_decisions: Any, description: str) -> list[dict]:
+def _normalize_decisions(
+    raw_decisions: Any,
+    description: str,
+    *,
+    project: str | None = None,
+    outcome_store: OutcomeStore | None = None,
+) -> list[dict]:
     using_defaults = raw_decisions is None
     if raw_decisions is None:
         raw_decisions = _default_decisions(description)
@@ -167,6 +189,7 @@ def _normalize_decisions(raw_decisions: Any, description: str) -> list[dict]:
 
     normalized = []
     ids = set()
+    learned_priors = load_outcome_priors(project, store=outcome_store)
     for raw in raw_decisions:
         if not isinstance(raw, dict):
             raise GrillError("each decision must be an object")
@@ -206,8 +229,14 @@ def _normalize_decisions(raw_decisions: Any, description: str) -> list[dict]:
                 f"decision {decision_id} has invalid resolution_policy: {resolution_policy}"
             )
 
-        normalized.append(
-            {
+        intelligence_input = raw
+        learning_prior = learned_priors.get(decision_id)
+        if learning_prior and kind == "decision" and "confidence" not in raw:
+            intelligence_input = deepcopy(raw)
+            intelligence_input["confidence"] = {
+                "recommendation": learning_prior["recommendation_confidence"]
+            }
+        node = {
                 "id": decision_id,
                 "kind": kind,
                 "owner": "repository" if kind == "fact" else "human",
@@ -230,8 +259,13 @@ def _normalize_decisions(raw_decisions: Any, description: str) -> list[dict]:
                 "selected_option": None,
                 "evidence": [],
                 "source": raw.get("source", "default" if using_defaults else "client"),
-            }
-        )
+        }
+        try:
+            node.update(enrich_decision(intelligence_input, node))
+        except DecisionIntelligenceError as exc:
+            raise GrillError(f"decision {decision_id}: {exc}") from exc
+        node["learning_prior"] = deepcopy(learning_prior)
+        normalized.append(node)
 
     _validate_graph(normalized)
     return normalized
@@ -276,13 +310,23 @@ def _resolved_ids(session: dict) -> set[str]:
 
 def _frontier(session: dict) -> list[dict]:
     resolved = _resolved_ids(session)
-    return [
+    frontier = [
         node
         for node in session["decisions"]
         if node["status"] == "open"
         and node["owner"] == "human"
         and set(node["prerequisites"]).issubset(resolved)
     ]
+    declaration_order = {
+        node["id"]: index for index, node in enumerate(session["decisions"])
+    }
+    return sorted(
+        frontier,
+        key=lambda node: (
+            -float(node.get("value_of_information", 0.0)),
+            declaration_order[node["id"]],
+        ),
+    )
 
 
 def _repository_blockers(session: dict) -> list[dict]:
@@ -412,8 +456,38 @@ def _readiness(session: dict) -> dict:
     blocking = [node for node in unresolved if node["blocking"]]
     contradictions = _contradictions(session)
     score = round((resolved / total) * 100) if total else 100
+    confidence_total = sum(
+        SEVERITY_WEIGHT[node["severity"]] for node in session["decisions"]
+    )
+    confidence_weighted = sum(
+        SEVERITY_WEIGHT[node["severity"]]
+        * float(
+            node.get("confidence", {}).get(
+                "evidence" if node["kind"] == "fact" else "recommendation",
+                0.5,
+            )
+        )
+        for node in session["decisions"]
+    )
+    confidence_score = (
+        round((confidence_weighted / confidence_total) * 100)
+        if confidence_total
+        else 100
+    )
     return {
         "score": score,
+        "confidence_score": confidence_score,
+        "low_confidence_decision_ids": [
+            node["id"]
+            for node in session["decisions"]
+            if float(
+                node.get("confidence", {}).get(
+                    "evidence" if node["kind"] == "fact" else "recommendation",
+                    0.5,
+                )
+            )
+            < 0.5
+        ],
         "resolved": len(session["decisions"]) - len(unresolved),
         "total": len(session["decisions"]),
         "blocking_count": len(blocking),
@@ -441,6 +515,13 @@ def _question_view(node: dict) -> dict:
             "prerequisites",
             "options",
             "evidence",
+            "confidence",
+            "decision_cost",
+            "reversibility",
+            "value_of_information",
+            "acceptance",
+            "adversarial_review",
+            "learning_prior",
         )
     }
 
@@ -529,10 +610,22 @@ class GrillSessionStore:
                 session = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
                 raise GrillError(f"grill session is unreadable: {session_id}") from exc
-        if session.get("schema_version") != SCHEMA_VERSION:
+        if session.get("schema_version") not in {SCHEMA_VERSION, *LEGACY_SCHEMA_VERSIONS}:
             raise GrillError("unsupported grill session schema")
         if session.get("session_id") != session_id:
             raise GrillError("grill session identity mismatch")
+        if session.get("schema_version") in LEGACY_SCHEMA_VERSIONS:
+            session["schema_version"] = SCHEMA_VERSION
+            for node in session.get("decisions", []):
+                try:
+                    intelligence = enrich_decision(node, node)
+                except DecisionIntelligenceError as exc:
+                    raise GrillError(f"cannot upgrade grill session: {exc}") from exc
+                for key, value in intelligence.items():
+                    node.setdefault(key, value)
+                node.setdefault("learning_prior", None)
+                if node.get("status") == "resolved":
+                    node["adversarial_review"] = finalize_adversarial_review(node)
         return session
 
     def save(self, session: dict) -> None:
@@ -560,6 +653,7 @@ def _new_session(
     mode: str,
     locale: str,
     max_questions: int,
+    outcome_root: Path | None = None,
 ) -> dict:
     if mode not in VALID_MODES:
         raise GrillError(f"invalid grill mode: {mode}")
@@ -581,7 +675,12 @@ def _new_session(
         "max_questions": max_questions,
         "created_at": timestamp,
         "updated_at": timestamp,
-        "decisions": _normalize_decisions(decisions, description),
+        "decisions": _normalize_decisions(
+            decisions,
+            description,
+            project=project,
+            outcome_store=OutcomeStore(outcome_root) if outcome_root else None,
+        ),
         "history": [{"event": "started", "at": timestamp}],
         "processed_request_ids": [],
         "contract": None,
@@ -645,6 +744,7 @@ def _answer(
     node["answer"] = answer
     node["selected_option"] = selected_option
     node["status"] = "resolved"
+    node["adversarial_review"] = finalize_adversarial_review(node)
     if request_id:
         session["processed_request_ids"].append(request_id)
         session["processed_request_ids"] = session["processed_request_ids"][-MAX_HISTORY:]
@@ -660,7 +760,7 @@ def _answer(
 
 
 def _contract_material(session: dict) -> dict:
-    return {
+    material = {
         "version": CONTRACT_VERSION,
         "session_id": session["session_id"],
         "description": session["description"],
@@ -677,15 +777,33 @@ def _contract_material(session: dict) -> dict:
                     "blocking",
                     "question",
                     "recommendation",
+                    "rationale",
+                    "prerequisites",
                     "answer",
                     "selected_option",
                     "evidence",
+                    "confidence",
+                    "decision_cost",
+                    "reversibility",
+                    "value_of_information",
+                    "acceptance",
+                    "adversarial_review",
+                    "learning_prior",
+                    "source",
                 )
             }
             for node in session["decisions"]
         ],
         "readiness": _readiness(session),
+        "evidence_snapshot": capture_evidence_snapshot(
+            session.get("project"), session["decisions"]
+        ),
     }
+    material["artifacts"] = {
+        "adr_markdown": render_adr(material),
+        "decision_audit": decision_audit_artifact(material),
+    }
+    return material
 
 
 def _freeze(session: dict) -> None:
@@ -704,12 +822,18 @@ def _freeze(session: dict) -> None:
     _append_history(session, {"event": "frozen", "fingerprint": material["fingerprint"]})
 
 
-def validate_decision_contract(task_contract: dict) -> dict:
+def validate_decision_contract(
+    task_contract: dict,
+    *,
+    project: str | None = None,
+    check_freshness: bool = True,
+) -> dict:
     """Validate an embedded frozen decision contract without trusting caller state."""
     contract = task_contract.get("decision_contract") if isinstance(task_contract, dict) else None
     if not contract:
         return {"pass": True, "decision": "pass", "required_actions": []}
-    if contract.get("version") != CONTRACT_VERSION or contract.get("status") != "frozen":
+    supported_versions = {CONTRACT_VERSION, *LEGACY_CONTRACT_VERSIONS}
+    if contract.get("version") not in supported_versions or contract.get("status") != "frozen":
         return {
             "pass": False,
             "decision": "blocked",
@@ -736,6 +860,40 @@ def validate_decision_contract(task_contract: dict) -> dict:
             "required_actions": list(readiness.get("blocking_decision_ids", [])),
             "message": "Critical decisions remain unresolved.",
         }
+    freshness = (
+        check_evidence_freshness(contract, project)
+        if check_freshness
+        else {
+            "pass": True,
+            "status": "not_checked",
+            "stale_decision_ids": [],
+            "changes": [],
+        }
+    )
+    if not freshness.get("pass"):
+        reopen_plan = selective_reopen_plan(contract, freshness)
+        invalid_scope = freshness.get("status") == "invalid_evidence_scope"
+        return {
+            "pass": False,
+            "decision": "blocked",
+            "reason_codes": [
+                (
+                    "DECISION_EVIDENCE_SCOPE_INVALID"
+                    if invalid_scope
+                    else "DECISION_EVIDENCE_STALE"
+                )
+            ],
+            "required_actions": [
+                f"reopen_decision:{item['decision_id']}" for item in reopen_plan
+            ],
+            "message": (
+                "Repository evidence escaped the declared project root."
+                if invalid_scope
+                else "Repository evidence changed after the decision contract was frozen."
+            ),
+            "evidence_freshness": freshness,
+            "selective_reopen": reopen_plan,
+        }
     return {
         "pass": True,
         "decision": "pass",
@@ -743,6 +901,8 @@ def validate_decision_contract(task_contract: dict) -> dict:
         "required_actions": [],
         "decision_completeness_done": True,
         "fingerprint": fingerprint,
+        "evidence_freshness": freshness,
+        "artifacts": deepcopy(contract.get("artifacts") or {}),
     }
 
 
@@ -781,7 +941,13 @@ def run_grill(
         store = store or GrillSessionStore()
         if operation == "start":
             session = _new_session(
-                description, project, decisions, mode, locale, max_questions
+                description,
+                project,
+                decisions,
+                mode,
+                locale,
+                max_questions,
+                store.root,
             )
             _resolve_facts(session, fact_resolver)
             store.save(session)

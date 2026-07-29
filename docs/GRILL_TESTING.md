@@ -15,12 +15,16 @@ flowchart LR
     A[Python / TypeScript / C fixture] --> B[IndexEngine full scan]
     B --> C[Repository fact resolution]
     C --> D[Reachable human decisions]
-    D --> E[Frozen signed contract]
+    D --> E[Frozen v2 contract + evidence snapshot + ADR]
     E --> F[task plan]
     F --> G[task gate]
     G --> H[Allowed implementation phase]
     H --> I[task validate: ruff + pytest]
-    I --> J[Strict full-scan verify]
+    I --> J[Evidence freshness + decision-to-diff gate]
+    J --> M[Local privacy-preserving outcome learning]
+    J --> N[Strict full-scan verify]
+    E --> O[Changed evidence]
+    O --> P[Selective decision reopen]
     E --> K[Tampered copy]
     K --> L[Gate rejects]
 ```
@@ -43,16 +47,20 @@ resolver.
 | Boundary | Required proof | Tests |
 |---|---|---|
 | Decision graph | prerequisite frontier, missing dependency, cycle rejection, batch bound | `test_grill.py` |
+| Decision intelligence | confidence validation, decision cost, reversibility, VOI ordering, bounded adversarial review, acceptance schema | `test_grill.py` |
 | Fact precision | exact identifier match by default; unrelated fuzzy hits remain blocked; explicit `all_terms` or `evidence_present` opt-in | `test_grill.py` |
 | Human answers | only reachable human nodes, recommendations, option validation, contradictions, idempotent request IDs | `test_grill.py` |
 | Persistence | atomic replace, reload, corrupt-state rejection, path traversal rejection, private permissions | `test_grill.py`, `test_grill_deep.py` |
 | Concurrency | no lost updates across threads or separate POSIX processes | `test_grill_deep.py` |
 | Contract integrity | incomplete freeze rejection, immutable frozen state, SHA-256 tamper rejection | `test_grill.py`, `test_grill_deep.py` |
+| Evidence freshness | content hashes, project scoping, only impacted decisions reopen, v1 migration | `test_grill_evidence.py` |
+| Diff conformance | expected/forbidden paths and symbols, safe proof matching, unsupported command rejection | `test_grill_conformance.py` |
+| Outcome learning | private compact records, idempotency, Bayesian confidence prior, explicit-confidence precedence | `test_grill_outcomes.py` |
 | Input safety | bounded arrays/text, arbitrary Unicode, hostile shell/template text treated as inert data | `test_grill_deep.py` |
 | Real index | Python, TypeScript, and C symbols resolve through `IndexEngine` and production search | `test_grill_real_data.py` |
-| CLI | real scan → start → blocked freeze → answers → freeze → plan → gate → validate → tamper rejection | `test_grill_cli_e2e.py` |
+| CLI | real scan → start → blocked freeze → answers → freeze → plan → gate → contract-aware validate → tamper rejection | `test_grill_cli_e2e.py` |
 | MCP | real stdio JSON-RPC start → fact resolution → answer → freeze → immutable state | `test_mcp_integration.py` |
-| Compatibility | unchanged public tool count and existing `task` plan/gate/validate behavior | `test_tool_registry.py`, `test_smart.py` |
+| Compatibility | v1 contracts/sessions, unchanged 20-tool public count, extracted CLI/dispatch adapters, existing task behavior | `test_tool_registry.py`, `test_smart.py`, `test_task_adapters.py` |
 | Large merged index | project-scoped test mapping, dead-code references, roots, and dependency work remain bounded and collision-free | `test_test_mapper.py`, `test_index_store_scope.py`, `test_maintenance_dead_code.py`, `test_task_analysis.py` |
 
 ## Evidence Selection Rules
@@ -76,6 +84,9 @@ Run the focused closure suite:
 python -m pytest -q \
   tests/test_grill.py \
   tests/test_grill_deep.py \
+  tests/test_grill_evidence.py \
+  tests/test_grill_conformance.py \
+  tests/test_grill_outcomes.py \
   tests/test_grill_real_data.py \
   tests/test_grill_cli_e2e.py \
   tests/test_mcp_integration.py

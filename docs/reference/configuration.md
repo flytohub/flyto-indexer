@@ -24,7 +24,7 @@
 | Variable | Readers |
 |---|---|
 | `FLYTO_AUTO_REINDEX` | `src/index_store.py` |
-| `FLYTO_INDEXER_GRILL_DIR` | `src/tools/grill.py` |
+| `FLYTO_INDEXER_GRILL_DIR` | `src/tools/grill.py`, `src/tools/grill_outcomes.py` |
 | `FLYTO_INDEXER_PYTEST_TIMEOUT` | `src/tools/validation.py` |
 | `FLYTO_INDEXER_RATE_LIMIT` | `src/mcp_server.py` |
 | `FLYTO_INDEXER_SESSION_RATE_LIMIT` | `src/mcp_server.py` |

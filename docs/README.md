@@ -8,7 +8,7 @@ the path that matches the work you need to do.
 
 | Goal | Document |
 |---|---|
-| Install and complete a first scan | [Root README](../README.md#try-it-in-60-seconds) |
+| Install and complete a first scan | [Root README](../README.md#start-in-60-seconds) |
 | Understand shipped capabilities | [Feature guide](FEATURES.md) |
 | Use the command line | [CLI guide](CLI.md) |
 | Connect an AI coding client | [MCP guide](MCP.md) |
@@ -18,6 +18,7 @@ the path that matches the work you need to do.
 | Review the dated Decision Grill evidence | [Decision Grill closure report](GRILL_TEST_REPORT_2026-07-29.md) |
 | Evaluate data handling and threats | [Security model](SECURITY_MODEL.md) |
 | Understand the design and evidence model | [Technical whitepaper](WHITEPAPER.md) |
+| Review borrowed mechanics and the anti-bloat budget | [Design references](DESIGN_REFERENCES.md) |
 
 ## Generated Reference
 

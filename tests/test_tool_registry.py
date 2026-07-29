@@ -89,6 +89,21 @@ class TestMCPTools:
         ]
         assert properties["locale"]["default"] == "und"
         assert properties["max_questions"]["maximum"] == 20
+        assert "confidence" in properties["decisions"]["description"]
+        assert "expected_paths" in properties["decisions"]["description"]
+        assert "gate/validate" in properties["task_contract"]["description"]
+        assert "decision-to-diff" in task_tool["description"]
+        assert "outcome store" in task_tool["description"]
+        assert len(SMART_TOOLS) == 20
+
+    def test_impact_adds_move_preflight_without_another_tool(self):
+        from tool_registry import SMART_TOOLS
+
+        impact = next(tool for tool in SMART_TOOLS if tool["name"] == "impact")
+        change_types = impact["inputSchema"]["properties"]["change_type"]["enum"]
+
+        assert "move" in change_types
+        assert "Semantic preflight" in impact["description"]
         assert len(SMART_TOOLS) == 20
 
 

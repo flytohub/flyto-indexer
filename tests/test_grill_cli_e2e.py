@@ -171,6 +171,8 @@ def test_real_cli_scan_grill_freeze_plan_gate_validate_and_tamper(tmp_path):
         "validate",
         "--project",
         str(ROOT),
+        "--task-contract",
+        str(contract_path),
         "--test-path",
         "tests/test_grill.py tests/test_grill_real_data.py",
     )
@@ -178,6 +180,9 @@ def test_real_cli_scan_grill_freeze_plan_gate_validate_and_tamper(tmp_path):
     assert validation["ruff"]["status"] == "pass"
     assert validation["pytest"]["status"] == "pass"
     assert validation["pytest"]["passed"] > 0
+    assert validation["decision_contract_validation"]["pass"] is True
+    assert validation["decision_conformance"]["pass"] is True
+    assert validation["outcome_learning"]["status"] == "recorded"
 
     tampered = deepcopy(plan)
     tampered["decision_contract"]["decisions"][0]["answer"] = "invented"

@@ -77,6 +77,21 @@ def _validation_mod():
     return m
 
 
+def _conformance_mod():
+    from . import grill_conformance as m
+    return m
+
+
+def _outcomes_mod():
+    from . import grill_outcomes as m
+    return m
+
+
+def _task_context_mod():
+    from . import task_context as m
+    return m
+
+
 def _quality_mod():
     try:
         from .. import quality as m
@@ -556,7 +571,7 @@ def smart_audit(project: str = None, focus: str = None) -> dict:
 # ---------------------------------------------------------------------------
 
 def _task_plan(description, targets, intent, project, grill_session_id=None):
-    """Handle task action='plan': analyze task and attach co-change suggestions."""
+    """Build one risk, instruction, and intent contract."""
     task = _task_mod()
     result = task.analyze_task(
         description=description,
@@ -583,18 +598,115 @@ def _task_plan(description, targets, intent, project, grill_session_id=None):
             }
         result["decision_contract"] = decision_contract
         result.setdefault("task_profile", {})["decision_session_id"] = grill_session_id
-    return result
+    return _task_context_mod().attach_task_context(
+        result,
+        project=project,
+        description=description,
+        targets=targets or [],
+    )
 
 
-def _task_validate(project, run_tests, test_path):
-    """Handle task action='validate': run validation and attach untested changes on failure."""
+def _task_validate(project, run_tests, test_path, task_contract=None):
+    """Run code checks and every contract-backed closure gate."""
     val = _validation_mod()
     result = val.validate_changes(
         project=project,
         run_tests=run_tests,
         test_path=test_path,
     )
-    if isinstance(result, dict) and not result.get("tests_passed", True):
+    contract = task_contract if isinstance(task_contract, dict) else {}
+    contract_project = (
+        contract.get("task_profile", {}).get("project") or project
+    )
+    validation_passed = result.get("overall", "pass") == "pass"
+    closed_loop_passed = validation_passed
+    reason_codes = []
+    required_actions = []
+    if not validation_passed:
+        reason_codes.append("CODE_VALIDATION_FAILED")
+        required_actions.append("fix_lint_or_tests")
+
+    ledger_gate = _task_context_mod().validate_intent_ledger(
+        contract,
+        project=contract_project,
+        validation=result,
+    )
+    if ledger_gate.get("status") != "not_required":
+        result["intent_ledger_validation"] = ledger_gate
+        if not ledger_gate.get("pass"):
+            closed_loop_passed = False
+            reason_codes.append("INTENT_LEDGER_NONCONFORMANT")
+            required_actions.extend(ledger_gate.get("required_actions", []))
+
+    changed_paths = (
+        ledger_gate.get("change_set", {}).get("changed_paths", [])
+        if isinstance(ledger_gate, dict)
+        else []
+    )
+    instruction_gate = _task_context_mod().validate_instruction_context(
+        contract,
+        project=contract_project,
+        changed_paths=changed_paths,
+    )
+    if instruction_gate.get("status") != "not_required":
+        result["instruction_context_validation"] = instruction_gate
+        if not instruction_gate.get("pass"):
+            closed_loop_passed = False
+            reason_codes.append("INSTRUCTION_CONTEXT_NONCONFORMANT")
+            required_actions.extend(instruction_gate.get("required_actions", []))
+
+    decision_contract = (
+        contract.get("decision_contract")
+    )
+    if decision_contract:
+        contract_project = decision_contract.get("project") or project
+        contract_gate = _grill_mod().validate_decision_contract(
+            contract, project=contract_project
+        )
+        result["decision_contract_validation"] = contract_gate
+        if contract_gate.get("pass"):
+            conformance = _conformance_mod().validate_decision_conformance(
+                contract,
+                project=contract_project,
+                validation=result,
+            )
+        else:
+            conformance = {
+                "pass": False,
+                "status": "blocked_by_decision_contract",
+                "violations": [],
+                "required_actions": contract_gate.get("required_actions", []),
+            }
+        result["decision_conformance"] = conformance
+        if not contract_gate.get("pass"):
+            closed_loop_passed = False
+            reason_codes.extend(contract_gate.get("reason_codes", []))
+            required_actions.extend(contract_gate.get("required_actions", []))
+        if contract_gate.get("pass") and not conformance.get("pass"):
+            closed_loop_passed = False
+            reason_codes.append("DECISION_DIFF_NONCONFORMANT")
+            required_actions.extend(conformance.get("required_actions", []))
+        result["artifacts"] = contract_gate.get(
+            "artifacts", decision_contract.get("artifacts", {})
+        )
+        if contract_gate.get("pass"):
+            result["outcome_learning"] = _outcomes_mod().record_outcome(
+                contract,
+                success=closed_loop_passed,
+                validation=result,
+                conformance=conformance,
+            )
+    has_contract_gates = any(
+        key in contract
+        for key in ("instruction_context", "intent_ledger", "decision_contract")
+    )
+    if has_contract_gates:
+        result["overall"] = "pass" if closed_loop_passed else "fail"
+        result["pass"] = closed_loop_passed
+        result["decision"] = "pass" if closed_loop_passed else "blocked"
+        result["reason_codes"] = list(dict.fromkeys(reason_codes))
+        result["required_actions"] = list(dict.fromkeys(required_actions))
+    if isinstance(result, dict) and result.get("overall") == "fail":
         r = _enrich("untested_changes", _coverage_mod().untested_changes, project=project, mode="unstaged")
         if r is not None:
             result["untested_changes"] = r
@@ -639,7 +751,48 @@ def smart_task(action: str, description: str = "", targets: list = None,
         return _task_plan(description, targets, intent, project, grill_session_id)
 
     if action == "gate":
-        decision_gate = _grill_mod().validate_decision_contract(task_contract or {})
+        contract_project = (
+            (task_contract or {}).get("task_profile", {}).get("project")
+            or project
+        )
+        instruction_gate = _task_context_mod().validate_instruction_context(
+            task_contract or {},
+            project=contract_project,
+        )
+        ledger_gate = _task_context_mod().validate_intent_ledger(
+            task_contract or {},
+            project=contract_project,
+            check_diff=False,
+        )
+        context_failures = [
+            gate
+            for gate in (instruction_gate, ledger_gate)
+            if not gate.get("pass", False)
+        ]
+        if context_failures:
+            return {
+                "pass": False,
+                "decision": "blocked",
+                "phase": next_phase,
+                "reason_codes": [
+                    (
+                        "INSTRUCTION_CONTEXT_NONCONFORMANT"
+                        if gate is instruction_gate
+                        else "INTENT_LEDGER_NONCONFORMANT"
+                    )
+                    for gate in context_failures
+                ],
+                "required_actions": [
+                    action
+                    for gate in context_failures
+                    for action in gate.get("required_actions", [])
+                ],
+                "instruction_context_validation": instruction_gate,
+                "intent_ledger_validation": ledger_gate,
+            }
+        decision_gate = _grill_mod().validate_decision_contract(
+            task_contract or {}, project=project
+        )
         if not decision_gate.get("pass"):
             return decision_gate
         derived_state = dict(current_state or {})
@@ -652,7 +805,7 @@ def smart_task(action: str, description: str = "", targets: list = None,
         )
 
     if action == "validate":
-        return _task_validate(project, run_tests, test_path)
+        return _task_validate(project, run_tests, test_path, task_contract)
 
     return {
         "error": (

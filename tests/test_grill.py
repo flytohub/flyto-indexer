@@ -27,8 +27,9 @@ def _decision(
     kind="decision",
     options=None,
     evidence_queries=None,
+    **overrides,
 ):
-    return {
+    decision = {
         "id": decision_id,
         "kind": kind,
         "severity": severity,
@@ -38,6 +39,8 @@ def _decision(
         "options": options or [],
         "evidence_queries": evidence_queries or [],
     }
+    decision.update(overrides)
+    return decision
 
 
 def _start(store, decisions, **kwargs):
@@ -121,6 +124,75 @@ class TestDecisionTree:
 
         assert "cycle" in cycle["error"]
         assert "missing prerequisites" in missing["error"]
+
+    def test_frontier_prioritizes_value_of_information_stably(self, store):
+        result = _start(
+            store,
+            [
+                _decision(
+                    "cheap",
+                    severity="critical",
+                    confidence={"recommendation": 0.95},
+                    decision_cost=1,
+                    reversibility="reversible",
+                ),
+                _decision(
+                    "expensive",
+                    severity="high",
+                    confidence={"recommendation": 0.1},
+                    decision_cost=10,
+                    reversibility="irreversible",
+                ),
+                _decision("stable", severity="medium"),
+            ],
+            mode="batch",
+        )
+
+        assert result["frontier_ids"] == ["expensive", "stable", "cheap"]
+        assert result["next_question"]["value_of_information"] > 10
+
+    def test_question_exposes_bounded_adversarial_and_acceptance_contract(self, store):
+        result = _start(
+            store,
+            [
+                _decision(
+                    "scope",
+                    confidence={"recommendation": 0.35},
+                    acceptance={
+                        "expected_paths": ["src/tools/grill.py"],
+                        "forbidden_paths": ["src/legacy.py"],
+                        "assertions": ["Existing task callers remain compatible."],
+                        "proof_commands": ["pytest -q tests/test_grill.py"],
+                    },
+                    failure_conditions=["The legacy task schema changes."],
+                )
+            ],
+        )
+        question = result["next_question"]
+
+        assert question["confidence"]["recommendation"] == 0.35
+        assert question["acceptance"]["expected_paths"] == ["src/tools/grill.py"]
+        assert question["adversarial_review"]["bounded"] is True
+        assert question["adversarial_review"]["max_rounds"] == 2
+        assert question["adversarial_review"]["failure_conditions"] == [
+            "The legacy task schema changes."
+        ]
+
+    @pytest.mark.parametrize(
+        "overrides,error",
+        [
+            ({"confidence": {"recommendation": 1.1}}, "confidence.recommendation"),
+            ({"decision_cost": 0}, "decision_cost"),
+            ({"reversibility": "magic"}, "reversibility"),
+            ({"acceptance": {"proof_commands": "pytest"}}, "proof_commands"),
+            ({"adversarial_review": {"max_rounds": 99}}, "max_rounds"),
+        ],
+    )
+    def test_invalid_decision_intelligence_fails_closed(self, store, overrides, error):
+        result = _start(store, [_decision("scope", **overrides)])
+
+        assert result["pass"] is False
+        assert error in result["error"]
 
 
 class TestRepositoryFacts:
@@ -313,13 +385,26 @@ class TestPersistenceAndContract:
         assert frozen["status"] == "active"
 
     def test_frozen_contract_is_exportable_and_tamper_evident(self, store):
-        started = _start(store, [_decision("scope", severity="critical")])
+        started = _start(
+            store,
+            [
+                _decision(
+                    "scope",
+                    severity="critical",
+                    acceptance={"expected_paths": ["src/tools/grill.py"]},
+                )
+            ],
+        )
         answered = _answer(store, started, "scope", answer="safe scope")
         frozen = run_grill("freeze", session_id=answered["session_id"], store=store)
 
         assert frozen["pass"] is True
         contract = export_decision_contract(answered["session_id"], store)
         assert contract["version"] == CONTRACT_VERSION
+        assert contract["decisions"][0]["acceptance"]["expected_paths"] == [
+            "src/tools/grill.py"
+        ]
+        assert contract["decisions"][0]["adversarial_review"]["status"] == "closed"
         assert validate_decision_contract({"decision_contract": contract})["pass"] is True
 
         tampered = json.loads(json.dumps(contract))
