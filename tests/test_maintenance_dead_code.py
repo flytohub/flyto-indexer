@@ -206,3 +206,83 @@ def test_go_type_referenced_from_same_project_source_is_not_dead(monkeypatch, tm
     result = maintenance.find_dead_code(project="proj", min_lines=1)
 
     assert result["total_dead"] == 0
+
+
+def test_project_roots_uses_preserved_scope_without_workspace_discovery(monkeypatch, tmp_path):
+    other_root = tmp_path / "other"
+    index = {
+        "project": "proj-a",
+        "root_path": str(tmp_path),
+        "project_roots": {
+            "proj-a": str(tmp_path),
+            "proj-b": str(other_root),
+        },
+    }
+    monkeypatch.setattr(
+        maintenance,
+        "_discover_index_dirs",
+        lambda: (_ for _ in ()).throw(AssertionError("workspace discovery should not run")),
+    )
+
+    assert maintenance._project_roots(index, project="proj-a") == {
+        "proj-a": tmp_path,
+    }
+
+
+def test_markdown_walk_prunes_ignored_directories(tmp_path):
+    docs = tmp_path / "docs"
+    ignored = tmp_path / "node_modules" / "package"
+    docs.mkdir()
+    ignored.mkdir(parents=True)
+    guide = docs / "guide.md"
+    guide.write_text("<LiveComponent />\n", encoding="utf-8")
+    (ignored / "README.md").write_text("<IgnoredComponent />\n", encoding="utf-8")
+
+    assert list(maintenance._iter_markdown_content_files(tmp_path)) == [guide]
+
+
+def test_find_dead_code_scopes_source_and_dependency_work(monkeypatch, tmp_path):
+    root_a = tmp_path / "a"
+    root_b = tmp_path / "b"
+    root_a.mkdir()
+    root_b.mkdir()
+    (root_a / "a.py").write_text("def unused_a():\n    return 1\n", encoding="utf-8")
+    (root_b / "b.py").write_text("def unused_b():\n    return 2\n", encoding="utf-8")
+    sid_a = "proj-a:a.py:function:unused_a"
+    sid_b = "proj-b:b.py:function:unused_b"
+    index = {
+        "project": "proj-a",
+        "root_path": str(root_a),
+        "project_roots": {"proj-a": str(root_a), "proj-b": str(root_b)},
+        "symbols": {
+            sid_a: _symbol("proj-a", "a.py", "function", "unused_a", end=3),
+            sid_b: _symbol("proj-b", "b.py", "function", "unused_b", end=3),
+        },
+        "dependencies": {
+            f"{sid_a}--calls-->local_a": {
+                "source": sid_a,
+                "target": "local_a",
+                "type": "calls",
+            },
+            f"{sid_b}--calls-->local_b": {
+                "source": sid_b,
+                "target": "local_b",
+                "type": "calls",
+            },
+        },
+        "reverse_index": {},
+    }
+    visited_roots = []
+    original_iter = maintenance._iter_markdown_content_files
+
+    def capture_root(root):
+        visited_roots.append(root)
+        yield from original_iter(root)
+
+    monkeypatch.setattr(maintenance, "load_index", lambda: index)
+    monkeypatch.setattr(maintenance, "_iter_markdown_content_files", capture_root)
+
+    result = maintenance.find_dead_code(project="proj-a", min_lines=1)
+
+    assert visited_roots == [root_a]
+    assert {item["project"] for item in result["dead_symbols"]} <= {"proj-a"}

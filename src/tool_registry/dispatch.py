@@ -170,7 +170,8 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             project=args.get("project"),
         ),
         "find_test_file": lambda args: _info().find_test_file(
-            path=args.get("path", ""),
+            path=args.get("path") or args.get("file_path", ""),
+            project=args.get("project"),
         ),
 
         # Maintenance tools

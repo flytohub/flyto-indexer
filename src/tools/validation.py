@@ -9,6 +9,7 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 try:
@@ -43,7 +44,7 @@ def _run_ruff(project_root: str) -> dict:
 
     cmds = [
         ["ruff", "check", "."],
-        ["python", "-m", "ruff", "check", "."],
+        [sys.executable, "-m", "ruff", "check", "."],
     ]
 
     for cmd in cmds:
@@ -99,7 +100,7 @@ def _run_pytest(project_root: str, test_path: str = None) -> dict:
         "output": "",
     }
 
-    cmd = ["python", "-m", "pytest"]
+    cmd = [sys.executable, "-m", "pytest"]
     if test_path:
         cmd.extend(shlex.split(test_path))
     # With no explicit target, let pytest honor testpaths from pyproject.toml,
@@ -196,13 +197,13 @@ def validate_changes(
         project_root = str(cwd_project_path)
         project_name = cwd_project_path.name
     elif project_roots:
-        if len(project_roots) == 1:
-            project_name = next(iter(project_roots))
-            project_root = project_roots[project_name]
-        elif project:
+        if project:
             return {"error": "Project '{}' not found. Available: {}".format(
                 project, ", ".join(sorted(project_roots.keys()))
             )}
+        if len(project_roots) == 1:
+            project_name = next(iter(project_roots))
+            project_root = project_roots[project_name]
         else:
             # Use CWD as fallback
             project_root = str(Path.cwd())

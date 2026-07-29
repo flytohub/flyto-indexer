@@ -26,7 +26,7 @@ def test_run_pytest_without_explicit_path_defers_to_pytest_config(
 
     assert result["status"] == "pass"
     assert captured["cmd"] == [
-        "python",
+        sys.executable,
         "-m",
         "pytest",
         "-x",
@@ -93,7 +93,7 @@ def test_run_pytest_splits_multiple_test_paths(monkeypatch, tmp_path):
 
     assert result["status"] == "pass"
     assert captured["cmd"] == [
-        "python",
+        sys.executable,
         "-m",
         "pytest",
         "tests/test_bm25.py",
@@ -132,4 +132,30 @@ def test_validate_changes_resolves_relative_project_directory(monkeypatch, tmp_p
     assert captured == {
         "root": str(project_root.resolve()),
         "test_path": "tests/test_bm25.py tests/test_verify.py",
+    }
+
+
+def test_validate_changes_rejects_unknown_explicit_project_with_one_index_root(
+    monkeypatch, tmp_path
+):
+    indexed_root = tmp_path / "indexed"
+    indexed_root.mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        validation,
+        "load_index",
+        lambda: {"project_roots": {"indexed-project": str(indexed_root)}},
+    )
+    monkeypatch.setattr(
+        validation,
+        "_run_ruff",
+        lambda _root: (_ for _ in ()).throw(
+            AssertionError("validation must not run against the wrong project")
+        ),
+    )
+
+    result = validation.validate_changes(project="missing-project")
+
+    assert result == {
+        "error": "Project 'missing-project' not found. Available: indexed-project",
     }

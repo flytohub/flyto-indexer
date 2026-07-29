@@ -2,6 +2,7 @@
 
 import os
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -125,3 +126,80 @@ class TestTestMapperBuild:
         # find_test triggers build
         mapper.find_test("src/auth.py")
         assert mapper._built is True
+
+    def test_project_scope_disambiguates_identical_relative_paths(self):
+        index = {
+            "symbols": {
+                "alpha:src/auth.py:function:login": {"path": "src/auth.py"},
+                "alpha:tests/test_auth.py:function:test_login": {
+                    "path": "tests/test_auth.py"
+                },
+                "beta:src/auth.py:function:login": {"path": "src/auth.py"},
+                "beta:spec/auth_test.py:function:test_login": {
+                    "path": "spec/auth_test.py"
+                },
+            },
+            "dependencies": {},
+        }
+
+        mapper = TestMapper(index)
+
+        assert mapper.find_test("src/auth.py", project="alpha") == "tests/test_auth.py"
+        assert mapper.find_test("src/auth.py", project="beta") == "spec/auth_test.py"
+
+    def test_import_fallback_stays_in_source_project(self):
+        index = {
+            "symbols": {
+                "alpha:src/shared.py:function:run": {"path": "src/shared.py"},
+                "alpha:tests/test_adapter.py:function:test_run": {
+                    "path": "tests/test_adapter.py"
+                },
+                "beta:src/shared.py:function:run": {"path": "src/shared.py"},
+            },
+            "dependencies": {
+                "import-1": {
+                    "type": "imports",
+                    "source": "alpha:tests/test_adapter.py:function:test_run",
+                    "target": "shared",
+                    "metadata": {},
+                }
+            },
+        }
+
+        mapper = TestMapper(index)
+
+        assert (
+            mapper.find_source("tests/test_adapter.py", project="alpha")
+            == "src/shared.py"
+        )
+        assert mapper.find_test("src/shared.py", project="beta") is None
+
+    def test_large_import_fallback_is_bounded(self):
+        symbols = {}
+        dependencies = {}
+        source_count = 6000
+        import_count = 2000
+        for index in range(source_count):
+            symbols[f"proj:src/module_{index}.py:function:run"] = {
+                "path": f"src/module_{index}.py"
+            }
+        for index in range(import_count):
+            test_path = f"tests/check_{index}.py"
+            symbols[f"proj:{test_path}:function:test_run"] = {"path": test_path}
+            dependencies[f"import-{index}"] = {
+                "type": "imports",
+                "source": f"proj:{test_path}:function:test_run",
+                "target": f"module_{index}",
+                "metadata": {},
+            }
+
+        started = time.monotonic()
+        mapper = TestMapper(
+            {"symbols": symbols, "dependencies": dependencies},
+            project="proj",
+        )
+        mapper.build()
+        elapsed = time.monotonic() - started
+
+        assert mapper.find_test("src/module_1999.py") == "tests/check_1999.py"
+        assert elapsed < 1.0

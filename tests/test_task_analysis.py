@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import pytest
 
@@ -1131,3 +1131,86 @@ class TestExecutionPlan:
         # Both targets should have find_references steps
         ref_steps = [s for s in plan if s["tool"] == "find_references"]
         assert len(ref_steps) >= 2
+
+    def test_test_coverage_step_uses_canonical_dispatch_argument(self):
+        from tools.task_analysis import _build_execution_plan
+
+        resolved = [{
+            "symbol_id": "proj-a:src/auth.py:function:login",
+            "path": "src/auth.py",
+            "name": "login",
+        }]
+        dims = {key: {"score": 2.0, "level": "low"} for key in [
+            "blast_radius",
+            "breaking_risk",
+            "test_risk",
+            "cross_coupling",
+            "complexity",
+            "rollback_difficulty",
+        ]}
+        dims["test_risk"] = {"score": 6.0, "level": "medium"}
+
+        plan = _build_execution_plan(resolved, dims, "feature", {})
+        test_step = next(
+            step for step in plan if step["purpose"] == "verify_test_coverage"
+        )
+
+        assert test_step["args"] == {"path": "src/auth.py"}
+
+    def test_test_risk_maps_target_and_callers_in_their_projects(self):
+        from tools.task_analysis import _score_test_risk
+
+        references = {
+            "references": [{
+                "from_symbol": "proj-b:src/proxy.py:function:forward_auth",
+                "from_path": "src/proxy.py",
+            }]
+        }
+        with (
+            patch(
+                "tools.task_analysis.find_references",
+                return_value=references,
+            ),
+            patch(
+                "tools.task_analysis.find_test_file",
+                return_value={"test_file": "tests/test.py"},
+            ) as find_test,
+        ):
+            _score_test_risk([{
+                "symbol_id": "proj-a:src/auth.py:function:login",
+                "path": "src/auth.py",
+            }])
+
+        assert find_test.call_args_list == [
+            call("src/auth.py", project="proj-a"),
+            call("src/proxy.py", project="proj-b"),
+        ]
+
+    def test_test_risk_does_not_collapse_same_path_across_projects(self):
+        from tools.task_analysis import _score_test_risk
+
+        with (
+            patch(
+                "tools.task_analysis.find_references",
+                return_value={"references": []},
+            ),
+            patch(
+                "tools.task_analysis.find_test_file",
+                return_value={"test_file": "tests/test_auth.py"},
+            ) as find_test,
+        ):
+            _score_test_risk([
+                {
+                    "symbol_id": "proj-a:src/auth.py:function:login",
+                    "path": "src/auth.py",
+                },
+                {
+                    "symbol_id": "proj-b:src/auth.py:function:login",
+                    "path": "src/auth.py",
+                },
+            ])
+
+        assert find_test.call_args_list == [
+            call("src/auth.py", project="proj-a"),
+            call("src/auth.py", project="proj-b"),
+        ]

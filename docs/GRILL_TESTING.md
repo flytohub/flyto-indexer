@@ -19,8 +19,10 @@ flowchart LR
     E --> F[task plan]
     F --> G[task gate]
     G --> H[Allowed implementation phase]
-    E --> I[Tampered copy]
-    I --> J[Gate rejects]
+    H --> I[task validate: ruff + pytest]
+    I --> J[Strict full-scan verify]
+    E --> K[Tampered copy]
+    K --> L[Gate rejects]
 ```
 
 The fixture under `tests/fixtures/grill_robotics/` intentionally contains:
@@ -48,9 +50,10 @@ resolver.
 | Contract integrity | incomplete freeze rejection, immutable frozen state, SHA-256 tamper rejection | `test_grill.py`, `test_grill_deep.py` |
 | Input safety | bounded arrays/text, arbitrary Unicode, hostile shell/template text treated as inert data | `test_grill_deep.py` |
 | Real index | Python, TypeScript, and C symbols resolve through `IndexEngine` and production search | `test_grill_real_data.py` |
-| CLI | real scan → start → blocked freeze → answers → freeze → plan → gate → tamper rejection | `test_grill_cli_e2e.py` |
+| CLI | real scan → start → blocked freeze → answers → freeze → plan → gate → validate → tamper rejection | `test_grill_cli_e2e.py` |
 | MCP | real stdio JSON-RPC start → fact resolution → answer → freeze → immutable state | `test_mcp_integration.py` |
 | Compatibility | unchanged public tool count and existing `task` plan/gate/validate behavior | `test_tool_registry.py`, `test_smart.py` |
+| Large merged index | project-scoped test mapping, dead-code references, roots, and dependency work remain bounded and collision-free | `test_test_mapper.py`, `test_index_store_scope.py`, `test_maintenance_dead_code.py`, `test_task_analysis.py` |
 
 ## Evidence Selection Rules
 
@@ -120,6 +123,10 @@ commit it or place it in a public shared directory.
 - A changed answer, evidence item, readiness field, project, or decision list
   invalidates the contract fingerprint.
 - A frozen session cannot be answered or discarded.
+- Validation rejects an explicit unknown project instead of silently running
+  against the only indexed project.
+- Project-scoped planning never walks ignored dependency/build directories or
+  borrows same-path tests and references from another indexed project.
 - Resolver failures are bounded in the response and cannot be mistaken for
   evidence.
 - Unsupported schemas, invalid IDs, dependency cycles, duplicate option IDs,

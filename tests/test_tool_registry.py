@@ -3,6 +3,7 @@
 import os
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -122,6 +123,24 @@ class TestIndexerToolNames:
         for name in INDEXER_TOOL_NAMES:
             assert isinstance(name, str)
             assert len(name) > 0
+
+    @pytest.mark.parametrize("arguments", [
+        {"path": "src/auth.py", "project": "alpha"},
+        {"file_path": "src/auth.py", "project": "alpha"},
+    ])
+    def test_find_test_file_dispatch_accepts_canonical_and_legacy_path(
+        self, arguments
+    ):
+        info = MagicMock()
+        info.find_test_file.return_value = {"test_file": "tests/test_auth.py"}
+        with patch("tool_registry.dispatch._info", return_value=info):
+            result = execute_tool("find_test_file", arguments)
+
+        assert result["test_file"] == "tests/test_auth.py"
+        info.find_test_file.assert_called_once_with(
+            path="src/auth.py",
+            project="alpha",
+        )
 
 
 # ===========================================================================

@@ -598,11 +598,13 @@ def _score_test_risk(resolved: List[dict]) -> dict:
     for target in resolved:
         sid = target.get("symbol_id")
         path = target.get("path", "")
+        target_project = sid.split(":", 1)[0] if sid and ":" in sid else None
 
         # Check target file test coverage
-        if path and path not in checked_paths:
-            checked_paths.add(path)
-            result = find_test_file(path)
+        target_key = (target_project, path)
+        if path and target_key not in checked_paths:
+            checked_paths.add(target_key)
+            result = find_test_file(path, project=target_project)
             test_file = result.get("test_file", "")
             if test_file:
                 targets_with_tests += 1
@@ -617,10 +619,20 @@ def _score_test_risk(resolved: List[dict]) -> dict:
             refs = find_references(sid)
             for ref in refs.get("references", []):
                 caller_path = ref.get("from_path", "")
-                if not caller_path or caller_path in checked_paths:
+                caller_symbol = ref.get("from_symbol", "")
+                caller_project = (
+                    caller_symbol.split(":", 1)[0]
+                    if ":" in caller_symbol
+                    else target_project
+                )
+                caller_key = (caller_project, caller_path)
+                if not caller_path or caller_key in checked_paths:
                     continue
-                checked_paths.add(caller_path)
-                caller_test = find_test_file(caller_path)
+                checked_paths.add(caller_key)
+                caller_test = find_test_file(
+                    caller_path,
+                    project=caller_project,
+                )
                 if caller_test.get("test_file"):
                     callers_with_tests += 1
                     test_files.append(caller_test["test_file"])
@@ -1267,7 +1279,7 @@ def _plan_inspect_steps(symbol_ids, file_paths, first_sid, first_path,
         for idx, fpath in enumerate(individual_paths):
             purpose = "verify_test_coverage" if len(unique_test_paths) == 1 else f"verify_test_coverage_{idx}"
             t_step = _add(
-                "find_test_file", {"file_path": fpath}, purpose,
+                "find_test_file", {"path": fpath}, purpose,
                 required=test_level in ("medium", "high"),
             )
             test_steps.append(t_step)

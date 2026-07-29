@@ -336,6 +336,7 @@ def list_projects() -> dict:
     """
     index = load_index()
     projects = index.get("projects", [])
+    project_roots = index.get("project_roots", {})
 
     # Count symbols per project
     stats = {}
@@ -353,6 +354,8 @@ def list_projects() -> dict:
         s = stats.get(proj, {"files": set(), "symbols": 0, "by_type": {}})
         result.append({
             "project": proj,
+            "name": proj,
+            "root": project_roots.get(proj, ""),
             "files": len(s["files"]),
             "symbols": s["symbols"],
             "by_type": s["by_type"],
@@ -498,30 +501,32 @@ def update_description(path: str, summary: str, project: str = None) -> dict:
     }
 
 
-def find_test_file(path: str) -> dict:
+def find_test_file(path: str, project: str | None = None) -> dict:
     """
     Find the corresponding test file for a source file, or vice versa.
 
     Uses naming convention (primary) and import analysis (fallback).
     """
-    mapper = _get_test_mapper()
+    mapper = _get_test_mapper(project=project)
 
     try:
         from ..test_mapper import TestMapper
     except ImportError:
         from test_mapper import TestMapper
     if TestMapper._is_test_file(path):
-        source = mapper.find_source(path)
+        source = mapper.find_source(path, project=project)
         return {
             "query_path": path,
+            "project": project,
             "is_test_file": True,
             "source_file": source,
             "test_file": path,
         }
     else:
-        test = mapper.find_test(path)
+        test = mapper.find_test(path, project=project)
         return {
             "query_path": path,
+            "project": project,
             "is_test_file": False,
             "source_file": path,
             "test_file": test,

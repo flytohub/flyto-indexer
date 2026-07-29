@@ -84,6 +84,7 @@ _content_loaded: bool = False
 _bm25_cache = None
 _semantic_cache = None
 _test_mapper = None
+_test_mappers: dict[str, object] = {}
 _session_store = None
 _lsp_manager = None
 _cache_generation: float = 0.0
@@ -274,6 +275,17 @@ def _merge_index_into(merged: dict, idx: dict):
             merged[key] = list(incoming)
 
 
+def _record_project_roots(index: dict, roots: dict[str, str]) -> None:
+    """Preserve every project root while combining independently-built indexes."""
+    for project, root in (index.get("project_roots") or {}).items():
+        if project and root:
+            roots[str(project)] = str(root)
+    project = index.get("project")
+    root_path = index.get("root_path")
+    if project and root_path:
+        roots[str(project)] = str(root_path)
+
+
 def load_index() -> dict:
     """Load and merge all discovered indexes, with caching.
 
@@ -312,6 +324,8 @@ def load_index() -> dict:
 
         # Merge additional indexes
         projects = list(merged.get("projects", []))
+        project_roots: dict[str, str] = {}
+        _record_project_roots(merged, project_roots)
         if merged.get("project") and merged["project"] not in projects:
             projects.append(merged["project"])
 
@@ -322,9 +336,11 @@ def load_index() -> dict:
             proj = idx.get("project", "")
             if proj and proj not in projects:
                 projects.append(proj)
+            _record_project_roots(idx, project_roots)
             _merge_index_into(merged, idx)
 
         merged["projects"] = projects
+        merged["project_roots"] = project_roots
         _index_cache = merged
         # Record the latest generation mtime so subsequent checks are relative
         _update_cache_generation()
@@ -479,15 +495,26 @@ def _load_semantic():
     return _semantic_cache
 
 
-def _get_test_mapper():
-    """Return the cached TestMapper instance."""
-    global _test_mapper
-    if _test_mapper is None:
+def _get_test_mapper(project: str | None = None):
+    """Return a cached mapper, scoped to one project when available."""
+    global _test_mapper, _test_mappers
+    index = load_index()
+    if project:
         try:
             from .test_mapper import TestMapper
         except ImportError:
             from test_mapper import TestMapper
-        _test_mapper = TestMapper(load_index())
+        mapper = _test_mappers.get(project)
+        if mapper is None or mapper._index is not index:
+            mapper = TestMapper(index, project=project)
+            _test_mappers[project] = mapper
+        return mapper
+    if _test_mapper is None or _test_mapper._index is not index:
+        try:
+            from .test_mapper import TestMapper
+        except ImportError:
+            from test_mapper import TestMapper
+        _test_mapper = TestMapper(index)
     return _test_mapper
 
 
@@ -551,13 +578,15 @@ def invalidate_caches():
 def _invalidate_caches_unlocked():
     """Internal cache reset — caller must hold _reindex_lock or _load_lock."""
     global _index_cache, _content_cache, _content_loaded
-    global _bm25_cache, _semantic_cache, _test_mapper, _lsp_manager, _cache_generation
+    global _bm25_cache, _semantic_cache, _test_mapper, _test_mappers
+    global _lsp_manager, _cache_generation
     _index_cache = None
     _content_cache = {}
     _content_loaded = False
     _bm25_cache = None
     _semantic_cache = None
     _test_mapper = None
+    _test_mappers = {}
     _cache_generation = 0.0
     # Shutdown LSP servers on cache invalidation
     if _lsp_manager is not None:

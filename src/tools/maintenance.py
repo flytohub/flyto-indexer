@@ -74,23 +74,39 @@ def _build_reference_sets(dependencies):
     )
 
 
-def _project_roots(index):
+def _project_roots(index, project=None):
     """Best-effort project -> root path map for source-level heuristics."""
     roots = {}
-    project = index.get("project")
-    root_path = index.get("root_path")
-    if project and root_path:
-        roots[str(project)] = Path(root_path)
+    requested_project = project
 
-    # load_index() may merge multiple .flyto-index directories. The merged
-    # payload only preserves one root_path, so inspect each discovered index
-    # when available.
+    def matches(candidate):
+        return (
+            not requested_project
+            or requested_project.lower() in str(candidate).lower()
+        )
+
+    for proj, root in (index.get("project_roots") or {}).items():
+        if proj and root and matches(proj):
+            roots[str(proj)] = Path(root)
+
+    index_project = index.get("project")
+    root_path = index.get("root_path")
+    if index_project and root_path and matches(index_project):
+        roots[str(index_project)] = Path(root_path)
+
+    # Current merged indexes preserve every project root. Avoid rediscovering
+    # and loading all workspace indexes when the requested scope is complete.
+    if roots and (index.get("project_roots") or requested_project):
+        return roots
+
+    # Backward compatibility for older merged indexes that did not preserve
+    # project_roots.
     try:
         for index_dir in _discover_index_dirs():
             single = _load_single_index(index_dir)
             proj = single.get("project")
             root = single.get("root_path")
-            if proj and root:
+            if proj and root and matches(proj):
                 roots[str(proj)] = Path(root)
     except Exception:
         pass
@@ -140,8 +156,8 @@ def _module_level_python_refs(text):
     return names, decorated
 
 
-def _build_source_reference_sets(index, symbols):
-    project_roots = _project_roots(index)
+def _build_source_reference_sets(index, symbols, project=None):
+    project_roots = _project_roots(index, project=project)
     source_cache = {}
     scoped_names = set()
     decorated = set()
@@ -193,15 +209,17 @@ def _iter_markdown_content_files(root):
         "out",
         ".next",
     }
-    try:
-        candidates = root.rglob("*.md")
-    except OSError:
-        return
-    for candidate in candidates:
-        rel_parts = set(candidate.relative_to(root).parts)
-        if rel_parts & ignored_parts:
-            continue
-        yield candidate
+    for dir_path, dir_names, file_names in os.walk(root):
+        # Prune before descent. Path.rglob() still traverses ignored trees
+        # such as node_modules before a post-filter gets a chance to reject
+        # their files.
+        dir_names[:] = sorted(
+            name for name in dir_names
+            if name not in ignored_parts
+        )
+        for file_name in sorted(file_names):
+            if file_name.lower().endswith(".md"):
+                yield Path(dir_path) / file_name
 
 
 def _has_same_file_reference(sym_id, sym_name, sym_project, sym_path,
@@ -447,8 +465,23 @@ def find_dead_code(project=None, symbol_type=None, min_lines=5):
     reverse_index = index.get("reverse_index", {})
     dependencies = index.get("dependencies", {})
 
+    if project:
+        project_lower = project.lower()
+        symbols = {
+            sym_id: sym
+            for sym_id, sym in symbols.items()
+            if project_lower in sym_id.split(":", 1)[0].lower()
+        }
+        dependencies = {
+            dep_id: dep
+            for dep_id, dep in dependencies.items()
+            if project_lower in str(dep.get("source", dep_id)).split(":", 1)[0].lower()
+        }
+
     ref_ctx = _build_reference_sets(dependencies)
-    scoped_names, decorated, name_counts, project_roots, source_text_cache = _build_source_reference_sets(index, symbols)
+    scoped_names, decorated, name_counts, project_roots, source_text_cache = _build_source_reference_sets(
+        index, symbols, project=project,
+    )
     ref_ctx = ref_ctx._replace(
         scoped_names=scoped_names,
         decorated=decorated,

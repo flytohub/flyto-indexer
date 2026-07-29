@@ -32,7 +32,7 @@ def _run_cli(environment, *arguments, check=True):
 
 
 @pytest.mark.integration
-def test_real_cli_scan_grill_freeze_plan_gate_and_tamper(tmp_path):
+def test_real_cli_scan_grill_freeze_plan_gate_validate_and_tamper(tmp_path):
     index_dir = tmp_path / "index"
     state_dir = tmp_path / "state"
     environment = {
@@ -164,6 +164,20 @@ def test_real_cli_scan_grill_freeze_plan_gate_and_tamper(tmp_path):
         "inspect",
     )
     assert gate["pass"] is True
+
+    _, validation = _run_cli(
+        environment,
+        "task",
+        "validate",
+        "--project",
+        str(ROOT),
+        "--test-path",
+        "tests/test_grill.py tests/test_grill_real_data.py",
+    )
+    assert validation["overall"] == "pass"
+    assert validation["ruff"]["status"] == "pass"
+    assert validation["pytest"]["status"] == "pass"
+    assert validation["pytest"]["passed"] > 0
 
     tampered = deepcopy(plan)
     tampered["decision_contract"]["decisions"][0]["answer"] = "invented"
