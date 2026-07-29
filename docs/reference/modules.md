@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **155 Python modules**, **62,501 lines**, and **1,858 class/function/method declarations**.
+Generated inventory: **155 Python modules**, **62,503 lines**, and **1,858 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -147,7 +147,7 @@ Generated inventory: **155 Python modules**, **62,501 lines**, and **1,858 class
 | [`src/tools/grill_evidence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill_evidence.py#L1) | 333 | 13 | `__future__, datetime, hashlib, index_store, json, pathlib, subprocess, typing` | Repository evidence snapshots, freshness checks, and Grill artifacts. |
 | [`src/tools/grill_intelligence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill_intelligence.py#L1) | 236 | 8 | `__future__, copy, typing` | Pure decision-intelligence helpers for the Grill workflow. |
 | [`src/tools/grill_outcomes.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill_outcomes.py#L1) | 198 | 11 | `__future__, datetime, fcntl, hashlib, json, os, pathlib, threading, typing` | Privacy-preserving local outcome learning for Grill decisions. |
-| [`src/tools/maintenance.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L1) | 835 | 23 | `ast, collections, datetime, engine, index_store, os, pathlib, re, search, tools, watcher` | Maintenance tools — dead code, TODOs, index status, reindex, sessions. |
+| [`src/tools/maintenance.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L1) | 837 | 23 | `ast, collections, datetime, engine, index_store, os, pathlib, re, search, tools, watcher` | Maintenance tools — dead code, TODOs, index status, reindex, sessions. |
 | [`src/tools/references.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/references.py#L1) | 1266 | 30 | `index_store, logging, lsp, os, pathlib, re, resolver` | Reference and impact analysis tools for flyto-indexer MCP server. |
 | [`src/tools/resolver.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/resolver.py#L1) | 79 | 2 | `none` | Shared symbol resolution — single implementation used by all reference/impact tools. |
 | [`src/tools/search.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L1) | 676 | 16 | `bm25, index_store, re, synonyms` | Search tools for flyto-indexer MCP server. |
