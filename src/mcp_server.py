@@ -140,6 +140,19 @@ def _tool_response_payload(result: Any, runtime: dict, result_text: str) -> dict
     }
 
 
+def _tool_project_scope(arguments: dict) -> str | None:
+    """Resolve an explicit project without guessing from ordinary file paths."""
+    project = arguments.get("project")
+    if isinstance(project, str) and project.strip():
+        return project.strip()
+    path = arguments.get("path")
+    if isinstance(path, str) and path.strip():
+        candidate = Path(path).expanduser()
+        if candidate.is_dir() and (candidate / ".flyto-index").is_dir():
+            return candidate.resolve().name
+    return None
+
+
 # =============================================================================
 # Rate Limiting (per-process, sliding window, O(1) popleft with deque)
 # =============================================================================
@@ -466,19 +479,24 @@ def _handle_tool_call(id: Any, params: dict):
     """Handle tools/call — extracted from handle_request for clarity."""
     started_at = _time.monotonic()
     index_freshness = "checked"
-    # Auto-reindex check
-    try:
-        try:
-            from .index_store import _maybe_auto_reindex
-        except ImportError:
-            from index_store import _maybe_auto_reindex
-        _maybe_auto_reindex()
-    except (OSError, RuntimeError) as e:
-        index_freshness = "unknown"
-        logger.debug("Auto-reindex skipped: %s", e)
-
     tool_name = params.get("name", "")
     arguments = params.get("arguments", {})
+    project_scope = _tool_project_scope(arguments)
+
+    # Workspace-wide auto-reindex is intentionally disabled. Project-scoped
+    # calls remain fresh without making an overview request scan every sibling.
+    if project_scope:
+        try:
+            try:
+                from .index_store import _maybe_auto_reindex
+            except ImportError:
+                from index_store import _maybe_auto_reindex
+            _maybe_auto_reindex(project=project_scope)
+        except (OSError, RuntimeError) as e:
+            index_freshness = "unknown"
+            logger.debug("Auto-reindex skipped: %s", e)
+    else:
+        index_freshness = "not_checked"
 
     # Rate limiting
     _session_id = str(arguments.get("session_id", ""))[:64] if isinstance(arguments.get("session_id"), str) else ""
@@ -512,10 +530,13 @@ def _handle_tool_call(id: Any, params: dict):
     try:
         try:
             from .tool_registry import execute_tool
+            from .index_store import project_index_scope
         except ImportError:
             from tool_registry import execute_tool
+            from index_store import project_index_scope
         try:
-            result = execute_tool(tool_name, arguments)
+            with project_index_scope(project_scope):
+                result = execute_tool(tool_name, arguments)
         except KeyError:
             send_error(id, -32601, f"Unknown tool: {tool_name}")
             return

@@ -10,9 +10,11 @@ import gzip
 import json
 import logging
 import os
+import re
 import sys
 import threading
 import time as _time
+from contextlib import contextmanager
 from pathlib import Path
 
 logger = logging.getLogger("flyto-indexer.store")
@@ -23,6 +25,7 @@ logger = logging.getLogger("flyto-indexer.store")
 
 _EXPLICIT_INDEX_DIR = os.environ.get("FLYTO_INDEX_DIR")
 INDEX_DIR = Path(_EXPLICIT_INDEX_DIR) if _EXPLICIT_INDEX_DIR else Path.cwd() / ".flyto-index"
+_PROJECT_SCOPE = threading.local()
 
 
 def _discover_index_dirs() -> list:
@@ -74,6 +77,76 @@ def _discover_index_dirs() -> list:
 
     return dirs
 
+
+def _normalize_project_name(project: str | None) -> str:
+    if not project:
+        return ""
+    return re.sub(r"[^a-z0-9]+", "-", project.casefold()).strip("-")
+
+
+def _peek_index_project(index_dir: Path) -> str:
+    """Read only the small index header needed to identify a project."""
+    candidates = (
+        (index_dir / "index.json", False),
+        (index_dir / "index.json.gz", True),
+    )
+    for path, compressed in candidates:
+        if not path.exists():
+            continue
+        try:
+            if compressed:
+                with gzip.open(path, "rt", encoding="utf-8") as handle:
+                    prefix = handle.read(4096)
+            else:
+                with path.open("r", encoding="utf-8") as handle:
+                    prefix = handle.read(4096)
+        except (OSError, UnicodeError):
+            continue
+        match = re.search(r'"project"\s*:\s*"([^"]+)"', prefix)
+        if match:
+            return match.group(1)
+    return ""
+
+
+def _active_index_dirs(project: str | None = None) -> list[Path]:
+    """Return all indexes, or only the index matching the active project."""
+    dirs = _discover_index_dirs()
+    scoped_project = project or _current_project_scope()
+    target = _normalize_project_name(scoped_project)
+    if not target:
+        return dirs
+
+    path_matches = [
+        directory
+        for directory in dirs
+        if _normalize_project_name(directory.parent.name) == target
+    ]
+    if path_matches:
+        return path_matches
+
+    return [
+        directory
+        for directory in dirs
+        if _normalize_project_name(_peek_index_project(directory)) == target
+    ]
+
+
+@contextmanager
+def project_index_scope(project: str | None):
+    """Limit index loading to one project for the duration of a tool call."""
+    normalized = str(project).strip() if project else None
+    previous = _current_project_scope()
+    _PROJECT_SCOPE.project = normalized or None
+    try:
+        yield
+    finally:
+        _PROJECT_SCOPE.project = previous
+
+
+def _current_project_scope() -> str | None:
+    """Return the current thread's project scope, if one is active."""
+    return getattr(_PROJECT_SCOPE, "project", None)
+
 # ---------------------------------------------------------------------------
 # Caches
 # ---------------------------------------------------------------------------
@@ -88,6 +161,10 @@ _test_mappers: dict[str, object] = {}
 _session_store = None
 _lsp_manager = None
 _cache_generation: float = 0.0
+_scoped_index_caches: dict[str, tuple[tuple, dict]] = {}
+_scoped_content_caches: dict[str, dict] = {}
+_scoped_bm25_caches: dict[str, object] = {}
+_scoped_semantic_caches: dict[str, object] = {}
 
 # ---------------------------------------------------------------------------
 # Reindex / load locks
@@ -123,10 +200,12 @@ _last_reindex_check: float = 0.0
 _REINDEX_INTERVAL_FAST = 10.0   # fast mtime check (cheap stat calls)
 _REINDEX_INTERVAL_FULL = 300.0  # full watcher scan (more expensive)
 _last_full_check: float = 0.0
+_project_reindex_checks: dict[str, float] = {}
+_project_full_checks: dict[str, float] = {}
 _AUTO_REINDEX_ENABLED = os.environ.get("FLYTO_AUTO_REINDEX", "1") != "0"
 
 
-def _maybe_auto_reindex():
+def _maybe_auto_reindex(project: str | None = None):
     """Check for file changes and trigger incremental reindex if needed.
 
     Two-tier strategy:
@@ -139,61 +218,84 @@ def _maybe_auto_reindex():
     if not _AUTO_REINDEX_ENABLED:
         return
     now = _time.monotonic()
+    scope_key = _normalize_project_name(project)
 
     # Tier 1: fast generation check (every 10s)
-    if now - _last_reindex_check < _REINDEX_INTERVAL_FAST:
-        return
-    _last_reindex_check = now
+    if scope_key:
+        if now - _project_reindex_checks.get(scope_key, 0.0) < _REINDEX_INTERVAL_FAST:
+            return
+        _project_reindex_checks[scope_key] = now
+    else:
+        if now - _last_reindex_check < _REINDEX_INTERVAL_FAST:
+            return
+        _last_reindex_check = now
 
     # If generation file changed, cache will auto-invalidate on next load_index()
     # No action needed here for tier 1 — _check_generation() handles it in load_index()
 
     # Tier 2: full file watcher scan (every 300s)
-    if now - _last_full_check < _REINDEX_INTERVAL_FULL:
-        return
-    _last_full_check = now
+    if scope_key:
+        if now - _project_full_checks.get(scope_key, 0.0) < _REINDEX_INTERVAL_FULL:
+            return
+        _project_full_checks[scope_key] = now
+    else:
+        if now - _last_full_check < _REINDEX_INTERVAL_FULL:
+            return
+        _last_full_check = now
 
     # Non-blocking acquire: skip this cycle if another reindex is in progress
     if not _reindex_lock.acquire(blocking=False):
         logger.debug("Auto-reindex skipped: another reindex is in progress")
         return
     try:
-        try:
-            from .watcher import FileWatcher
-        except ImportError:
-            from watcher import FileWatcher
-        index = load_index()
-        if not index:
-            return
-        watcher = FileWatcher(index)
-        changes = watcher.detect_changes()
-        if not changes:
-            return
+        with project_index_scope(project):
+            try:
+                from .watcher import FileWatcher
+            except ImportError:
+                from watcher import FileWatcher
+            index = load_index()
+            if not index:
+                return
+            watcher = FileWatcher(index)
+            changes = (
+                watcher.detect_changes(project=project)
+                if project
+                else watcher.detect_changes()
+            )
+            if not changes:
+                return
 
-        # Group changes by project — only reindex affected projects
-        changed_projects = set()
-        for c in changes:
-            changed_projects.add(c.project)
+            changed_projects = {change.project for change in changes}
+            if project:
+                changed_projects = {
+                    changed_project
+                    for changed_project in changed_projects
+                    if _normalize_project_name(changed_project) == scope_key
+                }
+            if not changed_projects:
+                return
 
-        sys.stderr.write(
-            f"[flyto-indexer] Auto-reindex: {len(changes)} changes in {len(changed_projects)} project(s)\n"
-        )
-        sys.stderr.flush()
+            sys.stderr.write(
+                f"[flyto-indexer] Auto-reindex: {len(changes)} changes in "
+                f"{len(changed_projects)} project(s)\n"
+            )
+            sys.stderr.flush()
 
-        try:
-            from .tools.maintenance import _perform_live_reindex_unlocked
-        except ImportError:
-            from tools.maintenance import _perform_live_reindex_unlocked
+            try:
+                from .tools.maintenance import _perform_live_reindex_unlocked
+            except ImportError:
+                from tools.maintenance import _perform_live_reindex_unlocked
 
-        total_reindexed = 0
-        for proj in changed_projects:
-            result = _perform_live_reindex_unlocked(project=proj)
-            total_reindexed += result.get("reindexed", 0)
+            total_reindexed = 0
+            for proj in changed_projects:
+                result = _perform_live_reindex_unlocked(project=proj)
+                total_reindexed += result.get("reindexed", 0)
 
-        sys.stderr.write(
-            f"[flyto-indexer] Auto-reindex: done ({total_reindexed} projects updated)\n"
-        )
-        sys.stderr.flush()
+            sys.stderr.write(
+                f"[flyto-indexer] Auto-reindex: done "
+                f"({total_reindexed} projects updated)\n"
+            )
+            sys.stderr.flush()
     except (OSError, json.JSONDecodeError, RuntimeError) as e:
         logger.warning("Auto-reindex error: %s", e, exc_info=True)
     finally:
@@ -219,7 +321,7 @@ def _load_single_index(index_dir: Path) -> dict:
 def _check_generation() -> bool:
     """Return True if any discovered index dir has a newer .generation file."""
     global _cache_generation
-    for d in _discover_index_dirs():
+    for d in _active_index_dirs():
         gen_file = d / ".generation"
         if gen_file.exists():
             try:
@@ -286,6 +388,53 @@ def _record_project_roots(index: dict, roots: dict[str, str]) -> None:
         roots[str(project)] = str(root_path)
 
 
+def _index_dirs_fingerprint(dirs: list[Path]) -> tuple:
+    """Return a stable freshness fingerprint without loading index bodies."""
+    fingerprint = []
+    for directory in dirs:
+        marker = directory / ".generation"
+        if not marker.exists():
+            marker = directory / "index.json"
+        try:
+            mtime = marker.stat().st_mtime_ns
+        except OSError:
+            mtime = 0
+        fingerprint.append((str(directory), mtime))
+    return tuple(fingerprint)
+
+
+def _load_merged_indexes(dirs: list[Path]) -> dict:
+    """Load and combine a preselected set of project indexes."""
+    if not dirs:
+        return {}
+
+    merged = _load_single_index(dirs[0])
+    if not merged and len(dirs) <= 1:
+        return {}
+    if not merged:
+        merged = {}
+
+    projects = list(merged.get("projects", []))
+    project_roots: dict[str, str] = {}
+    _record_project_roots(merged, project_roots)
+    if merged.get("project") and merged["project"] not in projects:
+        projects.append(merged["project"])
+
+    for directory in dirs[1:]:
+        index = _load_single_index(directory)
+        if not index:
+            continue
+        project = index.get("project", "")
+        if project and project not in projects:
+            projects.append(project)
+        _record_project_roots(index, project_roots)
+        _merge_index_into(merged, index)
+
+    merged["projects"] = projects
+    merged["project_roots"] = project_roots
+    return merged
+
+
 def load_index() -> dict:
     """Load and merge all discovered indexes, with caching.
 
@@ -293,6 +442,23 @@ def load_index() -> dict:
     multiple threads see a stale generation simultaneously.
     """
     global _index_cache
+    scope_key = _normalize_project_name(_current_project_scope())
+
+    if scope_key:
+        dirs = _active_index_dirs()
+        fingerprint = _index_dirs_fingerprint(dirs)
+        cached_entry = _scoped_index_caches.get(scope_key)
+        if cached_entry and cached_entry[0] == fingerprint:
+            return cached_entry[1]
+        with _load_lock:
+            dirs = _active_index_dirs()
+            fingerprint = _index_dirs_fingerprint(dirs)
+            cached_entry = _scoped_index_caches.get(scope_key)
+            if cached_entry and cached_entry[0] == fingerprint:
+                return cached_entry[1]
+            merged = _load_merged_indexes(dirs)
+            _scoped_index_caches[scope_key] = (fingerprint, merged)
+            return merged
 
     # Fast path (no lock): return cached if still valid. Snapshot the
     # global into a local so a concurrent invalidate_caches() can't turn
@@ -311,36 +477,10 @@ def load_index() -> dict:
             # Use unlocked variant to avoid deadlock with _reindex_lock
             _invalidate_caches_unlocked()
 
-        dirs = _discover_index_dirs()
-        if not dirs:
-            return {}
-
-        # Load first index as base
-        merged = _load_single_index(dirs[0])
-        if not merged and len(dirs) <= 1:
-            return {}
+        dirs = _active_index_dirs()
+        merged = _load_merged_indexes(dirs)
         if not merged:
-            merged = {}
-
-        # Merge additional indexes
-        projects = list(merged.get("projects", []))
-        project_roots: dict[str, str] = {}
-        _record_project_roots(merged, project_roots)
-        if merged.get("project") and merged["project"] not in projects:
-            projects.append(merged["project"])
-
-        for d in dirs[1:]:
-            idx = _load_single_index(d)
-            if not idx:
-                continue
-            proj = idx.get("project", "")
-            if proj and proj not in projects:
-                projects.append(proj)
-            _record_project_roots(idx, project_roots)
-            _merge_index_into(merged, idx)
-
-        merged["projects"] = projects
-        merged["project_roots"] = project_roots
+            return {}
         _index_cache = merged
         # Record the latest generation mtime so subsequent checks are relative
         _update_cache_generation()
@@ -352,7 +492,7 @@ def load_index() -> dict:
 def load_project_map() -> dict:
     """Load and merge project maps from all discovered index dirs."""
     merged = None
-    for d in _discover_index_dirs():
+    for d in _active_index_dirs():
         gz_path = d / "PROJECT_MAP.json.gz"
         path = d / "PROJECT_MAP.json"
         data = {}
@@ -376,9 +516,17 @@ def load_project_map() -> dict:
 def load_content_file() -> dict:
     """Lazily load content.jsonl from all discovered index dirs."""
     global _content_cache, _content_loaded
-    if _content_loaded:
-        return _content_cache
-    for d in _discover_index_dirs():
+    scope_key = _normalize_project_name(_current_project_scope())
+    if scope_key:
+        if scope_key in _scoped_content_caches:
+            return _scoped_content_caches[scope_key]
+        content_cache = {}
+    else:
+        if _content_loaded:
+            return _content_cache
+        content_cache = _content_cache
+
+    for d in _active_index_dirs():
         content_file = d / "content.jsonl"
         if content_file.exists():
             try:
@@ -387,11 +535,14 @@ def load_content_file() -> dict:
                         line = line.strip()
                         if line:
                             record = json.loads(line)
-                            _content_cache[record["id"]] = record["content"]
+                            content_cache[record["id"]] = record["content"]
             except (json.JSONDecodeError, KeyError, OSError) as e:
                 logger.warning("Failed to load content from %s: %s", content_file, e)
-    _content_loaded = True
-    return _content_cache
+    if scope_key:
+        _scoped_content_caches[scope_key] = content_cache
+    else:
+        _content_loaded = True
+    return content_cache
 
 
 def get_symbol_content_text(symbol_id: str, symbol_data: dict) -> str:
@@ -410,15 +561,28 @@ def get_symbol_content_text(symbol_id: str, symbol_data: dict) -> str:
 def _load_bm25():
     """Load or return the cached BM25 index."""
     global _bm25_cache
+    scope_key = _normalize_project_name(_current_project_scope())
+    if scope_key and scope_key in _scoped_bm25_caches:
+        return _scoped_bm25_caches[scope_key]
     if _bm25_cache is not None:
-        return _bm25_cache
+        if not scope_key:
+            return _bm25_cache
     try:
         from .bm25 import BM25Index
     except ImportError:
         from bm25 import BM25Index
-    bm25_path = INDEX_DIR / "bm25.json"
-    _bm25_cache = BM25Index.load(bm25_path)
-    return _bm25_cache
+    dirs = _active_index_dirs()
+    bm25_path = (
+        dirs[0] / "bm25.json"
+        if scope_key and dirs
+        else INDEX_DIR / "bm25.json"
+    )
+    bm25 = BM25Index.load(bm25_path)
+    if scope_key:
+        _scoped_bm25_caches[scope_key] = bm25
+    else:
+        _bm25_cache = bm25
+    return bm25
 
 
 def _rebuild_semantic_index(index_dir: Path):
@@ -468,37 +632,59 @@ def _load_semantic():
     from current index data before loading.
     """
     global _semantic_cache
+    scope_key = _normalize_project_name(_current_project_scope())
+    if scope_key and scope_key in _scoped_semantic_caches:
+        return _scoped_semantic_caches[scope_key]
     if _semantic_cache is not None:
-        return _semantic_cache
+        if not scope_key:
+            return _semantic_cache
     try:
         from .semantic import SemanticIndex
     except ImportError:
         from semantic import SemanticIndex
 
     # Check for stale marker in all discovered index dirs
-    for d in _discover_index_dirs():
+    for d in _active_index_dirs():
         stale_marker = d / ".semantic_stale"
         if stale_marker.exists():
             logger.info("Semantic index stale, rebuilding from %s", d)
             try:
                 rebuilt = _rebuild_semantic_index(d)
                 if rebuilt:
-                    _semantic_cache = rebuilt
+                    if scope_key:
+                        _scoped_semantic_caches[scope_key] = rebuilt
+                    else:
+                        _semantic_cache = rebuilt
                 stale_marker.unlink(missing_ok=True)
             except (OSError, RuntimeError) as e:
                 logger.warning("Failed to rebuild semantic index: %s", e)
-            if _semantic_cache is not None:
+            if scope_key and scope_key in _scoped_semantic_caches:
+                return _scoped_semantic_caches[scope_key]
+            if not scope_key and _semantic_cache is not None:
                 return _semantic_cache
 
-    semantic_path = INDEX_DIR / "semantic.json"
-    _semantic_cache = SemanticIndex.load(semantic_path)
-    return _semantic_cache
+    dirs = _active_index_dirs()
+    semantic_path = (
+        dirs[0] / "semantic.json"
+        if scope_key and dirs
+        else INDEX_DIR / "semantic.json"
+    )
+    semantic = SemanticIndex.load(semantic_path)
+    if scope_key:
+        _scoped_semantic_caches[scope_key] = semantic
+    else:
+        _semantic_cache = semantic
+    return semantic
 
 
 def _get_test_mapper(project: str | None = None):
     """Return a cached mapper, scoped to one project when available."""
     global _test_mapper, _test_mappers
-    index = load_index()
+    if project:
+        with project_index_scope(project):
+            index = load_index()
+    else:
+        index = load_index()
     if project:
         try:
             from .test_mapper import TestMapper
@@ -553,7 +739,7 @@ def _update_cache_generation():
     """Record the max .generation mtime across all discovered index dirs."""
     global _cache_generation
     max_mtime = 0.0
-    for d in _discover_index_dirs():
+    for d in _active_index_dirs():
         gen_file = d / ".generation"
         if gen_file.exists():
             try:
@@ -588,6 +774,10 @@ def _invalidate_caches_unlocked():
     _test_mapper = None
     _test_mappers = {}
     _cache_generation = 0.0
+    _scoped_index_caches.clear()
+    _scoped_content_caches.clear()
+    _scoped_bm25_caches.clear()
+    _scoped_semantic_caches.clear()
     # Shutdown LSP servers on cache invalidation
     if _lsp_manager is not None:
         try:

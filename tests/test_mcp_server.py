@@ -1096,7 +1096,7 @@ class TestRuntimeEnvelope:
         with (
             patch.object(mcp_server, "send_response") as send_response,
             patch.object(mcp_server, "_check_rate_limit", return_value=True),
-            patch.object(index_store, "_maybe_auto_reindex"),
+            patch.object(index_store, "_maybe_auto_reindex") as auto_reindex,
             patch("execution_guard.check_enforcement", return_value=None),
             patch("execution_guard.record_tool_call"),
             patch("tool_registry.execute_tool", return_value={"ok": True}),
@@ -1113,6 +1113,7 @@ class TestRuntimeEnvelope:
         text_result = json.loads(payload["content"][0]["text"])
         runtime = text_result["_runtime"]
 
+        auto_reindex.assert_called_once_with(project="flyto-indexer")
         assert text_result["ok"] is True
         assert payload["structuredContent"]["_runtime"] == runtime
         assert payload["_meta"]["flyto/indexerRuntime"] == runtime
@@ -1126,6 +1127,59 @@ class TestRuntimeEnvelope:
         assert runtime["index_freshness"] == "checked"
         assert runtime["elapsed_ms"] >= 0
         assert runtime["result_mode"] == "compact"
+
+    def test_unscoped_call_does_not_scan_workspace(self):
+        with (
+            patch.object(mcp_server, "send_response") as send_response,
+            patch.object(mcp_server, "_check_rate_limit", return_value=True),
+            patch.object(index_store, "_maybe_auto_reindex") as auto_reindex,
+            patch("execution_guard.check_enforcement", return_value=None),
+            patch("execution_guard.record_tool_call"),
+            patch("tool_registry.execute_tool", return_value={"ok": True}),
+        ):
+            mcp_server._handle_tool_call(10, {
+                "name": "structure",
+                "arguments": {"focus": "profile"},
+            })
+
+        auto_reindex.assert_not_called()
+        payload = send_response.call_args.args[1]
+        text_result = json.loads(payload["content"][0]["text"])
+        assert text_result["_runtime"]["index_freshness"] == "not_checked"
+
+    def test_execute_tool_runs_inside_explicit_project_scope(self):
+        observed_scopes = []
+
+        def execute_tool(_tool_name, _arguments):
+            observed_scopes.append(index_store._current_project_scope())
+            return {"ok": True}
+
+        with (
+            patch.object(mcp_server, "send_response"),
+            patch.object(mcp_server, "_check_rate_limit", return_value=True),
+            patch.object(index_store, "_maybe_auto_reindex"),
+            patch("execution_guard.check_enforcement", return_value=None),
+            patch("execution_guard.record_tool_call"),
+            patch("tool_registry.execute_tool", side_effect=execute_tool),
+        ):
+            mcp_server._handle_tool_call(11, {
+                "name": "structure",
+                "arguments": {
+                    "focus": "profile",
+                    "project": "flyto-indexer",
+                },
+            })
+
+        assert observed_scopes == ["flyto-indexer"]
+        assert index_store._current_project_scope() is None
+
+    def test_project_root_path_is_a_safe_scope_hint(self, tmp_path):
+        project_root = tmp_path / "sample-project"
+        (project_root / ".flyto-index").mkdir(parents=True)
+
+        assert mcp_server._tool_project_scope({
+            "path": str(project_root),
+        }) == "sample-project"
 
 
 if __name__ == "__main__":

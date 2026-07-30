@@ -1,9 +1,33 @@
 """Regression tests for workspace auto-reindex index isolation."""
 
+import json
 from pathlib import Path
 
 import src.engine as engine
+import src.index_store as index_store
 import src.tools.maintenance as maintenance
+import src.watcher as watcher
+
+
+def _write_index(root: Path, project: str, symbol_name: str) -> Path:
+    index_dir = root / project / ".flyto-index"
+    index_dir.mkdir(parents=True)
+    payload = {
+        "project": project,
+        "projects": [project],
+        "symbols": {
+            f"{project}:src/example.py:{symbol_name}": {
+                "name": symbol_name,
+                "path": "src/example.py",
+                "project": project,
+            },
+        },
+        "files": {},
+        "reverse_index": {},
+        "dependencies": {},
+    }
+    (index_dir / "index.json").write_text(json.dumps(payload), encoding="utf-8")
+    return index_dir
 
 
 def _run_reindex(monkeypatch, roots):
@@ -85,3 +109,66 @@ def test_explicit_index_dir_remains_authoritative(monkeypatch, tmp_path):
         ("first", first_root, explicit_index_dir),
         ("second", second_root, explicit_index_dir),
     ]
+
+
+def test_project_scope_loads_only_the_requested_index(monkeypatch, tmp_path):
+    alpha_dir = _write_index(tmp_path, "alpha", "alpha_symbol")
+    beta_dir = _write_index(tmp_path, "beta", "beta_symbol")
+    monkeypatch.setattr(
+        index_store,
+        "_discover_index_dirs",
+        lambda: [alpha_dir, beta_dir],
+    )
+    index_store.invalidate_caches()
+
+    with index_store.project_index_scope("alpha"):
+        alpha_index = index_store.load_index()
+    with index_store.project_index_scope("beta"):
+        beta_index = index_store.load_index()
+
+    assert alpha_index["projects"] == ["alpha"]
+    assert beta_index["projects"] == ["beta"]
+    assert {symbol["name"] for symbol in alpha_index["symbols"].values()} == {
+        "alpha_symbol",
+    }
+    assert {symbol["name"] for symbol in beta_index["symbols"].values()} == {
+        "beta_symbol",
+    }
+
+
+def test_project_auto_reindex_filters_sibling_changes(monkeypatch):
+    detected_projects = []
+    reindexed_projects = []
+
+    class FakeChange:
+        def __init__(self, project):
+            self.project = project
+
+    class FakeWatcher:
+        def __init__(self, index):
+            assert index["project"] == "alpha"
+
+        def detect_changes(self, project=None):
+            detected_projects.append(project)
+            return [FakeChange("alpha"), FakeChange("beta")]
+
+    monkeypatch.setattr(index_store, "_AUTO_REINDEX_ENABLED", True)
+    monkeypatch.setattr(index_store, "_project_reindex_checks", {})
+    monkeypatch.setattr(index_store, "_project_full_checks", {})
+    monkeypatch.setattr(
+        index_store,
+        "load_index",
+        lambda: {"project": "alpha"},
+    )
+    monkeypatch.setattr(watcher, "FileWatcher", FakeWatcher)
+    monkeypatch.setattr(
+        maintenance,
+        "_perform_live_reindex_unlocked",
+        lambda project=None: reindexed_projects.append(project)
+        or {"reindexed": 1},
+    )
+
+    index_store._maybe_auto_reindex(project="alpha")
+
+    assert detected_projects == ["alpha"]
+    assert reindexed_projects == ["alpha"]
