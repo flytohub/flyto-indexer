@@ -17,8 +17,10 @@ from typing import Optional
 
 try:
     from ..models import Dependency, FileManifest, Symbol
+    from ..safe_io import atomic_write_json
 except ImportError:
     from models import Dependency, FileManifest, Symbol
+    from safe_io import atomic_write_json
 
 
 @dataclass
@@ -73,8 +75,19 @@ class ManifestStore:
 
     def save(self):
         """Save manifest"""
-        self.store_path.parent.mkdir(parents=True, exist_ok=True)
-        self.store_path.write_text(json.dumps(self.data, indent=2))
+        atomic_write_json(self.store_path, self.data)
+
+    def replace(self, project: str, manifests: list[FileManifest]):
+        """Atomically replace stale state after a full project rebuild."""
+        self.data = {
+            "project": project,
+            "version": 1,
+            "files": {
+                manifest.path: manifest.to_dict()
+                for manifest in manifests
+            },
+        }
+        self.save()
 
     def get_file_hash(self, path: str) -> Optional[str]:
         """Get the old hash for a file"""
@@ -169,6 +182,14 @@ class IncrementalIndexer:
 
         # Save
         self.manifest_store.save()
+
+    def replace_manifest(
+        self,
+        project: str,
+        manifests: list[FileManifest],
+    ):
+        """Replace the complete manifest after a non-incremental scan."""
+        self.manifest_store.replace(project, manifests)
 
     def get_symbols_to_update(
         self,

@@ -274,14 +274,21 @@ class IndexEngine(
         if incremental and changes and not changes.is_empty():
             changed_paths = set(changes.all_changed() + changes.deleted)
 
+        # Parsing stays incremental, but symbol resolution is a project-wide
+        # graph operation. Rebuild the derived graph after any file change so
+        # unchanged callers are reconnected when a target file changes.
+        graph_changed_paths = changed_paths
+        if changed_paths:
+            graph_changed_paths = None
+
         # Resolve dependencies and build reverse index
         t_resolve_start = time.monotonic()
-        self._resolve_dependencies(changed_paths=changed_paths)
+        self._resolve_dependencies(changed_paths=graph_changed_paths)
         self._resolve_go_implementations()
         t_resolve_end = time.monotonic()
 
         t_reverse_start = time.monotonic()
-        self._build_reverse_index(changed_paths=changed_paths)
+        self._build_reverse_index(changed_paths=graph_changed_paths)
         t_reverse_end = time.monotonic()
 
         # Save index + build search indexes
@@ -297,6 +304,11 @@ class IndexEngine(
                 result.manifests,
                 result.symbols,
                 result.dependencies
+            )
+        elif not incremental:
+            self.incremental.replace_manifest(
+                self.project_name,
+                result.manifests,
             )
 
         t_total_end = time.monotonic()

@@ -159,6 +159,39 @@ class TestBM25UpdateDocs:
 class TestIncrementalReverseIndex:
     """Test incremental reverse_index purge + re-add in the engine."""
 
+    def test_full_rebuild_replaces_polluted_manifest(self, tmp_path):
+        """A full rebuild must leave no sibling paths for the next scan."""
+        from src.engine import IndexEngine
+
+        root = tmp_path / "project"
+        root.mkdir()
+        (root / "app.py").write_text("def run():\n    return True\n")
+        idx_dir = root / ".flyto-index"
+        idx_dir.mkdir()
+        (idx_dir / "manifest.json").write_text(json.dumps({
+            "project": "",
+            "version": 1,
+            "files": {
+                "sibling/src/foreign.py": {
+                    "path": "sibling/src/foreign.py",
+                    "hash": "stale",
+                    "lines": 1,
+                    "symbols": ["sibling:src/foreign.py:file:foreign"],
+                },
+            },
+        }))
+
+        engine = IndexEngine("project", root, index_dir=idx_dir)
+        full = engine.scan(incremental=False)
+        manifest = json.loads((idx_dir / "manifest.json").read_text())
+        incremental = engine.scan(incremental=True)
+
+        assert full["files_scanned"] == 1
+        assert manifest["project"] == "project"
+        assert set(manifest["files"]) == {"app.py"}
+        assert incremental["changes"] == "+0 ~0 -0"
+        assert incremental["files_scanned"] == 0
+
     def test_incremental_reverse_index_update(self):
         """Verify purge + re-add produces correct reverse index after file change."""
         from src.engine import IndexEngine
