@@ -6,7 +6,9 @@
 - Reworked the public README and documentation entry points around common
   change-safety pain, practical outcomes, and clear reader paths. Exhaustive
   implementation details remain in the generated reference and technical
-  guides instead of leading the first-use experience.
+  guides instead of leading the first-use experience. Added a clearly labeled
+  illustrative Before/After rename walkthrough without presenting it as a
+  customer result.
 
 ## [2.17.0] - 2026-07-30
 

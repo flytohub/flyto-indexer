@@ -58,6 +58,22 @@ A text search finds the name. Flyto2 Indexer shows the change surface.
 | “Our scanner is so noisy that nobody trusts it.” | Keeps evidence local, reports confidence and provenance, and supports baselines for accepted debt. |
 | “A large repository overwhelms the agent.” | Returns bounded, relevant context instead of dumping the whole codebase. |
 
+## Before And After: Rename One Shared Function
+
+Suppose `validateOrder` must be renamed. This is an illustrative walkthrough
+using the sample result above, not a customer case study.
+
+**Before:** Search for the name, edit the obvious files, run the nearest test,
+and discover missed callers or dynamic references later.
+
+**After:** `impact` makes the seven call sites, three projects, two likely test
+files, and one manual-review item visible before the edit. The agent turns that
+list into a scoped plan, runs the relevant proof, and keeps the unresolved item
+visible until someone reviews it.
+
+**Practical difference:** hidden work becomes an explicit checklist before it
+becomes a regression.
+
 ## Usage
 
 Keep daily work in one closed loop:
