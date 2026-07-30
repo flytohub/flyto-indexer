@@ -966,6 +966,8 @@ class TestIndexPersistence:
         greet_id = "test:hello.py:function:greet"
         original = engine1.index.symbols.get(greet_id)
         assert original is not None
+        assert original.params == ["name"]
+        assert original.returns == "str"
 
         engine2 = IndexEngine("test", project_dir, index_dir)
         loaded = engine2.index.symbols.get(greet_id)
@@ -977,6 +979,8 @@ class TestIndexPersistence:
         assert loaded.language == original.language
         assert loaded.start_line == original.start_line
         assert loaded.end_line == original.end_line
+        assert loaded.params == original.params
+        assert loaded.returns == original.returns
 
     def test_roundtrip_preserves_file_manifest(self, tmp_path):
         """File manifests are preserved across save/load."""

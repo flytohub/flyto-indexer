@@ -737,6 +737,8 @@ class IndexEngine(
                 language=sdata.get("language", ""),
                 exports=sdata.get("exports", []),
                 imports=sdata.get("imports", []),
+                params=sdata.get("params", []),
+                returns=sdata.get("returns", ""),
                 metadata=sdata.get("metadata", {}),
                 reference_count=sdata.get("ref_count", 0),
             )
