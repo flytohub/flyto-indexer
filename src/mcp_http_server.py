@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import logging
 import os
@@ -15,9 +16,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 try:
+    from .mcp_server import MODERN_PROTOCOL_VERSION
     from .tool_registry import SMART_TOOLS
     from .version import __version__
 except ImportError:  # Direct source execution.
+    from mcp_server import MODERN_PROTOCOL_VERSION
     from tool_registry import SMART_TOOLS
     from version import __version__
 
@@ -34,6 +37,12 @@ _SAFE_METHODS = {
     "prompts/list", "prompts/get",
 }
 _DEFAULT_P95_BUDGET_MS = 8_000.0
+_PROTOCOL_VERSION_META_KEY = "io.modelcontextprotocol/protocolVersion"
+_NAMED_METHOD_FIELDS = {
+    "tools/call": "name",
+    "resources/read": "uri",
+    "prompts/get": "name",
+}
 
 
 class BridgeRequestCancelled(RuntimeError):
@@ -77,6 +86,96 @@ def _is_replay_safe(payload: dict) -> bool:
         return False
     params = payload.get("params", {})
     return isinstance(params, dict) and params.get("name") in _READ_ONLY_TOOLS
+
+
+def _decode_mcp_header(value: str) -> str:
+    """Decode the MCP Base64 sentinel form used by name-bearing headers."""
+    prefix = "=?base64?"
+    suffix = "?="
+    if not value.startswith(prefix):
+        return value
+    if not value.endswith(suffix):
+        raise ValueError("malformed Base64 sentinel")
+    encoded = value[len(prefix):-len(suffix)]
+    try:
+        return base64.b64decode(encoded, validate=True).decode("utf-8")
+    except ValueError as exc:
+        raise ValueError("invalid Base64 header value") from exc
+
+
+def _header_mismatch(payload: dict, message: str) -> dict:
+    return {
+        "jsonrpc": "2.0",
+        "id": payload.get("id"),
+        "error": {
+            "code": -32020,
+            "message": f"Header mismatch: {message}",
+        },
+    }
+
+
+def _validate_modern_http_headers(headers: Any, payload: dict) -> dict | None:
+    """Validate the mirrored headers required by MCP 2026-07-28."""
+    params = payload.get("params")
+    metadata = params.get("_meta") if isinstance(params, dict) else None
+    body_version = (
+        metadata.get(_PROTOCOL_VERSION_META_KEY)
+        if isinstance(metadata, dict)
+        else None
+    )
+    header_version = headers.get("MCP-Protocol-Version")
+    if body_version is None and header_version != MODERN_PROTOCOL_VERSION:
+        return None
+
+    if not isinstance(body_version, str):
+        return _header_mismatch(
+            payload,
+            "request metadata is missing MCP protocol version",
+        )
+    if header_version is None:
+        return _header_mismatch(
+            payload,
+            "required MCP-Protocol-Version header is missing",
+        )
+    if header_version != body_version:
+        return _header_mismatch(
+            payload,
+            "MCP-Protocol-Version header does not match request metadata",
+        )
+
+    method = payload.get("method")
+    method_header = headers.get("Mcp-Method")
+    if not isinstance(method, str) or not method_header:
+        return _header_mismatch(
+            payload,
+            "required Mcp-Method header is missing",
+        )
+    if method_header != method:
+        return _header_mismatch(
+            payload,
+            "Mcp-Method header does not match the JSON-RPC method",
+        )
+
+    name_field = _NAMED_METHOD_FIELDS.get(method)
+    if name_field is None:
+        return None
+    expected_name = params.get(name_field) if isinstance(params, dict) else None
+    name_header = headers.get("Mcp-Name")
+    if not isinstance(expected_name, str) or not name_header:
+        return _header_mismatch(
+            payload,
+            "required Mcp-Name header is missing",
+        )
+    try:
+        decoded_name = _decode_mcp_header(name_header)
+    except ValueError as exc:
+        return _header_mismatch(payload, str(exc))
+    if decoded_name != expected_name:
+        return _header_mismatch(
+            payload,
+            "Mcp-Name header does not match the request body",
+        )
+    return None
 
 
 class StdioMCPBridge:
@@ -393,12 +492,22 @@ class MCPRequestHandler(BaseHTTPRequestHandler):
             if not isinstance(payload, dict):
                 raise ValueError("JSON-RPC payload must be an object")
             request_id = payload.get("id")
+            header_error = _validate_modern_http_headers(
+                self.headers,
+                payload,
+            )
+            if header_error is not None:
+                self._send_json(400, header_error)
+                return
             response = self.bridge.request(payload)
             if response is None:
                 self.send_response(202)
                 self.end_headers()
                 return
-            self._send_json(200, response)
+            error = response.get("error")
+            error_code = error.get("code") if isinstance(error, dict) else None
+            status = 400 if error_code in {-32020, -32021, -32022} else 200
+            self._send_json(status, response)
         except (ValueError, json.JSONDecodeError) as exc:
             self._send_json(400, {
                 "jsonrpc": "2.0",

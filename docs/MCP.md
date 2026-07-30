@@ -62,12 +62,38 @@ and `evidence-verdict.v1` summary. Both are bounded, omit patch bodies, filter
 machine-managed noise, and link each verdict finding to receipts in the same
 result. This adds no tool, action, dependency, upload, or model call.
 
-## Protocol Behavior
+## Protocol Compatibility
 
-- Transport is newline-delimited JSON-RPC over stdin/stdout.
-- Initialization reports the active package version.
-- The server accepts supported MCP protocol versions and otherwise replies with
-  its preferred version so the client can decide whether to continue.
+MCP `2026-07-28` removed the session handshake and moved client identity,
+capabilities, and protocol selection onto every request. Servers that only
+understand one era either reject new clients or silently apply old behavior to
+new messages. flyto-indexer supports both eras on the same server:
+
+- Modern clients use stateless MCP `2026-07-28`. Every request carries
+  `io.modelcontextprotocol/protocolVersion` and
+  `io.modelcontextprotocol/clientCapabilities` in `_meta`.
+- `server/discover` reports modern and legacy versions, server capabilities,
+  identity, instructions, and cache hints before any tool call.
+- Successful modern results include `resultType`, server identity in `_meta`,
+  and the required cache fields on list and resource-read results.
+- Unsupported modern versions return `-32022` with the requested version and
+  the complete supported-version list.
+- Methods removed from the modern core, including `ping` and
+  `logging/setLevel`, return Method Not Found. Legacy clients retain both
+  methods.
+- Legacy clients continue to initialize with `2025-11-25`, `2025-06-18`,
+  `2025-03-26`, or `2024-11-05`. An `initialize` request never upgrades a
+  client into the stateless era.
+
+This follows the official
+[MCP 2026-07-28 versioning model](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning)
+and preserves existing client integrations during migration.
+
+## Runtime Behavior
+
+- Stdio uses newline-delimited JSON-RPC over stdin/stdout.
+- Legacy initialization and modern discovery report the active package
+  version.
 - Tool errors return structured JSON-RPC errors; analysis findings are normal
   tool results.
 - Tool calls have bounded wall-clock deadlines. Normal calls default to 120
@@ -79,7 +105,8 @@ result. This adds no tool, action, dependency, upload, or model call.
   errors include a `retryable` flag derived from the tool's read-only
   annotation, and the same server process remains available for the next
   request.
-- MCP `ping` returns an empty success response for connection-liveness probes.
+- Legacy MCP `ping` returns an empty success response for connection-liveness
+  probes.
 - `_runtime.deadline_ms` exposes the applied budget beside runtime version,
   commit, index freshness, elapsed time, and result mode.
 - The optional loopback HTTP bridge serializes stdio responses but admits
@@ -87,6 +114,14 @@ result. This adds no tool, action, dependency, upload, or model call.
   restarts on deadlines, EOF, broken pipes, or corrupt JSON. Only annotation-
   safe read-only requests are replayed after protocol failure; timed-out or
   cancelled work is never replayed.
+- Modern Streamable HTTP requests must mirror the body in
+  `MCP-Protocol-Version`, `Mcp-Method`, and, where required, `Mcp-Name`.
+  Missing, malformed, or conflicting headers fail with HTTP 400 and MCP error
+  `-32020`. Encoded non-ASCII names use the standard Base64 sentinel form.
+  Protocol errors `-32021` and `-32022` also map to HTTP 400.
+- The modern HTTP path is sessionless and does not issue or require
+  `Mcp-Session-Id`. Legacy request behavior remains available for older local
+  clients.
 - `/health` reports active and peak concurrency, request/failure/restart
   counts, the last restart reason, and rolling p50/p95 latency. The default p95
   budget is 8000 ms and is configurable with `--p95-budget-ms`.

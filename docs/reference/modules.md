@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **168 Python modules**, **67,391 lines**, and **2,071 class/function/method declarations**.
+Generated inventory: **168 Python modules**, **67,710 lines**, and **2,081 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -93,8 +93,8 @@ Generated inventory: **168 Python modules**, **67,391 lines**, and **2,071 class
 | [`src/mapper/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/mapper/__init__.py#L1) | 28 | 0 | `project_map, symbol_index` | PROJECT_MAP generator |
 | [`src/mapper/project_map.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/mapper/project_map.py#L1) | 619 | 20 | `ast, dataclasses, json, pathlib, re, typing` | PROJECT_MAP generator — helps AI quickly understand project structure |
 | [`src/mapper/symbol_index.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/mapper/symbol_index.py#L1) | 515 | 14 | `ast, dataclasses, json, pathlib, re` | Symbol index — precise location of functions and classes |
-| [`src/mcp_http_server.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_http_server.py#L1) | 479 | 35 | `__future__, argparse, collections, http, json, logging, os, subprocess, sys, threading, time, tool_registry` | Loopback-only MCP Streamable HTTP transport backed by the stdio server. |
-| [`src/mcp_server.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L1) | 973 | 32 | `collections, contextlib, diff_impact, execution_guard, functools, index_store, json, logging, os, pathlib, quality, queue` | Flyto2 Indexer MCP Server — Protocol handler. |
+| [`src/mcp_http_server.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_http_server.py#L1) | 588 | 38 | `__future__, argparse, base64, collections, http, json, logging, mcp_server, os, subprocess, sys, threading` | Loopback-only MCP Streamable HTTP transport backed by the stdio server. |
+| [`src/mcp_server.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/mcp_server.py#L1) | 1183 | 39 | `collections, contextlib, diff_impact, execution_guard, functools, index_store, json, logging, os, pathlib, quality, queue` | Flyto2 Indexer MCP Server — Protocol handler. |
 | [`src/models.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/models.py#L1) | 310 | 18 | `dataclasses, enum, hashlib` | Core data models for Flyto2 Indexer. |
 | [`src/pr_analyzer.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/pr_analyzer.py#L1) | 680 | 19 | `dataclasses, index_store, logging, os, pathlib, re, subprocess, typing` | PR Risk Analysis — analyze a git diff and produce a risk assessment. |
 | [`src/profile/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/profile/__init__.py#L1) | 12 | 0 | `builder, formatter` | profile — project profile subpackage. |

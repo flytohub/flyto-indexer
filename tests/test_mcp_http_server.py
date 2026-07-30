@@ -13,7 +13,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from mcp_http_server import (
     BridgeRequestCancelled,
+    MODERN_PROTOCOL_VERSION,
     StdioMCPBridge,
+    _decode_mcp_header,
     _is_loopback_authority,
     _is_loopback_origin,
     _is_replay_safe,
@@ -52,6 +54,33 @@ class _FakeBridge:
 class _TimeoutBridge(_FakeBridge):
     def request(self, payload):
         raise TimeoutError("deadline exceeded")
+
+
+class _UnsupportedVersionBridge(_FakeBridge):
+    def request(self, payload):
+        self.requests.append(payload)
+        return {
+            "jsonrpc": "2.0",
+            "id": payload.get("id"),
+            "error": {
+                "code": -32022,
+                "message": "Unsupported protocol version",
+                "data": {
+                    "supported": [MODERN_PROTOCOL_VERSION],
+                    "requested": "1900-01-01",
+                },
+            },
+        }
+
+
+def _modern_params(**values):
+    return {
+        "_meta": {
+            "io.modelcontextprotocol/protocolVersion": MODERN_PROTOCOL_VERSION,
+            "io.modelcontextprotocol/clientCapabilities": {},
+        },
+        **values,
+    }
 
 
 def test_server_rejects_non_loopback_bind():
@@ -153,6 +182,106 @@ def test_http_timeout_maps_to_gateway_timeout():
         body = json.loads(response.read())
         assert response.status == 504
         assert body["error"]["code"] == -32001
+        connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)
+
+
+def test_modern_http_requires_matching_standard_headers():
+    bridge = _FakeBridge()
+    server = create_server("127.0.0.1", 0, bridge=bridge)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 9,
+        "method": "tools/list",
+        "params": _modern_params(),
+    }
+
+    try:
+        connection = http.client.HTTPConnection(host, port, timeout=3)
+        connection.request(
+            "POST",
+            "/mcp",
+            body=json.dumps(payload),
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+                "MCP-Protocol-Version": MODERN_PROTOCOL_VERSION,
+                "Mcp-Method": "tools/list",
+            },
+        )
+        accepted = connection.getresponse()
+        assert accepted.status == 200
+        accepted.read()
+        assert bridge.requests == [payload]
+
+        connection.request(
+            "POST",
+            "/mcp",
+            body=json.dumps(payload),
+            headers={
+                "Content-Type": "application/json",
+                "MCP-Protocol-Version": MODERN_PROTOCOL_VERSION,
+            },
+        )
+        rejected = connection.getresponse()
+        body = json.loads(rejected.read())
+        assert rejected.status == 400
+        assert body["error"]["code"] == -32020
+        assert "Mcp-Method" in body["error"]["message"]
+        assert bridge.requests == [payload]
+        connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)
+
+
+def test_modern_http_decodes_name_header_and_maps_version_error():
+    encoded_name = "=?base64?ZmlsZTovLy9Iw6lsbG8=?="
+    assert _decode_mcp_header(encoded_name) == "file:///Héllo"
+    with pytest.raises(ValueError, match="Base64"):
+        _decode_mcp_header("=?base64?not-valid!?=")
+
+    bridge = _UnsupportedVersionBridge()
+    server = create_server("127.0.0.1", 0, bridge=bridge)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "resources/read",
+        "params": _modern_params(uri="file:///Héllo"),
+    }
+    payload["params"]["_meta"][
+        "io.modelcontextprotocol/protocolVersion"
+    ] = "1900-01-01"
+
+    try:
+        connection = http.client.HTTPConnection(host, port, timeout=3)
+        connection.request(
+            "POST",
+            "/mcp",
+            body=json.dumps(payload),
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+                "MCP-Protocol-Version": "1900-01-01",
+                "Mcp-Method": "resources/read",
+                "Mcp-Name": encoded_name,
+            },
+        )
+        response = connection.getresponse()
+        body = json.loads(response.read())
+        assert response.status == 400
+        assert body["error"]["code"] == -32022
+        assert bridge.requests == [payload]
         connection.close()
     finally:
         server.shutdown()

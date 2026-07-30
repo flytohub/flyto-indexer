@@ -45,6 +45,7 @@ EXPECTED_TOOL_NAMES = sorted([
 
 # Test project name used in synthetic index
 TEST_PROJECT = "test-integration"
+MODERN_PROTOCOL_VERSION = "2026-07-28"
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +303,20 @@ def _call(proc, method: str, params: dict = None, timeout: float = 10.0) -> dict
     return resp
 
 
+def _modern_params(**values) -> dict:
+    return {
+        "_meta": {
+            "io.modelcontextprotocol/protocolVersion": MODERN_PROTOCOL_VERSION,
+            "io.modelcontextprotocol/clientInfo": {
+                "name": "modern-test-client",
+                "version": "1.0",
+            },
+            "io.modelcontextprotocol/clientCapabilities": {},
+        },
+        **values,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -371,6 +386,82 @@ class TestProtocolVersionNegotiation:
         })
         # Server returns its preferred (newest) version.
         assert resp["result"]["protocolVersion"] == "2025-11-25"
+
+    def test_initialize_does_not_negotiate_modern_revision(self, mcp_server):
+        resp = _call(mcp_server, "initialize", {
+            "protocolVersion": MODERN_PROTOCOL_VERSION,
+            "capabilities": {},
+            "clientInfo": {"name": "wrong-era", "version": "0.1"},
+        })
+        assert resp["result"]["protocolVersion"] == "2025-11-25"
+
+
+class TestModernProtocol:
+    """MCP 2026-07-28 requests are stateless and self-describing."""
+
+    def test_server_discover_advertises_dual_era_support(self, mcp_server):
+        resp = _call(mcp_server, "server/discover", _modern_params())
+        result = resp["result"]
+
+        assert result["resultType"] == "complete"
+        assert result["supportedVersions"][0] == MODERN_PROTOCOL_VERSION
+        assert "2025-11-25" in result["supportedVersions"]
+        assert result["capabilities"]["tools"]["listChanged"] is False
+        assert "logging" not in result["capabilities"]
+        assert result["ttlMs"] > 0
+        assert result["cacheScope"] == "public"
+        server_info = result["_meta"]["io.modelcontextprotocol/serverInfo"]
+        assert server_info["name"] == "flyto-indexer"
+
+    def test_modern_tools_list_has_required_result_fields(self, mcp_server):
+        resp = _call(mcp_server, "tools/list", _modern_params())
+        result = resp["result"]
+
+        assert result["resultType"] == "complete"
+        assert result["cacheScope"] == "public"
+        assert result["ttlMs"] > 0
+        assert len(result["tools"]) == EXPECTED_TOOL_COUNT
+        assert (
+            result["_meta"]["io.modelcontextprotocol/serverInfo"]["name"]
+            == "flyto-indexer"
+        )
+
+    def test_modern_tool_call_keeps_typed_runtime_payload(self, mcp_server):
+        resp = _call(
+            mcp_server,
+            "tools/call",
+            _modern_params(
+                name="search",
+                arguments={"query": "login_user", "project": TEST_PROJECT},
+            ),
+        )
+        result = resp["result"]
+
+        assert result["resultType"] == "complete"
+        assert result["structuredContent"]["result_count"] >= 1
+        assert "flyto/indexerRuntime" in result["_meta"]
+        assert "io.modelcontextprotocol/serverInfo" in result["_meta"]
+
+    def test_unknown_modern_version_returns_standard_error(self, mcp_server):
+        params = _modern_params()
+        params["_meta"]["io.modelcontextprotocol/protocolVersion"] = "1900-01-01"
+        resp = _call(mcp_server, "tools/list", params)
+
+        assert resp["error"]["code"] == -32022
+        assert resp["error"]["data"]["requested"] == "1900-01-01"
+        assert MODERN_PROTOCOL_VERSION in resp["error"]["data"]["supported"]
+
+    def test_modern_request_requires_client_capabilities(self, mcp_server):
+        params = _modern_params()
+        del params["_meta"]["io.modelcontextprotocol/clientCapabilities"]
+        resp = _call(mcp_server, "tools/list", params)
+
+        assert resp["error"]["code"] == -32602
+        assert "clientCapabilities" in resp["error"]["message"]
+
+    def test_removed_modern_ping_is_method_not_found(self, mcp_server):
+        resp = _call(mcp_server, "ping", _modern_params())
+        assert resp["error"]["code"] == -32601
 
 
 class TestToolsList:

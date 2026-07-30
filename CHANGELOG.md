@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Changed
+- Added dual-era MCP compatibility for the final `2026-07-28` specification
+  while preserving all existing handshake-based versions. Modern clients can
+  discover capabilities before calling tools, send self-contained stateless
+  requests, receive required result and cache metadata, and get standardized
+  protocol errors. The loopback HTTP bridge now rejects missing or conflicting
+  routing headers before dispatch and maps modern protocol failures to HTTP
+  400 without adding a dependency, session store, or public tool.
 - Reworked the public README and documentation entry points around common
   change-safety pain, practical outcomes, and clear reader paths. Exhaustive
   implementation details remain in the generated reference and technical

@@ -10,6 +10,10 @@
 - MCP task guidance treats `pass=false` as a phase-local remediation loop:
   complete `required_actions`, update the exact `current_state` keys, and
   re-run the same gate until it passes. It is not a task-termination signal.
+- MCP is dual-era: stateless `2026-07-28` requests use per-request metadata,
+  `server/discover`, required result/cache fields, and validated Streamable
+  HTTP routing headers, while initialize-based `2025-11-25`, `2025-06-18`,
+  `2025-03-26`, and `2024-11-05` clients remain supported.
 - `verify` runs graph integrity, context, impact, secret, taint, documentation,
   rules/layers, package, runtime, and working-tree checks without requiring an
   external service.
@@ -60,7 +64,7 @@
   dependency boundary in an isolated environment.
 - Durable user, operator, security, architecture, and whitepaper documentation
   links to a generated source reference covering 168 non-test Python modules,
-  2,071 declarations, 36 CLI commands, 20 published MCP tools, 47 granular
+  2,081 declarations, 36 CLI commands, 20 published MCP tools, 47 granular
   compatibility definitions, seven local HTTP operations, 14 environment
   variables, and eight built-in rule files.
 - Documentation scoring distinguishes inline summaries from exact source-linked
@@ -76,13 +80,13 @@
   instead of misclassifying locale and content directories as software modules.
 - Package, MCP registry, and MCP initialization versions are synchronized and
   enforced by tests and CI. Every built-in rule YAML file is parsed in tests.
-- Latest local verification: `1889 passed, 1 skipped`; Ruff passed across the
+- Latest local verification: `1898 passed, 1 skipped`; Ruff passed across the
   repository; mypy found no issues in 147 source files; the offline corpus
   passed 13/13 with 1.0 precision, 1.0 recall, zero false positives, p95 case
   latency 175.03 ms, and stable evidence fingerprint `203edae3857a360d`;
   sdist/wheel, isolated installed-feature, and real optional Tree-sitter
-  grammar smokes passed; strict baseline self-verify passed 22/22 with 284
-  files, 4,671 indexed symbols, health 82/100, and zero warnings.
+  grammar smokes passed; strict self-verify passed 20/20 with 284 files,
+  4,697 indexed symbols, health 82/100, and zero warnings.
 
 ## Release Blockers
 

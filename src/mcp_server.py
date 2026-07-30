@@ -70,23 +70,43 @@ class ToolRequestCancelled(BaseException):
 # MCP Protocol — JSON-RPC communication
 # =============================================================================
 
-# MCP protocol versions we support, newest first. Server echoes the client's
-# requested version when supported, otherwise returns SUPPORTED_PROTOCOL_VERSIONS[0]
-# and lets the client decide whether to disconnect.
-# Reference: https://modelcontextprotocol.io/specification/versioning
-SUPPORTED_PROTOCOL_VERSIONS = (
+# MCP protocol versions we support, newest first. The 2026 revision is
+# stateless and selected by per-request metadata. Older revisions continue to
+# use the initialize handshake.
+# Reference:
+# https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning
+MODERN_PROTOCOL_VERSION = "2026-07-28"
+LEGACY_PROTOCOL_VERSIONS = (
     "2025-11-25",
     "2025-06-18",
     "2025-03-26",
     "2024-11-05",
 )
+SUPPORTED_PROTOCOL_VERSIONS = (
+    MODERN_PROTOCOL_VERSION,
+    *LEGACY_PROTOCOL_VERSIONS,
+)
+_PROTOCOL_VERSION_META_KEY = "io.modelcontextprotocol/protocolVersion"
+_CLIENT_INFO_META_KEY = "io.modelcontextprotocol/clientInfo"
+_CLIENT_CAPABILITIES_META_KEY = "io.modelcontextprotocol/clientCapabilities"
+_SERVER_INFO_META_KEY = "io.modelcontextprotocol/serverInfo"
+_DISCOVERY_TTL_MS = 60_000
+_STATIC_LIST_TTL_MS = 60_000
+_PRIVATE_RESOURCE_TTL_MS = 0
 
 
 def negotiate_protocol_version(client_version: Optional[str]) -> str:
-    """Echo client's requested MCP protocol version when supported, else server preferred."""
+    """Select a supported version, preferring the newest revision."""
     if client_version and client_version in SUPPORTED_PROTOCOL_VERSIONS:
         return client_version
     return SUPPORTED_PROTOCOL_VERSIONS[0]
+
+
+def negotiate_legacy_protocol_version(client_version: Optional[str]) -> str:
+    """Select a handshake-based version without negotiating into the modern era."""
+    if client_version and client_version in LEGACY_PROTOCOL_VERSIONS:
+        return client_version
+    return LEGACY_PROTOCOL_VERSIONS[0]
 
 
 def send_response(id: Any, result: Any):
@@ -155,7 +175,13 @@ def _runtime_envelope(
     }
 
 
-def _tool_response_payload(result: Any, runtime: dict, result_text: str) -> dict:
+def _tool_response_payload(
+    result: Any,
+    runtime: dict,
+    result_text: str,
+    *,
+    modern: bool = False,
+) -> dict:
     """Build an MCP result while preserving legacy text and adding typed metadata."""
     if isinstance(result, dict):
         structured = dict(result)
@@ -164,11 +190,12 @@ def _tool_response_payload(result: Any, runtime: dict, result_text: str) -> dict
     else:
         structured = {"result": result, "_runtime": runtime}
         text_value = result_text
-    return {
+    payload = {
         "content": [{"type": "text", "text": text_value}],
         "structuredContent": structured,
         "_meta": {"flyto/indexerRuntime": runtime},
     }
+    return _modern_result(payload) if modern else payload
 
 
 def _tool_project_scope(arguments: dict) -> str | None:
@@ -510,69 +537,234 @@ def _read_resource(uri: str) -> dict:
 # Request Handler
 # =============================================================================
 
+def _server_info() -> dict:
+    return {
+        "name": "flyto-indexer",
+        "title": "Flyto2 Code Indexer",
+        "version": __version__,
+        "description": (
+            "Code analysis MCP server — impact analysis, dependency tracking, "
+            "dead code detection, security scanning, and code health scoring "
+            "across any project."
+        ),
+        "websiteUrl": "https://github.com/flytohub/flyto-indexer",
+    }
+
+
+def _server_capabilities(*, modern: bool) -> dict:
+    capabilities = {
+        "tools": {"listChanged": False},
+        "resources": {"listChanged": False},
+        "prompts": {"listChanged": False},
+    }
+    if not modern:
+        capabilities["logging"] = {}
+    return capabilities
+
+
+def _server_instructions() -> str:
+    return (
+        "flyto-indexer provides {tool_count} code analysis tools. "
+        "ALWAYS use these tools — do NOT fall back to Grep/Read for tasks they cover.\n\n"
+        "When asked to AUDIT or REVIEW a project:\n"
+        "  1. audit → overall quality score + auto-expands weak dimensions\n\n"
+        "When asked to MODIFY or REFACTOR code:\n"
+        "  1. task(action='plan') → risk assessment + execution plan (call FIRST)\n"
+        "  2. MANDATORY: Execute EVERY step in the execution_plan sequentially.\n"
+        "     Each step has: tool name, pre-filled args, and dependencies.\n"
+        "     Do NOT skip steps. Do NOT edit code until all inspect/assess steps complete.\n"
+        "  3. task(action='gate') → call at EVERY gate step before proceeding.\n"
+        "     If pass=false, do not enter the blocked phase or edit. Execute every\n"
+        "     required_actions item, update current_state with the exact requested\n"
+        "     keys, and immediately re-run the same gate. Repeat until pass=true.\n"
+        "     Ask the user only when remediation requires unavailable authorization,\n"
+        "     required input, or an external state change.\n"
+        "  4. Only after all gates pass, proceed to make changes.\n"
+        "  5. task(action='validate') → run ruff + pytest after making changes.\n\n"
+        "When asked to UNDERSTAND or EXPLORE code:\n"
+        "  1. search → find symbols by name or natural language\n"
+        "  2. structure → discover projects, APIs, dependencies\n\n"
+        "When checking IMPACT of changes:\n"
+        "  1. impact(target='symbol_name') → references + blast radius + cross-project\n"
+        "  2. impact(mode='unstaged') → blast radius of uncommitted changes"
+    ).format(tool_count=len(TOOLS))
+
+
+def _modern_result(
+    result: dict,
+    *,
+    ttl_ms: int | None = None,
+    cache_scope: str | None = None,
+) -> dict:
+    """Add fields required on successful MCP 2026-07-28 results."""
+    modern_result = dict(result)
+    modern_result.setdefault("resultType", "complete")
+    result_meta = modern_result.get("_meta")
+    result_meta = dict(result_meta) if isinstance(result_meta, dict) else {}
+    result_meta.setdefault(_SERVER_INFO_META_KEY, _server_info())
+    modern_result["_meta"] = result_meta
+    if ttl_ms is not None and cache_scope is not None:
+        modern_result["ttlMs"] = ttl_ms
+        modern_result["cacheScope"] = cache_scope
+    return modern_result
+
+
+def _send_result(
+    request_id: Any,
+    result: dict,
+    *,
+    modern: bool,
+    ttl_ms: int | None = None,
+    cache_scope: str | None = None,
+) -> None:
+    if modern:
+        result = _modern_result(
+            result,
+            ttl_ms=ttl_ms,
+            cache_scope=cache_scope,
+        )
+    send_response(request_id, result)
+
+
+def _request_protocol_era(
+    request_id: Any,
+    method: str,
+    params: Any,
+) -> str | None:
+    """Return modern/legacy, or emit a protocol error and return None."""
+    if not isinstance(params, dict):
+        if method == "server/discover":
+            send_error(request_id, -32602, "Request params must be an object")
+            return None
+        return "legacy"
+
+    metadata = params.get("_meta")
+    has_version = (
+        isinstance(metadata, dict)
+        and _PROTOCOL_VERSION_META_KEY in metadata
+    )
+    if not has_version:
+        if method == "server/discover":
+            send_error(
+                request_id,
+                -32602,
+                f"Missing required request metadata: {_PROTOCOL_VERSION_META_KEY}",
+            )
+            return None
+        return "legacy"
+
+    requested = metadata.get(_PROTOCOL_VERSION_META_KEY)
+    if not isinstance(requested, str):
+        send_error(
+            request_id,
+            -32602,
+            f"{_PROTOCOL_VERSION_META_KEY} must be a string",
+        )
+        return None
+    if requested != MODERN_PROTOCOL_VERSION:
+        send_error(
+            request_id,
+            -32022,
+            "Unsupported protocol version",
+            {
+                "supported": list(SUPPORTED_PROTOCOL_VERSIONS),
+                "requested": requested,
+            },
+        )
+        return None
+
+    client_capabilities = metadata.get(_CLIENT_CAPABILITIES_META_KEY)
+    if not isinstance(client_capabilities, dict):
+        send_error(
+            request_id,
+            -32602,
+            f"Missing or invalid request metadata: {_CLIENT_CAPABILITIES_META_KEY}",
+        )
+        return None
+    client_info = metadata.get(_CLIENT_INFO_META_KEY)
+    if client_info is not None and (
+        not isinstance(client_info, dict)
+        or not isinstance(client_info.get("name"), str)
+        or not isinstance(client_info.get("version"), str)
+    ):
+        send_error(
+            request_id,
+            -32602,
+            f"Invalid request metadata: {_CLIENT_INFO_META_KEY}",
+        )
+        return None
+    return "modern"
+
+
 def handle_request(request: dict):
     """Handle MCP request."""
     method = request.get("method", "")
     id = request.get("id")
     params = request.get("params", {})
+    era = _request_protocol_era(id, method, params)
+    if era is None:
+        return
+    modern = era == "modern"
 
-    if method == "initialize":
+    if method == "initialize" and not modern:
         client_version = params.get("protocolVersion") if isinstance(params, dict) else None
-        server_version = negotiate_protocol_version(client_version)
+        server_version = negotiate_legacy_protocol_version(client_version)
 
         send_response(id, {
             "protocolVersion": server_version,
-            "capabilities": {
-                "tools": {"listChanged": False},
-                "resources": {"listChanged": False},
-                "prompts": {"listChanged": False},
-                "logging": {},
-            },
-            "serverInfo": {
-                "name": "flyto-indexer",
-                "title": "Flyto2 Code Indexer",
-                "version": __version__,
-                "description": "Code analysis MCP server — impact analysis, dependency tracking, dead code detection, security scanning, and code health scoring across any project.",
-                "websiteUrl": "https://github.com/flytohub/flyto-indexer",
-            },
-            "instructions": (
-                "flyto-indexer provides {tool_count} code analysis tools. "
-                "ALWAYS use these tools — do NOT fall back to Grep/Read for tasks they cover.\n\n"
-                "When asked to AUDIT or REVIEW a project:\n"
-                "  1. audit → overall quality score + auto-expands weak dimensions\n\n"
-                "When asked to MODIFY or REFACTOR code:\n"
-                "  1. task(action='plan') → risk assessment + execution plan (call FIRST)\n"
-                "  2. MANDATORY: Execute EVERY step in the execution_plan sequentially.\n"
-                "     Each step has: tool name, pre-filled args, and dependencies.\n"
-                "     Do NOT skip steps. Do NOT edit code until all inspect/assess steps complete.\n"
-                "  3. task(action='gate') → call at EVERY gate step before proceeding.\n"
-                "     If pass=false, do not enter the blocked phase or edit. Execute every\n"
-                "     required_actions item, update current_state with the exact requested\n"
-                "     keys, and immediately re-run the same gate. Repeat until pass=true.\n"
-                "     Ask the user only when remediation requires unavailable authorization,\n"
-                "     required input, or an external state change.\n"
-                "  4. Only after all gates pass, proceed to make changes.\n"
-                "  5. task(action='validate') → run ruff + pytest after making changes.\n\n"
-                "When asked to UNDERSTAND or EXPLORE code:\n"
-                "  1. search → find symbols by name or natural language\n"
-                "  2. structure → discover projects, APIs, dependencies\n\n"
-                "When checking IMPACT of changes:\n"
-                "  1. impact(target='symbol_name') → references + blast radius + cross-project\n"
-                "  2. impact(mode='unstaged') → blast radius of uncommitted changes"
-            ).format(tool_count=len(TOOLS)),
+            "capabilities": _server_capabilities(modern=False),
+            "serverInfo": _server_info(),
+            "instructions": _server_instructions(),
         })
+
+    elif method == "server/discover" and modern:
+        _send_result(
+            id,
+            {
+                "supportedVersions": list(SUPPORTED_PROTOCOL_VERSIONS),
+                "capabilities": _server_capabilities(modern=True),
+                "instructions": _server_instructions(),
+            },
+            modern=True,
+            ttl_ms=_DISCOVERY_TTL_MS,
+            cache_scope="public",
+        )
+
+    elif modern and method in {"initialize", "ping", "logging/setLevel"}:
+        send_error(id, -32601, f"Method not found: {method}")
 
     elif method == "tools/list":
-        send_response(id, {"tools": TOOLS})
+        _send_result(
+            id,
+            {"tools": TOOLS},
+            modern=modern,
+            ttl_ms=_STATIC_LIST_TTL_MS,
+            cache_scope="public",
+        )
 
     elif method == "tools/call":
-        _handle_tool_call(id, params)
+        _handle_tool_call(id, params, modern=modern)
 
     elif method == "resources/list":
-        send_response(id, {
-            "resources": RESOURCES,
-            "resourceTemplates": RESOURCE_TEMPLATES,
-        })
+        result = {"resources": RESOURCES}
+        if not modern:
+            result["resourceTemplates"] = RESOURCE_TEMPLATES
+        _send_result(
+            id,
+            result,
+            modern=modern,
+            ttl_ms=_STATIC_LIST_TTL_MS,
+            cache_scope="public",
+        )
+
+    elif method == "resources/templates/list":
+        _send_result(
+            id,
+            {"resourceTemplates": RESOURCE_TEMPLATES},
+            modern=modern,
+            ttl_ms=_STATIC_LIST_TTL_MS,
+            cache_scope="public",
+        )
 
     elif method == "resources/read":
         uri = params.get("uri", "")
@@ -581,12 +773,24 @@ def handle_request(request: dict):
             return
         result = _read_resource(uri)
         if "error" in result:
-            send_error(id, -32002, result["error"])
+            send_error(id, -32602 if modern else -32002, result["error"])
         else:
-            send_response(id, result)
+            _send_result(
+                id,
+                result,
+                modern=modern,
+                ttl_ms=_PRIVATE_RESOURCE_TTL_MS,
+                cache_scope="private",
+            )
 
     elif method == "prompts/list":
-        send_response(id, {"prompts": PROMPTS})
+        _send_result(
+            id,
+            {"prompts": PROMPTS},
+            modern=modern,
+            ttl_ms=_STATIC_LIST_TTL_MS,
+            cache_scope="public",
+        )
 
     elif method == "prompts/get":
         prompt_name = params.get("name", "")
@@ -595,7 +799,7 @@ def handle_request(request: dict):
         if "error" in result:
             send_error(id, -32602, result["error"])
         else:
-            send_response(id, result)
+            _send_result(id, result, modern=modern)
 
     elif method == "logging/setLevel":
         send_response(id, {})
@@ -614,7 +818,7 @@ def handle_request(request: dict):
         send_error(id, -32601, f"Method not found: {method}")
 
 
-def _handle_tool_call(id: Any, params: dict):
+def _handle_tool_call(id: Any, params: dict, *, modern: bool = False):
     """Run a tool within a bounded, cancellable request lifecycle."""
     started_at = _time.monotonic()
     tool_name = params.get("name", "")
@@ -623,7 +827,7 @@ def _handle_tool_call(id: Any, params: dict):
     _begin_request(id)
     try:
         with _tool_deadline(id, timeout_seconds):
-            _handle_tool_call_body(id, params)
+            _handle_tool_call_body(id, params, modern=modern)
     except ToolRequestCancelled as exc:
         send_error(id, -32800, str(exc), {
             "cancelled": True,
@@ -651,7 +855,7 @@ def _is_replay_safe_tool(tool_name: str) -> bool:
     )
 
 
-def _handle_tool_call_body(id: Any, params: dict):
+def _handle_tool_call_body(id: Any, params: dict, *, modern: bool = False):
     """Handle tools/call — extracted from handle_request for clarity."""
     started_at = _time.monotonic()
     index_freshness = "checked"
@@ -697,6 +901,7 @@ def _handle_tool_call_body(id: Any, params: dict):
                     _guard_warning,
                     runtime,
                     json.dumps(_guard_warning, ensure_ascii=False, indent=2),
+                    modern=modern,
                 ),
             )
             return
@@ -738,7 +943,12 @@ def _handle_tool_call_body(id: Any, params: dict):
         if _is_plan and isinstance(result, dict):
             result_text += _build_analyze_task_directive(result)
 
-        payload = _tool_response_payload(result, runtime, result_text)
+        payload = _tool_response_payload(
+            result,
+            runtime,
+            result_text,
+            modern=modern,
+        )
         if _is_plan and isinstance(result, dict):
             payload["content"][0]["text"] += _build_analyze_task_directive(result)
         send_response(id, payload)
