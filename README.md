@@ -81,6 +81,16 @@ Spec drift, orphan requirements, missing expected paths, and unplanned diff
 files fail closed. OpenSpec-style requirements and scenarios work without an
 OpenSpec runtime dependency.
 
+### Adaptive Governance
+
+`task(plan)` groups changes by responsibility and requests documentation only
+for public contracts, schemas, architecture, user behavior, security, or
+deployment. Internal fixes do not inherit a blanket documentation tax.
+
+The default `.flyto-rules.yaml` mode is `advisory`. Projects may opt into
+`guarded` or `strict`; deterministic violations then close through the existing
+`gate` and `validate` actions. No extra tool or action is added.
+
 ### Semantic Refactor Preflight
 
 `impact(change_type="rename"|"move"|"signature_change")` reports:

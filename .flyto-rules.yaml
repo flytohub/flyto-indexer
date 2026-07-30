@@ -122,3 +122,11 @@ style:
       - pattern: "subprocess\\.[A-Za-z_]+\\([^\\n)]*,\\s*shell\\s*=\\s*True"
         glob: "src/**/*.py"
     severity: high
+
+governance:
+  mode: advisory
+  atomicity:
+    enabled: true
+  documentation:
+    change_aware: true
+  waivers: []

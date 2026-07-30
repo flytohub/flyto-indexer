@@ -143,6 +143,7 @@ class TestAnalyzeTask:
         assert "constraints" in result
         assert "strategy" in result
         assert "human_summary" in result
+        assert result["governance"]["mode"] == "advisory"
 
     def test_task_profile_fields(self):
         from tools.task_analysis import analyze_task

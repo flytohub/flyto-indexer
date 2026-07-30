@@ -138,6 +138,39 @@ grill → plan → gate → validate
 analysis. `validate` rejects orphan requirements, unplanned diff paths, missing
 requirement paths/proofs, and stale instruction/spec fingerprints.
 
+Plans also include a compact governance contract:
+
+- Atomicity is based on production responsibilities and dependency evidence,
+  never a line-count threshold. Multiple independent responsibilities are
+  recommended as separate reversible changes.
+- Documentation is change-aware. Public APIs and schemas map to API or migration
+  docs; architecture maps to architecture/ADR records; user behavior maps to
+  README/CHANGELOG; security and deployment map to their runbooks. Internal
+  fixes require no docs.
+- `advisory` is the default and never blocks. `guarded` blocks deterministic
+  high-risk findings such as forbidden layer edges, cycles, unrelated mixed
+  changes, or incomplete public contract changes. `strict` additionally closes
+  every applicable documentation requirement during validation.
+- Waivers are narrow: each needs an ID, check IDs, path globs, a rationale, and
+  an ISO expiry date. Missing or expired waivers do not suppress findings.
+
+Configure the existing project policy without adding tools or actions:
+
+```yaml
+governance:
+  mode: advisory  # advisory | guarded | strict
+  atomicity:
+    enabled: true
+  documentation:
+    change_aware: true
+  waivers:
+    - id: legacy-edge
+      checks: [forbidden_layer_edge]
+      paths: ["src/legacy/**"]
+      rationale: "Remove after the adapter migration."
+      expires: "2026-12-31"
+```
+
 `grill` is optional decision closure for ambiguous work. It resolves repository
 facts from the index, asks one high-value question at a time, and freezes an
 immutable v2 contract with evidence snapshots, acceptance criteria, ADR, and
@@ -181,7 +214,7 @@ Primary implementation: `src/tools/task_analysis.py`, `src/execution_guard.py`,
 `src/tools/grill.py`, `src/tools/grill_intelligence.py`,
 `src/tools/grill_evidence.py`, `src/tools/grill_conformance.py`,
 `src/tools/grill_outcomes.py`, `src/tools/task_context.py`, and
-`src/tools/smart.py`.
+`src/tools/governance.py`, `src/tools/smart.py`.
 The [Decision Grill test protocol](GRILL_TESTING.md) maps the real
 mixed-language fixture, CLI, MCP, persistence, concurrency, and tamper gates.
 The [design references](DESIGN_REFERENCES.md) record the borrowed mechanics and

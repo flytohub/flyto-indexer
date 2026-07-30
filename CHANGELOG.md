@@ -38,6 +38,10 @@
 - Added multilingual robot workflow fixtures and deep unit, concurrency,
   security, real-index, CLI, dispatch, persistence, tamper, and MCP subprocess
   coverage for the complete decision loop.
+- Added responsibility-based atomic change guidance and change-aware
+  documentation governance to the existing task contract. Enforcement remains
+  advisory by default, with opt-in guarded/strict modes and expiring,
+  path-scoped waivers.
 
 ### Fixed
 - Made repository fact resolution require normalized exact evidence by default,
@@ -69,6 +73,8 @@
 - Reworked the README around one value statement, one quick start, and three
   differentiators; detailed inventories now live in the feature and generated
   references.
+- Scoped MCP index loading and auto-reindex checks to the requested project,
+  preventing idle requests from repeatedly scanning sibling repositories.
 
 ## [2.15.0] - 2026-07-23
 

@@ -910,6 +910,7 @@ def validate_intent_ledger(
         )
     captured: dict[str, Any] | None = None
     changed_paths: list[str] = []
+    governance_gate: dict[str, Any] | None = None
     if check_diff:
         captured = _change_set(task_project, change_set)
         changed_paths = captured.get("changed_paths") or []
@@ -951,22 +952,43 @@ def validate_intent_ledger(
                             "command": command,
                         }
                     )
+        governance = task_contract.get("governance")
+        if governance:
+            from .governance import validate_governance_diff
+
+            governance_gate = validate_governance_diff(
+                governance,
+                changed_paths=changed_paths,
+            )
+            for finding in governance_gate.get("blocking") or []:
+                violations.append(
+                    {
+                        "type": "governance_violation",
+                        "code": finding.get("code"),
+                        "paths": finding.get("paths") or [],
+                    }
+                )
+    required_actions = [
+        (
+            f"fix_intent_ledger:{item.get('requirement_id', 'task')}:"
+            f"{item['type']}"
+        )
+        for item in violations
+        if item.get("type") != "governance_violation"
+    ]
+    if governance_gate:
+        required_actions.extend(governance_gate.get("required_actions") or [])
     return {
         "pass": not violations,
         "status": "pass" if not violations else "blocked",
         "violations": violations,
-        "required_actions": [
-            (
-                f"fix_intent_ledger:{item.get('requirement_id', 'task')}:"
-                f"{item['type']}"
-            )
-            for item in violations
-        ],
+        "required_actions": list(dict.fromkeys(required_actions)),
         "summary": {
             "requirements": len(expected.get("requirements") or []),
             "changed_paths": len(changed_paths),
             "violations": len(violations),
         },
+        "governance": governance_gate,
         "change_set": (
             {
                 key: value

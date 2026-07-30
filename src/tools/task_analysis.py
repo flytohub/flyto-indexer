@@ -40,6 +40,7 @@ try:
         dependency_graph,
     )
     from .code_info import find_test_file, list_projects
+    from .governance import evaluate_task_governance, validate_governance_diff
     from .search import search_by_keyword
     from ..index_store import load_index
     from ..quality import code_health_score
@@ -52,6 +53,7 @@ except ImportError:
         dependency_graph,
     )
     from tools.code_info import find_test_file, list_projects
+    from tools.governance import evaluate_task_governance, validate_governance_diff
     from tools.search import search_by_keyword
     from index_store import load_index
     from quality import code_health_score
@@ -1663,7 +1665,7 @@ def _build_compound_contract(
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    return {
+    contract = {
         "task_profile": {
             "task_id": task_id,
             "title": description[:120],
@@ -1679,6 +1681,14 @@ def _build_compound_contract(
         "sub_tasks": sub_tasks,
         "human_summary": _generate_compound_summary(sub_tasks),
     }
+    contract["governance"] = evaluate_task_governance(
+        description=description,
+        targets=[t.get("input", "") for t in resolved],
+        resolved_targets=resolved,
+        project=project,
+        options=opts,
+    )
+    return contract
 
 
 def analyze_task(
@@ -1785,8 +1795,53 @@ def analyze_task(
         "strategy": strategy,
         "human_summary": _generate_human_summary(dimensions, constraints),
     }
+    contract["governance"] = evaluate_task_governance(
+        description=description,
+        targets=targets,
+        resolved_targets=resolved,
+        project=project,
+        options=opts,
+    )
 
     return contract
+
+
+def _apply_governance_gate(
+    result: dict,
+    task_contract: dict,
+    current_state: dict | None,
+) -> dict:
+    """Merge opt-in governance blockers into an existing gate result."""
+    governance = task_contract.get("governance")
+    if not governance:
+        return result
+    state = current_state or {}
+    gate = validate_governance_diff(
+        governance,
+        changed_paths=state.get("changed_paths") or [],
+        state=state,
+    )
+    result["governance"] = gate
+    if gate.get("pass"):
+        return result
+    codes = [
+        f"GOVERNANCE_{item.get('code', 'VIOLATION').upper()}"
+        for item in gate.get("blocking") or []
+    ]
+    result["pass"] = False
+    result["decision"] = "blocked"
+    result["reason_codes"] = list(dict.fromkeys(
+        list(result.get("reason_codes") or []) + codes
+    ))
+    result["required_actions"] = list(dict.fromkeys(
+        list(result.get("required_actions") or [])
+        + list(gate.get("required_actions") or [])
+    ))
+    result["message"] = (
+        f"Cannot enter {result.get('phase')}. "
+        f"Governance blocked {len(gate.get('blocking') or [])} finding(s)."
+    )
+    return result
 
 
 def _gate_check_compound(task_contract, next_phase, current_state):
@@ -1807,11 +1862,27 @@ def _gate_check_compound(task_contract, next_phase, current_state):
                     all_blockers.append(prefixed)
 
     if all_pass:
-        return {"pass": True, "decision": "pass", "phase": next_phase, "reason_codes": [],
-                "message": f"Clear to proceed to {next_phase} (all {len(sub_tasks)} sub-tasks pass).",
-                "required_actions": []}
-    return {"pass": False, "decision": "blocked", "phase": next_phase, "reason_codes": all_blockers,
-            "message": f"Blocked: {'; '.join(all_blockers)}", "required_actions": all_blockers}
+        result = {
+            "pass": True,
+            "decision": "pass",
+            "phase": next_phase,
+            "reason_codes": [],
+            "message": (
+                f"Clear to proceed to {next_phase} "
+                f"(all {len(sub_tasks)} sub-tasks pass)."
+            ),
+            "required_actions": [],
+        }
+    else:
+        result = {
+            "pass": False,
+            "decision": "blocked",
+            "phase": next_phase,
+            "reason_codes": all_blockers,
+            "message": f"Blocked: {'; '.join(all_blockers)}",
+            "required_actions": all_blockers,
+        }
+    return _apply_governance_gate(result, task_contract, current_state)
 
 
 def _collect_gate_blockers(next_phase, state, constraints):
@@ -1886,4 +1957,4 @@ def task_gate_check(
     if original_phase != next_phase:
         result["strategy_phase"] = original_phase
         result["mapped_to_gate"] = next_phase
-    return result
+    return _apply_governance_gate(result, task_contract, state)
