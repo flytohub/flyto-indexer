@@ -1147,6 +1147,67 @@ class TestRuntimeEnvelope:
         text_result = json.loads(payload["content"][0]["text"])
         assert text_result["_runtime"]["index_freshness"] == "not_checked"
 
+    def test_unscoped_profile_dispatch_does_not_walk_workspace(self):
+        from tools import smart
+
+        fake_info = MagicMock()
+        fake_info.list_projects.return_value = {
+            "total_projects": 2,
+            "projects": [
+                {"project": "alpha", "files": 3, "symbols": 10},
+                {"project": "beta", "files": 4, "symbols": 12},
+            ],
+        }
+        fake_profile = MagicMock()
+        with (
+            patch.object(smart, "_info_mod", return_value=fake_info),
+            patch.object(smart, "_refs_mod"),
+            patch.object(
+                smart,
+                "_bounded_profile_projects",
+                return_value=fake_info.list_projects.return_value,
+            ),
+            patch.dict(sys.modules, {"project_profile": fake_profile}),
+        ):
+            result = smart.smart_structure(focus="profile")
+
+        fake_profile.build_project_profile.assert_not_called()
+        fake_info.list_projects.assert_not_called()
+        assert result["profile_scope"] == "workspace_overview"
+        assert result["projects"]["total_projects"] == 2
+        assert result["next_action"]["arguments"] == {
+            "focus": "profile",
+            "project": "<project>",
+        }
+
+    def test_scoped_profile_keeps_deep_project_profile(self, tmp_path):
+        from tools import smart
+
+        project_root = tmp_path / "alpha"
+        project_root.mkdir()
+        fake_info = MagicMock()
+        fake_info.list_projects.return_value = {
+            "projects": [{"name": "alpha", "root": str(project_root)}],
+        }
+        fake_profile = MagicMock()
+        fake_profile.build_project_profile.return_value = {"project": "alpha"}
+        with (
+            patch.object(smart, "_info_mod", return_value=fake_info),
+            patch.object(smart, "_refs_mod"),
+            patch.dict(sys.modules, {"project_profile": fake_profile}),
+        ):
+            result = smart.smart_structure(
+                focus="profile",
+                project="alpha",
+            )
+
+        assert result == {"project": "alpha"}
+        fake_profile.build_project_profile.assert_called_once()
+        assert (
+            fake_profile.build_project_profile.call_args.args[0]
+            == project_root
+        )
+
     def test_execute_tool_runs_inside_explicit_project_scope(self):
         observed_scopes = []
 

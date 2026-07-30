@@ -261,6 +261,28 @@ def _add_explicit_project_counts(projects_result: dict) -> dict:
     return projects_result
 
 
+def _bounded_profile_projects() -> dict:
+    """List indexed project names from small headers, without loading graphs."""
+    try:
+        from ..index_store import _active_index_dirs, _peek_index_project
+    except ImportError:
+        from index_store import _active_index_dirs, _peek_index_project
+
+    projects = set()
+    for index_dir in _active_index_dirs():
+        project = _peek_index_project(index_dir) or index_dir.parent.name
+        if project:
+            projects.add(project)
+    return {
+        "total_projects": len(projects),
+        "projects": [
+            {"project": project, "name": project}
+            for project in sorted(projects)
+        ],
+        "counts_included": False,
+    }
+
+
 # ---------------------------------------------------------------------------
 # 1. search — unified code search with auto-enrichment
 # ---------------------------------------------------------------------------
@@ -964,20 +986,36 @@ def smart_structure(
 
     # --- Profile focus (full project profile) ---
     if focus == "profile":
+        if not project:
+            try:
+                projects = _bounded_profile_projects()
+            except Exception as e:
+                logger.debug("bounded project overview failed: %s", e)
+                projects = {"error": str(e), "projects": []}
+            return {
+                "profile_scope": "workspace_overview",
+                "projects": projects,
+                "next_action": {
+                    "tool": "structure",
+                    "arguments": {
+                        "focus": "profile",
+                        "project": "<project>",
+                    },
+                },
+            }
         try:
             from .. import project_profile as _pp
         except ImportError:
             import project_profile as _pp
         scan_path = None
-        if project:
-            try:
-                projects = info.list_projects()
-                for p in (projects.get("projects") or []):
-                    if p.get("name") == project:
-                        scan_path = p.get("root")
-                        break
-            except Exception:
-                pass
+        try:
+            projects = info.list_projects()
+            for p in (projects.get("projects") or []):
+                if p.get("name") == project:
+                    scan_path = p.get("root")
+                    break
+        except Exception:
+            pass
         if not scan_path:
             try:
                 idx = info._load_index()
