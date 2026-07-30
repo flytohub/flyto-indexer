@@ -975,7 +975,7 @@ Every declared class, function, nested function, and method in the package, supp
 | method | `def IndexEngine._update_index(self, result: ScanResult, changes=None)` | Update index | [`src/engine.py:604`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L604) |
 | method | `def IndexEngine._save_index(self, separate_content: bool=True)` | Save index | [`src/engine.py:645`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L645) |
 | method | `def IndexEngine._deserialize_index(self, data: dict) -> ProjectIndex` | Deserialize index from JSON | [`src/engine.py:694`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L694) |
-| method | `def IndexEngine._load_content_file(self, content_file: Path) -> dict` | Load content from JSONL file. | [`src/engine.py:757`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L757) |
+| method | `def IndexEngine._load_content_file(self, content_file: Path) -> dict` | Load content from JSONL file. | [`src/engine.py:759`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L759) |
 
 ## `src/execution_guard.py`
 

@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **168 Python modules**, **67,697 lines**, and **2,081 class/function/method declarations**.
+Generated inventory: **168 Python modules**, **67,699 lines**, and **2,081 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -69,7 +69,7 @@ Generated inventory: **168 Python modules**, **67,697 lines**, and **2,081 class
 | [`src/doc_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L1) | 537 | 12 | `dataclasses, fnmatch, gzip, json, logging, os, pathlib, re, typing, urllib` | Documentation Coverage Scanner — analyze documentation completeness. |
 | [`src/dockerfile_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_scanner.py#L1) | 240 | 3 | `logging, os, pathlib, re, rule_loader` | Dockerfile & IaC Scanner — detect security misconfigurations in Dockerfiles and docker-compose files. |
 | [`src/embedding.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/embedding.py#L1) | 96 | 5 | `logging, pathlib, sentence_transformers, typing` | Embedding-based semantic search — optional hybrid layer. |
-| [`src/engine.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L1) | 769 | 22 | `context, datetime, dependency_resolver, glob, hashlib, index_store, indexer, json, logging, models, pathlib, reverse_index` | Main indexing engine - orchestrates the entire flow. |
+| [`src/engine.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L1) | 771 | 22 | `context, datetime, dependency_resolver, glob, hashlib, index_store, indexer, json, logging, models, pathlib, reverse_index` | Main indexing engine - orchestrates the entire flow. |
 | [`src/execution_guard.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/execution_guard.py#L1) | 255 | 16 | `time, typing` | Execution Guard — server-side enforcement for task execution plans. |
 | [`src/finding_identity.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/finding_identity.py#L1) | 169 | 7 | `__future__, hashlib, json, pathlib, re, typing` | Stable, privacy-preserving identities for scanner and verification findings. |
 | [`src/flyto_output.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/flyto_output.py#L1) | 706 | 12 | `collections, datetime, engine, flyto_tags, json, models, pathlib` | Generate per-project .flyto/ folder (Schema v1). |
