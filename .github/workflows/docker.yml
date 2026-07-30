@@ -48,6 +48,10 @@ jobs:
           limit-severities-for-sarif: true
           exit-code: '1'
           ignore-unfixed: true
+          # pip bundles a third-party component SBOM, not an environment
+          # inventory. Runtime package versions are pinned and asserted in the
+          # Dockerfile; scanning this nested SBOM creates known false positives.
+          skip-files: /usr/local/lib/python3.12/site-packages/pip/_vendor/bom.cdx.json
 
       - name: Upload Trivy SARIF to GitHub Security tab
         if: always()
