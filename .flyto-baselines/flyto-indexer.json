@@ -10,7 +10,7 @@
   "metadata": {
     "schema_version": "2",
     "project": "flyto-indexer",
-    "git_head": "b3163d37adf1c61c5beafc8345510e479e5ee7b3",
+    "git_head": "9a76da5a93cbbedd536b6bbf960dabd74330343a",
     "git_dirty": false,
     "check_count": 20,
     "check_fingerprint": "15809f9ef8a5c8c994be819c72248bb6f84cd68976d36316d3b748e8d0880056"
@@ -46,16 +46,16 @@
           "definition_mismatches": 0
         },
         "files_scanned": 284,
-        "symbols_found": 4387,
-        "dependencies_found": 28176,
+        "symbols_found": 4389,
+        "dependencies_found": 28186,
         "errors": 0,
         "changes": "full rebuild",
         "timing": {
-          "scan_files": 1.422,
-          "resolve_deps": 0.939,
-          "build_reverse": 0.421,
-          "save_index": 4.587,
-          "total": 7.467
+          "scan_files": 1.377,
+          "resolve_deps": 0.872,
+          "build_reverse": 0.411,
+          "save_index": 4.286,
+          "total": 7.005
         }
       },
       "finding_id": "flyto-4d4b2e4f738d4d4fa3f3532b"
@@ -66,9 +66,9 @@
       "summary": "Index graph is internally connected",
       "metrics": {
         "files": 284,
-        "symbols": 4671,
-        "dependencies": 20213,
-        "reverse_targets": 3517,
+        "symbols": 4673,
+        "dependencies": 20220,
+        "reverse_targets": 3518,
         "missing_file_symbols": 0,
         "missing_reverse_targets": 0,
         "missing_reverse_callers": 0
@@ -84,7 +84,7 @@
         "health_grade": "B",
         "snapshot": {
           "schema": "health-snapshot.v2",
-          "id": "dfe7531e86d5616303fc0e311514f67149a84f817401224d10bd9e4ecbdfd1c9",
+          "id": "bf24ef0b4950b7b00123fca6fc1da0221f83d33d8e1a8bf5e5ebf51c045efedd",
           "project": "flyto-indexer",
           "analysis_scope": "production_source_only",
           "symbol_count": 2123,
@@ -93,7 +93,7 @@
         "complexity": {
           "total_functions": 1834,
           "complex_functions": 641,
-          "complexity_burden": 7098,
+          "complexity_burden": 7099,
           "max_complexity_score": 65,
           "avg_complexity": 3.91
         },
