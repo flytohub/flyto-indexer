@@ -632,6 +632,7 @@ def _request_protocol_era(
     params: Any,
 ) -> str | None:
     """Return modern/legacy, or emit a protocol error and return None."""
+    missing_metadata_prefix = "Missing required request metadata: "
     if not isinstance(params, dict):
         if method == "server/discover":
             send_error(request_id, -32602, "Request params must be an object")
@@ -645,11 +646,8 @@ def _request_protocol_era(
     )
     if not has_version:
         if method == "server/discover":
-            send_error(
-                request_id,
-                -32602,
-                f"Missing required request metadata: {_PROTOCOL_VERSION_META_KEY}",
-            )
+            message = missing_metadata_prefix + _PROTOCOL_VERSION_META_KEY
+            send_error(request_id, -32602, message)
             return None
         return "legacy"
 
@@ -662,14 +660,15 @@ def _request_protocol_era(
         )
         return None
     if requested != MODERN_PROTOCOL_VERSION:
+        error_data = {
+            "supported": list(SUPPORTED_PROTOCOL_VERSIONS),
+            "requested": requested,
+        }
         send_error(
             request_id,
             -32022,
             "Unsupported protocol version",
-            {
-                "supported": list(SUPPORTED_PROTOCOL_VERSIONS),
-                "requested": requested,
-            },
+            error_data,
         )
         return None
 
@@ -705,6 +704,7 @@ def handle_request(request: dict):
     if era is None:
         return
     modern = era == "modern"
+    static_options = {"ttl_ms": _STATIC_LIST_TTL_MS, "cache_scope": "public"}
 
     if method == "initialize" and not modern:
         client_version = params.get("protocolVersion") if isinstance(params, dict) else None
@@ -718,13 +718,14 @@ def handle_request(request: dict):
         })
 
     elif method == "server/discover" and modern:
+        result = {
+            "supportedVersions": list(SUPPORTED_PROTOCOL_VERSIONS),
+            "capabilities": _server_capabilities(modern=True),
+            "instructions": _server_instructions(),
+        }
         _send_result(
             id,
-            {
-                "supportedVersions": list(SUPPORTED_PROTOCOL_VERSIONS),
-                "capabilities": _server_capabilities(modern=True),
-                "instructions": _server_instructions(),
-            },
+            result,
             modern=True,
             ttl_ms=_DISCOVERY_TTL_MS,
             cache_scope="public",
@@ -733,13 +734,21 @@ def handle_request(request: dict):
     elif modern and method in {"initialize", "ping", "logging/setLevel"}:
         send_error(id, -32601, f"Method not found: {method}")
 
-    elif method == "tools/list":
+    elif method in {
+        "tools/list",
+        "resources/templates/list",
+        "prompts/list",
+    }:
+        result_name, entries = {
+            "tools/list": ("tools", TOOLS),
+            "resources/templates/list": ("resourceTemplates", RESOURCE_TEMPLATES),
+            "prompts/list": ("prompts", PROMPTS),
+        }[method]
         _send_result(
             id,
-            {"tools": TOOLS},
+            {result_name: entries},
             modern=modern,
-            ttl_ms=_STATIC_LIST_TTL_MS,
-            cache_scope="public",
+            **static_options,
         )
 
     elif method == "tools/call":
@@ -753,17 +762,7 @@ def handle_request(request: dict):
             id,
             result,
             modern=modern,
-            ttl_ms=_STATIC_LIST_TTL_MS,
-            cache_scope="public",
-        )
-
-    elif method == "resources/templates/list":
-        _send_result(
-            id,
-            {"resourceTemplates": RESOURCE_TEMPLATES},
-            modern=modern,
-            ttl_ms=_STATIC_LIST_TTL_MS,
-            cache_scope="public",
+            **static_options,
         )
 
     elif method == "resources/read":
@@ -774,22 +773,13 @@ def handle_request(request: dict):
         result = _read_resource(uri)
         if "error" in result:
             send_error(id, -32602 if modern else -32002, result["error"])
-        else:
-            _send_result(
-                id,
-                result,
-                modern=modern,
-                ttl_ms=_PRIVATE_RESOURCE_TTL_MS,
-                cache_scope="private",
-            )
-
-    elif method == "prompts/list":
+            return
         _send_result(
             id,
-            {"prompts": PROMPTS},
+            result,
             modern=modern,
-            ttl_ms=_STATIC_LIST_TTL_MS,
-            cache_scope="public",
+            ttl_ms=_PRIVATE_RESOURCE_TTL_MS,
+            cache_scope="private",
         )
 
     elif method == "prompts/get":
@@ -801,10 +791,7 @@ def handle_request(request: dict):
         else:
             _send_result(id, result, modern=modern)
 
-    elif method == "logging/setLevel":
-        send_response(id, {})
-
-    elif method == "ping":
+    elif method in {"logging/setLevel", "ping"}:
         send_response(id, {})
 
     elif method == "notifications/cancelled":
