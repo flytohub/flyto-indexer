@@ -1,34 +1,49 @@
 # Flyto2 Indexer Documentation
 
-Flyto2 Indexer builds a local code-intelligence graph and exposes it through a
-CLI, MCP server, Python package, and optional localhost HTTP bridge. Start with
-the path that matches the work you need to do.
+Start with the problem you are trying to stop. You do not need to understand
+the index format, parser stack, or every scanner before Flyto2 Indexer is useful.
 
-## Start Here
+## Choose By Pain
 
-| Goal | Document |
-|---|---|
-| Install and complete a first scan | [Root README](../README.md#start-in-60-seconds) |
-| Understand shipped capabilities | [Feature guide](FEATURES.md) |
+| If this is the problem | Start here |
+| --- | --- |
+| “I am afraid this change will break code I cannot see.” | Run the [first setup](../README.md#installation-and-first-result), then use `impact`. |
+| “The AI agent keeps missing project rules or requirements.” | Read the [task workflow](FEATURES.md#the-agent-missed-a-rule-or-requirement). |
+| “The tests are green, but I still do not trust the change.” | Use the [verification guide](VERIFICATION.md). |
+| “Frontend calls and backend routes keep drifting.” | See [contract drift](FEATURES.md#the-frontend-and-backend-drifted-apart). |
+| “Security and quality reports are too noisy.” | See [evidence-first audits](FEATURES.md#the-audit-is-too-noisy-to-trust). |
+| “Several repositories change together.” | See [multi-repository work](FEATURES.md#one-change-crosses-several-repositories). |
+| “I need the AI to clarify decisions before writing code.” | Use the [Decision Grill protocol](GRILL_TESTING.md). |
+| “I just need a command or exact argument.” | Go straight to the [generated reference](reference/README.md). |
+
+## Setup And Daily Use
+
+| Need | Guide |
+| --- | --- |
+| Install, scan, and see the first result | [Root README](../README.md#installation-and-first-result) |
+| Understand the problems it solves | [Feature guide](FEATURES.md) |
 | Use the command line | [CLI guide](CLI.md) |
 | Connect an AI coding client | [MCP guide](MCP.md) |
-| Configure scanning, policies, and LSP | [Configuration](CONFIGURATION.md) |
-| Run local and CI release gates | [Verification](VERIFICATION.md) |
-| Reproduce scanner accuracy and latency evidence | [Benchmark corpus](../benchmarks/README.md) |
-| Reproduce the Decision Grill closed loop | [Decision Grill test protocol](GRILL_TESTING.md) |
-| Review the dated Decision Grill evidence | [Decision Grill closure report](GRILL_TEST_REPORT_2026-07-29.md) |
-| Evaluate data handling and threats | [Security model](SECURITY_MODEL.md) |
-| Understand the design and evidence model | [Technical whitepaper](WHITEPAPER.md) |
-| Review borrowed mechanics and the anti-bloat budget | [Design references](DESIGN_REFERENCES.md) |
+| Configure policies and optional integrations | [Configuration](CONFIGURATION.md) |
+| Add local or CI finish gates | [Verification](VERIFICATION.md) |
 
-## Generated Reference
+## Trust And Evidence
+
+| Question | Document |
+| --- | --- |
+| What leaves my machine? | [Security model](SECURITY_MODEL.md) |
+| Are scanner claims reproducible? | [Benchmark corpus](../benchmarks/README.md) |
+| How was Decision Grill tested? | [Test protocol](GRILL_TESTING.md) and [dated closure report](GRILL_TEST_REPORT_2026-07-29.md) |
+| Why was the product designed this way? | [Design references](DESIGN_REFERENCES.md) |
+| How does it work internally? | [Technical whitepaper](WHITEPAPER.md) |
+
+## Exact Reference
 
 The [generated reference index](reference/README.md) is the exhaustive,
-source-backed catalog. It covers every non-test Python declaration, CLI command
-and argument, published and compatibility MCP tool, local HTTP operation,
-environment variable, scanner default, and built-in rule file.
+source-backed catalog for CLI commands, MCP tools, local HTTP operations,
+configuration, built-in rules, and Python interfaces.
 
-Regenerate it from the repository root after changing a documented surface:
+Regenerate it after changing a documented interface:
 
 ```bash
 python3 scripts/generate-reference.py

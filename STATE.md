@@ -64,10 +64,10 @@
   compatibility definitions, seven local HTTP operations, 14 environment
   variables, and eight built-in rule files.
 - Documentation scoring distinguishes inline summaries from exact source-linked
-  reference entries. The latest score is 92/100 with 67.1% inline coverage,
-  99.9% source-reference coverage, and 99.9% combined symbol coverage; external
-  links count only when they resolve to the indexed declaration inside the
-  repository.
+  reference entries. The latest score is 98/100 with a 78/100 README score,
+  67.1% inline coverage, 99.9% source-reference coverage, and 99.9% combined
+  symbol coverage; external links count only when they resolve to the indexed
+  declaration inside the repository.
 - Generated source-reference manifests accept repository-local glob patterns,
   while absolute or escaping paths remain outside the documentation trust
   boundary.

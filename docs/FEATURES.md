@@ -1,287 +1,163 @@
-# Feature Guide
+# Problems Flyto2 Indexer Solves
 
-This guide explains the supported product surfaces. Exact signatures,
+This guide starts with failure modes, not scanner internals. Exact commands,
 arguments, schemas, and source links live in the
 [generated reference](reference/README.md).
 
-## Index And Search
+## “I Changed One Thing And Broke Another”
 
-`scan` walks supported source and configuration files, extracts symbols,
-imports, routes, package dependencies, and documentation signals, then writes a
-local `.flyto-index/` graph. Incremental scans reuse unchanged data; `--full`
-rebuilds it. `search` combines lexical and semantic ranking and enriches results
-with callers and neighboring symbols.
+Before an edit, `impact` shows the selected symbol, its callers and dependents,
+likely test files, cross-repository connections, and references that still need
+manual review.
 
-Manifest v2 uses full SHA-256 content addresses and a content fingerprint of
-the native scanner pipeline. Content or parser changes invalidate the exact
-cached inputs they make unsafe. Optional Tree-sitter validation can cross-check
-definition parsing when installed and enabled; unavailable grammars fall back
-without changing native results or the default dependency boundary.
+For a rename, move, delete, or signature change, it separates exact references
+from same-name matches and unresolved dynamic uses. The coding agent gets a
+reviewable change surface instead of assuming a text search found everything.
 
-JavaScript and TypeScript coverage includes CommonJS, ECMAScript module, and
-typed module variants (`.cjs`, `.mjs`, `.cts`, and `.mts`) in addition to the
-standard extensions. Authored VitePress config and theme source is indexed,
-while generated `.vitepress/cache/` dependency bundles are excluded.
-Dart coverage indexes Flutter widget classes, ordinary classes, constructors,
-methods, getters, top-level functions, enums, mixins, extensions, and import or
-export directives without requiring a local Dart SDK.
-C and common C++ coverage indexes function definitions, typedef structs,
-includes, and call edges across `.c`, `.h`, `.cc`, `.cpp`, `.cxx`, `.hh`,
-`.hpp`, and `.hxx` without requiring Clang. It is a dependency-free structural
-indexer, not a replacement for compiler-accurate preprocessing.
+For an existing diff, it reports which code and tests are affected and attaches
+a small local evidence case file. Generated output, lockfiles, and binary noise
+do not consume the evidence budget.
 
-Primary implementation: `src/engine.py`, `src/scanner/`, `src/indexer/`,
-`src/index_store.py`, and `src/tools/search.py`.
+## “The Agent Cannot Find The Right Code”
 
-## Context And Project Profiles
+`search` combines exact terms with related concepts, then adds nearby symbols
+and callers. Context and project-profile tools return bounded views of the
+repository instead of dumping the whole tree into the model.
 
-Context tools produce bounded, AI-ready views instead of dumping a repository.
-They support project briefs, outlines, file descriptions, architecture
-conventions, package inventories, framework detection, API catalogs, type
-contracts, and project profiles. Generated context is evidence, not executable
-code.
+The local index covers symbols, imports, routes, calls, models, packages, and
+architecture signals. Incremental scans reuse safe unchanged data, so a large
+repository does not require a full rebuild for every question.
 
-Primary implementation: `src/context/`, `src/profile/`,
-`src/tools/project.py`, and `src/tools/structure.py`.
+## “The Agent Missed A Rule Or Requirement”
 
-## Impact And Call Graphs
+`task(plan)` loads only the instructions that apply to the files being changed.
+Nested rules take precedence; contradictory rules block the next phase instead
+of being silently guessed around.
 
-Impact analysis resolves a symbol or diff to references, transitive callers,
-cross-project dependents, likely test files, call paths, and a risk level.
-Explicit paths are resolved before fuzzy symbol search. Language-server results
-can enrich static edges when a supported local LSP is available; deterministic
-parsers and text fallback remain available.
-
-If a repository exports SCIP, references prefer that precise local artifact
-before LSP and heuristic fallbacks. Diff impact also consumes coverage.py
-dynamic contexts or LCOV `TN` contexts plus JUnit XML to name tests that
-executed changed lines and symbols. Every artifact records its hash and
-freshness; missing contexts produce an explicit downgrade rather than a guess.
-
-For rename, move, delete, and signature changes, semantic preflight also
-reports the exact selected symbol, same-name candidates, overloads,
-indexed/name-only/unresolved reference classes, and production/test/manual
-review update sites. It analyzes the edit; it does not perform it.
-
-Diff impact also attaches a bounded local Git case file and deterministic risk
-verdict. Receipts identify commits and files without embedding patch bodies;
-lockfiles, generated output, and binaries are excluded from the evidence rank.
-
-Primary implementation: `src/engine.py`, `src/diff_impact.py`,
-`src/lsp/call_graph.py`, `src/lsp/`, `src/tools/evidence_portfolio.py`, and
-`src/tools/references.py`.
-
-## API And Contract Drift
-
-The indexer extracts backend routes and frontend calls, preserves HTTP methods
-from common TypeScript wrappers, and reports route definitions without callers
-or calls without definitions. Product closure checks apply to `/api/v1/**`;
-mock `/api/mock/**` fixtures are excluded from that product gate.
-
-Primary implementation: `src/scanner/api.py`,
-`src/analyzer/api_consistency.py`, `src/analyzer/api_drift.py`, and
-`src/tools/contracts.py`.
-
-## Quality And Security Audits
-
-Audits cover complexity, duplication, dead code, stale code, coverage gaps,
-secrets, license posture, vulnerable patterns, taint flows, infrastructure as
-code, AI-agent policy, documentation, dependency health, and git hotspots.
-Static analysis never intentionally imports or executes the target project.
-Documentation scoring reports inline summaries separately from generated
-source-reference coverage. An external reference counts only when its manifest
-declares the reference file and the Markdown link resolves inside the target
-repository to the exact indexed declaration line.
-`documentation.source_reference` accepts repository-local file paths or glob
-patterns, allowing large generated references to stay split into navigable
-pages without losing exact symbol coverage accounting.
-`documentation.source_reference_exclude` accepts repository-relative globs for
-vendored dependencies and fixtures whose authoritative reference belongs to
-another repository. Absolute paths and parent traversal are ignored;
-exclusions affect documentation scoring only, never source or security scans.
-Docs-only repositories with no runtime environment can set
-`documentation.configuration_not_applicable` to `true`; this suppresses the
-`.env.example` recommendation without weakening source or security checks.
-They can also set `documentation.module_roots` to an empty list when the
-repository intentionally has no source-owning module directories.
-
-Repositories that mix source code with top-level content directories can set
-`documentation.module_roots` in `docs/documentation-manifest.json`. The scanner
-then measures README or package-docstring coverage only for those declared,
-repository-local source roots. This prevents translated pages and other content
-collections from being misclassified as undocumented software modules while
-keeping the default top-level-directory discovery for repositories without a
-manifest scope.
-
-The smart `audit` result includes the same bounded evidence portfolio plus a
-three-finding maximum verdict. Every verdict claim points back to health,
-impact, commit, file, or diff evidence already present in the result.
-
-Secret, SAST, taint, IaC, and governance findings share one evidence envelope:
-a line-move-stable fingerprint, confidence level and basis, bounded trace, and
-active or suppressed provenance. Sanitizers and expiring governance waivers
-therefore remain auditable after a finding leaves the active set.
-
-Primary implementation: `src/analyzer/`, `src/auditor/`, `src/quality.py`, and
-`src/tools/evidence_portfolio.py`, plus the rule corpus under `config/rules/`.
-
-## Repository Policy
-
-`.flyto-rules.yaml` can define file placement, forbidden patterns,
-architecture layers, allowed imports, and project-specific taint sources,
-sinks, and sanitizers. Built-in rules and project rules are merged; malformed
-policy fails verification instead of silently disabling checks.
-
-See [Configuration](CONFIGURATION.md#repository-policy) and the generated
-[configuration reference](reference/configuration.md).
-
-## Task Workflow
-
-`task` has four actions and one contract:
+The same plan links each requirement to:
 
 ```text
-grill → plan → gate → validate
+planned step → expected path or symbol → test or proof
 ```
 
-`plan` adds two lean, automatic layers:
+If the rules or requirements change after planning, the gate detects the stale
+contract. If the final diff touches unrelated files or leaves a requirement
+without proof, validation fails with a specific remediation.
 
-- **JIT Rules** resolves only target-applicable agent instructions, applies
-  nested-path precedence, reports same-scope conflicts, and fingerprints the
-  result.
-- **Intent Ledger** maps the task and bounded Markdown requirements/scenarios
-  to plan steps, expected paths, symbols, tests, and Ruff/pytest proof.
+Projects may keep this guidance advisory or make deterministic architecture,
+atomicity, and documentation checks blocking. Waivers must be narrow, explained,
+path-scoped, and time-limited.
 
-`gate` rejects stale rules/specs, unresolved conflicts, and incomplete required
-analysis. `validate` rejects orphan requirements, unplanned diff paths, missing
-requirement paths/proofs, and stale instruction/spec fingerprints.
+## “The Task Is Too Vague To Plan Safely”
 
-Plans also include a compact governance contract:
+Decision Grill is optional. It resolves repository facts first, then asks one
+high-value product or architecture question at a time. A recommendation and
+counterargument travel with the question so the user is not forced to invent
+options from scratch.
 
-- Atomicity is based on production responsibilities and dependency evidence,
-  never a line-count threshold. Multiple independent responsibilities are
-  recommended as separate reversible changes.
-- Documentation is change-aware. Public APIs and schemas map to API or migration
-  docs; architecture maps to architecture/ADR records; user behavior maps to
-  README/CHANGELOG; security and deployment map to their runbooks. Internal
-  fixes require no docs.
-- `advisory` is the default and never blocks. `guarded` blocks deterministic
-  high-risk findings such as forbidden layer edges, cycles, unrelated mixed
-  changes, or incomplete public contract changes. `strict` additionally closes
-  every applicable documentation requirement during validation.
-- Waivers are narrow: each needs an ID, check IDs, path globs, a rationale, and
-  an ISO expiry date. Missing or expired waivers do not suppress findings.
+When the important choices are settled, Grill freezes the evidence, acceptance
+criteria, and decision record into the task contract. Changed evidence reopens
+only the affected decisions. Straightforward work can skip Grill entirely.
 
-Configure the existing project policy without adding tools or actions:
+See the [Decision Grill test protocol](GRILL_TESTING.md).
 
-```yaml
-governance:
-  mode: advisory  # advisory | guarded | strict
-  atomicity:
-    enabled: true
-  documentation:
-    change_aware: true
-  waivers:
-    - id: legacy-edge
-      checks: [forbidden_layer_edge]
-      paths: ["src/legacy/**"]
-      rationale: "Remove after the adapter migration."
-      expires: "2026-12-31"
-```
+## “The Tests Passed, But The Work Is Not Finished”
 
-`grill` is optional decision closure for ambiguous work. It resolves repository
-facts from the index, asks one high-value question at a time, and freezes an
-immutable v2 contract with evidence snapshots, acceptance criteria, ADR, and
-audit artifacts. Changed evidence selectively reopens affected decisions.
-Outcomes are stored locally without questions, answers, or source code.
+`verify` checks more than a test exit code. It closes:
 
-Questions may use any language. IDs and contracts remain provider-neutral.
-Grill state defaults to `~/.flyto-indexer/grill`; override it with
-`FLYTO_INDEXER_GRILL_DIR`.
+- index freshness and internal consistency;
+- context and impact lookup;
+- secrets and unsafe data flow;
+- documentation and repository policy;
+- package, runtime, and generated-file consistency;
+- working-tree and baseline regression hygiene.
 
-Example CLI sequence:
+`task(validate)` runs the project linter and tests, then checks the final diff
+against the rules, requirements, decisions, paths, and proof recorded in the
+plan.
 
-```bash
-flyto-index task grill --grill-action start \
-  --description "Add a safe robot adapter" \
-  --decisions decisions.json
+A failed gate returns the missing actions. The agent completes them and reruns
+the same gate; it does not treat the failure as permission to stop the task.
 
-flyto-index task grill --grill-action answer \
-  --grill-session-id grill_... \
-  --decision-id failure_policy \
-  --accept-recommendation \
-  --request-id answer-failure-policy-v1
+## “The Frontend And Backend Drifted Apart”
 
-flyto-index task grill --grill-action freeze \
-  --grill-session-id grill_...
+The indexer compares frontend calls with backend routes and preserves the HTTP
+method when common wrappers are used. Missing calls, unused routes, and
+cross-project type differences become visible before release.
 
-flyto-index task plan \
-  --description "Add a safe robot adapter" \
-  --target src/adapter.py \
-  --grill-session-id grill_...
+Real product contracts remain strict. Mock and development fixtures can be
+kept outside the product gate so test helpers do not create false failures.
 
-flyto-index task validate \
-  --project . \
-  --task-contract task-contract.json
-```
+## “The Audit Is Too Noisy To Trust”
 
-Plans continue to include risk dimensions, constraints, affected locations,
-tests, and co-change evidence. The new layers add no tool or task action.
+Audits rank quality and security findings instead of presenting an unbounded
+dump. They cover complexity, duplication, dead code, stale code, secrets,
+unsafe data flow, vulnerable patterns, infrastructure configuration,
+dependencies, licenses, documentation, and git hotspots.
 
-Primary implementation: `src/tools/task_analysis.py`, `src/execution_guard.py`,
-`src/tools/grill.py`, `src/tools/grill_intelligence.py`,
-`src/tools/grill_evidence.py`, `src/tools/grill_conformance.py`,
-`src/tools/grill_outcomes.py`, `src/tools/task_context.py`, and
-`src/tools/governance.py`, `src/tools/smart.py`.
-The [Decision Grill test protocol](GRILL_TESTING.md) maps the real
-mixed-language fixture, CLI, MCP, persistence, concurrency, and tamper gates.
-The [design references](DESIGN_REFERENCES.md) record the borrowed mechanics and
-anti-bloat budget.
+Findings carry a stable identity, confidence basis, bounded trace, and
+suppression history. Moving a line does not create a brand-new issue. Accepted
+debt can be baselined while newly worse findings still fail CI.
 
-## Verification And Baselines
+Target code is treated as untrusted input. Static checks do not intentionally
+import or execute the repository being analyzed.
 
-`verify` closes the scan, context, impact, security, documentation, policy,
-runtime, packaging, and working-tree checks for one repository.
-`verify-workspace` applies the same model across repositories.
-`verify-baseline` records or compares accepted findings so CI can detect
-regressions without hiding existing debt.
+## “One Change Crosses Several Repositories”
 
-`audit`, project profiles, and `verify` consume one canonical
-`health-snapshot.v2`. The content-addressed snapshot fixes analysis scope to production source
-and records a stable symbol fingerprint, weighted complexity burden,
-high-confidence dead code, documentation coverage, and modularity. Public
-surfaces fail closed if an expanded dimension diverges from it.
+Workspace verification applies the same checks across a selected set of
+projects. Impact analysis can show dependents and likely tests outside the
+current repository, while API and type checks expose contract drift across
+project boundaries.
 
-Verify schema v2 assigns stable IDs to checks and individual sampled findings.
-Regression comparison catches new finding IDs inside an already-warning check,
-and newly-worse canonical quality metrics inside an otherwise passing check,
-while legacy status-only baselines remain compatible. SARIF exports the same
-fingerprint for line-move correlation.
+Changed-only mode keeps the normal path focused. Full workspace verification
+remains available for release gates.
 
-The committed offline evaluation corpus runs real Python, JavaScript,
-TypeScript, and Go index/taint paths with positive, sanitized, constant, and
-cross-file cases. CI gates exact expected counts, per-language precision and
-recall, negative-case false-positive rate, metamorphic relations, pinned
-differential categories, scan errors, path depth, and p95/max latency without
-adding a runtime dependency or network call.
+## “The Scanner Itself Became The Bottleneck”
 
-See [Verification](VERIFICATION.md) for release commands and report formats.
+Flyto2 Indexer is designed to stay out of the way:
 
-## Software Inventory
+- analysis is local by default;
+- the public MCP surface stays at 20 tools;
+- large results are bounded and pageable;
+- unchanged files are reused safely;
+- optional precision adapters are not required for the normal path;
+- timeouts and cancellation stop one request without sacrificing the next;
+- the tool reports evidence but does not edit or commit product code.
 
-Dependency scanning reads supported package manifests and lockfiles. License
-analysis identifies repository and dependency licenses. SBOM export produces a
-CycloneDX 1.5 JSON document suitable for artifact and supply-chain workflows.
+For clients that need a persistent connection, the optional localhost bridge
+keeps one child process warm, exposes health and latency, and restarts the child
+after a failure. It refuses non-local binds.
 
-Primary implementation: `src/dependency_scanner.py`, `src/license_scanner.py`,
-`src/sbom.py`, and `src/tools/dependencies.py`.
+## What It Understands
 
-## Integration Surfaces
+Built-in indexing covers:
 
-- CLI: 36 subcommands; see the [CLI reference](reference/cli.md).
-- MCP: smart tools are listed to clients; granular definitions remain for
-  compatibility and internal dispatch. See the [MCP reference](reference/mcp-tools.md).
-- Python: import `IndexEngine` or the focused modules documented in the
-  [Python API reference](reference/python-api.md).
-- HTTP: the optional local bridge exposes seven operations documented in the
-  [HTTP reference](reference/http-api.md).
-- JSON export: `export` creates a portable scan bundle for an explicit caller.
+- Python
+- TypeScript and JavaScript
+- Vue
+- Go
+- Rust
+- Java
+- Dart
+- C and C++
+
+It also reads common package manifests and lockfiles, detects framework and
+infrastructure signals, exports software inventory, and can use local language
+servers, SCIP, coverage, and test-result artifacts when they are already
+available. Missing optional evidence is labeled; it is not presented as proof.
+
+## Ways To Use It
+
+- **MCP:** let an AI coding client call the focused tools.
+- **CLI:** use the same planning, impact, audit, and verification flow in a
+  terminal or CI job.
+- **Python:** embed the index and focused analyzers in local tooling.
+- **Local HTTP:** keep an optional loopback bridge available for compatible
+  clients.
+- **JSON export:** hand an explicit scan bundle to another approved system.
+
+Start with the [root README](../README.md#installation-and-first-result). Use the
+[CLI guide](CLI.md), [MCP guide](MCP.md), and
+[verification guide](VERIFICATION.md) for daily workflows. Use the
+[generated reference](reference/README.md) only when you need exact technical
+detail.

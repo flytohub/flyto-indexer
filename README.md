@@ -9,13 +9,21 @@
   </p>
 </div>
 
-Flyto2 Indexer is local code intelligence for AI coding agents. It maps
-symbols, callers, APIs, tests, rules, and requirements before an edit, then
-closes the loop with lint, tests, and diff conformance.
+Most bad AI-assisted changes are not syntax errors. They happen because the
+agent changed one file and missed a caller, a test, a repository rule, or a
+requirement somewhere else.
+
+Flyto2 Indexer gives coding agents a local map before they edit and a finish
+gate before they say the work is done.
+
+- See what a change can break before touching it.
+- Give the agent only the project rules and context that matter.
+- Keep requirements, changed files, and proof connected.
+- Catch unfinished work even when one test command is green.
 
 No API key. No model lock-in. No source upload.
 
-## Start in 60 seconds
+## Installation And First Result
 
 ```bash
 pip install flyto-indexer
@@ -23,7 +31,7 @@ flyto-index setup .
 flyto-index verify . --strict
 ```
 
-`setup` builds the index and configures supported MCP clients. Then ask your
+`setup` builds a local index and configures supported MCP clients. Then ask your
 agent:
 
 ```text
@@ -36,163 +44,88 @@ Risk: high
 Manual review: 1 unresolved dynamic reference
 ```
 
-Text search finds a name. Flyto2 Indexer finds the change surface.
+A text search finds the name. Flyto2 Indexer shows the change surface.
 
-## One closed loop
+## The Problems It Removes
+
+| Pain | What Flyto2 Indexer changes |
+| --- | --- |
+| “I changed one function and something unrelated broke.” | Shows callers, dependents, likely tests, and unresolved references before the edit. |
+| “The agent ignored our repository rules.” | Loads the instructions that apply to the target and blocks contradictory or stale guidance. |
+| “The ticket said five things; the diff only did three.” | Links requirements to planned steps, changed paths, and proof. |
+| “Tests passed, but the change still was not ready.” | Verifies the index, impact, security checks, documentation, policy, package state, and working tree together. |
+| “Frontend and backend drifted apart.” | Compares calls, routes, and contracts so missing connections are visible. |
+| “Our scanner is so noisy that nobody trusts it.” | Keeps evidence local, reports confidence and provenance, and supports baselines for accepted debt. |
+| “A large repository overwhelms the agent.” | Returns bounded, relevant context instead of dumping the whole codebase. |
+
+## Usage
+
+Keep daily work in one closed loop:
+
+```text
+find → understand impact → plan → pass the gate → edit → validate → verify
+```
+
+The public tool names are short:
 
 ```text
 search → impact → task(plan) → task(gate) → edit → task(validate) → verify
 ```
 
-- `search` finds symbols and concepts.
-- `impact` previews blast radius, ambiguity, callers, tests, and dynamic gaps.
-- `task` carries decisions, scoped instructions, requirements, and proof.
-- `verify` checks the repository before the agent says done.
+- `search` finds the relevant code and concepts.
+- `impact` shows what a change can affect.
+- `task` keeps decisions, project rules, requirements, and proof connected.
+- `verify` checks whether the repository is actually ready to finish or merge.
 
-The public smart-tool surface stays at 20 tools. Core analysis is local and
-works without external services. `audit` and diff-based `impact` also return a
-bounded Git evidence portfolio and a short verdict linked to its receipts;
-lockfiles and generated artifacts are filtered before they consume context.
+When a gate fails, it explains what is missing. Complete those actions and run
+the same gate again. A failed gate pauses the unsafe step; it does not abandon
+the task.
 
-## What is different
+## When The Task Is Still Vague
 
-### JIT Rules
-
-`task(plan)` loads only the instructions that apply to the target path:
-
-- `AGENTS.md`
-- `CLAUDE.md`
-- `GEMINI.md`
-- `QWEN.md`
-- Copilot and Cursor project rules
-
-Nested rules override broader scopes. Same-scope contradictions block the gate.
-Fingerprints detect rule changes after planning.
-
-### Intent Ledger
-
-Existing Markdown specs remain the source of truth. The plan maps:
-
-```text
-requirement → plan step → changed path → test/proof
-```
-
-Spec drift, orphan requirements, missing expected paths, and unplanned diff
-files fail closed. OpenSpec-style requirements and scenarios work without an
-OpenSpec runtime dependency.
-
-### Adaptive Governance
-
-`task(plan)` groups changes by responsibility and requests documentation only
-for public contracts, schemas, architecture, user behavior, security, or
-deployment. Internal fixes do not inherit a blanket documentation tax.
-
-The default `.flyto-rules.yaml` mode is `advisory`. Projects may opt into
-`guarded` or `strict`; deterministic violations then close through the existing
-`gate` and `validate` actions. No extra tool or action is added.
-
-### Semantic Refactor Preflight
-
-`impact(change_type="rename"|"move"|"signature_change")` reports:
-
-- exact symbol identity and same-name candidates;
-- overload and ambiguity counts;
-- indexed, name-only, and unresolved references;
-- production, test, and manual-review update sites.
-
-Flyto2 Indexer does not edit files or become an IDE. It makes the edit contract
-precise for the agent that already does.
-
-### Precision Without Runtime Bloat
-
-- `find_references` prefers a local SCIP artifact, then LSP, then the existing
-  index and content fallbacks.
-- Diff impact can correlate changed symbols with LCOV or coverage.py dynamic
-  contexts and JUnit results. Stale or context-free artifacts are labeled
-  instead of treated as proof.
-- Incremental manifests use full content hashes plus a parser-pipeline
-  fingerprint, so unchanged files stay fast and parser changes rebuild safely.
-- Tree-sitter cross-validation is opt-in with
-  `pip install "flyto-indexer[treesitter]"` and
-  `FLYTO_TREE_SITTER=1`; native scanners remain the fallback.
-- Findings carry one stable evidence envelope: confidence basis, trace,
-  fingerprint, and suppression provenance.
-
-These are internal adapters. The public MCP surface remains 20 tools, and the
-default runtime dependency boundary remains PyYAML only.
-
-### Decision Grill
-
-Use Grill when the task still has product or architecture decisions:
+Use the optional Decision Grill before planning. It resolves facts from the
+repository first, then asks one high-value question at a time. Once the
+important decisions are settled, it freezes them into the plan so the final
+diff can be checked against what was agreed.
 
 ```text
 task(action="grill", grill_action="start", description="Add robot adapter")
-  → one high-value question + recommendation + evidence
-
 task(action="grill", grill_action="freeze", grill_session_id="grill_...")
-  → immutable decision contract + evidence snapshot + ADR
-
 task(action="plan", grill_session_id="grill_...", ...)
-  → risk + JIT Rules + Intent Ledger + frozen decisions
-
-task(action="validate", task_contract=<plan>, project="...")
-  → Ruff + pytest + freshness + requirement/diff conformance
 ```
 
-Repository facts are resolved from the index instead of being asked back to the
-user. Critical uncertainty and contradictions fail closed.
+If there is no real product or architecture choice to make, skip Grill and go
+straight to `task(plan)`.
 
-## Core tools
+## The Main Questions It Can Answer
 
-| Tool | Answer |
+| Tool | Question |
 | --- | --- |
 | `search` | Where is the relevant code? |
-| `impact` | What breaks if this changes? |
-| `task` | Are decisions, rules, requirements, and proof closed? |
-| `audit` | Where are the quality and security risks? |
-| `structure` | How is the project connected? |
+| `impact` | What could break if this changes? |
+| `task` | Are the decisions, rules, requirements, and proof complete? |
+| `audit` | Where are the most important quality and security risks? |
+| `structure` | How is this project connected? |
 | `verify` | Is this repository ready to finish or merge? |
 
-Focused tools also cover secrets, taint, SBOM, licenses, architecture layers,
-documentation, PR risk, and workspace verification. See the
-[source-backed MCP reference](docs/reference/mcp-tools.md).
+Focused checks also cover secrets, unsafe data flow, dependencies, licenses,
+software inventory, architecture boundaries, documentation, pull-request risk,
+and multi-repository verification. The exact tool contracts live in the
+[generated MCP reference](docs/reference/mcp-tools.md).
 
-### MCP transport and response budgets
+## What “Verified” Means
 
-`stdio` remains the default transport. For clients that benefit from a
-persistent local connection, run the optional loopback-only Streamable HTTP
-bridge:
+`verify` combines checks that are usually scattered across several commands:
 
-```bash
-flyto-index-mcp-http --port 8765
-# MCP endpoint: http://127.0.0.1:8765/mcp
-# health:       http://127.0.0.1:8765/health
-```
+- Is the local index current and internally consistent?
+- Can the requested context and impact path be reproduced?
+- Did secret, unsafe-data-flow, and repository-policy checks pass?
+- Are documentation, package metadata, and generated files in sync?
+- Is the working tree clean enough for the requested gate?
 
-The bridge keeps one stdio child warm, restarts it after a failure, and only
-replays requests declared read-only. It refuses non-loopback binds.
-
-Stdio tool calls have bounded deadlines and support MCP
-`notifications/cancelled`. Normal analysis defaults to 120 seconds; full
-verification and task plan/validate calls default to 600 seconds. Override
-both, within the enforced 1–900 second range, with
-`FLYTO_INDEXER_TOOL_TIMEOUT_SECONDS`. A timeout or cancellation fails only that
-request, so the same process can serve the next call instead of entering a busy
-loop.
-
-`structure(focus="profile")` and `project_profile` now default to bounded
-`compact` results. Use `limit` and `cursor` to page lists, `result_mode="paged"`
-for the complete paged shape, or explicit `result_mode="full"` for the legacy
-unbounded response. Profile counts distinguish filesystem total, production
-source, indexed, test, fixture, example, and generated files. Test fixtures do
-not affect production API/model signals unless
-`include_non_production=true`.
-
-Every MCP tool result includes `_runtime` metadata with the runtime version,
-commit, index freshness, elapsed time, result mode, and request deadline.
-`audit`, `structure(focus="profile")`, and `verify` also share the same
-`health-snapshot.v2`; a score or complexity count therefore means the same
-thing on every surface.
+It does not pretend static analysis proves runtime behavior. Browser, service,
+integration, and deployment checks can remain project-owned proof commands and
+be attached to the task contract.
 
 ## CLI
 
@@ -205,22 +138,8 @@ flyto-index verify . --strict
 flyto-index verify-workspace . --changed-only --base origin/main
 ```
 
-For an existing-warning baseline:
-
-```bash
-flyto-index verify . \
-  --save-baseline .flyto-baselines/flyto-indexer.json \
-  --json
-
-flyto-index verify . \
-  --baseline .flyto-baselines/flyto-indexer.json \
-  --regression-only
-```
-
-Current baselines compare stable, privacy-preserving finding IDs as well as
-check status and canonical quality metrics, so a new finding or newly-worse
-complexity/dead-code/documentation result cannot hide behind accepted debt.
-Line-number-only moves keep the same ID. Legacy baselines remain readable.
+The same guarded `task` workflow is available through the CLI when an MCP
+client has a stale long-running process.
 
 ## CI
 
@@ -231,94 +150,63 @@ Line-number-only moves keep the same ID. Legacy baselines remain readable.
 - run: flyto-index check . --threshold medium --base main
 ```
 
-Project policy lives in `.flyto-rules.yaml`:
+Projects can keep an accepted baseline and fail only newly worse findings:
 
-```yaml
-verify:
-  allow_warn: [docs_coverage]
-  warn_as_fail: [agent_hygiene, generated_index_ignore, mcp_registry]
-  min_docs_score: 60
-  min_health_score: 80
-  max_dead_code: 14
-
-layers:
-  - name: ui
-    paths: ["src/ui/**"]
-    cannot_import: [db]
-
-taint:
-  sources:
-    - pattern: "ctx.payload"
-      language: python
-  sinks:
-    - pattern: "dangerousEval("
-      vuln_type: rce
-      severity: critical
+```bash
+flyto-index verify . \
+  --baseline .flyto-baselines/flyto-indexer.json \
+  --regression-only
 ```
+
+## Designed To Stay Lean
+
+- The public MCP surface stays at 20 tools instead of growing one tool per
+  scanner.
+- Normal analysis is local and works without a hosted service.
+- Generated data stays under `.flyto-index/` and can be deleted at any time.
+- Flyto2 Indexer reports evidence; it does not auto-edit, auto-commit, or take
+  over the coding agent.
+- Optional precision adapters remain optional. The default install keeps one
+  runtime dependency.
+- Large results are bounded and pageable so they do not flood the agent's
+  context.
+
+For clients that need a persistent local connection, an optional loopback-only
+HTTP bridge can keep one MCP process warm and restart it after a failure. See
+the [MCP guide](docs/MCP.md).
 
 ## Languages
 
-| Language | Indexing |
-| --- | --- |
-| Python | AST: functions, classes, methods, decorators, routes |
-| TypeScript / JavaScript | Functions, classes, interfaces, types, API calls |
-| Vue | Components, composables, props, emits |
-| Go | Functions, structs, methods, interfaces, embeddings |
-| Rust | Functions, structs, impl blocks, traits |
-| Java | Classes, methods, interfaces, annotations |
-| Dart | Widgets, classes, constructors, methods, imports |
-| C / C++ | Functions, typedef structs, includes, call edges |
+Built-in indexing covers Python, TypeScript and JavaScript, Vue, Go, Rust,
+Java, Dart, and C/C++. Local language servers and SCIP data can improve
+reference precision when available; the built-in index remains the fallback.
 
-Optional local language servers enrich references. The built-in index remains
-the dependency-free fallback.
+## Evidence, Privacy, And Limits
 
-## How it works
+Target repositories are treated as untrusted input. Static checks do not
+intentionally import or execute the code being analyzed. Findings include
+confidence and trace evidence without retaining raw secrets.
 
-```text
-source → symbols → dependency graph → reverse index → MCP
-                         ↓
-              task contracts + verify
-```
-
-Generated data stays under `.flyto-index/`:
-
-```text
-index.json      symbols and dependency graph
-content.jsonl   lazy source records
-bm25.json       keyword index
-semantic.json   local semantic index
-```
-
-Delete that directory to remove generated index data.
-
-## Design choices
-
-The workflow borrows proven ideas without copying entire products:
-
-- clear spec-to-implementation traceability from
-  [GitHub Spec Kit](https://github.com/github/spec-kit);
-- plain Markdown and brownfield-first deltas from
-  [OpenSpec](https://github.com/Fission-AI/OpenSpec);
-- path-scoped, just-in-time project context from
-  [Gemini CLI](https://github.com/google-gemini/gemini-cli);
-- symbol-aware refactor preflight from
-  [Serena](https://github.com/oraios/serena);
-- compact, evidence-first code case files from
-  [Grillme](https://grillme.dev/).
-
-What stays out of core: hosted documentation fetchers, model bindings,
-auto-editing, auto-commit, and another workflow tree. See
-[design references](docs/DESIGN_REFERENCES.md).
+The committed offline benchmark covers positive, negative, sanitized, and
+cross-file cases across Python, JavaScript, TypeScript, and Go. It gates
+accuracy, false positives, scan errors, and latency on every release. See the
+[reproducible benchmark](benchmarks/README.md) and
+[security model](docs/SECURITY_MODEL.md).
 
 ## Documentation
 
-- [Features](docs/FEATURES.md)
-- [CLI](docs/CLI.md)
-- [MCP](docs/MCP.md)
+- [Choose a guide by your pain](docs/README.md)
+- [Problems and capabilities](docs/FEATURES.md)
+- [CLI guide](docs/CLI.md)
+- [MCP setup and runtime](docs/MCP.md)
 - [Configuration](docs/CONFIGURATION.md)
-- [Security model](docs/SECURITY_MODEL.md)
-- [Decision Grill tests](docs/GRILL_TESTING.md)
+- [Verification](docs/VERIFICATION.md)
+- [Technical whitepaper](docs/WHITEPAPER.md)
 - [Generated references](docs/reference/)
+
+The [design references](docs/DESIGN_REFERENCES.md) explain what was borrowed
+from Spec Kit, OpenSpec, Gemini CLI, Serena, Grillme, and other projects—and
+what was deliberately left out to avoid bloat.
 
 ## Contributing
 

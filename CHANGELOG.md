@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+- Reworked the public README and documentation entry points around common
+  change-safety pain, practical outcomes, and clear reader paths. Exhaustive
+  implementation details remain in the generated reference and technical
+  guides instead of leading the first-use experience.
+
 ## [2.17.0] - 2026-07-30
 
 ### Added
