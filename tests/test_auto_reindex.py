@@ -2,6 +2,7 @@
 
 import json
 import sys
+import threading
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -158,6 +159,7 @@ def test_project_auto_reindex_filters_sibling_changes(monkeypatch):
     monkeypatch.setattr(index_store, "_AUTO_REINDEX_ENABLED", True)
     monkeypatch.setattr(index_store, "_project_reindex_checks", {})
     monkeypatch.setattr(index_store, "_project_full_checks", {})
+    monkeypatch.setattr(index_store, "_reindex_lock", threading.Lock())
     monkeypatch.setattr(
         index_store,
         "load_index",

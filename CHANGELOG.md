@@ -95,6 +95,8 @@
 - Placed intentionally vulnerable benchmark cases under the established
   `fixture/` boundary so legacy Indexer versions in shared workflows exclude
   them from repository self-scans while the evaluator still scans them.
+- Isolated auto-reindex and governance tests from shared lock/index state so
+  both Python CI matrices are deterministic under the full-suite order.
 
 ## [2.15.0] - 2026-07-23
 

@@ -204,9 +204,10 @@ def test_expired_waiver_is_invalid():
 
 
 def test_validate_intent_ledger_applies_strict_diff_governance():
+    project_root = str(Path(__file__).parent.parent)
     targets = ["src/cli.py", "tests/test_cli.py", "README.md"]
     ledger = build_intent_ledger(
-        "flyto-indexer",
+        project_root,
         "Change CLI output behavior",
         targets,
         [{
@@ -216,14 +217,14 @@ def test_validate_intent_ledger_applies_strict_diff_governance():
         }],
     )
     contract = {
-        "task_profile": {"project": "flyto-indexer"},
+        "task_profile": {"project": project_root},
         "intent_ledger": ledger,
         "governance": _contract("strict"),
     }
 
     blocked = validate_intent_ledger(
         contract,
-        project="flyto-indexer",
+        project=project_root,
         change_set={
             "status": "captured",
             "changed_paths": ["src/cli.py", "tests/test_cli.py"],
@@ -231,7 +232,7 @@ def test_validate_intent_ledger_applies_strict_diff_governance():
     )
     passing = validate_intent_ledger(
         contract,
-        project="flyto-indexer",
+        project=project_root,
         change_set={
             "status": "captured",
             "changed_paths": ["src/cli.py", "tests/test_cli.py", "README.md"],
