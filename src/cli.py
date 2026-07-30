@@ -1738,7 +1738,6 @@ def cmd_export(args):
 def cmd_secrets(args):
     """Scan project for hardcoded secrets."""
     from .secret_scanner import scan_secrets, format_secret_scan
-    from dataclasses import asdict
 
     project_path = Path(args.path).resolve()
     if not project_path.exists():
@@ -1754,7 +1753,7 @@ def cmd_secrets(args):
             "critical": result.critical,
             "high": result.high,
             "medium": result.medium,
-            "findings": [asdict(f) for f in result.findings],
+            "findings": [finding.to_dict() for finding in result.findings],
         }
 
     print(format_secret_scan(result))

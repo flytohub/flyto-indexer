@@ -167,6 +167,30 @@ class TestParseCoverageSqlite:
         result = _parse_coverage_sqlite(str(db_path))
         assert result == {}
 
+    def test_branch_coverage_arcs_are_projected_to_lines(self, tmp_project):
+        from src.tools.coverage_intel import _parse_coverage_sqlite
+
+        db_path = tmp_project / ".coverage"
+        connection = sqlite3.connect(str(db_path))
+        connection.execute("CREATE TABLE file (id INTEGER PRIMARY KEY, path TEXT)")
+        connection.execute(
+            "CREATE TABLE arc "
+            "(file_id INTEGER, context_id INTEGER, fromno INTEGER, tono INTEGER)"
+        )
+        connection.execute(
+            "INSERT INTO file VALUES (1, ?)",
+            (str(tmp_project / "src/auth.py"),),
+        )
+        connection.execute("INSERT INTO arc VALUES (1, 0, -3, 3)")
+        connection.execute("INSERT INTO arc VALUES (1, 0, 3, 8)")
+        connection.execute("INSERT INTO arc VALUES (1, 0, 8, -3)")
+        connection.commit()
+        connection.close()
+
+        result = _parse_coverage_sqlite(str(db_path))
+
+        assert result == {"src/auth.py": {3, 8}}
+
 
 class TestParseCoverageXml:
 
@@ -238,6 +262,37 @@ class TestFindCoverageData:
         assert fmt == "none"
         assert path == ""
 
+    def test_finds_lcov(self, tmp_project):
+        from src.tools.coverage_intel import _find_coverage_data
+
+        lcov_path = tmp_project / "lcov.info"
+        lcov_path.write_text("SF:src/auth.py\nDA:3,1\nend_of_record\n")
+
+        fmt, path = _find_coverage_data(str(tmp_project))
+
+        assert fmt == "lcov"
+        assert path == str(lcov_path)
+
+
+class TestParseCoverageLcov:
+
+    def test_basic_parsing(self, tmp_project):
+        from src.tools.coverage_intel import _parse_coverage_lcov
+
+        lcov_path = tmp_project / "lcov.info"
+        lcov_path.write_text(textwrap.dedent("""\
+            TN:tests/test_auth.py::test_login
+            SF:src/auth.py
+            DA:2,1
+            DA:3,0
+            DA:4,2
+            end_of_record
+        """))
+
+        result = _parse_coverage_lcov(str(lcov_path))
+
+        assert result == {"src/auth.py": {2, 4}}
+
 
 class TestUncoveredRanges:
 
@@ -284,6 +339,8 @@ class TestCoverageReport:
         assert "error" not in result
         assert result["project"] == "test-project"
         assert result["data_source"] == "sqlite"
+        assert result["coverage_artifact"]["kind"] == "coverage.sqlite"
+        assert len(result["coverage_artifact"]["sha256"]) == 64
         assert "overall" in result
         assert result["overall"]["total_lines"] > 0
         assert "functions" in result
@@ -401,6 +458,8 @@ class TestUntestedChanges:
         assert "summary" in result
         assert "files" in result
         assert result["summary"]["total_changed_lines"] == 3
+        assert result["test_impact"]["schema"] == "test-impact-evidence.v1"
+        assert result["test_impact"]["status"] == "no_contexts"
 
     @patch("src.tools.coverage_intel._run_git_diff")
     @patch("src.tools.coverage_intel.load_index")

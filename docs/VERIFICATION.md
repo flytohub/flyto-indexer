@@ -18,7 +18,7 @@ repository rules and layers, package/runtime metadata, generated-index hygiene,
 canonical code health, and relevant working-tree conditions. `--strict`
 promotes warnings to failure.
 
-The `quality_health` check is the same `health-snapshot.v1` used by `audit` and
+The `quality_health` check is the same `health-snapshot.v2` used by `audit` and
 project profiles. Project policy may set `min_health_score`,
 `min_documentation_score`, `max_complex_functions`,
 `max_complexity_burden`, and `max_dead_code`.
@@ -42,37 +42,46 @@ use comparison mode in CI to reject new regressions. See
 `flyto-index verify-baseline --help` for the exact current arguments.
 
 Verify result schema v2 assigns stable, privacy-preserving IDs to checks and
-individual secret/taint findings. IDs use rule, repository-relative path, and a
-bounded semantic anchor, but not line numbers or source excerpts. Regression
-mode therefore detects a new finding even when its parent check was already
-warning. It also compares canonical health score, complex-function count,
-complexity burden, dead-code count, and documentation score even when the check
-status remains `pass`. A v1 baseline without IDs remains readable.
+individual findings. Scanner findings also expose the full fingerprint,
+confidence basis, bounded trace, and active/suppressed provenance. Identity
+uses rule, repository-relative path, and a bounded semantic anchor, but not
+line numbers or raw secrets. Regression mode therefore detects a new finding
+even when its parent check was already warning. It also compares canonical
+health score, complex-function count, complexity burden, dead-code count, and
+documentation score even when the check status remains `pass`. A v1 baseline
+without IDs remains readable.
 
 This intentionally follows a “no new debt” gate: absolute policy floors catch
 catastrophic drift, while the reviewed baseline blocks only newly-worse
 metrics. Existing debt stays visible without making the scanner unusable.
 
-SARIF output carries the same ID in `partialFingerprints.flytoFindingId/v1` and
-`properties.findingId`, with file and line evidence when a sampled finding has
-it. This lets code-scanning consumers correlate a finding across line-only
-moves.
+SARIF output carries the compact ID and full fingerprint in
+`partialFingerprints`, with confidence, trace, suppression, file, and line
+evidence where available. This lets code-scanning consumers correlate a
+finding across line-only moves.
 
 ## Offline Scanner Evaluation
 
-The repository includes a small committed positive/negative corpus for Python,
-JavaScript, and Go. It runs the real index and taint analyzer without network
-access and fails on missed findings, extra findings, missing cross-file path
-proof, scan errors, or latency beyond the configured bound:
+The repository includes a committed positive/negative corpus for Python,
+JavaScript, TypeScript, and Go. It runs the real index and taint analyzer
+without network access and fails on missed findings, extra findings, broken
+metamorphic relations, differential-category drift, missing cross-file path
+proof, scan errors, or p95/max latency beyond the configured bounds:
 
 ```bash
 python benchmarks/evaluate.py --check --json
 ```
 
-The report includes precision, recall, negative-case false-positive rate,
-per-case latency and peak memory, plus a deterministic evidence fingerprint
-that excludes timing noise. This fast gate complements—not replaces—the larger
-optional external corpus described in [benchmarks/README.md](../benchmarks/README.md).
+The report includes per-language precision and recall, negative-case
+false-positive rate, p50/p95/max latency and peak memory, plus a deterministic
+evidence fingerprint that excludes timing noise. This fast gate
+complements—not replaces—the larger optional external corpus described in
+[benchmarks/README.md](../benchmarks/README.md).
+
+On Python 3.12, CI also emits coverage.py per-test contexts and JUnit XML,
+downloads both into the verify job, and proves that at least one covered line
+maps back to an executed test. These are dev/CI extras; they do not change the
+installed runtime dependency boundary.
 
 ## Indexer Release Gate
 

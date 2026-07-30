@@ -312,6 +312,67 @@ def _attach_evidence(
     return result
 
 
+def _attach_test_impact(
+    result: dict,
+    git_root: str,
+    file_changes: Dict[str, List[Tuple[int, int]]],
+    changed_symbols: List[dict],
+) -> dict:
+    """Attach artifact-backed changed-symbol to test execution evidence."""
+    try:
+        from .test_evidence import build_test_impact_evidence
+        from .tools.coverage_intel import _find_coverage_data
+    except ImportError:
+        try:
+            from test_evidence import build_test_impact_evidence
+            from tools.coverage_intel import _find_coverage_data
+        except ImportError:
+            result["test_impact"] = {
+                "schema": "test-impact-evidence.v1",
+                "status": "unavailable",
+                "confidence": "none",
+                "reason": "adapter_unavailable",
+                "impacted_tests": [],
+            }
+            result["suggested_tests"] = []
+            return result
+
+    # Keep evidence construction bounded even for a newly added generated file.
+    changed_lines: Dict[str, List[int]] = {}
+    remaining = 50_000
+    truncated = False
+    for path, ranges in sorted(file_changes.items()):
+        lines: List[int] = []
+        for start, end in ranges:
+            if remaining <= 0:
+                truncated = True
+                break
+            count = min(max(0, end - start + 1), remaining)
+            lines.extend(range(start, start + count))
+            remaining -= count
+            if start + count <= end:
+                truncated = True
+                break
+        changed_lines[path] = lines
+
+    coverage_format, coverage_path = _find_coverage_data(git_root)
+    test_impact = build_test_impact_evidence(
+        git_root,
+        coverage_format,
+        coverage_path,
+        changed_lines,
+        changed_symbols,
+    )
+    test_impact["input_truncated"] = truncated
+    result["test_impact"] = test_impact
+    result["suggested_tests"] = [
+        test["node_id"]
+        for test in test_impact.get("impacted_tests", [])
+        if test.get("node_id")
+    ]
+    return result
+
+
 def impact_from_diff(
     mode: str = "unstaged",
     base: str = "",
@@ -347,14 +408,15 @@ def impact_from_diff(
     if mode == "unstaged":
         file_changes.update(_untracked_file_changes(git_root))
     if not file_changes:
-        return _attach_evidence({
+        result = _attach_test_impact({
             "mode": mode,
             "total_changed_files": 0,
             "total_changed_symbols": 0,
             "symbols": [],
             "summary": {"high_risk": 0, "moderate_risk": 0, "low_risk": 0, "safe": 0},
             "next_action": "No changes detected." if mode == "unstaged" else f"No changes in {mode} mode.",
-        }, git_root, mode, base, [])
+        }, git_root, {}, [])
+        return _attach_evidence(result, git_root, mode, base, [])
 
     # Match hunks to indexed symbols
     changed_symbols = _match_symbols_to_changes(project, file_changes)
@@ -393,6 +455,7 @@ def impact_from_diff(
             "type": sym["type"],
             "path": sym["path"],
             "project": sym["project"],
+            "line_range": sym["line_range"],
             "change_type": sym["change_type"],
             "impact": {
                 "risk": risk,
@@ -423,7 +486,7 @@ def impact_from_diff(
     else:
         next_action = "No indexed symbols affected by this diff."
 
-    return _attach_evidence({
+    result = _attach_test_impact({
         "mode": mode,
         "base": base or "(default)",
         "total_changed_files": len(file_changes),
@@ -431,4 +494,5 @@ def impact_from_diff(
         "symbols": symbols_with_impact,
         "summary": risk_summary,
         "next_action": next_action,
-    }, git_root, mode, base, sorted(file_changes))
+    }, git_root, file_changes, symbols_with_impact)
+    return _attach_evidence(result, git_root, mode, base, sorted(file_changes))

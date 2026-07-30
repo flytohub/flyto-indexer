@@ -7,6 +7,11 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+try:
+    from ..finding_identity import finding_evidence, suppression_provenance
+except ImportError:
+    from finding_identity import finding_evidence, suppression_provenance
+
 GOVERNANCE_VERSION = "governance.v1"
 VALID_MODES = {"advisory", "guarded", "strict"}
 
@@ -425,6 +430,37 @@ def _waives(finding: dict, waiver: dict) -> bool:
     )
 
 
+def _finding_with_evidence(finding: dict, waiver: dict | None = None) -> dict:
+    code = str(finding.get("code") or "governance")
+    paths = finding.get("paths") or []
+    primary_path = paths[0] if paths else "."
+    is_waived = waiver is not None
+    evidence = finding_evidence(
+        f"governance/{code}",
+        primary_path,
+        anchor={"code": code, "paths": sorted(paths)},
+        confidence="high",
+        confidence_basis=["deterministic_diff_policy"],
+        trace=[
+            {"kind": "changed_path", "path": path}
+            for path in paths
+        ],
+        suppression=suppression_provenance(
+            suppressed=is_waived,
+            mechanism="waiver" if is_waived else "none",
+            rule_id=str(waiver.get("id", "")) if waiver else "",
+            reason=str(waiver.get("rationale", "")) if waiver else "",
+            source=".flyto-rules.yaml" if waiver else "",
+            expires=str(waiver.get("expires", "")) if waiver else "",
+        ),
+        origin="governance.diff",
+    )
+    result = {**finding, **evidence}
+    if waiver:
+        result["waiver_id"] = waiver["id"]
+    return result
+
+
 def validate_governance_diff(
     governance: dict | None,
     *,
@@ -446,9 +482,9 @@ def validate_governance_diff(
             None,
         )
         if waiver:
-            waived.append({**finding, "waiver_id": waiver["id"]})
+            waived.append(_finding_with_evidence(finding, waiver))
         else:
-            active.append(finding)
+            active.append(_finding_with_evidence(finding))
     blocking_codes = (
         set()
         if mode == "advisory"

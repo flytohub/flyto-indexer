@@ -19,6 +19,19 @@ try:
 except ImportError:
     from safe_xml import safe_parse_xml, UnsafeXMLError
 
+try:
+    from ..test_evidence import (
+        artifact_provenance,
+        build_test_impact_evidence,
+        parse_lcov,
+    )
+except ImportError:
+    from test_evidence import (
+        artifact_provenance,
+        build_test_impact_evidence,
+        parse_lcov,
+    )
+
 
 # Parse unified diff headers: @@ -start[,count] +start[,count] @@
 _HUNK_HEADER = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
@@ -64,11 +77,11 @@ def _get_project_root(project: Optional[str] = None) -> Tuple[str, str]:
 def _find_coverage_data(project_root: str) -> Tuple[str, str]:
     """Find coverage data file in project root.
 
-    Checks (in order): .coverage (SQLite), coverage.xml, htmlcov/status.json,
-    coverage.json.
+    Checks (in order): .coverage (SQLite), coverage.xml, lcov.info,
+    coverage/lcov.info, htmlcov/status.json, coverage.json.
 
     Returns:
-        (format, path) — format is one of "sqlite", "xml", "json", "none".
+        (format, path) — one of "sqlite", "xml", "lcov", "json", "none".
     """
     root = Path(project_root)
 
@@ -81,6 +94,11 @@ def _find_coverage_data(project_root: str) -> Tuple[str, str]:
     cov_xml = root / "coverage.xml"
     if cov_xml.is_file():
         return "xml", str(cov_xml)
+
+    # LCOV output (Jest, Vitest, nyc, Go converters, and many CI systems)
+    for lcov_path in (root / "lcov.info", root / "coverage" / "lcov.info"):
+        if lcov_path.is_file():
+            return "lcov", str(lcov_path)
 
     # htmlcov/status.json
     htmlcov_status = root / "htmlcov" / "status.json"
@@ -107,7 +125,7 @@ def _decode_numbits(numbits: bytes) -> Set[int]:
 
 
 def _parse_coverage_sqlite(db_path: str) -> Dict[str, Set[int]]:
-    """Parse .coverage SQLite file (coverage.py v5+ format).
+    """Parse coverage.py line or branch data from its SQLite artifact.
 
     Returns:
         {relative_file_path: {set of covered line numbers}}
@@ -116,40 +134,59 @@ def _parse_coverage_sqlite(db_path: str) -> Dict[str, Set[int]]:
     result: Dict[str, Set[int]] = {}
 
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        with sqlite3.connect(db_path) as connection:
+            try:
+                files = {
+                    row[0]: row[1]
+                    for row in connection.execute("SELECT id, path FROM file")
+                }
+            except sqlite3.OperationalError:
+                return result
 
-        try:
-            cursor.execute("SELECT id, path FROM file")
-        except sqlite3.OperationalError:
-            conn.close()
-            return result
-        files = {row[0]: row[1] for row in cursor.fetchall()}
+            try:
+                line_rows = connection.execute(
+                    "SELECT file_id, numbits FROM line_bits"
+                ).fetchall()
+            except sqlite3.OperationalError:
+                line_rows = []
+            try:
+                arc_rows = connection.execute(
+                    "SELECT file_id, fromno, tono FROM arc"
+                ).fetchall()
+            except sqlite3.OperationalError:
+                arc_rows = []
 
-        try:
-            cursor.execute("SELECT file_id, numbits FROM line_bits")
-        except sqlite3.OperationalError:
-            conn.close()
-            return result
-
-        for file_id, numbits in cursor.fetchall():
-            if file_id not in files:
-                continue
-
-            file_path = files[file_id]
+        def relative_file_path(file_id: int) -> Optional[str]:
+            file_path = files.get(file_id)
+            if file_path is None:
+                return None
             if os.path.isabs(file_path):
                 try:
                     file_path = os.path.relpath(file_path, project_root)
                 except ValueError:
                     pass
+            return file_path
 
+        for file_id, numbits in line_rows:
+            file_path = relative_file_path(file_id)
+            if file_path is None:
+                continue
             lines = _decode_numbits(numbits)
-            if file_path in result:
-                result[file_path].update(lines)
-            else:
-                result[file_path] = lines
+            result.setdefault(file_path, set()).update(lines)
 
-        conn.close()
+        # coverage.py stores branch-mode execution as arcs instead of line
+        # bitmaps. Negative endpoints are entry/exit sentinels; positive
+        # endpoints project back to executed source lines.
+        for file_id, from_line, to_line in arc_rows:
+            file_path = relative_file_path(file_id)
+            if file_path is None:
+                continue
+            lines = {
+                line
+                for line in (from_line, to_line)
+                if isinstance(line, int) and line > 0
+            }
+            result.setdefault(file_path, set()).update(lines)
     except (sqlite3.Error, OSError):
         pass
 
@@ -217,12 +254,23 @@ def _parse_coverage_json(json_path: str) -> Dict[str, Set[int]]:
     return result
 
 
+def _parse_coverage_lcov(lcov_path: str) -> Dict[str, Set[int]]:
+    """Parse LCOV data while preserving TN contexts for test-impact mapping."""
+    project_root = str(Path(lcov_path).parent)
+    if Path(lcov_path).parent.name == "coverage":
+        project_root = str(Path(lcov_path).parent.parent)
+    covered, _ = parse_lcov(lcov_path, project_root)
+    return covered
+
+
 def _parse_coverage(fmt: str, path: str) -> Dict[str, Set[int]]:
     """Dispatch to the appropriate parser."""
     if fmt == "sqlite":
         return _parse_coverage_sqlite(path)
     elif fmt == "xml":
         return _parse_coverage_xml(path)
+    elif fmt == "lcov":
+        return _parse_coverage_lcov(path)
     elif fmt == "json":
         return _parse_coverage_json(path)
     return {}
@@ -394,6 +442,9 @@ def coverage_report(project: Optional[str] = None, min_coverage: Optional[float]
         "data_source": fmt,
         "data_age_hours": round(age_hours, 1),
         "stale_warning": stale_warning,
+        "coverage_artifact": artifact_provenance(
+            cov_path, project_root, "coverage.{}".format(fmt)
+        ),
         "overall": {
             "total_lines": total_lines,
             "covered_lines": covered_lines,
@@ -473,6 +524,9 @@ def coverage_gaps(project: Optional[str] = None, max_results: int = 20) -> dict:
 
     return {
         "gaps": gaps,
+        "coverage_artifact": artifact_provenance(
+            cov_path, project_root, "coverage.{}".format(fmt)
+        ),
         "summary": {
             "total_gaps": total_gaps,
             "avg_gap_coverage": round(avg_gap_coverage, 1),
@@ -513,7 +567,12 @@ def _find_affected_symbols(
             continue
         for line in uncovered_lines:
             if start_line <= line <= end_line:
-                affected.append({"name": symbol.get("name", ""), "symbol_id": symbol_id})
+                affected.append({
+                    "name": symbol.get("name", ""),
+                    "symbol_id": symbol_id,
+                    "path": sym_path,
+                    "line_range": [start_line, end_line],
+                })
                 break
     return affected
 
@@ -547,6 +606,12 @@ def untested_changes(project: Optional[str] = None, mode: str = "unstaged") -> d
             "mode": mode,
             "summary": {"total_changed_lines": 0, "uncovered_changed_lines": 0, "change_coverage_pct": 100.0},
             "files": [],
+            "coverage_artifact": artifact_provenance(
+                cov_path, project_root, "coverage.{}".format(fmt)
+            ),
+            "test_impact": build_test_impact_evidence(
+                project_root, fmt, cov_path, {}
+            ),
         }
 
     file_changes = _parse_diff_lines(diff_text)
@@ -555,6 +620,7 @@ def untested_changes(project: Optional[str] = None, mode: str = "unstaged") -> d
     files_result: List[dict] = []
     total_changed = 0
     total_uncovered = 0
+    changed_symbols_by_id: Dict[str, dict] = {}
 
     for file_path, changed_lines in file_changes.items():
         if not changed_lines:
@@ -570,6 +636,10 @@ def untested_changes(project: Optional[str] = None, mode: str = "unstaged") -> d
         total_uncovered += uncovered_count
 
         affected_symbols = _find_affected_symbols(file_path, uncovered_lines, symbols, project_name)
+        for changed_symbol in _find_affected_symbols(
+            file_path, changed_lines, symbols, project_name
+        ):
+            changed_symbols_by_id[changed_symbol["symbol_id"]] = changed_symbol
 
         if uncovered_lines or changed_lines:
             files_result.append({
@@ -585,6 +655,16 @@ def untested_changes(project: Optional[str] = None, mode: str = "unstaged") -> d
 
     return {
         "mode": mode,
+        "coverage_artifact": artifact_provenance(
+            cov_path, project_root, "coverage.{}".format(fmt)
+        ),
+        "test_impact": build_test_impact_evidence(
+            project_root,
+            fmt,
+            cov_path,
+            file_changes,
+            changed_symbols_by_id.values(),
+        ),
         "summary": {
             "total_changed_lines": total_changed,
             "uncovered_changed_lines": total_uncovered,

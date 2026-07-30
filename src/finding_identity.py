@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any
 
 _SPACE_RE = re.compile(r"\s+")
+FINDING_EVIDENCE_SCHEMA = "finding-evidence.v1"
+_CONFIDENCE_SCORES = {"none": 0.0, "low": 0.35, "medium": 0.65, "high": 0.9}
+_MAX_TRACE_STEPS = 32
 
 
 def normalize_finding_path(path: str | Path | None) -> str:
@@ -62,3 +65,105 @@ def stable_finding_id(
 ) -> str:
     """Return a compact stable identifier suitable for JSON, baselines, and SARIF."""
     return f"flyto-{finding_fingerprint(rule_id, path, anchor=anchor, discriminator=discriminator)[:24]}"
+
+
+def _normalise_trace(trace: Any) -> list[dict[str, Any]]:
+    """Return a bounded JSON-safe trace without leaking object internals."""
+    if not isinstance(trace, (list, tuple)):
+        trace = [trace] if trace else []
+    result = []
+    for index, raw_step in enumerate(trace[:_MAX_TRACE_STEPS]):
+        if isinstance(raw_step, dict):
+            step = {
+                str(key): normalize_finding_anchor(value)
+                for key, value in raw_step.items()
+                if value not in (None, "")
+            }
+        else:
+            step = {"value": normalize_finding_anchor(raw_step)}
+        step.setdefault("index", index)
+        result.append(step)
+    return result
+
+
+def suppression_provenance(
+    *,
+    suppressed: bool = False,
+    mechanism: str = "none",
+    rule_id: str = "",
+    reason: str = "",
+    source: str = "",
+    expires: str = "",
+) -> dict[str, Any]:
+    """Create an explicit, bounded record for active or suppressed findings."""
+    result: dict[str, Any] = {
+        "status": "suppressed" if suppressed else "active",
+        "mechanism": normalize_finding_anchor(mechanism) or "none",
+    }
+    optional = {
+        "rule_id": rule_id,
+        "reason": reason,
+        "source": source,
+        "expires": expires,
+    }
+    result.update({
+        key: normalize_finding_anchor(value)
+        for key, value in optional.items()
+        if value
+    })
+    return result
+
+
+def finding_evidence(
+    rule_id: str,
+    path: str | Path | None = None,
+    *,
+    anchor: Any = "",
+    discriminator: Any = "",
+    confidence: str = "medium",
+    confidence_score: float | None = None,
+    confidence_basis: Any = (),
+    trace: Any = (),
+    suppression: dict[str, Any] | None = None,
+    origin: str = "",
+) -> dict[str, Any]:
+    """Build the common evidence envelope shared by scanner findings.
+
+    The fingerprint intentionally excludes confidence, trace, line numbers, and
+    suppression state, so triage and baselines survive evidence enrichment.
+    """
+    level = confidence if confidence in _CONFIDENCE_SCORES else "medium"
+    score = (
+        _CONFIDENCE_SCORES[level]
+        if confidence_score is None
+        else max(0.0, min(1.0, float(confidence_score)))
+    )
+    basis = (
+        list(confidence_basis)
+        if isinstance(confidence_basis, (list, tuple, set))
+        else [confidence_basis]
+    )
+    fingerprint = finding_fingerprint(
+        rule_id,
+        path,
+        anchor=anchor,
+        discriminator=discriminator,
+    )
+    return {
+        "schema": FINDING_EVIDENCE_SCHEMA,
+        "finding_id": f"flyto-{fingerprint[:24]}",
+        "fingerprint": fingerprint,
+        "rule_id": normalize_finding_anchor(rule_id) or "finding",
+        "origin": normalize_finding_anchor(origin),
+        "confidence": {
+            "level": level,
+            "score": round(score, 3),
+            "basis": [
+                normalize_finding_anchor(item)
+                for item in basis
+                if item not in (None, "")
+            ][:10],
+        },
+        "trace": _normalise_trace(trace),
+        "suppression": suppression or suppression_provenance(),
+    }

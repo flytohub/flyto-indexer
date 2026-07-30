@@ -68,7 +68,7 @@ class TestBaseScannerHash:
     def test_hash_length(self):
         scanner = ConcreteScanner("proj")
         h = scanner.compute_file_hash("test content")
-        assert len(h) == 16
+        assert len(h) == 64
 
 
 class TestBaseScannerFileManifest:

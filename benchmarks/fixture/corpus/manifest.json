@@ -1,37 +1,155 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "cases": [
     {
       "id": "python-cross-file-sqli",
       "path": "python-cross-file-sqli",
+      "language": "python",
+      "kind": "positive",
       "expected": {
         "sql_injection": 1
       },
-      "minimum_path_hops": 2
+      "minimum_path_hops": 2,
+      "metamorphic_group": "python-sqli-shape",
+      "metamorphic_relation": "same_categories",
+      "reference_categories": ["sql_injection"],
+      "reference_sources": ["semgrep/python-sqli", "codeql/py-sql-injection"]
+    },
+    {
+      "id": "python-direct-sqli",
+      "path": "python-direct-sqli",
+      "language": "python",
+      "kind": "positive",
+      "expected": {
+        "sql_injection": 1
+      },
+      "metamorphic_group": "python-sqli-shape",
+      "metamorphic_relation": "same_categories",
+      "reference_categories": ["sql_injection"],
+      "reference_sources": ["semgrep/python-sqli", "codeql/py-sql-injection"]
     },
     {
       "id": "python-sanitized",
       "path": "python-sanitized",
-      "expected": {}
+      "language": "python",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": ["semgrep/python-sqli", "codeql/py-sql-injection"]
+    },
+    {
+      "id": "python-rce",
+      "path": "python-rce",
+      "language": "python",
+      "kind": "positive",
+      "expected": {
+        "rce": 1
+      },
+      "metamorphic_group": "python-rce-sanitization",
+      "metamorphic_relation": "sanitizer_removes",
+      "reference_categories": ["rce"],
+      "reference_sources": ["semgrep/python-command-injection", "codeql/py-command-line-injection"]
+    },
+    {
+      "id": "python-rce-sanitized",
+      "path": "python-rce-sanitized",
+      "language": "python",
+      "kind": "negative",
+      "expected": {},
+      "metamorphic_group": "python-rce-sanitization",
+      "metamorphic_relation": "sanitizer_removes",
+      "reference_categories": [],
+      "reference_sources": ["semgrep/python-command-injection", "codeql/py-command-line-injection"]
     },
     {
       "id": "javascript-ssrf",
       "path": "javascript-ssrf",
+      "language": "javascript",
+      "kind": "positive",
       "expected": {
         "ssrf": 1
-      }
+      },
+      "reference_categories": ["ssrf"],
+      "reference_sources": ["semgrep/javascript-ssrf", "codeql/js-request-forgery"]
+    },
+    {
+      "id": "javascript-prototype-pollution",
+      "path": "javascript-prototype-pollution",
+      "language": "javascript",
+      "kind": "positive",
+      "expected": {
+        "prototype_pollution": 1
+      },
+      "reference_categories": ["prototype_pollution"],
+      "reference_sources": ["semgrep/javascript-prototype-pollution", "codeql/js-prototype-pollution"]
+    },
+    {
+      "id": "typescript-open-redirect",
+      "path": "typescript-open-redirect",
+      "language": "typescript",
+      "kind": "positive",
+      "expected": {
+        "open_redirect": 1
+      },
+      "metamorphic_group": "typescript-redirect-constant",
+      "metamorphic_relation": "constant_removes",
+      "reference_categories": ["open_redirect"],
+      "reference_sources": ["semgrep/typescript-open-redirect", "codeql/js-client-side-url-redirect"]
+    },
+    {
+      "id": "typescript-internal-redirect",
+      "path": "typescript-internal-redirect",
+      "language": "typescript",
+      "kind": "negative",
+      "expected": {},
+      "metamorphic_group": "typescript-redirect-constant",
+      "metamorphic_relation": "constant_removes",
+      "reference_categories": [],
+      "reference_sources": ["semgrep/typescript-open-redirect", "codeql/js-client-side-url-redirect"]
     },
     {
       "id": "go-ssrf",
       "path": "go-ssrf",
+      "language": "go",
+      "kind": "positive",
       "expected": {
         "ssrf": 1
-      }
+      },
+      "metamorphic_group": "go-ssrf-constant",
+      "metamorphic_relation": "constant_removes",
+      "reference_categories": ["ssrf"],
+      "reference_sources": ["semgrep/go-ssrf", "codeql/go-request-forgery"]
     },
     {
       "id": "go-constant-url",
       "path": "go-constant-url",
-      "expected": {}
+      "language": "go",
+      "kind": "negative",
+      "expected": {},
+      "metamorphic_group": "go-ssrf-constant",
+      "metamorphic_relation": "constant_removes",
+      "reference_categories": [],
+      "reference_sources": ["semgrep/go-ssrf", "codeql/go-request-forgery"]
+    },
+    {
+      "id": "go-rce",
+      "path": "go-rce",
+      "language": "go",
+      "kind": "positive",
+      "expected": {
+        "rce": 1
+      },
+      "reference_categories": ["rce"],
+      "reference_sources": ["semgrep/go-command-injection", "codeql/go-command-line-injection"]
+    },
+    {
+      "id": "go-regex-constant",
+      "path": "go-regex-constant",
+      "language": "go",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": ["semgrep/go-redos", "codeql/go-redos"]
     }
   ]
 }

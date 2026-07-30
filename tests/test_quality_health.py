@@ -139,3 +139,49 @@ def test_canonical_health_cache_is_index_versioned_and_copy_safe(monkeypatch):
 
     assert second["score"] != -1
     assert calls == {"complexity": 1, "dead": 1}
+
+
+def test_health_snapshot_and_cache_change_with_symbol_content_hash(monkeypatch):
+    index = {
+        "root_path": "/tmp/project",
+        "indexed_at": "2026-07-30T00:00:00Z",
+        "symbols": {
+            "proj:src/app.py:function:run": {
+                "type": "function",
+                "path": "src/app.py",
+                "name": "run",
+                "summary": "Run.",
+                "content_hash": "before",
+                "ref_count": 1,
+            },
+        },
+    }
+    monkeypatch.setattr(
+        quality,
+        "_find_complex_functions_from_index",
+        lambda *_args, **_kwargs: {
+            "total_analyzed": 1,
+            "complex_count": 0,
+            "complexity_burden": 0,
+            "max_complexity_score": 0,
+            "avg_complexity": 0.0,
+            "functions": [],
+        },
+    )
+    monkeypatch.setattr(
+        quality,
+        "_dead_code_from_index",
+        lambda *_args, **_kwargs: {
+            "total_dead": 0,
+            "total_dead_lines": 0,
+            "dead_symbols": [],
+        },
+    )
+
+    quality._HEALTH_CACHE.clear()
+    before = quality._code_health_score_from_index(index, project="proj")
+    index["symbols"]["proj:src/app.py:function:run"]["content_hash"] = "after"
+    after = quality._code_health_score_from_index(index, project="proj")
+
+    assert before["snapshot"]["schema"] == "health-snapshot.v2"
+    assert before["snapshot"]["id"] != after["snapshot"]["id"]

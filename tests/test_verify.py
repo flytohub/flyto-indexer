@@ -445,7 +445,7 @@ def test_run_verification_closes_core_loops(tmp_path):
     assert checks["runtime_dependencies"]["status"] == "pass"
     assert checks["index_integrity"]["status"] == "pass"
     assert checks["quality_health"]["status"] == "pass"
-    assert checks["quality_health"]["metrics"]["snapshot"]["schema"] == "health-snapshot.v1"
+    assert checks["quality_health"]["metrics"]["snapshot"]["schema"] == "health-snapshot.v2"
     assert checks["context_loop"]["status"] == "pass"
     assert checks["impact_loop"]["status"] == "pass"
     assert checks["weak_scan_secrets"]["status"] == "pass"
@@ -1789,6 +1789,8 @@ def test_render_report_formats(tmp_path):
     assert '"version": "2.1.0"' in sarif
     for sarif_result in sarif_payload["runs"][0]["results"]:
         assert sarif_result["partialFingerprints"]["flytoFindingId/v1"].startswith("flyto-")
+        assert sarif_result["partialFingerprints"]["flytoFindingFingerprint/v1"]
+        assert "suppression" in sarif_result["properties"]
         assert sarif_result["properties"]["findingId"].startswith("flyto-")
 
 

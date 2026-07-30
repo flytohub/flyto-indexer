@@ -7,6 +7,7 @@ layers:
       - "src/safe_io.py"
       - "src/safe_xml.py"
       - "src/flyto_tags.py"
+      - "src/finding_identity.py"
       - "src/signature.py"
       - "src/synonyms.py"
     cannot_import:
@@ -28,6 +29,7 @@ layers:
       - "src/iac_scanner.py"
       - "src/license_scanner.py"
       - "src/secret_scanner.py"
+      - "src/tree_sitter_adapter.py"
     cannot_import:
       - tool_surface
       - entrypoints
@@ -40,6 +42,7 @@ layers:
       - "src/pr_analyzer.py"
       - "src/quality.py"
       - "src/sbom_export.py"
+      - "src/test_evidence.py"
     cannot_import:
       - tool_surface
       - entrypoints
@@ -75,6 +78,7 @@ layers:
       - "src/project_profile.py"
       - "src/rule_loader.py"
       - "src/session.py"
+      - "src/scip_adapter.py"
       - "src/tools/maintenance.py"
       - "src/watcher.py"
     reason: "Runtime services may compose lower layers but must not depend on CLI or MCP entrypoints."

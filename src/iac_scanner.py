@@ -21,6 +21,11 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
 
+try:
+    from .finding_identity import finding_evidence
+except ImportError:
+    from finding_identity import finding_evidence
+
 logger = logging.getLogger("flyto-indexer.iac-scanner")
 
 # ---------------------------------------------------------------------------
@@ -64,6 +69,39 @@ class IaCFinding:
     line: int = 0
     guideline: str = ""   # Remediation URL or text
     framework: str = ""   # "terraform", "kubernetes", "docker_compose"
+
+    def to_dict(self) -> dict:
+        evidence = finding_evidence(
+            f"iac/{self.check_id}",
+            self.file_path,
+            anchor={
+                "resource_type": self.resource_type,
+                "check_name": self.check_name,
+            },
+            confidence="medium",
+            confidence_basis=["framework_scoped_policy_rule", self.framework],
+            trace=[
+                {"kind": "detector", "rule_id": self.check_id},
+                {
+                    "kind": "resource",
+                    "path": self.file_path,
+                    "line": self.line,
+                    "resource_type": self.resource_type,
+                },
+            ],
+            origin="iac.{}".format(self.framework or "policy"),
+        )
+        return {
+            **evidence,
+            "file_path": self.file_path,
+            "resource_type": self.resource_type,
+            "check_id": self.check_id,
+            "check_name": self.check_name,
+            "severity": self.severity,
+            "line": self.line,
+            "guideline": self.guideline,
+            "framework": self.framework,
+        }
 
 
 @dataclass
@@ -902,17 +940,5 @@ def scan_iac_to_dict(project_path: str) -> dict:
             "low": result.low,
         },
         "frameworks_detected": result.frameworks_detected,
-        "findings": [
-            {
-                "file_path": f.file_path,
-                "resource_type": f.resource_type,
-                "check_id": f.check_id,
-                "check_name": f.check_name,
-                "severity": f.severity,
-                "line": f.line,
-                "guideline": f.guideline,
-                "framework": f.framework,
-            }
-            for f in result.findings
-        ],
+        "findings": [finding.to_dict() for finding in result.findings],
     }

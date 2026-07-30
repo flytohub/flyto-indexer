@@ -180,6 +180,17 @@ def test_valid_narrow_waiver_suppresses_one_matching_check():
     assert result["pass"] is True
     assert result["findings"] == []
     assert result["waived"][0]["waiver_id"] == "legacy-edge"
+    assert result["waived"][0]["schema"] == "finding-evidence.v1"
+    assert result["waived"][0]["suppression"] == {
+        "status": "suppressed",
+        "mechanism": "waiver",
+        "rule_id": "legacy-edge",
+        "reason": "Remove after legacy adapter migration.",
+        "source": ".flyto-rules.yaml",
+        "expires": "2099-01-01",
+    }
+    assert result["waived"][0]["confidence"]["level"] == "high"
+    assert result["waived"][0]["trace"][0]["path"] == "src/legacy/service.py"
 
 
 def test_expired_waiver_is_invalid():

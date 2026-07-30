@@ -25,6 +25,8 @@ ENV/
 # Testing
 .pytest_cache/
 .coverage
+coverage.xml
+junit.xml
 htmlcov/
 
 # Local index data

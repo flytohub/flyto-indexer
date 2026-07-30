@@ -103,6 +103,24 @@ The default `.flyto-rules.yaml` mode is `advisory`. Projects may opt into
 Flyto2 Indexer does not edit files or become an IDE. It makes the edit contract
 precise for the agent that already does.
 
+### Precision Without Runtime Bloat
+
+- `find_references` prefers a local SCIP artifact, then LSP, then the existing
+  index and content fallbacks.
+- Diff impact can correlate changed symbols with LCOV or coverage.py dynamic
+  contexts and JUnit results. Stale or context-free artifacts are labeled
+  instead of treated as proof.
+- Incremental manifests use full content hashes plus a parser-pipeline
+  fingerprint, so unchanged files stay fast and parser changes rebuild safely.
+- Tree-sitter cross-validation is opt-in with
+  `pip install "flyto-indexer[treesitter]"` and
+  `FLYTO_TREE_SITTER=1`; native scanners remain the fallback.
+- Findings carry one stable evidence envelope: confidence basis, trace,
+  fingerprint, and suppression provenance.
+
+These are internal adapters. The public MCP surface remains 20 tools, and the
+default runtime dependency boundary remains PyYAML only.
+
 ### Decision Grill
 
 Use Grill when the task still has product or architecture decisions:
@@ -173,7 +191,7 @@ not affect production API/model signals unless
 Every MCP tool result includes `_runtime` metadata with the runtime version,
 commit, index freshness, elapsed time, result mode, and request deadline.
 `audit`, `structure(focus="profile")`, and `verify` also share the same
-`health-snapshot.v1`; a score or complexity count therefore means the same
+`health-snapshot.v2`; a score or complexity count therefore means the same
 thing on every surface.
 
 ## CLI

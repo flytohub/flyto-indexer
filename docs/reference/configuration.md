@@ -19,7 +19,7 @@
 | `context.l1_max_symbols` | `50` | [`config/default.yaml:1`](https://github.com/flytohub/flyto-indexer/blob/main/config/default.yaml#L1) |
 | `context.l2_max_tokens` | `4000` | [`config/default.yaml:1`](https://github.com/flytohub/flyto-indexer/blob/main/config/default.yaml#L1) |
 
-## Environment variables (13)
+## Environment variables (14)
 
 | Variable | Readers |
 |---|---|
@@ -35,6 +35,7 @@
 | `FLYTO_LSP_ENABLED` | `src/lsp/manager.py` |
 | `FLYTO_LSP_TIMEOUT` | `src/lsp/manager.py` |
 | `FLYTO_PROJECT_ROOT` | `src/tools/references.py` |
+| `FLYTO_TREE_SITTER` | `src/tree_sitter_adapter.py` |
 | `OPENAI_API_KEY` | `examples/audit_all.py`, `examples/audit_incremental.py`, `examples/demo_audit.py`, `src/auditor/llm_auditor.py` |
 
 ## Built-in rule corpus (8 files)

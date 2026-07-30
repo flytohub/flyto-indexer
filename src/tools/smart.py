@@ -533,7 +533,94 @@ def _determine_dimensions_to_expand(focus, breakdown):
     }
 
 
-def _expand_audit_dimensions(result, should_expand, focus, project):
+def _canonical_complexity_detail(score_data, max_results=10):
+    """Project the canonical health complexity evidence without rescanning."""
+    dimension = score_data.get("breakdown", {}).get("complexity", {})
+    metrics = dimension.get("metrics", {})
+    return {
+        "total_analyzed": metrics.get("total_functions", 0),
+        "complex_count": metrics.get("complex_functions", 0),
+        "complexity_burden": metrics.get("complexity_burden", 0),
+        "max_complexity_score": metrics.get("max_complexity_score", 0),
+        "avg_complexity": metrics.get("avg_complexity", 0.0),
+        "functions": list(dimension.get("hotspots", []))[:max_results],
+        "snapshot": score_data.get("snapshot"),
+        "evidence_source": "canonical_health_snapshot",
+    }
+
+
+def _canonical_dead_code_detail(score_data, max_results=10):
+    """Project canonical dead-code evidence without a second analysis pass."""
+    dimension = score_data.get("breakdown", {}).get("dead_code", {})
+    metrics = dimension.get("metrics", {})
+    symbols = list(dimension.get("symbols", []))
+    return {
+        "total": metrics.get("dead_count", 0),
+        "total_dead": metrics.get("dead_count", 0),
+        "total_dead_lines": metrics.get("dead_lines", 0),
+        "dead_symbols": symbols[:max_results],
+        "top_20": symbols[:max_results],
+        "snapshot": score_data.get("snapshot"),
+        "evidence_source": "canonical_health_snapshot",
+    }
+
+
+def _audit_evidence_integrity(result):
+    """Fail closed when expanded evidence diverges from the canonical snapshot."""
+    health = result.get("health", {})
+    snapshot = health.get("snapshot")
+    failures = []
+    checks = 0
+
+    complexity = result.get("complex_functions")
+    if isinstance(complexity, dict):
+        checks += 1
+        metrics = health.get("breakdown", {}).get("complexity", {}).get("metrics", {})
+        expected = (
+            metrics.get("total_functions"),
+            metrics.get("complex_functions"),
+            metrics.get("complexity_burden"),
+            metrics.get("max_complexity_score"),
+        )
+        actual = (
+            complexity.get("total_analyzed"),
+            complexity.get("complex_count"),
+            complexity.get("complexity_burden"),
+            complexity.get("max_complexity_score"),
+        )
+        if actual != expected or complexity.get("snapshot") != snapshot:
+            failures.append({
+                "dimension": "complexity",
+                "expected": expected,
+                "actual": actual,
+            })
+
+    dead_code = result.get("dead_code")
+    if isinstance(dead_code, dict):
+        checks += 1
+        expected = health.get("breakdown", {}).get("dead_code", {}).get(
+            "metrics", {}
+        ).get("dead_count")
+        actual = dead_code.get("total_dead", dead_code.get("total"))
+        if actual != expected or dead_code.get("snapshot") != snapshot:
+            failures.append({
+                "dimension": "dead_code",
+                "expected": expected,
+                "actual": actual,
+            })
+
+    return {
+        "schema": "audit-evidence-integrity.v1",
+        "pass": not failures,
+        "status": "verified" if not failures else "blocked",
+        "snapshot": snapshot,
+        "checks": checks,
+        "failures": failures,
+        "reason_codes": ["EVIDENCE_SNAPSHOT_DIVERGED"] if failures else [],
+    }
+
+
+def _expand_audit_dimensions(result, score_data, should_expand, focus, project):
     """Expand weak dimensions with detailed findings."""
     quality = _quality_mod()
 
@@ -551,18 +638,14 @@ def _expand_audit_dimensions(result, should_expand, focus, project):
 
     # --- Complexity ---
     if "complexity" in should_expand or focus in ("complexity", "all"):
-        r = _enrich("complex_functions", quality.find_complex_functions, project=project, max_results=10)
-        if r is not None:
-            result["complex_functions"] = r
+        result["complex_functions"] = _canonical_complexity_detail(score_data)
         r = _enrich("duplicates", quality.find_duplicates, project=project, max_results=5)
         if r is not None:
             result["duplicates"] = r
 
     # --- Dead code ---
     if "dead_code" in should_expand or focus in ("dead_code", "all"):
-        r = _enrich("dead_code", _maint_mod().find_dead_code, project=project, min_lines=5)
-        if r is not None:
-            result["dead_code"] = r
+        result["dead_code"] = _canonical_dead_code_detail(score_data)
 
     # --- Coverage ---
     if "coverage" in should_expand or focus in ("coverage", "all"):
@@ -608,9 +691,14 @@ def smart_audit(project: str = None, focus: str = None) -> dict:
     result, score_data, breakdown = _audit_health_score(project)
     should_expand = _determine_dimensions_to_expand(focus, breakdown)
 
-    _expand_audit_dimensions(result, should_expand, focus, project)
+    _expand_audit_dimensions(result, score_data, should_expand, focus, project)
     _audit_supplementary(result, score_data, project)
     _truncate_audit_results(result)
+    result["evidence_integrity"] = _audit_evidence_integrity(result)
+    if not result["evidence_integrity"]["pass"]:
+        result["blocked"] = True
+        result["reason_codes"] = result["evidence_integrity"]["reason_codes"]
+        return result
 
     evidence = _evidence_mod()
     portfolio = _enrich(

@@ -244,29 +244,45 @@ def find_references(symbol_id: str) -> dict:
     seen_keys = set()  # Use (path, line) as key to avoid duplicates
     seen_paths = set()  # Track unique paths for dedup across projects
 
-    # Method 0: Use pre-computed reverse index (fastest & most accurate) + name-based lookup
+    semantic_evidence = {}
+
+    # Method 0: Prefer committed compiler-accurate SCIP evidence when present.
+    scip_result = _enrich_with_scip(resolved_id, target_symbol, index)
+    semantic_evidence["scip"] = {
+        key: value
+        for key, value in scip_result.items()
+        if key != "references"
+    }
+    for ref in scip_result.get("references", []):
+        key = (ref["from_path"], ref.get("line", 0))
+        seen_keys.add(key)
+        references.append(ref)
+
+    # Method 1: LSP is the precise live fallback when no SCIP edge resolved.
+    if not references:
+        lsp_refs = _enrich_with_lsp(resolved_id, target_symbol, index)
+        semantic_evidence["selected"] = "lsp" if lsp_refs else "heuristic"
+        for ref in lsp_refs:
+            key = (ref["from_path"], ref.get("line", 0))
+            seen_keys.add(key)
+            references.append(ref)
+    else:
+        semantic_evidence["selected"] = "scip"
+
+    # Method 2: Use pre-computed reverse index + name-based lookup.
     references.extend(_find_refs_from_reverse_index(
         resolved_id, reverse_index, symbols, target_path, seen_keys, seen_paths, dependencies
     ))
 
-    # Method 1: Search dependencies (calls, extends, implements, uses)
+    # Method 3: Search dependencies (calls, extends, implements, uses).
     references.extend(_find_refs_from_dependencies(
         resolved_id, target_name, dependencies, symbols, target_path, seen_keys, seen_paths
     ))
 
-    # Method 2: Search content for symbol name usage (capped to avoid O(N*C) at scale)
+    # Method 4: Content fallback (capped to avoid O(N*C) at scale).
     references.extend(_find_refs_from_content(
         resolved_id, target_name, target_path, symbols, seen_keys, seen_paths
     ))
-
-    # Method 3: LSP enrichment (type-aware references from language servers)
-    lsp_refs = _enrich_with_lsp(resolved_id, target_symbol, index)
-    if lsp_refs:
-        for ref in lsp_refs:
-            key = (ref["from_path"], ref.get("line", 0))
-            if key not in seen_keys:
-                seen_keys.add(key)
-                references.append(ref)
 
     # Sort by confidence (high first), then by path
     confidence_order = {"high": 0, "medium": 1, "low": 2}
@@ -306,8 +322,27 @@ def find_references(symbol_id: str) -> dict:
         "confidence_breakdown": confidence_counts,
         "by_project": by_project,
         "references": references,
+        "semantic_evidence": semantic_evidence,
         "next_action": next_action,
     }
+
+
+def _enrich_with_scip(resolved_id: str, target_symbol: dict, index: dict) -> dict:
+    """Read optional local SCIP evidence; never generate or download it."""
+    try:
+        try:
+            from ..scip_adapter import find_scip_references
+        except ImportError:
+            from scip_adapter import find_scip_references
+        return find_scip_references(index, resolved_id, target_symbol)
+    except Exception as exc:
+        logger.debug("SCIP enrichment failed: %s", exc, exc_info=True)
+        return {
+            "schema": "scip-reference-evidence.v1",
+            "status": "invalid",
+            "reason": type(exc).__name__,
+            "references": [],
+        }
 
 
 def _enrich_impact_with_call_hierarchy(

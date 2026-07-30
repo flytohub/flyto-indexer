@@ -41,8 +41,8 @@ class BaseScanner(ABC):
         return file_path.suffix in self.supported_extensions
 
     def compute_file_hash(self, content: str) -> str:
-        """Compute content hash for the file"""
-        return hashlib.sha256(content.encode()).hexdigest()[:16]
+        """Compute the full SHA-256 content address used by the manifest."""
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
     def create_file_manifest(
         self,

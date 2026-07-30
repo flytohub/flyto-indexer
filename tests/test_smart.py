@@ -109,9 +109,31 @@ def mock_quality():
         mod.code_health_score.return_value = {
             "score": 72,
             "grade": "C",
+            "snapshot": {
+                "schema": "health-snapshot.v2",
+                "id": "snapshot-1",
+            },
             "breakdown": {
-                "complexity": {"score": 15, "max": 25, "detail": "5 complex functions"},
-                "dead_code": {"score": 23, "max": 25, "detail": "2 unused symbols"},
+                "complexity": {
+                    "score": 15,
+                    "max": 25,
+                    "detail": "5 complex functions",
+                    "metrics": {
+                        "total_functions": 20,
+                        "complex_functions": 5,
+                        "complexity_burden": 35,
+                        "max_complexity_score": 12,
+                        "avg_complexity": 2.5,
+                    },
+                    "hotspots": [{"name": "branchy", "score": 12}],
+                },
+                "dead_code": {
+                    "score": 23,
+                    "max": 25,
+                    "detail": "2 unused symbols",
+                    "metrics": {"dead_count": 2, "dead_lines": 10},
+                    "symbols": [{"name": "unused"}],
+                },
                 "security": {"score": 12, "max": 25, "detail": "3 findings"},
                 "documentation": {"score": 22, "max": 25, "detail": "ok"},
             },
@@ -300,6 +322,7 @@ class TestSmartAudit:
         assert result["health"]["score"] == 72
         assert result["evidence_portfolio"]["schema"] == "evidence-portfolio.v1"
         assert result["verdict"]["schema"] == "evidence-verdict.v1"
+        assert result["evidence_integrity"]["pass"] is True
 
     def test_auto_expands_weak_dimensions(
         self, mock_quality, mock_git, mock_evidence, mock_staleness, mock_maint
@@ -313,11 +336,40 @@ class TestSmartAudit:
         # dead_code=90 → should NOT auto-expand
         assert "dead_code" not in result
 
+        detail = result["complex_functions"]
+        metrics = result["health"]["breakdown"]["complexity"]["metrics"]
+        assert detail["complex_count"] == metrics["complex_functions"]
+        assert detail["complexity_burden"] == metrics["complexity_burden"]
+        assert detail["snapshot"] == result["health"]["snapshot"]
+
     def test_focus_overrides(
         self, mock_quality, mock_git, mock_evidence, mock_staleness, mock_maint
     ):
         result = smart_audit(focus="dead_code")
         assert "dead_code" in result
+        assert result["dead_code"]["total_dead"] == 2
+        assert result["dead_code"]["snapshot"] == result["health"]["snapshot"]
+
+    def test_audit_integrity_fails_closed_on_divergent_expansion(
+        self, mock_quality, mock_git, mock_evidence, mock_staleness, mock_maint,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(
+            "tools.smart._canonical_complexity_detail",
+            lambda *_args, **_kwargs: {
+                "total_analyzed": 20,
+                "complex_count": 99,
+                "complexity_burden": 35,
+                "max_complexity_score": 12,
+                "snapshot": {"id": "wrong"},
+            },
+        )
+
+        result = smart_audit(focus="complexity")
+
+        assert result["blocked"] is True
+        assert result["reason_codes"] == ["EVIDENCE_SNAPSHOT_DIVERGED"]
+        assert "verdict" not in result
 
     def test_low_score_suggests_refactoring(
         self, mock_quality, mock_git, mock_evidence, mock_staleness, mock_maint

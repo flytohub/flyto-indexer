@@ -20,13 +20,13 @@
     {
       "id": "index-and-search-core",
       "description": "Owns filesystem scanning, language extraction, symbol models, incremental indexes, lexical search, semantic search, and dependency resolution.",
-      "paths": ["src/engine.py", "src/models.py", "src/scanner/**", "src/indexer/**", "src/index_store.py", "src/search_index.py", "src/semantic.py", "src/dependency_resolver.py"],
+      "paths": ["src/engine.py", "src/models.py", "src/scanner/**", "src/indexer/**", "src/index_store.py", "src/search_index.py", "src/semantic.py", "src/dependency_resolver.py", "src/tree_sitter_adapter.py"],
       "documentation": ["docs/FEATURES.md#index-and-search", "docs/WHITEPAPER.md#index-model", "docs/reference/modules.md", "docs/reference/python-api.md"]
     },
     {
       "id": "context-impact-contracts",
       "description": "Owns bounded context, project profiles, reference and call graphs, Git diff impact, API extraction, and cross-project contract drift.",
-      "paths": ["src/context/**", "src/profile/**", "src/engine.py", "src/diff_impact.py", "src/lsp/**", "src/tools/references.py", "src/analyzer/api_consistency.py", "src/analyzer/api_drift.py"],
+      "paths": ["src/context/**", "src/profile/**", "src/engine.py", "src/diff_impact.py", "src/lsp/**", "src/scip_adapter.py", "src/test_evidence.py", "src/tools/references.py", "src/tools/coverage_intel.py", "src/analyzer/api_consistency.py", "src/analyzer/api_drift.py"],
       "documentation": ["docs/FEATURES.md#context-and-project-profiles", "docs/FEATURES.md#impact-and-call-graphs", "docs/FEATURES.md#api-and-contract-drift", "docs/DESIGN_REFERENCES.md", "ARCHITECTURE.md#product-api-contract-detection"]
     },
     {
@@ -38,7 +38,7 @@
     {
       "id": "task-and-verification",
       "description": "Owns task planning and phase gates, repository and workspace verification, stable finding identities, baselines, offline evaluation, PR risk, test mapping, and structured release evidence.",
-      "paths": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/task_context.py", "src/execution_guard.py", "src/finding_identity.py", "src/verify.py", "src/pr_analyzer.py", "src/test_mapper.py", "src/tools/smart.py", "benchmarks/evaluate.py", "benchmarks/fixture/corpus/**"],
+      "paths": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/task_context.py", "src/execution_guard.py", "src/finding_identity.py", "src/test_evidence.py", "src/verify.py", "src/pr_analyzer.py", "src/test_mapper.py", "src/tools/smart.py", "benchmarks/evaluate.py", "benchmarks/fixture/corpus/**"],
       "documentation": ["docs/FEATURES.md#task-workflow", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/DESIGN_REFERENCES.md", "docs/FEATURES.md#verification-and-baselines", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"]
     },
     {
@@ -61,9 +61,9 @@
       "kind": "library",
       "status": "active",
       "description": "Builds incremental or full local indexes and provides lexical and semantic discovery without requiring a hosted service.",
-      "source": ["src/engine.py", "src/scanner/**", "src/indexer/**", "src/search_index.py", "src/semantic.py"],
+      "source": ["src/engine.py", "src/scanner/**", "src/indexer/**", "src/search_index.py", "src/semantic.py", "src/tree_sitter_adapter.py"],
       "documentation": ["docs/FEATURES.md#index-and-search", "docs/WHITEPAPER.md#evidence-pipeline", "docs/reference/python-api.md"],
-      "tests": ["tests/test_engine.py", "tests/test_incremental.py", "tests/test_semantic.py", "tests/test_symbol_index.py"]
+      "tests": ["tests/test_engine.py", "tests/test_incremental.py", "tests/test_semantic.py", "tests/test_symbol_index.py", "tests/test_tree_sitter_adapter.py"]
     },
     {
       "id": "impact-and-contract-analysis",
@@ -71,9 +71,9 @@
       "kind": "library",
       "status": "active",
       "description": "Maps callers, transitive blast radius, likely tests, cross-project dependencies, APIs, and route-call contract drift.",
-      "source": ["src/engine.py", "src/diff_impact.py", "src/lsp/call_graph.py", "src/tools/references.py", "src/analyzer/api_consistency.py", "src/analyzer/api_drift.py"],
+      "source": ["src/engine.py", "src/diff_impact.py", "src/lsp/call_graph.py", "src/scip_adapter.py", "src/test_evidence.py", "src/tools/coverage_intel.py", "src/tools/references.py", "src/analyzer/api_consistency.py", "src/analyzer/api_drift.py"],
       "documentation": ["docs/FEATURES.md#impact-and-call-graphs", "docs/FEATURES.md#api-and-contract-drift", "docs/DESIGN_REFERENCES.md", "ARCHITECTURE.md#product-api-contract-detection"],
-      "tests": ["tests/test_diff_impact.py", "tests/test_cross_language_api.py", "tests/test_call_sites_layer4.py", "tests/test_semantic_preflight.py"]
+      "tests": ["tests/test_diff_impact.py", "tests/test_cross_language_api.py", "tests/test_call_sites_layer4.py", "tests/test_semantic_preflight.py", "tests/test_scip_adapter.py", "tests/test_test_evidence.py"]
     },
     {
       "id": "quality-security-audits",
@@ -83,7 +83,7 @@
       "description": "Analyzes quality, security, secrets, taint, licenses, infrastructure, documentation, architecture, and agent policy using local evidence.",
       "source": ["src/analyzer/**", "src/auditor/**", "src/quality.py", "config/rules/**"],
       "documentation": ["docs/FEATURES.md#quality-and-security-audits", "docs/SECURITY_MODEL.md", "docs/reference/configuration.md"],
-      "tests": ["tests/test_quality_health.py", "tests/test_taint.py", "tests/test_agent_policy.py", "tests/test_rule_corpus_yaml.py", "tests/test_rules.py"]
+      "tests": ["tests/test_quality_health.py", "tests/test_taint.py", "tests/test_agent_policy.py", "tests/test_rule_corpus_yaml.py", "tests/test_rules.py", "tests/test_scanner_finding_evidence.py"]
     },
     {
       "id": "repository-policy",

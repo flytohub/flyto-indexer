@@ -114,6 +114,7 @@ class TestBM25UpdateDocs:
         idx.update_docs(removed_ids={"sym2"}, added_docs={})
         assert idx.df.get("login", 0) == 1
 
+
     def test_avgdl_updated(self, base_docs):
         """Average document length should be recalculated."""
         idx = BM25Index()
@@ -150,6 +151,75 @@ class TestBM25UpdateDocs:
                 assert abs(full_results[doc_id] - incr_results[doc_id]) < 0.001, (
                     f"Score mismatch for '{doc_id}' on query '{query}'"
                 )
+
+
+class TestContentAddressedManifest:
+    """Incremental reuse requires both file content and parser identity."""
+
+    def test_legacy_manifest_forces_one_safe_rebuild(self, tmp_path):
+        from src.indexer.incremental import IncrementalIndexer, compute_file_hash
+
+        index_dir = tmp_path / ".flyto-index"
+        index_dir.mkdir()
+        content_hash = compute_file_hash("def run():\n    pass\n")
+        (index_dir / "manifest.json").write_text(json.dumps({
+            "project": "demo",
+            "version": 1,
+            "files": {
+                "app.py": {"hash": content_hash[:16], "symbols": []},
+            },
+        }))
+
+        indexer = IncrementalIndexer(
+            tmp_path,
+            index_dir,
+            pipeline_fingerprint="a" * 64,
+        )
+        changes = indexer.detect_changes({"app.py": content_hash})
+
+        assert changes.modified == ["app.py"]
+
+    def test_pipeline_change_invalidates_unchanged_content(self, tmp_path):
+        from src.indexer.incremental import IncrementalIndexer, compute_file_hash
+
+        index_dir = tmp_path / ".flyto-index"
+        index_dir.mkdir()
+        content_hash = compute_file_hash("def run():\n    pass\n")
+        (index_dir / "manifest.json").write_text(json.dumps({
+            "project": "demo",
+            "version": 2,
+            "hash_algorithm": "sha256",
+            "pipeline_fingerprint": "a" * 64,
+            "files": {
+                "app.py": {"hash": content_hash, "symbols": []},
+            },
+        }))
+
+        indexer = IncrementalIndexer(
+            tmp_path,
+            index_dir,
+            pipeline_fingerprint="b" * 64,
+        )
+        changes = indexer.detect_changes({"app.py": content_hash})
+
+        assert changes.modified == ["app.py"]
+
+    def test_engine_writes_v2_manifest_and_reuses_it(self, tmp_path):
+        from src.engine import IndexEngine
+
+        (tmp_path / "app.py").write_text("def run():\n    pass\n")
+        index_dir = tmp_path / ".flyto-index"
+        engine = IndexEngine("demo", tmp_path, index_dir=index_dir)
+
+        engine.scan(incremental=False)
+        manifest = json.loads((index_dir / "manifest.json").read_text())
+        second = engine.scan(incremental=True)
+
+        assert manifest["version"] == 2
+        assert manifest["hash_algorithm"] == "sha256"
+        assert len(manifest["pipeline_fingerprint"]) == 64
+        assert len(manifest["files"]["app.py"]["hash"]) == 64
+        assert second["changes"] == "+0 ~0 -0"
 
 
 # =============================================================================

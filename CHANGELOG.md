@@ -2,7 +2,26 @@
 
 ## Unreleased
 
+## [2.17.0] - 2026-07-30
+
 ### Added
+- Added precise optional SCIP ingestion before LSP and heuristic reference
+  fallback, without adding a default runtime dependency or public MCP tool.
+- Added LCOV, coverage.py dynamic-context, and JUnit evidence correlation so
+  diff impact can name the tests that executed changed lines and symbols, with
+  content hashes and freshness state.
+- Added a common finding evidence envelope across taint, secret, SAST, IaC,
+  governance waiver, verify, and SARIF output: stable full fingerprints,
+  calibrated confidence, bounded traces, and explicit suppression provenance.
+- Added content-addressed incremental manifest v2. Full SHA-256 file addresses
+  and a scanner-pipeline fingerprint safely invalidate stale parser output.
+- Added opt-in Tree-sitter structural cross-validation with dependency-safe
+  fallback to the native scanners.
+- Expanded the offline corpus to 13 Python, JavaScript, TypeScript, and Go
+  cases with four metamorphic groups, pinned differential categories,
+  per-language metrics, and enforced p50/p95/max latency evidence.
+- Added CI-produced per-test coverage contexts and JUnit artifacts, plus a
+  downstream smoke proving changed-line-to-test correlation.
 - Added one canonical `health-snapshot.v1` across `audit`, project profiles,
   and `verify`, including weighted complexity burden, high-confidence dead
   code, documentation, modularity, stable fingerprints, and project-owned
@@ -66,6 +85,8 @@
   protocol-level `ping` liveness probe.
 
 ### Fixed
+- Made canonical health expansions project the exact same content-addressed
+  snapshot as the top-level audit, and fail closed if evidence diverges.
 - Made generated task plans reference only callable public MCP tools and public
   phase names. Gate failures now return exact `required_state` keys, and
   compound contracts advance one subtask at a time.

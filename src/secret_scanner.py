@@ -13,6 +13,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+try:
+    from .finding_identity import finding_evidence
+except ImportError:
+    from finding_identity import finding_evidence
+
 logger = logging.getLogger("flyto-indexer.secret-scanner")
 
 # Directories to skip
@@ -113,6 +118,37 @@ class SecretFinding:
     pattern: str       # "aws_access_key", "password", etc.
     severity: str      # "critical", "high", "medium"
     masked_value: str  # "AKIA***"
+
+    def to_dict(self) -> dict:
+        strict_patterns = {
+            "aws_access_key", "aws_secret_key", "private_key", "database_url",
+            "stripe_key", "github_token", "gitlab_token", "slack_token",
+            "google_api", "firebase_key",
+        }
+        confidence = "high" if self.pattern in strict_patterns else "medium"
+        evidence = finding_evidence(
+            f"secret/{self.pattern}",
+            self.file,
+            anchor=self.masked_value,
+            confidence=confidence,
+            confidence_basis=[
+                "strict_service_signature"
+                if confidence == "high" else "generic_secret_assignment"
+            ],
+            trace=[
+                {"kind": "detector", "rule_id": self.pattern},
+                {"kind": "location", "path": self.file, "line": self.line},
+            ],
+            origin="secret.regex",
+        )
+        return {
+            **evidence,
+            "file": self.file,
+            "line": self.line,
+            "pattern": self.pattern,
+            "severity": self.severity,
+            "masked_value": self.masked_value,
+        }
 
 
 @dataclass
@@ -588,6 +624,34 @@ class VulnerabilityFinding:
     snippet: str
     cwe: str
 
+    def to_dict(self) -> dict:
+        evidence = finding_evidence(
+            f"sast/{self.rule_id}",
+            self.file,
+            anchor=self.snippet,
+            discriminator=self.cwe,
+            confidence="medium",
+            confidence_basis=["language_scoped_pattern", self.cwe],
+            trace=[
+                {"kind": "detector", "rule_id": self.rule_id},
+                {"kind": "location", "path": self.file, "line": self.line},
+            ],
+            origin="sast.regex",
+        )
+        return {
+            **evidence,
+            # Preserve the pre-v2 public scanner contract while exposing the
+            # namespaced identity used by the common evidence envelope.
+            "finding_rule_id": evidence["rule_id"],
+            "rule_id": self.rule_id,
+            "title": self.title,
+            "severity": self.severity,
+            "file": self.file,
+            "line": self.line,
+            "snippet": self.snippet,
+            "cwe": self.cwe,
+        }
+
 
 # 15 SAST vulnerability rules
 VULNERABILITY_RULES: list[VulnerabilityRule] = [
@@ -822,18 +886,7 @@ def scan_code_vulnerabilities(project_path: str | Path) -> dict:
 
     return {
         "total_findings": len(findings),
-        "findings": [
-            {
-                "rule_id": f.rule_id,
-                "title": f.title,
-                "severity": f.severity,
-                "file": f.file,
-                "line": f.line,
-                "snippet": f.snippet,
-                "cwe": f.cwe,
-            }
-            for f in findings
-        ],
+        "findings": [finding.to_dict() for finding in findings],
     }
 
 

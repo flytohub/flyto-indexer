@@ -101,3 +101,7 @@ def test_secret_scanner_keeps_actual_private_key_headers(tmp_path: Path):
 
     assert result.total_findings == 1
     assert result.findings[0].pattern == "private_key"
+    evidence = result.findings[0].to_dict()
+    assert evidence["schema"] == "finding-evidence.v1"
+    assert evidence["confidence"]["level"] == "high"
+    assert evidence["suppression"]["status"] == "active"

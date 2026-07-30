@@ -14,14 +14,16 @@ python benchmarks/evaluate.py --check --json
 ```
 
 `evaluate.py` builds temporary indexes and runs the real taint analyzer against
-the committed `fixture/corpus/` cases. The `fixture/` boundary keeps
+13 committed `fixture/corpus/` cases: eight positive and five negative examples
+across Python, JavaScript, TypeScript, and Go. The `fixture/` boundary keeps
 intentionally vulnerable samples out of repository self-scans, including older
-Indexer releases used by shared workflows. The manifest contains positive,
-negative, sanitized, constant-value, and cross-file examples across Python,
-JavaScript, and Go. The gate checks exact expected category counts, scan errors,
-cross-file path depth, precision, recall, negative-case false-positive rate, and
-a bounded per-case latency. Its evidence fingerprint excludes timing and memory
-noise, so identical findings produce identical proof across runs.
+Indexer releases used by shared workflows. The manifest includes direct and
+cross-file flows, sanitizers, constants, and four metamorphic groups. Pinned
+differential categories make language-specific drift visible. The gate checks
+exact category counts, scan errors, cross-file path depth, precision, recall,
+negative-case false-positive rate, and p50/p95/max latency budgets. Its evidence
+fingerprint excludes timing and memory noise, so identical findings produce
+identical proof across runs.
 
 The default gate is intentionally tiny and has no network or third-party
 scanner dependency. It catches local analyzer regressions quickly; it does not

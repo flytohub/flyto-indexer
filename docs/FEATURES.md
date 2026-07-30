@@ -12,6 +12,12 @@ local `.flyto-index/` graph. Incremental scans reuse unchanged data; `--full`
 rebuilds it. `search` combines lexical and semantic ranking and enriches results
 with callers and neighboring symbols.
 
+Manifest v2 uses full SHA-256 content addresses and a content fingerprint of
+the native scanner pipeline. Content or parser changes invalidate the exact
+cached inputs they make unsafe. Optional Tree-sitter validation can cross-check
+definition parsing when installed and enabled; unavailable grammars fall back
+without changing native results or the default dependency boundary.
+
 JavaScript and TypeScript coverage includes CommonJS, ECMAScript module, and
 typed module variants (`.cjs`, `.mjs`, `.cts`, and `.mts`) in addition to the
 standard extensions. Authored VitePress config and theme source is indexed,
@@ -45,6 +51,12 @@ cross-project dependents, likely test files, call paths, and a risk level.
 Explicit paths are resolved before fuzzy symbol search. Language-server results
 can enrich static edges when a supported local LSP is available; deterministic
 parsers and text fallback remain available.
+
+If a repository exports SCIP, references prefer that precise local artifact
+before LSP and heuristic fallbacks. Diff impact also consumes coverage.py
+dynamic contexts or LCOV `TN` contexts plus JUnit XML to name tests that
+executed changed lines and symbols. Every artifact records its hash and
+freshness; missing contexts produce an explicit downgrade rather than a guess.
 
 For rename, move, delete, and signature changes, semantic preflight also
 reports the exact selected symbol, same-name candidates, overloads,
@@ -104,6 +116,11 @@ manifest scope.
 The smart `audit` result includes the same bounded evidence portfolio plus a
 three-finding maximum verdict. Every verdict claim points back to health,
 impact, commit, file, or diff evidence already present in the result.
+
+Secret, SAST, taint, IaC, and governance findings share one evidence envelope:
+a line-move-stable fingerprint, confidence level and basis, bounded trace, and
+active or suppressed provenance. Sanitizers and expiring governance waivers
+therefore remain auditable after a finding leaves the active set.
 
 Primary implementation: `src/analyzer/`, `src/auditor/`, `src/quality.py`, and
 `src/tools/evidence_portfolio.py`, plus the rule corpus under `config/rules/`.
@@ -229,10 +246,10 @@ runtime, packaging, and working-tree checks for one repository.
 regressions without hiding existing debt.
 
 `audit`, project profiles, and `verify` consume one canonical
-`health-snapshot.v1`. The snapshot fixes analysis scope to production source
+`health-snapshot.v2`. The content-addressed snapshot fixes analysis scope to production source
 and records a stable symbol fingerprint, weighted complexity burden,
 high-confidence dead code, documentation coverage, and modularity. Public
-surfaces cannot silently disagree about the same commit.
+surfaces fail closed if an expanded dimension diverges from it.
 
 Verify schema v2 assigns stable IDs to checks and individual sampled findings.
 Regression comparison catches new finding IDs inside an already-warning check,
@@ -240,11 +257,12 @@ and newly-worse canonical quality metrics inside an otherwise passing check,
 while legacy status-only baselines remain compatible. SARIF exports the same
 fingerprint for line-move correlation.
 
-The committed offline evaluation corpus runs real Python, JavaScript, and Go
-index/taint paths with positive, sanitized, constant, and cross-file cases. CI
-gates exact expected counts, precision, recall, negative-case false-positive
-rate, scan errors, path depth, and bounded latency without adding a runtime
-dependency or network call.
+The committed offline evaluation corpus runs real Python, JavaScript,
+TypeScript, and Go index/taint paths with positive, sanitized, constant, and
+cross-file cases. CI gates exact expected counts, per-language precision and
+recall, negative-case false-positive rate, metamorphic relations, pinned
+differential categories, scan errors, path depth, and p95/max latency without
+adding a runtime dependency or network call.
 
 See [Verification](VERIFICATION.md) for release commands and report formats.
 

@@ -22,6 +22,9 @@ except ImportError:
     from models import Dependency, FileManifest, Symbol
     from safe_io import atomic_write_json
 
+MANIFEST_VERSION = 2
+CONTENT_HASH_ALGORITHM = "sha256"
+
 
 @dataclass
 class ChangeSet:
@@ -47,7 +50,9 @@ class ManifestStore:
     Storage format:
     {
         "project": "flyto-cloud",
-        "version": 1,
+        "version": 2,
+        "hash_algorithm": "sha256",
+        "pipeline_fingerprint": "<sha256>",
         "files": {
             "src/pages/TopUp.vue": {
                 "hash": "abc123...",
@@ -59,17 +64,33 @@ class ManifestStore:
     }
     """
 
-    def __init__(self, store_path: Path):
+    def __init__(self, store_path: Path, pipeline_fingerprint: str = ""):
         self.store_path = store_path
-        self.data = {"project": "", "version": 1, "files": {}}
+        self.pipeline_fingerprint = pipeline_fingerprint
+        self.data = self._empty_data()
+
+    def _empty_data(self) -> dict:
+        return {
+            "project": "",
+            "version": MANIFEST_VERSION,
+            "hash_algorithm": CONTENT_HASH_ALGORITHM,
+            "pipeline_fingerprint": self.pipeline_fingerprint,
+            "files": {},
+        }
 
     def load(self) -> bool:
         """Load manifest"""
         if self.store_path.exists():
             try:
                 self.data = json.loads(self.store_path.read_text())
+                if not isinstance(self.data, dict):
+                    self.data = self._empty_data()
+                    return False
+                if not isinstance(self.data.get("files"), dict):
+                    self.data["files"] = {}
                 return True
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, OSError):
+                self.data = self._empty_data()
                 return False
         return False
 
@@ -81,13 +102,28 @@ class ManifestStore:
         """Atomically replace stale state after a full project rebuild."""
         self.data = {
             "project": project,
-            "version": 1,
+            "version": MANIFEST_VERSION,
+            "hash_algorithm": CONTENT_HASH_ALGORITHM,
+            "pipeline_fingerprint": self.pipeline_fingerprint,
             "files": {
                 manifest.path: manifest.to_dict()
                 for manifest in manifests
             },
         }
         self.save()
+
+    def is_compatible(self) -> bool:
+        """Whether cached file entries were produced by this exact pipeline."""
+        return (
+            self.data.get("version") == MANIFEST_VERSION
+            and self.data.get("hash_algorithm") == CONTENT_HASH_ALGORITHM
+            and self.data.get("pipeline_fingerprint") == self.pipeline_fingerprint
+        )
+
+    def mark_compatible(self) -> None:
+        self.data["version"] = MANIFEST_VERSION
+        self.data["hash_algorithm"] = CONTENT_HASH_ALGORITHM
+        self.data["pipeline_fingerprint"] = self.pipeline_fingerprint
 
     def get_file_hash(self, path: str) -> Optional[str]:
         """Get the old hash for a file"""
@@ -119,10 +155,18 @@ class IncrementalIndexer:
     Only updates changed files, significantly reducing rebuild time.
     """
 
-    def __init__(self, project_root: Path, index_dir: Path):
+    def __init__(
+        self,
+        project_root: Path,
+        index_dir: Path,
+        pipeline_fingerprint: str = "",
+    ):
         self.project_root = project_root
         self.index_dir = index_dir
-        self.manifest_store = ManifestStore(index_dir / "manifest.json")
+        self.manifest_store = ManifestStore(
+            index_dir / "manifest.json",
+            pipeline_fingerprint=pipeline_fingerprint,
+        )
 
     def detect_changes(self, current_files: dict[str, str]) -> ChangeSet:
         """
@@ -135,6 +179,7 @@ class IncrementalIndexer:
             ChangeSet of changes
         """
         self.manifest_store.load()
+        compatible = self.manifest_store.is_compatible()
 
         old_paths = self.manifest_store.get_all_paths()
         new_paths = set(current_files.keys())
@@ -155,7 +200,7 @@ class IncrementalIndexer:
         for path in new_paths & old_paths:
             old_hash = self.manifest_store.get_file_hash(path)
             new_hash = current_files[path]
-            if old_hash != new_hash:
+            if not compatible or old_hash != new_hash:
                 modified.append(path)
 
         return ChangeSet(added=added, modified=modified, deleted=deleted)
@@ -173,6 +218,7 @@ class IncrementalIndexer:
         This only updates the manifest; vector store updates are handled elsewhere.
         """
         # Update/add
+        self.manifest_store.mark_compatible()
         for manifest in new_manifests:
             self.manifest_store.update_file(manifest)
 
@@ -223,8 +269,8 @@ class IncrementalIndexer:
 
 
 def compute_file_hash(content: str) -> str:
-    """Compute file hash"""
-    return hashlib.sha256(content.encode()).hexdigest()[:16]
+    """Compute a collision-resistant content address for one source file."""
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 def scan_directory_hashes(

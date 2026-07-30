@@ -26,19 +26,22 @@ except ImportError:
     )
 
 
-_HEALTH_CACHE: dict[tuple[str, str, str, int], dict] = {}
+_HEALTH_CACHE: dict[tuple, dict] = {}
 
 
 def _health_cache_key(index: dict, project: str | None) -> tuple | None:
-    """Return a cache identity that changes whenever the index is rebuilt."""
+    """Return a content-addressed cache identity for the selected project."""
     indexed_at = str(index.get("indexed_at") or "")
     if not indexed_at:
         return None
+    symbols = _project_symbols(index, project)
+    snapshot_id = _health_snapshot(project, symbols)["id"]
     return (
         str(index.get("root_path") or ""),
         indexed_at,
         project or "",
-        len(index.get("symbols") or {}),
+        str(index.get("generation") or index.get("index_generation") or ""),
+        snapshot_id,
     )
 
 
@@ -95,15 +98,24 @@ def _health_snapshot(project: str | None, symbols: dict) -> dict:
     for symbol_id, symbol in sorted(symbols.items()):
         digest.update(symbol_id.encode("utf-8", errors="replace"))
         digest.update(b"\0")
-        for field in ("path", "start_line", "end_line", "ref_count"):
+        for field in (
+            "path",
+            "start_line",
+            "end_line",
+            "ref_count",
+            "content_hash",
+            "hash",
+            "summary",
+        ):
             digest.update(str(symbol.get(field, "")).encode("utf-8", errors="replace"))
             digest.update(b"\0")
     return {
-        "schema": "health-snapshot.v1",
+        "schema": "health-snapshot.v2",
         "id": digest.hexdigest(),
         "project": project or "",
         "analysis_scope": "production_source_only",
         "symbol_count": len(symbols),
+        "content_addressed": True,
     }
 
 

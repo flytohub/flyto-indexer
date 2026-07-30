@@ -12,17 +12,24 @@ Flyto2 Indexer borrows successful mechanics, not product bulk.
 | [Superpowers](https://github.com/obra/superpowers) and [Get Shit Done](https://github.com/gsd-build/get-shit-done) | Small plans, explicit verification, resumable state, and disciplined subtask boundaries | Responsibility-based atomic guidance and change-aware documentation, advisory by default |
 | [Aider](https://github.com/Aider-AI/aider) | Public, reproducible coding benchmarks make capability claims falsifiable | A committed offline accuracy/latency gate with deterministic evidence fingerprints |
 | [Semgrep](https://github.com/semgrep/semgrep) and [CodeQL](https://github.com/github/codeql) | Structured static-analysis findings, data-flow evidence, baselines, and SARIF integration | AST-first Python flow, bounded cross-file proof, stable finding IDs, finding-level regression comparison, and SARIF partial fingerprints |
+| [SCIP](https://github.com/sourcegraph/scip) | A language-neutral precise-code-navigation artifact with stable symbol identities | Optional protobuf/JSON ingestion ahead of LSP and native indexes, content-addressed caching, and fail-safe fallback when an artifact is absent or invalid |
+| [coverage.py dynamic contexts](https://coverage.readthedocs.io/en/latest/contexts.html), [pytest-cov](https://pytest-cov.readthedocs.io/en/latest/contexts.html), and JUnit XML | Executed-by-test evidence connects a changed line to the tests that actually ran it | Local LCOV/coverage SQLite/JUnit correlation with artifact hashes, freshness, bounded results, and explicit confidence instead of guessed test selection |
+| [Tree-sitter](https://github.com/tree-sitter/tree-sitter) | Fast incremental concrete syntax trees across many languages | An opt-in parser cross-check with lazy grammar loading and native-scanner fallback; the default dependency and latency boundary stays unchanged |
 | [Sonar Clean as You Code](https://docs.sonarsource.com/sonarqube-server/10.7/core-concepts/clean-as-you-code/overview) | Gate new debt without pretending a brownfield repository is already clean | Absolute safety floors plus a reviewed baseline that rejects newly-worse health metrics |
 | [Ruff](https://github.com/astral-sh/ruff) | A broad capability surface stays usable through a common interface, caching, and measured speed | One cached dispatch registry, no new runtime dependency, bounded results, and explicit p95 budgets |
 | [ast-grep](https://github.com/ast-grep/ast-grep), [dependency-cruiser](https://github.com/sverweij/dependency-cruiser), and [ArchUnit](https://github.com/TNG/ArchUnit) | Structural matching and enforceable dependency/architecture constraints | Language-aware scanning plus repository-owned advisory/guarded/strict rules; no mandatory universal architecture |
 | [Model Context Protocol](https://github.com/modelcontextprotocol/modelcontextprotocol) and its [Python SDK](https://github.com/modelcontextprotocol/python-sdk) | Standard cancellation, bounded request lifecycles, and Streamable HTTP | Interruptible calls, explicit deadlines, safe replay rules, active-child self-healing, and observable p50/p95 latency |
+| [OpenTelemetry](https://github.com/open-telemetry/opentelemetry-specification) | Shared vocabulary for traces, metrics, attributes, and provenance | Schema-versioned finding traces and confidence/suppression provenance without adding a telemetry service or network path |
 
 ## Evidence gates adopted
 
 - `benchmarks/evaluate.py` runs committed positive and negative cases through
   the real index and taint analyzer. It measures exact category counts,
-  precision, recall, false-positive rate, cross-file path depth, latency, and
-  peak memory without cloning repositories or calling a hosted service.
+  precision, recall, false-positive rate, cross-file path depth, p50/p95/max
+  latency, and peak memory. Metamorphic pairs prove sanitization and constant
+  substitution change only the intended result; pinned differential categories
+  catch language-specific drift without cloning repositories or calling a
+  hosted service.
 - Verification finding IDs exclude line numbers and raw source bodies. The
   same ID is used by JSON baselines and SARIF, so line-only edits do not create
   churn while genuinely new findings still regress.

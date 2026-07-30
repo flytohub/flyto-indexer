@@ -40,14 +40,36 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip
       - run: pip install ".[dev]"
-      # Seven tests assume a writable HOME / TMPDIR that the hosted runners
-      # expose via a systemd-private bind mount, which rejects writes. Deselect
-      # until the tests are rewritten to use pytest's tmp_path fixture.
-      - run: |
+      - name: Test
+        if: matrix.python-version != '3.12'
+        run: |
           pytest tests/ -v \
             --deselect tests/test_incremental.py::TestSemanticStaleMarker::test_stale_marker_triggers_rebuild \
             --deselect tests/test_mcp_server.py::TestLoadProjectMap \
             --deselect tests/test_mcp_server.py::TestLoadContentFile
+      - name: Test with per-test coverage evidence
+        if: matrix.python-version == '3.12'
+        run: |
+          pytest tests/ -v \
+            --cov=src \
+            --cov-branch \
+            --cov-context=test \
+            --cov-report=xml:coverage.xml \
+            --junitxml=junit.xml \
+            --deselect tests/test_incremental.py::TestSemanticStaleMarker::test_stale_marker_triggers_rebuild \
+            --deselect tests/test_mcp_server.py::TestLoadProjectMap \
+            --deselect tests/test_mcp_server.py::TestLoadContentFile
+      - name: Upload test evidence
+        if: matrix.python-version == '3.12' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-evidence-${{ matrix.python-version }}
+          path: |
+            .coverage
+            coverage.xml
+            junit.xml
+          if-no-files-found: error
+          retention-days: 7
 
   verify:
     runs-on: ubuntu-latest
@@ -59,6 +81,10 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install --upgrade pip
       - run: pip install ".[dev]"
+      - uses: actions/download-artifact@v5
+        with:
+          name: test-evidence-3.12
+          path: .
       - run: python benchmarks/evaluate.py --check --json
       - run: >-
           flyto-index verify . --full-scan --strict
@@ -67,6 +93,40 @@ jobs:
           --report /tmp/flyto-indexer-verify.sarif
           --report-format sarif
           --json
+      - name: Prove coverage-context and JUnit test impact
+        run: |
+          python - <<'PY'
+          from src.test_evidence import (
+              build_test_impact_evidence,
+              parse_sqlite_contexts,
+          )
+          from src.tools.coverage_intel import coverage_report
+
+          contexts = parse_sqlite_contexts(
+              ".coverage",
+              ".",
+              target_files=["src/engine.py"],
+          )
+          assert contexts, "coverage artifact has no per-test contexts"
+          path, line_map = next(
+              (path, lines) for path, lines in contexts.items() if lines
+          )
+          line = next(iter(line_map))
+          evidence = build_test_impact_evidence(
+              ".",
+              "sqlite",
+              ".coverage",
+              {path: [line]},
+          )
+          assert evidence["coverage_artifact"]["fresh"], evidence
+          assert evidence["junit_artifacts"], evidence
+          assert evidence["impacted_tests"], evidence
+          assert evidence["confidence"] in {"high", "medium"}, evidence
+          report = coverage_report("flyto-indexer")
+          assert "error" not in report, report
+          assert report["data_source"] == "sqlite", report
+          assert report["coverage_artifact"]["fresh"], report
+          PY
 
   build:
     runs-on: ubuntu-latest

@@ -872,21 +872,7 @@ def _check_impact_loop(engine: IndexEngine, symbol: str | None, add_check) -> No
 
 def _check_weak_scanners(root: Path, add_check) -> None:
     secrets = scan_secrets(root)
-    secret_samples = [
-        {
-            "finding_id": stable_finding_id(
-                f"secret/{finding.pattern}",
-                finding.file,
-                anchor=finding.masked_value,
-            ),
-            "file": finding.file,
-            "line": finding.line,
-            "pattern": finding.pattern,
-            "severity": finding.severity,
-            "masked_value": finding.masked_value,
-        }
-        for finding in secrets.findings[:10]
-    ]
+    secret_samples = [finding.to_dict() for finding in secrets.findings[:10]]
     secret_status = "pass"
     if secrets.critical or secrets.high:
         secret_status = "fail"
@@ -921,6 +907,13 @@ def _check_weak_scanners(root: Path, add_check) -> None:
             item = flow.to_dict()
             taint_samples.append({
                 "finding_id": item.get("finding_id"),
+                "schema": item.get("schema"),
+                "fingerprint": item.get("fingerprint"),
+                "rule_id": item.get("rule_id"),
+                "origin": item.get("origin"),
+                "confidence": item.get("confidence"),
+                "trace": item.get("trace"),
+                "suppression": item.get("suppression"),
                 "source_file": item.get("source_file"),
                 "source_line": item.get("source_line"),
                 "sink_file": item.get("sink_file"),
@@ -3072,9 +3065,16 @@ def _render_sarif_report(result: dict[str, Any]) -> str:
                 "locations": [{"physicalLocation": physical_location}],
                 "partialFingerprints": {
                     "flytoFindingId/v1": finding_id,
+                    "flytoFindingFingerprint/v1": str(
+                        candidate.get("fingerprint") or finding_id
+                    ),
                 },
                 "properties": {
                     "findingId": finding_id,
+                    "findingSchema": candidate.get("schema"),
+                    "confidence": candidate.get("confidence"),
+                    "trace": candidate.get("trace"),
+                    "suppression": candidate.get("suppression"),
                     "project": project,
                 },
             })

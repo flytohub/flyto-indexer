@@ -25,9 +25,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
-    from ..finding_identity import stable_finding_id
+    from ..finding_identity import finding_evidence, suppression_provenance
 except ImportError:  # Direct source imports expose analyzer as a top-level package.
-    from finding_identity import stable_finding_id
+    from finding_identity import finding_evidence, suppression_provenance
 
 from .taint_rules import (
     GO_TAINT_PATTERNS,
@@ -96,7 +96,8 @@ class TaintFlow:
         source_file = self.source_file or self.file_path
         sink_file = self.sink_file or self.file_path
         sink_line = self.sink_line or self.line
-        finding_id = stable_finding_id(
+        flow_trace = self.path or self.flow_chain
+        evidence = finding_evidence(
             f"taint/{self.category}",
             sink_file,
             anchor={
@@ -104,9 +105,28 @@ class TaintFlow:
                 "source": self.source_expr,
                 "sink": self.sink_expr,
             },
+            confidence="high" if self.path else "medium",
+            confidence_basis=(
+                ["source_to_sink_path", "typed_or_cross_function_resolution"]
+                if self.path
+                else ["source_to_sink_dataflow"]
+            ),
+            trace=[
+                {"kind": "flow", "value": step}
+                for step in flow_trace
+            ],
+            suppression=suppression_provenance(
+                suppressed=self.sanitized,
+                mechanism="sanitizer" if self.sanitized else "none",
+                rule_id=f"taint/{self.category}",
+                reason="flow passed through a configured sanitizer"
+                if self.sanitized else "",
+                source="taint.sanitizers" if self.sanitized else "",
+            ),
+            origin="taint.ast" if self.path else "taint.dataflow",
         )
         return {
-            "finding_id": finding_id,
+            **evidence,
             "source": self.source_expr,
             "source_file": source_file,
             "source_line": self.source_line or self.line,
@@ -128,6 +148,7 @@ class DataFlowResult:
     total_sources: int = 0
     total_sinks: int = 0
     taint_flows: list[TaintFlow] = field(default_factory=list)
+    suppressed_taint_flows: list[TaintFlow] = field(default_factory=list)
     sanitized_flows: int = 0
     high_risk_count: int = 0
 
@@ -140,6 +161,9 @@ class DataFlowResult:
             "sanitized_flows": self.sanitized_flows,
             "high_risk_count": self.high_risk_count,
             "taint_flows": [f.to_dict() for f in unsanitized],
+            "suppressed_taint_flows": [
+                flow.to_dict() for flow in self.suppressed_taint_flows
+            ],
         }
 
 
@@ -324,6 +348,7 @@ class TaintAnalyzer:
             total_sources=self._source_count,
             total_sinks=self._sink_count,
             taint_flows=self.findings,
+            suppressed_taint_flows=self._sanitized_findings,
             sanitized_flows=len(self._sanitized_findings),
             high_risk_count=high_risk,
         )

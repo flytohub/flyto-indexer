@@ -27,13 +27,23 @@ HTTP references.
 4. Verify combines index integrity, context lookup, impact closure, secret
    checks, taint rules, documentation checks, rules/layers policy checks, and
    release hygiene checks.
-5. Stable finding identities correlate JSON baseline and SARIF evidence without
-   depending on line numbers or retaining raw source bodies.
-6. The committed offline corpus runs the real index/taint path and gates exact
+5. Reference resolution consumes local SCIP when available, then LSP, then
+   deterministic reverse-index, dependency, and content fallbacks.
+6. Coverage.py or LCOV execution contexts correlate changed lines and symbols
+   with JUnit test outcomes. Artifact hashes and age make stale evidence
+   explicit.
+7. Stable finding evidence correlates JSON baseline and SARIF output with a
+   full fingerprint, confidence basis, bounded trace, and suppression
+   provenance, without depending on line numbers or retaining raw secrets.
+8. Incremental manifest v2 addresses files by full SHA-256 and fingerprints
+   the native parser pipeline. An old schema or changed parser invalidates
+   cached file results once. Optional Tree-sitter cross-validation is isolated
+   behind an environment switch and never removes the native fallback.
+9. The committed offline corpus runs the real index/taint path and gates exact
    positive/negative outcomes plus bounded latency. Repository self-scans treat
    benchmark trees as non-production; the evaluator scans each case root
    explicitly.
-7. CI and agents consume structured findings and decide what to fix.
+10. CI and agents consume structured findings and decide what to fix.
 
 ## Product API Contract Detection
 
@@ -73,6 +83,9 @@ HTTP references.
   tool execution interruptible through POSIX timers; it does not poll.
 - `src/api_server.py` provides a separate localhost bridge described by its
   embedded OpenAPI contract.
+- `src/scip_adapter.py`, `src/test_evidence.py`, and
+  `src/tree_sitter_adapter.py` are optional evidence adapters. They parse local
+  artifacts only and do not own protocol or tool registration.
 - `src/__init__.py` exports the stable Python package entry surface.
 
 Adapters compose shared scanners, analyzers, indexes, and tools; lower layers
