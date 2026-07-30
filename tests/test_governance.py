@@ -36,6 +36,28 @@ def test_internal_fix_needs_no_docs_or_forced_split():
     assert result["documentation"]["required"] is False
 
 
+def test_public_tool_schema_does_not_require_database_migration_docs():
+    tool_schema = evaluate_task_governance(
+        description="Preserve the public MCP tool schema",
+        targets=["src/tools/smart.py"],
+        resolved_targets=[{"path": "src/tools/smart.py"}],
+        project=None,
+        options={"governance": {"mode": "advisory"}},
+    )
+    database_schema = evaluate_task_governance(
+        description="Change the database schema for accounts",
+        targets=["src/storage.py"],
+        resolved_targets=[{"path": "src/storage.py"}],
+        project=None,
+        options={"governance": {"mode": "advisory"}},
+    )
+
+    assert "schema" not in tool_schema["documentation"]["signals"]
+    assert "migration" not in tool_schema["documentation"]["required_kinds"]
+    assert "schema" in database_schema["documentation"]["signals"]
+    assert "migration" in database_schema["documentation"]["required_kinds"]
+
+
 def test_atomicity_uses_responsibilities_instead_of_line_count():
     result = evaluate_task_governance(
         description="Change task analysis and runtime rule loading",

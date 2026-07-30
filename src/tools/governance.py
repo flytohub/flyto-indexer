@@ -252,7 +252,13 @@ def _change_signals(paths: list[str], description: str = "") -> list[str]:
             signals.add("deployment")
     keyword_signals = {
         "public_contract": (" public api ", " openapi ", " public contract "),
-        "schema": (" schema ", " migration "),
+        "schema": (
+            " database schema ",
+            " persistence schema ",
+            " persistent schema ",
+            " schema migration ",
+            " data migration ",
+        ),
         "user_behavior": (" user-visible ", " user behavior ", " cli output ", " mcp output "),
         "architecture": (" architecture boundary ", " layer boundary "),
         "security": (" security posture ", " authorization ", " authentication "),
