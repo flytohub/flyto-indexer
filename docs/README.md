@@ -7,6 +7,7 @@ the index format, parser stack, or every scanner before Flyto2 Indexer is useful
 
 | If this is the problem | Start here |
 | --- | --- |
+| “I want to know whether this fits my workflow before installing.” | Read [who it is for](../README.md#who-it-is-for) and [why it fits existing tools](../README.md#why-it-fits-your-existing-workflow). |
 | “I am afraid this change will break code I cannot see.” | Run the [first setup](../README.md#installation-and-first-result), then use `impact`. |
 | “The AI agent keeps missing project rules or requirements.” | Read the [task workflow](FEATURES.md#the-agent-missed-a-rule-or-requirement). |
 | “The tests are green, but I still do not trust the change.” | Use the [verification guide](VERIFICATION.md). |
@@ -20,6 +21,7 @@ the index format, parser stack, or every scanner before Flyto2 Indexer is useful
 
 | Need | Guide |
 | --- | --- |
+| Decide whether it belongs in your workflow | [Audience and fit](../README.md#who-it-is-for) |
 | Install, scan, and see the first result | [Root README](../README.md#installation-and-first-result) |
 | Understand the problems it solves | [Feature guide](FEATURES.md) |
 | Use the command line | [CLI guide](CLI.md) |

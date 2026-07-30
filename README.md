@@ -7,21 +7,40 @@
     <a href="https://github.com/flytohub/flyto-indexer/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License"></a>
     <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+"></a>
   </p>
+  <p>
+    <a href="#installation-and-first-result">Quick start</a> ·
+    <a href="#before-and-after-rename-one-shared-function">See it in action</a> ·
+    <a href="docs/README.md">Documentation</a>
+  </p>
 </div>
 
-Most bad AI-assisted changes are not syntax errors. They happen because the
-agent changed one file and missed a caller, a test, a repository rule, or a
-requirement somewhere else.
+Your coding agent can edit a repository in seconds. The expensive mistakes come
+later: a missed caller, a stale contract, an ignored repository rule, or
+“done” declared after the nearest test passes.
 
-Flyto2 Indexer gives coding agents a local map before they edit and a finish
-gate before they say the work is done.
+Flyto2 Indexer gives any MCP-capable coding agent a local map before it edits
+and an evidence gate before it stops.
 
-- See what a change can break before touching it.
-- Give the agent only the project rules and context that matter.
-- Keep requirements, changed files, and proof connected.
-- Catch unfinished work even when one test command is green.
+- **Map the change:** see callers, dependents, tests, APIs, and cross-project
+  impact before touching code.
+- **Keep the intent:** carry repository rules, requirements, and decisions into
+  the actual diff.
+- **Prove the result:** close lint, tests, security, documentation, and change
+  conformance before the agent says it is finished.
 
 No API key. No model lock-in. No source upload.
+
+## Who It Is For
+
+Flyto2 Indexer is most useful when:
+
+- you use AI on an existing codebase that no one holds entirely in their head;
+- a change can cross packages, services, or repositories;
+- several developers or coding agents must follow the same rules;
+- private, regulated, or air-gapped source must stay local.
+
+It is not another code generator, IDE, or hosted dashboard. Keep the tools you
+already trust; Flyto2 Indexer gives them a shared change map and finish gate.
 
 ## Installation And First Result
 
@@ -73,6 +92,20 @@ visible until someone reviews it.
 
 **Practical difference:** hidden work becomes an explicit checklist before it
 becomes a regression.
+
+## Why It Fits Your Existing Workflow
+
+Flyto2 Indexer complements the tools you already use:
+
+| Keep using | What it already does well | What Flyto2 Indexer adds |
+| --- | --- | --- |
+| Your coding agent | Understands requests and applies edits | A local change map, scoped rules, and a finish gate |
+| IDE search or `grep` | Finds names and direct references quickly | Transitive impact, cross-project links, likely tests, and unresolved gaps |
+| Linters and test suites | Catch the failures they are configured to detect | Proof that the requested work, changed paths, and required checks still agree |
+| CI | Repeats commands on every change | One regression-aware repository and workspace verdict |
+
+You do not need to replace your model or development workflow. Try it on one
+risky refactor first.
 
 ## Usage
 

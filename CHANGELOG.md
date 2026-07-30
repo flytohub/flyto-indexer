@@ -8,7 +8,9 @@
   implementation details remain in the generated reference and technical
   guides instead of leading the first-use experience. Added a clearly labeled
   illustrative Before/After rename walkthrough without presenting it as a
-  customer result.
+  customer result. Clarified the intended users, first-screen promise, and how
+  the indexer complements coding agents, IDE search, linters, tests, and CI
+  without requiring users to replace their existing workflow.
 
 ## [2.17.0] - 2026-07-30
 
