@@ -338,6 +338,10 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             focus=args.get("focus"),
             symbol_id=args.get("symbol_id"),
             path=args.get("path"),
+            result_mode=args.get("result_mode", "compact"),
+            limit=args.get("limit", 20),
+            cursor=args.get("cursor", 0),
+            include_non_production=args.get("include_non_production", False),
         ),
         "verify": lambda args: _verify().run_verification(
             project_path=args.get("path") or os.getcwd(),
@@ -403,7 +407,14 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
         # Project profile
         "project_profile": lambda args: _profile().build_project_profile(
             project_path=__import__("pathlib").Path(args.get("path") or os.getcwd()),
-            compact=args.get("compact", False),
+            compact=args.get("compact", True),
+            result_mode=(
+                args.get("result_mode")
+                or ("compact" if args.get("compact", True) else "full")
+            ),
+            limit=args.get("limit", 20),
+            cursor=args.get("cursor", 0),
+            include_non_production=args.get("include_non_production", False),
         ),
 
         # PR risk analysis

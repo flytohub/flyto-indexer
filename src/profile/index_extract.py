@@ -14,6 +14,7 @@ from .constants import (
     BACKEND_EXTS, FRONTEND_EXTS, HTTP_METHODS,
     ENTRY_FILE_PATTERN, ENTRY_NAMES, API_CATEGORY_KEYS,
 )
+from .filesystem import FILE_CLASSES, classify_path
 
 logger = logging.getLogger("flyto-indexer.profile")
 
@@ -52,6 +53,9 @@ def empty_extract_result() -> dict:
         "module_graph_full": [],
         "module_graph_summary": {},
         "complexity_summary": {},
+        "indexed_file_count": 0,
+        "indexed_source_file_count": 0,
+        "indexed_file_class_counts": dict.fromkeys(FILE_CLASSES, 0),
     }
 
 
@@ -490,7 +494,23 @@ def compute_reachability(deps: dict, idx: dict) -> dict:
     }
 
 
-def extract_from_index(project_path: Path) -> dict:
+def _path_is_in_scope(path: str, include_non_production: bool) -> bool:
+    return bool(path) and (
+        include_non_production or classify_path(path) == "source"
+    )
+
+
+def _filter_api_entries(entries: list[dict], include_non_production: bool) -> list[dict]:
+    return [
+        entry for entry in entries
+        if _path_is_in_scope(entry.get("file", ""), include_non_production)
+    ]
+
+
+def extract_from_index(
+    project_path: Path,
+    include_non_production: bool = False,
+) -> dict:
     """Extract data from the flyto-indexer index if available."""
     result = empty_extract_result()
 
@@ -502,10 +522,27 @@ def extract_from_index(project_path: Path) -> dict:
     if not index:
         return result
 
-    symbols = index.get("symbols", {})
+    all_symbols = index.get("symbols", {})
     dependencies = index.get("dependencies", {})
     reverse_index = index.get("reverse_index", {})
 
+    indexed_paths = {
+        sym.get("path", "")
+        for sym in all_symbols.values()
+        if sym.get("path")
+    }
+    indexed_class_counts = Counter(classify_path(path) for path in indexed_paths)
+    result["indexed_file_count"] = len(indexed_paths)
+    result["indexed_source_file_count"] = indexed_class_counts.get("source", 0)
+    result["indexed_file_class_counts"] = {
+        name: indexed_class_counts.get(name, 0)
+        for name in FILE_CLASSES
+    }
+
+    symbols = {
+        sid: sym for sid, sym in all_symbols.items()
+        if _path_is_in_scope(sym.get("path", ""), include_non_production)
+    }
     result["symbol_counts"] = dict(Counter(
         sym.get("type", "unknown") for sym in symbols.values()
     ).most_common())
@@ -514,12 +551,20 @@ def extract_from_index(project_path: Path) -> dict:
     _collect_api_from_dep_edges(index, result)
     _collect_api_from_routes(index, result)
     for key in ("api_definitions", "api_calls_internal", "api_calls_external", "api_routes"):
+        result[key] = _filter_api_entries(result[key], include_non_production)
         result[key].sort(key=lambda r: (r["method"], r["path"]))
 
     result["models"] = _collect_models(symbols)
     result["entry_points"] = _collect_entry_points(symbols)
 
-    file_connections = _build_file_connections(symbols, dependencies, reverse_index)
+    file_connections = Counter({
+        pair: count
+        for pair, count in _build_file_connections(
+            symbols, dependencies, reverse_index
+        ).items()
+        if _path_is_in_scope(pair[0], include_non_production)
+        and _path_is_in_scope(pair[1], include_non_production)
+    })
     all_connections = [
         {"source_file": pair[0], "target_file": pair[1], "import_count": count}
         for pair, count in file_connections.most_common()

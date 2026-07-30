@@ -41,6 +41,7 @@ dev = [
 
 [project.scripts]
 flyto-index = "flyto_indexer.cli:main"
+flyto-index-mcp-http = "flyto_indexer.mcp_http_server:main"
 
 [project.urls]
 Homepage = "https://flyto2.com"

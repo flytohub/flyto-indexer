@@ -1089,5 +1089,44 @@ class TestGateRemediationContract:
         assert "pass=false, STOP" not in instructions
 
 
+class TestRuntimeEnvelope:
+    """MCP tool results expose cheap, backward-compatible runtime metadata."""
+
+    def test_tool_result_includes_runtime_metadata(self):
+        with (
+            patch.object(mcp_server, "send_response") as send_response,
+            patch.object(mcp_server, "_check_rate_limit", return_value=True),
+            patch.object(index_store, "_maybe_auto_reindex"),
+            patch("execution_guard.check_enforcement", return_value=None),
+            patch("execution_guard.record_tool_call"),
+            patch("tool_registry.execute_tool", return_value={"ok": True}),
+        ):
+            mcp_server._handle_tool_call(9, {
+                "name": "structure",
+                "arguments": {
+                    "focus": "profile",
+                    "project": "flyto-indexer",
+                },
+            })
+
+        payload = send_response.call_args.args[1]
+        text_result = json.loads(payload["content"][0]["text"])
+        runtime = text_result["_runtime"]
+
+        assert text_result["ok"] is True
+        assert payload["structuredContent"]["_runtime"] == runtime
+        assert payload["_meta"]["flyto/indexerRuntime"] == runtime
+        assert set(runtime) == {
+            "runtime_version",
+            "commit",
+            "index_freshness",
+            "elapsed_ms",
+            "result_mode",
+        }
+        assert runtime["index_freshness"] == "checked"
+        assert runtime["elapsed_ms"] >= 0
+        assert runtime["result_mode"] == "compact"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -23,9 +23,12 @@ Claude Code config (~/.claude/mcp_servers.json):
 import json
 import logging
 import os
+import subprocess
 import sys
 import time as _time
 from collections import deque
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Optional
 
 try:
@@ -71,6 +74,70 @@ def send_notification(method: str, params: dict):
     """Send an MCP notification (no id, no response expected)."""
     msg = {"jsonrpc": "2.0", "method": method, "params": params}
     print(json.dumps(msg), flush=True)
+
+
+@lru_cache(maxsize=1)
+def _runtime_commit() -> str:
+    """Resolve the local source commit once without adding per-call latency."""
+    configured = os.environ.get("FLYTO_INDEXER_COMMIT", "").strip()
+    if configured:
+        return configured[:40]
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(Path(__file__).resolve().parent.parent),
+             "rev-parse", "--short=12", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        pass
+    return "unknown"
+
+
+def _result_mode(tool_name: str, arguments: dict) -> str:
+    requested = arguments.get("result_mode")
+    if requested in {"compact", "paged", "full"}:
+        return requested
+    if tool_name == "project_profile":
+        return "compact" if arguments.get("compact", True) else "full"
+    if tool_name == "structure" and arguments.get("focus") == "profile":
+        return "compact"
+    return "standard"
+
+
+def _runtime_envelope(
+    tool_name: str,
+    arguments: dict,
+    started_at: float,
+    index_freshness: str,
+) -> dict:
+    return {
+        "runtime_version": __version__,
+        "commit": _runtime_commit(),
+        "index_freshness": index_freshness,
+        "elapsed_ms": round((_time.monotonic() - started_at) * 1000, 2),
+        "result_mode": _result_mode(tool_name, arguments),
+    }
+
+
+def _tool_response_payload(result: Any, runtime: dict, result_text: str) -> dict:
+    """Build an MCP result while preserving legacy text and adding typed metadata."""
+    if isinstance(result, dict):
+        structured = dict(result)
+        structured["_runtime"] = runtime
+        text_value = json.dumps(structured, ensure_ascii=False, indent=2)
+    else:
+        structured = {"result": result, "_runtime": runtime}
+        text_value = result_text
+    return {
+        "content": [{"type": "text", "text": text_value}],
+        "structuredContent": structured,
+        "_meta": {"flyto/indexerRuntime": runtime},
+    }
 
 
 # =============================================================================
@@ -397,6 +464,8 @@ def handle_request(request: dict):
 
 def _handle_tool_call(id: Any, params: dict):
     """Handle tools/call — extracted from handle_request for clarity."""
+    started_at = _time.monotonic()
+    index_freshness = "checked"
     # Auto-reindex check
     try:
         try:
@@ -405,6 +474,7 @@ def _handle_tool_call(id: Any, params: dict):
             from index_store import _maybe_auto_reindex
         _maybe_auto_reindex()
     except (OSError, RuntimeError) as e:
+        index_freshness = "unknown"
         logger.debug("Auto-reindex skipped: %s", e)
 
     tool_name = params.get("name", "")
@@ -424,9 +494,17 @@ def _handle_tool_call(id: Any, params: dict):
             from execution_guard import check_enforcement, record_tool_call, register_task
         _guard_warning = check_enforcement(tool_name, arguments)
         if _guard_warning:
-            send_response(id, {
-                "content": [{"type": "text", "text": json.dumps(_guard_warning, ensure_ascii=False, indent=2)}],
-            })
+            runtime = _runtime_envelope(
+                tool_name, arguments, started_at, index_freshness
+            )
+            send_response(
+                id,
+                _tool_response_payload(
+                    _guard_warning,
+                    runtime,
+                    json.dumps(_guard_warning, ensure_ascii=False, indent=2),
+                ),
+            )
             return
     except (ImportError, AttributeError) as e:
         logger.debug("Execution guard unavailable: %s", e)
@@ -455,14 +533,18 @@ def _handle_tool_call(id: Any, params: dict):
             logger.debug("Guard record skipped: %s", e)
 
         result_text = json.dumps(result, ensure_ascii=False, indent=2)
+        runtime = _runtime_envelope(
+            tool_name, arguments, started_at, index_freshness
+        )
 
         # Structural enforcement: inject directive after analyze_task / task(plan)
         if _is_plan and isinstance(result, dict):
             result_text += _build_analyze_task_directive(result)
 
-        send_response(id, {
-            "content": [{"type": "text", "text": result_text}],
-        })
+        payload = _tool_response_payload(result, runtime, result_text)
+        if _is_plan and isinstance(result, dict):
+            payload["content"][0]["text"] += _build_analyze_task_directive(result)
+        send_response(id, payload)
     except Exception as e:
         send_error(id, -32000, str(e))
 

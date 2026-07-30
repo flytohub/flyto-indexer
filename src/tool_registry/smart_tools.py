@@ -286,7 +286,9 @@ SMART_TOOLS: list = [
             "- types: type schemas + cross-project contract drift\n"
             "- conventions: naming styles, patterns, imports, error handling conventions\n"
             "- change_patterns: files that frequently change together (from git history)\n"
-            "- profile: full project profile (structure, APIs, models, deps, patterns, git)\n\n"
+            "- profile: bounded project profile (structure, APIs, models, deps, patterns, git)\n\n"
+            "Profile responses default to compact mode with bounded lists. Use result_mode='paged' "
+            "to page the full shape, or explicit result_mode='full' for an unbounded legacy result.\n\n"
             "Auto-enriches project-level queries with API counts, categories, and index freshness."
         ),
         "inputSchema": {
@@ -308,6 +310,30 @@ SMART_TOOLS: list = [
                 "path": {
                     "type": "string",
                     "description": "(dependencies) File path to analyze",
+                },
+                "result_mode": {
+                    "type": "string",
+                    "enum": ["compact", "paged", "full"],
+                    "default": "compact",
+                    "description": "(profile) Bounded compact/paged output, or explicit unbounded full output",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 20,
+                    "description": "(profile) Maximum items returned per list",
+                },
+                "cursor": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "default": 0,
+                    "description": "(profile) Zero-based page offset",
+                },
+                "include_non_production": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "(profile) Include test, fixture, example, and generated index signals",
                 },
             },
         },
@@ -529,8 +555,32 @@ SMART_TOOLS.append({
             },
             "compact": {
                 "type": "boolean",
+                "default": True,
+                "description": "Legacy switch: true selects compact; false selects full unless result_mode is set.",
+            },
+            "result_mode": {
+                "type": "string",
+                "enum": ["compact", "paged", "full"],
+                "default": "compact",
+                "description": "Bounded compact/paged output, or explicit unbounded full output.",
+            },
+            "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50,
+                "default": 20,
+                "description": "Maximum items returned per list.",
+            },
+            "cursor": {
+                "type": "integer",
+                "minimum": 0,
+                "default": 0,
+                "description": "Zero-based page offset.",
+            },
+            "include_non_production": {
+                "type": "boolean",
                 "default": False,
-                "description": "If true, return summary only (omit folder structure detail).",
+                "description": "Include test, fixture, example, and generated index signals.",
             },
         },
     },

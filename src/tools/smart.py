@@ -241,6 +241,26 @@ def _truncate_structure_lists(result: dict):
                 result["categories_summarized"] = True
 
 
+def _add_explicit_project_counts(projects_result: dict) -> dict:
+    """Label legacy overview counts without changing their existing values."""
+    if not isinstance(projects_result, dict):
+        return projects_result
+    total_indexed_files = 0
+    for item in projects_result.get("projects", []):
+        if not isinstance(item, dict):
+            continue
+        indexed_count = item.get("files", 0)
+        item["indexed_file_count"] = indexed_count
+        item["file_count_semantics"] = {
+            "files": "unique file paths represented in the code index",
+            "indexed_file_count": "unique file paths represented in the code index",
+        }
+        if isinstance(indexed_count, int):
+            total_indexed_files += indexed_count
+    projects_result["total_indexed_files"] = total_indexed_files
+    return projects_result
+
+
 # ---------------------------------------------------------------------------
 # 1. search — unified code search with auto-enrichment
 # ---------------------------------------------------------------------------
@@ -840,8 +860,16 @@ def smart_task(action: str, description: str = "", targets: list = None,
 # 5. structure — project overview with auto-enrichment
 # ---------------------------------------------------------------------------
 
-def smart_structure(project: str = None, focus: str = None,
-                    symbol_id: str = None, path: str = None) -> dict:
+def smart_structure(
+    project: str = None,
+    focus: str = None,
+    symbol_id: str = None,
+    path: str = None,
+    result_mode: str = "compact",
+    limit: int = 20,
+    cursor: int = 0,
+    include_non_production: bool = False,
+) -> dict:
     """Project structure overview. Auto-enriches based on focus."""
     info = _info_mod()
     refs = _refs_mod()
@@ -960,11 +988,17 @@ def smart_structure(project: str = None, focus: str = None,
         if not scan_path:
             scan_path = os.getcwd()
         from pathlib import Path as _Path
-        return _pp.build_project_profile(_Path(scan_path))
+        return _pp.build_project_profile(
+            _Path(scan_path),
+            result_mode=result_mode,
+            limit=limit,
+            cursor=cursor,
+            include_non_production=include_non_production,
+        )
 
     # --- Default: project overview ---
     try:
-        result["projects"] = info.list_projects()
+        result["projects"] = _add_explicit_project_counts(info.list_projects())
     except Exception as e:
         logger.debug("list_projects failed: %s", e)
         result["projects_error"] = str(e)

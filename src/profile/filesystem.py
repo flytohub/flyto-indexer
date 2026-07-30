@@ -9,9 +9,55 @@ from pathlib import Path
 from .constants import SKIP_DIRS, EXT_LANG, CONFIG_FILES
 
 
+_FIXTURE_DIRS = frozenset({
+    "fixture", "fixtures", "testdata", "__snapshots__", "snapshots",
+    "golden", "goldens", "mock", "mocks", "__mocks__",
+})
+_TEST_DIRS = frozenset({"test", "tests", "__tests__", "spec", "specs"})
+_EXAMPLE_DIRS = frozenset({
+    "example", "examples", "sample", "samples", "demo", "demos", "playground",
+})
+_GENERATED_DIRS = frozenset({
+    "generated", "__generated__", "gen", "autogen", "codegen",
+})
+_GENERATED_NAMES = frozenset({
+    "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "poetry.lock",
+    "cargo.lock", "composer.lock",
+})
+FILE_CLASSES = ("source", "test", "fixture", "example", "generated")
+
+
+def classify_path(path: str) -> str:
+    """Classify a project-relative path for profile scoring and reporting."""
+    normalized = path.replace("\\", "/").strip("/")
+    parts = [part.lower() for part in normalized.split("/") if part]
+    name = parts[-1] if parts else ""
+    dirs = set(parts[:-1])
+
+    if (
+        dirs & _GENERATED_DIRS
+        or name in _GENERATED_NAMES
+        or ".generated." in name
+        or name.endswith((".min.js", ".min.css", ".pb.go", "_pb2.py"))
+    ):
+        return "generated"
+    if dirs & _FIXTURE_DIRS:
+        return "fixture"
+    if dirs & _TEST_DIRS or (
+        name.startswith("test_")
+        or name.endswith(("_test.py", "_test.go", ".test.ts", ".test.js",
+                          ".spec.ts", ".spec.js", ".spec.tsx", ".test.tsx"))
+    ):
+        return "test"
+    if dirs & _EXAMPLE_DIRS:
+        return "example"
+    return "source"
+
+
 def scan_filesystem(project_path: Path) -> dict:
     """Walk project directory to collect structure, languages, and signals."""
     file_count = 0
+    file_class_counts = Counter()
     folder_counts = {}  # relative dir path -> file count (top 2 levels)
     lang_counter = Counter()
     config_files_found = []
@@ -45,6 +91,7 @@ def scan_filesystem(project_path: Path) -> dict:
             file_count += 1
             rel_file = os.path.join(rel_dir, fname) if rel_dir != "." else fname
             all_files.append(rel_file)
+            file_class_counts[classify_path(rel_file)] += 1
 
             # Language detection
             ext = os.path.splitext(fname)[1].lower()
@@ -107,9 +154,26 @@ def scan_filesystem(project_path: Path) -> dict:
         {"path": k, "files": v}
         for k, v in sorted(folder_counts.items(), key=lambda x: -x[1])
     ]
+    classified_counts = {
+        file_class: file_class_counts.get(file_class, 0)
+        for file_class in FILE_CLASSES
+    }
+    non_production_count = file_count - classified_counts["source"]
 
     return {
+        # ``file_count`` remains the filesystem total for backward compatibility.
         "file_count": file_count,
+        "total_file_count": file_count,
+        "source_file_count": classified_counts["source"],
+        "non_production_file_count": non_production_count,
+        "file_class_counts": classified_counts,
+        "file_count_semantics": {
+            "file_count": "all non-skipped filesystem files",
+            "total_file_count": "all non-skipped filesystem files",
+            "source_file_count": "production/source files only",
+            "non_production_file_count": "test + fixture + example + generated files",
+            "indexed_file_count": "unique file paths represented in the code index",
+        },
         "folder_structure": folder_structure[:30],  # cap to top 30
         "languages": dict(lang_counter.most_common()),
         "has_docker": has_docker,

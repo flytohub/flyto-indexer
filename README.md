@@ -129,6 +129,32 @@ Focused tools also cover secrets, taint, SBOM, licenses, architecture layers,
 documentation, PR risk, and workspace verification. See the
 [source-backed MCP reference](docs/reference/mcp-tools.md).
 
+### MCP transport and response budgets
+
+`stdio` remains the default transport. For clients that benefit from a
+persistent local connection, run the optional loopback-only Streamable HTTP
+bridge:
+
+```bash
+flyto-index-mcp-http --port 8765
+# MCP endpoint: http://127.0.0.1:8765/mcp
+# health:       http://127.0.0.1:8765/health
+```
+
+The bridge keeps one stdio child warm, restarts it after a failure, and only
+replays requests declared read-only. It refuses non-loopback binds.
+
+`structure(focus="profile")` and `project_profile` now default to bounded
+`compact` results. Use `limit` and `cursor` to page lists, `result_mode="paged"`
+for the complete paged shape, or explicit `result_mode="full"` for the legacy
+unbounded response. Profile counts distinguish filesystem total, production
+source, indexed, test, fixture, example, and generated files. Test fixtures do
+not affect production API/model signals unless
+`include_non_production=true`.
+
+Every MCP tool result includes `_runtime` metadata with the runtime version,
+commit, index freshness, elapsed time, and result mode.
+
 ## CLI
 
 ```bash
