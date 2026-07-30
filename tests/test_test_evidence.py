@@ -155,6 +155,15 @@ def test_branch_coverage_arcs_map_back_to_line_contexts(tmp_path):
     }
 
 
+def test_missing_sqlite_context_artifact_is_read_only(tmp_path):
+    from src.test_evidence import parse_sqlite_contexts
+
+    missing = tmp_path / ".coverage"
+
+    assert parse_sqlite_contexts(str(missing), str(tmp_path)) == {}
+    assert not missing.exists()
+
+
 def test_lcov_tn_context_is_preserved(tmp_path):
     lcov_path = tmp_path / "lcov.info"
     lcov_path.write_text(

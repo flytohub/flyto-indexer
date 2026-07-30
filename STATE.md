@@ -76,10 +76,10 @@
   instead of misclassifying locale and content directories as software modules.
 - Package, MCP registry, and MCP initialization versions are synchronized and
   enforced by tests and CI. Every built-in rule YAML file is parsed in tests.
-- Latest local verification: `1887 passed, 1 skipped`; Ruff passed across the
+- Latest local verification: `1889 passed, 1 skipped`; Ruff passed across the
   repository; mypy found no issues in 147 source files; the offline corpus
   passed 13/13 with 1.0 precision, 1.0 recall, zero false positives, p95 case
-  latency 200.17 ms, and stable evidence fingerprint `203edae3857a360d`;
+  latency 175.03 ms, and stable evidence fingerprint `203edae3857a360d`;
   sdist/wheel, isolated installed-feature, and real optional Tree-sitter
   grammar smokes passed; strict baseline self-verify passed 22/22 with 284
   files, 4,671 indexed symbols, health 82/100, and zero warnings.

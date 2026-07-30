@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **168 Python modules**, **67,387 lines**, and **2,071 class/function/method declarations**.
+Generated inventory: **168 Python modules**, **67,391 lines**, and **2,071 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -135,7 +135,7 @@ Generated inventory: **168 Python modules**, **67,387 lines**, and **2,071 class
 | [`src/signature.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/signature.py#L1) | 307 | 9 | `ast, dataclasses, enum, re, typing` | Semantic Diff — Signature change detection for indexed symbols. |
 | [`src/synonyms.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/synonyms.py#L1) | 76 | 1 | `re` | Programming concept synonyms for semantic-like search expansion. |
 | [`src/task_cli.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L1) | 210 | 7 | `__future__, json, pathlib, tools, typing` | Focused CLI adapter for the task grill/plan/gate/validate workflow. |
-| [`src/test_evidence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/test_evidence.py#L1) | 560 | 16 | `__future__, collections, hashlib, json, os, pathlib, safe_xml, sqlite3, time, typing, xml` | Coverage-context and JUnit evidence for changed-symbol test impact. |
+| [`src/test_evidence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/test_evidence.py#L1) | 562 | 16 | `__future__, collections, hashlib, json, os, pathlib, safe_xml, sqlite3, time, typing, xml` | Coverage-context and JUnit evidence for changed-symbol test impact. |
 | [`src/test_mapper.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/test_mapper.py#L1) | 221 | 12 | `re, threading, typing` | Test File Mapper — source ↔ test file bidirectional mapping. |
 | [`src/tool_registry/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/__init__.py#L1) | 26 | 0 | `dispatch, mcp_tools, smart_tools, vscode_tools` | tool_registry — tool definitions, schemas, and dispatch subpackage. |
 | [`src/tool_registry/dispatch.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/dispatch.py#L1) | 511 | 8 | `functools, lazy_imports, lsp, os, pathlib, task_dispatch, typing` | Unified tool dispatch — single entry point for all tool execution. |
@@ -149,7 +149,7 @@ Generated inventory: **168 Python modules**, **67,387 lines**, and **2,071 class
 | [`src/tools/code_info.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/code_info.py#L1) | 533 | 13 | `datetime, hashlib, index_store, json, pathlib, test_mapper` | Code information tools for flyto-indexer MCP server. |
 | [`src/tools/context_budget.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/context_budget.py#L1) | 224 | 4 | `git_intel, logging, os, tools, typing` | Context budget optimizer — rank and trim results by relevance for LLM consumption. |
 | [`src/tools/conventions.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/conventions.py#L1) | 263 | 7 | `collections, index_store, logging, re, typing` | Convention extraction — learn project coding patterns from the index. |
-| [`src/tools/coverage_intel.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/coverage_intel.py#L1) | 728 | 18 | `index_store, json, os, pathlib, re, safe_xml, sqlite3, subprocess, test_evidence, time, typing, xml` | Coverage Intelligence tools — coverage report, gap analysis, untested changes. |
+| [`src/tools/coverage_intel.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/coverage_intel.py#L1) | 730 | 18 | `index_store, json, os, pathlib, re, safe_xml, sqlite3, subprocess, test_evidence, time, typing, xml` | Coverage Intelligence tools — coverage report, gap analysis, untested changes. |
 | [`src/tools/data_flow.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/data_flow.py#L1) | 242 | 7 | `collections, index_store, logging, re, typing` | Data flow lite — lightweight parameter threading via name matching. |
 | [`src/tools/evidence_portfolio.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/evidence_portfolio.py#L1) | 431 | 10 | `datetime, git_intel, os, pathlib, typing` | Bounded, local Git evidence portfolios and deterministic verdicts. |
 | [`src/tools/git_intel.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/git_intel.py#L1) | 650 | 11 | `index_store, os, quality, re, subprocess, time, typing` | Git History Intelligence — hotspot detection, co-change analysis, churn tracking, and risk scoring. |

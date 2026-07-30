@@ -113,6 +113,8 @@ def parse_sqlite_contexts(
     target_lines: Optional[Mapping[str, Iterable[int]]] = None,
 ) -> Dict[str, Dict[int, Set[str]]]:
     """Parse coverage.py line_bits joined to dynamic test contexts."""
+    if not Path(db_path).is_file():
+        return {}
     result: Dict[str, Dict[int, Set[str]]] = defaultdict(
         lambda: defaultdict(set)
     )

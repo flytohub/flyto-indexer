@@ -132,6 +132,8 @@ def _parse_coverage_sqlite(db_path: str) -> Dict[str, Set[int]]:
     """
     project_root = str(Path(db_path).parent)
     result: Dict[str, Set[int]] = {}
+    if not Path(db_path).is_file():
+        return result
 
     try:
         with sqlite3.connect(db_path) as connection:

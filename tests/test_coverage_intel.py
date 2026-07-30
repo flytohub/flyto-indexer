@@ -167,6 +167,14 @@ class TestParseCoverageSqlite:
         result = _parse_coverage_sqlite(str(db_path))
         assert result == {}
 
+    def test_missing_artifact_is_not_created(self, tmp_path):
+        from src.tools.coverage_intel import _parse_coverage_sqlite
+
+        db_path = tmp_path / ".coverage"
+
+        assert _parse_coverage_sqlite(str(db_path)) == {}
+        assert not db_path.exists()
+
     def test_branch_coverage_arcs_are_projected_to_lines(self, tmp_project):
         from src.tools.coverage_intel import _parse_coverage_sqlite
 

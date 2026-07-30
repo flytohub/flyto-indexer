@@ -68,6 +68,7 @@ jobs:
             .coverage
             coverage.xml
             junit.xml
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
 
@@ -101,7 +102,9 @@ jobs:
               parse_sqlite_contexts,
           )
           from src.tools.coverage_intel import coverage_report
+          from pathlib import Path
 
+          assert Path(".coverage").is_file(), "hidden coverage DB was not transferred"
           contexts = parse_sqlite_contexts(
               ".coverage",
               ".",

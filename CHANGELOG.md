@@ -22,7 +22,7 @@
   per-language metrics, and enforced p50/p95/max latency evidence.
 - Added CI-produced per-test coverage contexts and JUnit artifacts, plus a
   downstream smoke proving changed-line-to-test correlation.
-- Added one canonical `health-snapshot.v1` across `audit`, project profiles,
+- Added one canonical `health-snapshot.v2` across `audit`, project profiles,
   and `verify`, including weighted complexity burden, high-confidence dead
   code, documentation, modularity, stable fingerprints, and project-owned
   quality budgets.
@@ -85,6 +85,8 @@
   protocol-level `ping` liveness probe.
 
 ### Fixed
+- Made coverage SQLite readers fail closed without creating a missing artifact,
+  and configured CI to preserve the hidden `.coverage` database across jobs.
 - Made canonical health expansions project the exact same content-addressed
   snapshot as the top-level audit, and fail closed if evidence diverges.
 - Made generated task plans reference only callable public MCP tools and public
