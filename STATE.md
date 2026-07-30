@@ -16,9 +16,24 @@
 - Verify schema v2 gives checks and sampled findings stable local IDs, compares
   new IDs inside existing warnings, preserves legacy status-only baselines, and
   exports the IDs as SARIF partial fingerprints.
-- A committed offline Python/JavaScript/Go evaluation corpus gates exact
-  findings, cross-file proof, precision, recall, negative-case false-positive
-  rate, scan errors, latency, and memory without network access.
+- Canonical `health-snapshot.v2` evidence is content-addressed and shared by
+  audit, verification, and smart-tool expansions; divergent evidence fails
+  closed instead of presenting contradictory health scores.
+- A committed offline Python/JavaScript/TypeScript/Go evaluation corpus gates
+  13 exact positive/negative cases, cross-file proof, four metamorphic
+  relations, pinned differential categories, precision, recall,
+  false-positive rate, scan errors, p50/p95/max latency, and memory without
+  network access.
+- Optional SCIP artifacts precede LSP and native reverse-index fallback for
+  precise references. Coverage.py contexts, LCOV, and JUnit artifacts map
+  changed lines and symbols to executed tests with hashes, freshness, and
+  explicit confidence.
+- Secret, SAST, IaC, taint, verification, and SARIF findings carry stable
+  fingerprints, confidence basis, traces, and suppression provenance while
+  preserving legacy scanner fields.
+- Incremental manifests hash full content and the scanner/parser pipeline.
+  Optional Tree-sitter validation is lazy, environment-gated, and falls back
+  to native scanners; the default path imports no parser dependency.
 - Stdio MCP requests have bounded deadlines and standard cancellation. A failed
   request leaves the same process ready for the next call; the blocking input
   reader adds no idle polling loop.
@@ -38,18 +53,19 @@
   active runtime version.
 - `scripts/install-local-cli.sh` installs the current checkout into an isolated
   venv and verifies that the executable version matches the checkout.
-- Version 2.14.2 declares PyYAML as the sole runtime dependency so project
-  policies and layer rules cannot be silently skipped in installed builds.
-  Missing or malformed policy parsing now fails verification closed, and the
-  wheel CI smoke loads and evaluates a real rule in an isolated environment.
+- Version 2.17.0 retains PyYAML as the sole runtime dependency. Coverage test
+  evidence and Tree-sitter grammars are explicit optional extras, so the
+  default install and scan path remain small. Missing or malformed policy
+  parsing still fails verification closed, and wheel CI verifies the runtime
+  dependency boundary in an isolated environment.
 - Durable user, operator, security, architecture, and whitepaper documentation
-  links to a generated source reference covering 162 non-test Python modules,
-  1,954 declarations, 36 CLI commands, 20 published MCP tools, 47 granular
-  compatibility definitions, seven local HTTP operations, 13 environment
+  links to a generated source reference covering 168 non-test Python modules,
+  2,071 declarations, 36 CLI commands, 20 published MCP tools, 47 granular
+  compatibility definitions, seven local HTTP operations, 14 environment
   variables, and eight built-in rule files.
 - Documentation scoring distinguishes inline summaries from exact source-linked
-  reference entries. The latest score is 92/100 with 66.6% inline coverage,
-  97.8% source-reference coverage, and 99.6% combined symbol coverage; external
+  reference entries. The latest score is 92/100 with 67.1% inline coverage,
+  99.9% source-reference coverage, and 99.9% combined symbol coverage; external
   links count only when they resolve to the indexed declaration inside the
   repository.
 - Generated source-reference manifests accept repository-local glob patterns,
@@ -60,12 +76,13 @@
   instead of misclassifying locale and content directories as software modules.
 - Package, MCP registry, and MCP initialization versions are synchronized and
   enforced by tests and CI. Every built-in rule YAML file is parsed in tests.
-- Latest local verification: `1851 passed, 1 skipped`; Ruff passed across the
-  repository; mypy found no issues in 144 source files; the offline corpus
-  passed 5/5 with 1.0 precision, 1.0 recall, zero false positives, and stable
-  evidence fingerprint `b1411e646bc8f7f6`; sdist/wheel build and isolated
-  wheel smoke passed; strict self-verify passed 18/18 with 269 files, 4,214
-  scanned symbols, and zero warnings.
+- Latest local verification: `1887 passed, 1 skipped`; Ruff passed across the
+  repository; mypy found no issues in 147 source files; the offline corpus
+  passed 13/13 with 1.0 precision, 1.0 recall, zero false positives, p95 case
+  latency 200.17 ms, and stable evidence fingerprint `203edae3857a360d`;
+  sdist/wheel, isolated installed-feature, and real optional Tree-sitter
+  grammar smokes passed; strict baseline self-verify passed 22/22 with 284
+  files, 4,671 indexed symbols, health 82/100, and zero warnings.
 
 ## Release Blockers
 

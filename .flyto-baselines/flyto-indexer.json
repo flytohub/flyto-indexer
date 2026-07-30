@@ -10,10 +10,10 @@
   "metadata": {
     "schema_version": "2",
     "project": "flyto-indexer",
-    "git_head": "f2b001388d5da783e2bb3a8c9261d05ce2c19ea3",
+    "git_head": "b3163d37adf1c61c5beafc8345510e479e5ee7b3",
     "git_dirty": false,
     "check_count": 20,
-    "check_fingerprint": "e19b6741c42927af2544b5415ce283eba03bd08eb012df627c18914989cb9bed"
+    "check_fingerprint": "15809f9ef8a5c8c994be819c72248bb6f84cd68976d36316d3b748e8d0880056"
   },
   "checks": [
     {
@@ -33,17 +33,29 @@
       "summary": "Index scan completed",
       "metrics": {
         "project": "flyto-indexer",
-        "files_scanned": 269,
-        "symbols_found": 4272,
-        "dependencies_found": 27277,
+        "pipeline_fingerprint": "6e0ce7e165c04cf3762c80b80ff5a09b4e62f5f06a30140fdb8131a0b07f2c1a",
+        "parser": {
+          "schema": "tree-sitter-adapter.v1",
+          "mode": "disabled",
+          "signature": "d5284b20017d9a2bf00c2dd5640ec1abc25322b44375ac2a898ababea4935a15",
+          "validated_files": 0,
+          "fallback_files": 0,
+          "parse_error_files": 0,
+          "native_definitions": 0,
+          "tree_sitter_definitions": 0,
+          "definition_mismatches": 0
+        },
+        "files_scanned": 284,
+        "symbols_found": 4387,
+        "dependencies_found": 28176,
         "errors": 0,
         "changes": "full rebuild",
         "timing": {
-          "scan_files": 1.351,
-          "resolve_deps": 0.872,
-          "build_reverse": 0.414,
-          "save_index": 4.323,
-          "total": 7.0
+          "scan_files": 1.422,
+          "resolve_deps": 0.939,
+          "build_reverse": 0.421,
+          "save_index": 4.587,
+          "total": 7.467
         }
       },
       "finding_id": "flyto-4d4b2e4f738d4d4fa3f3532b"
@@ -53,10 +65,10 @@
       "status": "pass",
       "summary": "Index graph is internally connected",
       "metrics": {
-        "files": 269,
-        "symbols": 4541,
-        "dependencies": 19609,
-        "reverse_targets": 3424,
+        "files": 284,
+        "symbols": 4671,
+        "dependencies": 20213,
+        "reverse_targets": 3517,
         "missing_file_symbols": 0,
         "missing_reverse_targets": 0,
         "missing_reverse_callers": 0
@@ -66,23 +78,24 @@
     {
       "name": "quality_health",
       "status": "pass",
-      "summary": "Canonical health snapshot is 81/100 (B)",
+      "summary": "Canonical health snapshot is 82/100 (B)",
       "metrics": {
-        "health_score": 81,
+        "health_score": 82,
         "health_grade": "B",
         "snapshot": {
-          "schema": "health-snapshot.v1",
-          "id": "07b4ce598a5b1512b937102327198f93ed71a6c40f25151ce94c65b6df605fd2",
+          "schema": "health-snapshot.v2",
+          "id": "dfe7531e86d5616303fc0e311514f67149a84f817401224d10bd9e4ecbdfd1c9",
           "project": "flyto-indexer",
           "analysis_scope": "production_source_only",
-          "symbol_count": 2070
+          "symbol_count": 2123,
+          "content_addressed": true
         },
         "complexity": {
-          "total_functions": 1785,
-          "complex_functions": 629,
-          "complexity_burden": 6986,
+          "total_functions": 1834,
+          "complex_functions": 641,
+          "complexity_burden": 7098,
           "max_complexity_score": 65,
-          "avg_complexity": 3.95
+          "avg_complexity": 3.91
         },
         "dead_code": {
           "dead_count": 14,
@@ -90,15 +103,15 @@
         },
         "documentation": {
           "score": 25,
-          "documented_symbols": 1435,
-          "total_symbols": 2070,
-          "coverage": 0.6932
+          "documented_symbols": 1479,
+          "total_symbols": 2123,
+          "coverage": 0.6967
         },
         "modularity": {
           "score": 25,
-          "referenced_symbols": 1864,
-          "total_symbols": 2070,
-          "reference_ratio": 0.9005,
+          "referenced_symbols": 1916,
+          "total_symbols": 2123,
+          "reference_ratio": 0.9025,
           "archetype": "application"
         }
       },
@@ -109,7 +122,7 @@
       "status": "pass",
       "summary": "No high-confidence single-project islands found",
       "metrics": {
-        "candidate_symbols": 1,
+        "candidate_symbols": 4,
         "island_count": 0,
         "island_samples": [],
         "api_definitions": 0,
@@ -136,8 +149,8 @@
       "summary": "Impact graph returned direct references",
       "metrics": {
         "symbol": "flyto-indexer:src/engine.py:class:IndexEngine",
-        "ref_count": 89,
-        "direct_references": 89,
+        "ref_count": 92,
+        "direct_references": 92,
         "unresolved_direct_references": 0
       },
       "finding_id": "flyto-9a6ce5754231dea6508906bd"
@@ -147,7 +160,7 @@
       "status": "pass",
       "summary": "Secret scan completed",
       "metrics": {
-        "files_scanned": 262,
+        "files_scanned": 273,
         "findings": 0,
         "critical": 0,
         "high": 0,
@@ -161,8 +174,8 @@
       "status": "pass",
       "summary": "Taint scan completed; no high-risk flows",
       "metrics": {
-        "sources": 429,
-        "sinks": 819,
+        "sources": 430,
+        "sinks": 820,
         "unsanitized": 0,
         "high_risk": 0,
         "sanitized": 0,
@@ -177,7 +190,7 @@
       "metrics": {
         "overall_score": 92,
         "readme_score": 58,
-        "inline_doc_coverage": 0.666,
+        "inline_doc_coverage": 0.671,
         "source_reference_coverage": 0.999,
         "symbol_doc_coverage": 0.999,
         "suggestions": 2
@@ -195,8 +208,8 @@
         "violations": 0,
         "pass_rate": 1.0,
         "layer_count": 7,
-        "layer_files_checked": 270,
-        "layer_edges_checked": 359,
+        "layer_files_checked": 285,
+        "layer_edges_checked": 368,
         "samples": []
       },
       "finding_id": "flyto-d754933c414e4aa80a60695d"
@@ -212,7 +225,9 @@
           "PyYAML>=6.0.3"
         ],
         "optional_dependency_groups": [
-          "dev"
+          "dev",
+          "test-evidence",
+          "treesitter"
         ],
         "ci_policy_smoke": true,
         "ci_metadata_assertion": true,
