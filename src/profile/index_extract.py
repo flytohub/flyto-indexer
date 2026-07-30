@@ -292,111 +292,29 @@ def load_content_file(index_dir: Path) -> dict:
 
 
 def compute_complexity_summary(symbols: dict, index_dir: Path) -> dict:
-    """Compute complexity summary from indexed symbols."""
+    """Compute complexity summary with the canonical indexed-symbol scorer."""
     try:
         try:
-            from ..analyzer.complexity import _line_threshold_for_file, _is_test_file
+            from ..analyzer.complexity import summarize_indexed_complexity
         except ImportError:
-            from analyzer.complexity import _line_threshold_for_file, _is_test_file
+            from analyzer.complexity import summarize_indexed_complexity
     except ImportError:
-        def _line_threshold_for_file(p):
-            return 100 if any(p.endswith(e) for e in (".vue", ".tsx", ".jsx")) else 80
-        def _is_test_file(p):
-            lower = p.lower()
-            return any(pat in lower for pat in ("test_", "_test.", ".test.", ".spec.", "/test/", "/tests/"))
+        return {}
 
     content_map = load_content_file(index_dir) if index_dir.exists() else {}
 
-    total_functions = 0
-    complex_functions = 0
-    all_scores = []
-    most_complex = []
+    def content_loader(symbol_id: str, symbol: dict) -> str:
+        inline = symbol.get("content")
+        if isinstance(inline, str) and inline:
+            return inline
+        return content_map.get(symbol_id, "")
 
-    for sym_id, sym in symbols.items():
-        sym_type = sym.get("type", "")
-        if sym_type not in ("function", "method"):
-            continue
-
-        path = sym.get("path", "")
-        if _is_test_file(path):
-            continue
-
-        total_functions += 1
-
-        content = ""
-        if isinstance(sym.get("content"), str) and sym["content"]:
-            content = sym["content"]
-        else:
-            content = content_map.get(sym_id, "")
-
-        if not content:
-            all_scores.append(0)
-            continue
-
-        lines_list = content.split("\n")
-        line_count = len(lines_list)
-        params_list = sym.get("params", [])
-        param_count = len(params_list) if isinstance(params_list, list) else 0
-
-        is_python = path.endswith(".py")
-        indent_unit = 4 if is_python else 2
-
-        max_depth = 0
-        branches = 0
-        base_indent = 0
-        for ln in lines_list:
-            stripped = ln.strip()
-            if stripped:
-                base_indent = len(ln) - len(ln.lstrip())
-                break
-
-        for ln in lines_list:
-            stripped = ln.strip()
-            if not stripped:
-                continue
-            indent = len(ln) - len(ln.lstrip())
-            depth = max(0, (indent - base_indent) // indent_unit)
-            max_depth = max(max_depth, depth)
-            if is_python:
-                branch_kws = ("if ", "elif ", "for ", "while ", "try:", "except ", "with ")
-            else:
-                branch_kws = ("if ", "if(", "else if ", "for ", "for(", "while ", "while(", "switch ", "switch(", "try ", "try{", "catch ", "catch(")
-            for kw in branch_kws:
-                if stripped.startswith(kw):
-                    branches += 1
-                    break
-
-        score = 0
-        line_threshold = _line_threshold_for_file(path)
-        if line_count > line_threshold:
-            score += (line_count - line_threshold) // 10
-        if max_depth > 3:
-            score += (max_depth - 3) * 5
-        if param_count > 5:
-            score += (param_count - 5) * 2
-        if branches > 10:
-            score += (branches - 10)
-
-        all_scores.append(score)
-
-        if score >= 5:
-            complex_functions += 1
-            most_complex.append({
-                "name": sym.get("name", ""),
-                "path": path,
-                "score": score,
-                "line": sym.get("start_line", sym.get("line", 0)),
-            })
-
-    most_complex.sort(key=lambda x: x["score"], reverse=True)
-    avg_complexity = round(sum(all_scores) / max(len(all_scores), 1), 2)
-
-    return {
-        "total_functions": total_functions,
-        "complex_functions": complex_functions,
-        "avg_complexity": avg_complexity,
-        "most_complex": most_complex[:50],
-    }
+    return summarize_indexed_complexity(
+        symbols,
+        content_loader,
+        min_score=5,
+        max_results=50,
+    )
 
 
 def compute_reachability(deps: dict, idx: dict) -> dict:
@@ -574,11 +492,34 @@ def extract_from_index(
     result["module_graph_summary"] = _compute_graph_summary(symbols, file_connections)
 
     result["complexity_summary"] = compute_complexity_summary(symbols, index_dir)
+    content_map = load_content_file(index_dir) if index_dir.exists() else {}
+
+    def health_content_loader(symbol_id: str, symbol: dict) -> str:
+        inline = symbol.get("content")
+        if isinstance(inline, str) and inline:
+            return inline
+        return content_map.get(symbol_id, "")
+
+    try:
+        try:
+            from ..quality import _code_health_score_from_index
+        except ImportError:
+            from quality import _code_health_score_from_index
+        result["health_snapshot"] = _code_health_score_from_index(
+            index,
+            project=index.get("project") or project_path.name,
+            content_loader=health_content_loader,
+            complexity_result=result["complexity_summary"],
+        )
+    except (ImportError, OSError, ValueError) as exc:
+        logger.debug("Canonical health snapshot unavailable: %s", exc)
+        result["health_snapshot"] = {}
     result["_health_inputs"] = {
         "symbols": symbols,
         "reverse_index": reverse_index,
         "index_dir": index_dir,
         "complexity_summary": result["complexity_summary"],
+        "health_snapshot": result["health_snapshot"],
     }
     result["_raw_dependencies"] = index.get("dependencies", [])
     result["_raw_symbols"] = symbols

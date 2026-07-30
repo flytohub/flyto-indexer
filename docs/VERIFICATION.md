@@ -15,7 +15,13 @@ flyto-index verify . --full-scan --strict --json
 The gate rebuilds the index and checks index integrity, context lookup, impact
 resolution, secret and taint analysis, documentation coverage, agent guidance,
 repository rules and layers, package/runtime metadata, generated-index hygiene,
-and relevant working-tree conditions. `--strict` promotes warnings to failure.
+canonical code health, and relevant working-tree conditions. `--strict`
+promotes warnings to failure.
+
+The `quality_health` check is the same `health-snapshot.v1` used by `audit` and
+project profiles. Project policy may set `min_health_score`,
+`min_documentation_score`, `max_complex_functions`,
+`max_complexity_burden`, and `max_dead_code`.
 
 ## Workspace Gate
 
@@ -39,7 +45,13 @@ Verify result schema v2 assigns stable, privacy-preserving IDs to checks and
 individual secret/taint findings. IDs use rule, repository-relative path, and a
 bounded semantic anchor, but not line numbers or source excerpts. Regression
 mode therefore detects a new finding even when its parent check was already
-warning. A v1 baseline without IDs remains readable and compares status only.
+warning. It also compares canonical health score, complex-function count,
+complexity burden, dead-code count, and documentation score even when the check
+status remains `pass`. A v1 baseline without IDs remains readable.
+
+This intentionally follows a “no new debt” gate: absolute policy floors catch
+catastrophic drift, while the reviewed baseline blocks only newly-worse
+metrics. Existing debt stays visible without making the scanner unusable.
 
 SARIF output carries the same ID in `partialFingerprints.flytoFindingId/v1` and
 `properties.findingId`, with file and line evidence when a sampled finding has

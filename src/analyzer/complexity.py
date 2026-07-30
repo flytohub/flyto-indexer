@@ -12,7 +12,7 @@ import ast
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 # Load complexity thresholds from YAML (with hardcoded fallback)
 try:
@@ -99,6 +99,126 @@ class FunctionComplexity:
         if self.branches > 10:
             issues.append(f"Too many branches ({self.branches})")
         return issues
+
+
+def measure_indexed_function(
+    symbol_id: str,
+    symbol: dict,
+    content: str,
+) -> dict | None:
+    """Measure one indexed function with the canonical composite formula.
+
+    Audit and project-profile previously carried independent copies of this
+    calculation. Keeping the indexed-symbol adapter here makes every consumer
+    report the same score, burden, and hotspot ordering for one index snapshot.
+    """
+    if symbol.get("type") not in ("function", "method"):
+        return None
+
+    path = symbol.get("path", "")
+    lines = content.split("\n") if content else []
+    line_count = len(lines)
+    params = symbol.get("params", [])
+    param_count = len(params) if isinstance(params, list) else 0
+    is_python = path.endswith(".py")
+    indent_unit = 4 if is_python else 2
+
+    max_depth = 0
+    branches = 0
+    returns = 0
+    base_indent = 0
+    for line in lines:
+        if line.strip():
+            base_indent = len(line) - len(line.lstrip())
+            break
+
+    python_branches = (
+        "if ", "elif ", "for ", "while ", "try:", "except ", "with ",
+    )
+    other_branches = (
+        "if ", "if(", "else if ", "for ", "for(", "while ", "while(",
+        "switch ", "switch(", "try ", "try{", "catch ", "catch(",
+    )
+    branch_keywords = python_branches if is_python else other_branches
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        indent = len(line) - len(line.lstrip())
+        max_depth = max(max_depth, max(0, (indent - base_indent) // indent_unit))
+        if any(stripped.startswith(keyword) for keyword in branch_keywords):
+            branches += 1
+        if stripped == "return" or stripped.startswith("return "):
+            returns += 1
+
+    measured = FunctionComplexity(
+        file_path=path,
+        name=symbol.get("name", ""),
+        line_start=symbol.get("start_line", symbol.get("line", 0)),
+        line_end=symbol.get("end_line", symbol.get("line", 0)),
+        lines=line_count,
+        params=param_count,
+        max_depth=max_depth,
+        branches=branches,
+        returns=returns,
+    )
+    return {
+        "symbol_id": symbol_id,
+        "name": measured.name,
+        "path": path,
+        "line": measured.line_start,
+        "lines": line_count,
+        "params": param_count,
+        "max_depth": max_depth,
+        "branches": branches,
+        "returns": returns,
+        "score": measured.score,
+        "issues": measured.issues,
+    }
+
+
+def summarize_indexed_complexity(
+    symbols: dict,
+    content_loader: Callable[[str, dict], str],
+    *,
+    min_score: int = 5,
+    max_results: int = 50,
+    path_filter: Callable[[str], bool] | None = None,
+) -> dict:
+    """Return one deterministic complexity summary for indexed symbols."""
+    total_functions = 0
+    scores: list[int] = []
+    complex_functions: list[dict] = []
+
+    for symbol_id, symbol in symbols.items():
+        if symbol.get("type") not in ("function", "method"):
+            continue
+        path = symbol.get("path", "")
+        if _is_test_file(path) or (path_filter is not None and not path_filter(path)):
+            continue
+
+        total_functions += 1
+        content = content_loader(symbol_id, symbol) or ""
+        measured = measure_indexed_function(symbol_id, symbol, content)
+        score = measured["score"] if measured is not None else 0
+        scores.append(score)
+        if measured is not None and score >= min_score:
+            complex_functions.append(measured)
+
+    complex_functions.sort(
+        key=lambda item: (-item["score"], item["path"], item["line"], item["name"]),
+    )
+    burden = sum(item["score"] for item in complex_functions)
+    top_score = complex_functions[0]["score"] if complex_functions else 0
+    return {
+        "total_functions": total_functions,
+        "complex_functions": len(complex_functions),
+        "complexity_burden": burden,
+        "max_complexity_score": top_score,
+        "avg_complexity": round(sum(scores) / max(len(scores), 1), 2),
+        "most_complex": complex_functions[:max_results],
+    }
 
 
 @dataclass

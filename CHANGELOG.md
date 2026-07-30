@@ -3,6 +3,17 @@
 ## Unreleased
 
 ### Added
+- Added one canonical `health-snapshot.v1` across `audit`, project profiles,
+  and `verify`, including weighted complexity burden, high-confidence dead
+  code, documentation, modularity, stable fingerprints, and project-owned
+  quality budgets.
+- Added regression-only quality comparison for health score, complex-function
+  count, complexity burden, dead code, and documentation score, so CI can
+  reject newly-worse code without requiring a disruptive legacy cleanup.
+- Added HTTP MCP runtime telemetry and resilience: queued concurrency metrics,
+  p50/p95 latency with an explicit budget, deadline-specific 504 responses,
+  live-child protocol recovery, active-request cancellation, and child
+  self-healing.
 - Added `task(action="grill")`, a persistent, provider- and language-neutral
   pre-plan decision workflow with repository fact resolution, dependency
   frontiers, one-question interactive mode, bounded batch mode, recommended
@@ -55,6 +66,14 @@
   protocol-level `ping` liveness probe.
 
 ### Fixed
+- Made generated task plans reference only callable public MCP tools and public
+  phase names. Gate failures now return exact `required_state` keys, and
+  compound contracts advance one subtask at a time.
+- Split the CLI parser/dispatcher, task and structure focus branches, and tool
+  registry into responsibility-focused units while preserving command, MCP,
+  and result schemas.
+- Made `audit --focus all` actually expand every dimension and replaced
+  internal-only follow-up tool names with executable public next actions.
 - Made repository fact resolution require normalized exact evidence by default,
   added explicit alternate policies, serialized session updates across POSIX
   processes, and made an incomplete CLI freeze exit non-zero.

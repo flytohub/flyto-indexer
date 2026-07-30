@@ -228,8 +228,15 @@ runtime, packaging, and working-tree checks for one repository.
 `verify-baseline` records or compares accepted findings so CI can detect
 regressions without hiding existing debt.
 
+`audit`, project profiles, and `verify` consume one canonical
+`health-snapshot.v1`. The snapshot fixes analysis scope to production source
+and records a stable symbol fingerprint, weighted complexity burden,
+high-confidence dead code, documentation coverage, and modularity. Public
+surfaces cannot silently disagree about the same commit.
+
 Verify schema v2 assigns stable IDs to checks and individual sampled findings.
 Regression comparison catches new finding IDs inside an already-warning check,
+and newly-worse canonical quality metrics inside an otherwise passing check,
 while legacy status-only baselines remain compatible. SARIF exports the same
 fingerprint for line-move correlation.
 

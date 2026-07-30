@@ -444,6 +444,8 @@ def test_run_verification_closes_core_loops(tmp_path):
     checks = {check["name"]: check for check in result["checks"]}
     assert checks["runtime_dependencies"]["status"] == "pass"
     assert checks["index_integrity"]["status"] == "pass"
+    assert checks["quality_health"]["status"] == "pass"
+    assert checks["quality_health"]["metrics"]["snapshot"]["schema"] == "health-snapshot.v1"
     assert checks["context_loop"]["status"] == "pass"
     assert checks["impact_loop"]["status"] == "pass"
     assert checks["weak_scan_secrets"]["status"] == "pass"
@@ -704,6 +706,48 @@ def test_regression_gate_detects_new_finding_when_status_is_unchanged():
         "reason": "new finding",
         "new_finding_ids": ["flyto-new"],
     }]
+
+
+def test_regression_gate_detects_quality_metric_worsening():
+    baseline = {
+        "checks": [{
+            "name": "quality_health",
+            "status": "pass",
+            "metrics": {
+                "health_score": 80,
+                "complexity": {
+                    "complex_functions": 10,
+                    "complexity_burden": 100,
+                },
+                "dead_code": {"dead_count": 2},
+                "documentation": {"score": 20},
+            },
+        }],
+    }
+    current = [{
+        "name": "quality_health",
+        "status": "pass",
+        "metrics": {
+            "health_score": 79,
+            "complexity": {
+                "complex_functions": 11,
+                "complexity_burden": 105,
+            },
+            "dead_code": {"dead_count": 3},
+            "documentation": {"score": 19},
+        },
+    }]
+
+    regressions = _find_status_regressions(current, baseline)
+
+    assert regressions[0]["reason"] == "quality metric worsened"
+    assert {item["metric"] for item in regressions[0]["metrics"]} == {
+        "health_score",
+        "complex_functions",
+        "complexity_burden",
+        "dead_code",
+        "documentation_score",
+    }
 
 
 def test_legacy_baseline_without_finding_ids_keeps_status_only_behavior():
@@ -1390,6 +1434,33 @@ def test_verify_policy_budget_allows_named_warning(tmp_path):
     assert checks["agent_hygiene"]["status"] == "warn"
     assert checks["policy_budget"]["status"] == "pass"
     assert result["pass"] is True
+
+
+def test_verify_policy_budget_enforces_canonical_quality_limits(tmp_path):
+    _write_project(tmp_path)
+    policy = tmp_path / ".flyto-rules.yaml"
+    policy.write_text(
+        "verify:\n"
+        "  min_health_score: 101\n"
+        "  min_documentation_score: 26\n"
+        "  max_complex_functions: -1\n"
+        "  max_complexity_burden: -1\n"
+        "  max_dead_code: -1\n",
+        encoding="utf-8",
+    )
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    violations = checks["policy_budget"]["metrics"]["violations"]
+    assert checks["policy_budget"]["status"] == "fail"
+    assert {item["rule"] for item in violations} == {
+        "min_health_score",
+        "min_documentation_score",
+        "max_complex_functions",
+        "max_complexity_burden",
+        "max_dead_code",
+    }
 
 
 def test_verify_rules_policy_passes_with_real_layer_edges(tmp_path):

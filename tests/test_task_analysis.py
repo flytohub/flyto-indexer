@@ -659,6 +659,7 @@ class TestTaskGateCheck:
         assert result["decision"] == "blocked"
         assert "TEST_REVIEW_REQUIRED" in result["reason_codes"]
         assert "tests_reviewed" in result["required_actions"]
+        assert result["required_state"] == {"tests_reviewed": True}
 
     def test_pass_with_tests_reviewed(self):
         from tools.task_analysis import task_gate_check
@@ -680,6 +681,7 @@ class TestTaskGateCheck:
         )
         assert result["pass"] is False
         assert "IMPACT_ANALYSIS_REQUIRED" in result["reason_codes"]
+        assert result["required_state"] == {"impact_analysis_done": True}
 
     def test_blocked_public_contract_change(self):
         from tools.task_analysis import task_gate_check
@@ -696,6 +698,7 @@ class TestTaskGateCheck:
         )
         assert result["pass"] is False
         assert "HUMAN_REVIEW_REQUIRED_FOR_PUBLIC_CONTRACT_CHANGE" in result["reason_codes"]
+        assert result["required_state"] == {"human_review_completed": True}
 
     def test_pass_public_contract_after_review(self):
         from tools.task_analysis import task_gate_check
@@ -781,6 +784,47 @@ class TestTaskGateCheck:
         )
         assert result["pass"] is True
         assert result["mapped_to_gate"] == "finalize"
+
+    def test_public_phase_names_map_to_internal_gates(self):
+        from tools.task_analysis import task_gate_check
+
+        contract = self._make_contract(must_run_impact_analysis=True)
+        result = task_gate_check(
+            task_contract=contract,
+            next_phase="assess",
+            current_state={"impact_analysis_done": False},
+        )
+
+        assert result["pass"] is False
+        assert result["phase"] == "plan_changes"
+        assert result["mapped_to_gate"] == "plan_changes"
+        assert result["required_state"] == {"impact_analysis_done": True}
+
+    def test_compound_gate_advances_one_subtask_at_a_time(self):
+        from tools.task_analysis import task_gate_check
+
+        subtask = self._make_contract(must_run_impact_analysis=True)
+        subtask.update({"intent": "refactor", "targets": ["alpha"]})
+        second = self._make_contract()
+        second.update({"intent": "cleanup", "targets": ["beta"]})
+        contract = {
+            "task_profile": {"compound": True},
+            "sub_tasks": [subtask, second],
+        }
+
+        first = task_gate_check(
+            contract,
+            next_phase="assess",
+            current_state={"impact_analysis_done": True},
+        )
+        second_result = task_gate_check(
+            contract,
+            next_phase="assess",
+            current_state={"completed_subtasks": ["subtask_1"]},
+        )
+
+        assert first["active_subtask"]["id"] == "subtask_1"
+        assert second_result["active_subtask"]["id"] == "subtask_2"
 
     def test_gate_phase_no_mapping_info(self):
         """Direct gate phase names don't include mapping info."""
@@ -990,7 +1034,7 @@ class TestExecutionPlan:
             assert isinstance(step["depends_on"], list)
 
     def test_first_step_scopes_callers(self):
-        """First step for refactor should scope callers via find_references."""
+        """First step for refactor scopes callers via the public impact tool."""
         from tools.task_analysis import analyze_task
         result = analyze_task(
             description="Refactor login",
@@ -999,9 +1043,9 @@ class TestExecutionPlan:
         )
         plan = result["execution_plan"]
         first = plan[0]
-        assert first["tool"] == "find_references"
+        assert first["tool"] == "impact"
         assert first["purpose"] == "scope_callers"
-        assert "symbol_id" in first["args"]
+        assert "target" in first["args"]
 
     def test_args_prefilled_with_target(self):
         """Step args contain the resolved target's symbol_id."""
@@ -1014,19 +1058,44 @@ class TestExecutionPlan:
         plan = result["execution_plan"]
         ref_steps = [s for s in plan if s["purpose"] == "scope_callers"]
         assert len(ref_steps) >= 1
-        assert ref_steps[0]["args"]["symbol_id"] == "proj-a:src/auth.py:function:validate_token"
+        assert ref_steps[0]["args"]["target"] == "proj-a:src/auth.py:function:validate_token"
 
     def test_has_gate_steps(self):
-        """Plan includes task_gate_check steps."""
+        """Plan includes executable public task gate steps."""
         from tools.task_analysis import analyze_task
         result = analyze_task(
             description="Refactor login",
             targets=["login"],
             intent="refactor",
         )
-        gate_steps = [s for s in result["execution_plan"]
-                      if s["tool"] == "task_gate_check"]
+        gate_steps = [
+            step
+            for step in result["execution_plan"]
+            if step["tool"] == "task" and step["args"].get("action") == "gate"
+        ]
         assert len(gate_steps) >= 1
+
+    def test_plan_only_references_public_mcp_tools(self):
+        from tools.task_analysis import analyze_task
+
+        result = analyze_task(
+            description="Refactor login",
+            targets=["login"],
+            intent="refactor",
+        )
+
+        public_tools = {
+            "audit",
+            "search",
+            "structure",
+            "impact",
+            "task",
+            "verify",
+            "scan_documentation",
+        }
+        assert {
+            step["tool"] for step in result["execution_plan"]
+        } <= public_tools
 
     def test_gate_depends_on_prior_steps(self):
         """Gate steps depend on earlier inspection steps."""
@@ -1129,8 +1198,13 @@ class TestExecutionPlan:
                 ["blast_radius", "breaking_risk", "test_risk",
                  "cross_coupling", "complexity", "rollback_difficulty"]}
         plan = _build_execution_plan(resolved, dims, "refactor", {})
-        # Both targets should have find_references steps
-        ref_steps = [s for s in plan if s["tool"] == "find_references"]
+        # Both targets should have public impact steps
+        ref_steps = [
+            step
+            for step in plan
+            if step["tool"] == "impact"
+            and step["purpose"].startswith("scope_callers")
+        ]
         assert len(ref_steps) >= 2
 
     def test_test_coverage_step_uses_canonical_dispatch_argument(self):
@@ -1156,7 +1230,7 @@ class TestExecutionPlan:
             step for step in plan if step["purpose"] == "verify_test_coverage"
         )
 
-        assert test_step["args"] == {"path": "src/auth.py"}
+        assert test_step["args"] == {"query": "tests covering src/auth.py"}
 
     def test_test_risk_maps_target_and_callers_in_their_projects(self):
         from tools.task_analysis import _score_test_risk

@@ -306,6 +306,28 @@ def build_health_dims(idx: dict, project_type: str) -> dict:
     health_inputs = idx.get("_health_inputs")
     if not health_inputs:
         return {"overall": {"score": 0, "max": 100, "grade": "?"}}
+    canonical = health_inputs.get("health_snapshot")
+    if isinstance(canonical, dict) and canonical.get("breakdown"):
+        result = {}
+        for name, dimension in canonical["breakdown"].items():
+            if not isinstance(dimension, dict):
+                continue
+            item = dict(dimension)
+            item["status"] = _status_from_score(int(item.get("score", 0)))
+            metrics = item.get("metrics") or {}
+            if name == "complexity":
+                item["complex_count"] = metrics.get("complex_functions", 0)
+            elif name == "dead_code":
+                item["dead_count"] = metrics.get("dead_count", 0)
+                item["dead_symbols"] = item.get("symbols", [])
+            result[name] = item
+        result["overall"] = {
+            "score": canonical.get("score", 0),
+            "max": 100,
+            "grade": canonical.get("grade", "?"),
+        }
+        result["snapshot"] = canonical.get("snapshot", {})
+        return result
     return compute_health_dimensions(
         health_inputs["symbols"],
         health_inputs["reverse_index"],

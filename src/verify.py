@@ -241,6 +241,7 @@ def run_verification(
         add_check("scan", "pass", "Existing .flyto-index loaded; scan not requested")
 
     _check_index_integrity(engine, add_check)
+    _check_quality_health(root, add_check)
     _check_single_project_islands(engine, add_check)
     _check_context_loop(engine, query, add_check)
     _check_impact_loop(engine, symbol, add_check)
@@ -2285,6 +2286,11 @@ def _check_policy_budget(
     warn_as_fail = set(_as_list(policy.get("warn_as_fail") or policy.get("fail_on_warn")))
     allow_warn = set(_as_list(policy.get("allow_warn") or policy.get("allow_warnings")))
     min_docs_score = _as_int(policy.get("min_docs_score"))
+    min_health_score = _as_int(policy.get("min_health_score"))
+    min_documentation_score = _as_int(policy.get("min_documentation_score"))
+    max_complex_functions = _as_int(policy.get("max_complex_functions"))
+    max_complexity_burden = _as_int(policy.get("max_complexity_burden"))
+    max_dead_code = _as_int(policy.get("max_dead_code"))
 
     violations: list[dict[str, Any]] = []
     for check in checks:
@@ -2305,6 +2311,49 @@ def _check_policy_budget(
                     "score": score,
                     "minimum": min_docs_score,
                 })
+        if name == "quality_health":
+            metrics = check.get("metrics") or {}
+            complexity = metrics.get("complexity") or {}
+            dead_code = metrics.get("dead_code") or {}
+            documentation = metrics.get("documentation") or {}
+            quality_limits = (
+                ("min_health_score", metrics.get("health_score"), min_health_score, "min"),
+                (
+                    "min_documentation_score",
+                    documentation.get("score"),
+                    min_documentation_score,
+                    "min",
+                ),
+                (
+                    "max_complex_functions",
+                    complexity.get("complex_functions"),
+                    max_complex_functions,
+                    "max",
+                ),
+                (
+                    "max_complexity_burden",
+                    complexity.get("complexity_burden"),
+                    max_complexity_burden,
+                    "max",
+                ),
+                (
+                    "max_dead_code",
+                    dead_code.get("dead_count"),
+                    max_dead_code,
+                    "max",
+                ),
+            )
+            for rule, actual, limit, direction in quality_limits:
+                if limit is None or not isinstance(actual, (int, float)):
+                    continue
+                violates = actual < limit if direction == "min" else actual > limit
+                if violates:
+                    violations.append({
+                        "check": name,
+                        "rule": rule,
+                        "actual": actual,
+                        "limit": limit,
+                    })
 
     checks.append({
         "name": "policy_budget",
@@ -2315,9 +2364,83 @@ def _check_policy_budget(
             "warn_as_fail": sorted(warn_as_fail),
             "allow_warn": sorted(allow_warn),
             "min_docs_score": min_docs_score,
+            "quality_budget": {
+                "min_health_score": min_health_score,
+                "min_documentation_score": min_documentation_score,
+                "max_complex_functions": max_complex_functions,
+                "max_complexity_burden": max_complexity_burden,
+                "max_dead_code": max_dead_code,
+            },
             "violations": violations,
         },
     })
+
+
+def _check_quality_health(root: Path, add_check) -> None:
+    """Attach canonical health metrics without failing on accepted legacy debt."""
+    try:
+        from .profile.index_extract import load_content_file, load_index_file
+        from .quality import _code_health_score_from_index
+    except ImportError:
+        from profile.index_extract import load_content_file, load_index_file
+        from quality import _code_health_score_from_index
+
+    index_dir = root / ".flyto-index"
+    index = load_index_file(index_dir)
+    if not index:
+        add_check(
+            "quality_health",
+            "warn",
+            "Canonical health snapshot unavailable because the index is missing",
+        )
+        return
+
+    content_map = load_content_file(index_dir)
+
+    def content_loader(symbol_id: str, symbol: dict) -> str:
+        inline = symbol.get("content")
+        if isinstance(inline, str) and inline:
+            return inline
+        return content_map.get(symbol_id, "")
+
+    health = _code_health_score_from_index(
+        index,
+        project=index.get("project") or root.name,
+        content_loader=content_loader,
+    )
+    if health.get("error"):
+        add_check(
+            "quality_health",
+            "warn",
+            str(health["error"]),
+            metrics={"snapshot": health.get("snapshot", {})},
+        )
+        return
+
+    breakdown = health.get("breakdown") or {}
+    add_check(
+        "quality_health",
+        "pass",
+        (
+            f"Canonical health snapshot is {health.get('score', 0)}/100 "
+            f"({health.get('grade', '?')})"
+        ),
+        metrics={
+            "health_score": health.get("score", 0),
+            "health_grade": health.get("grade", "?"),
+            "snapshot": health.get("snapshot", {}),
+            "complexity": (breakdown.get("complexity") or {}).get("metrics", {}),
+            "dead_code": (breakdown.get("dead_code") or {}).get("metrics", {}),
+            "documentation": {
+                "score": (breakdown.get("documentation") or {}).get("score", 0),
+                **((breakdown.get("documentation") or {}).get("metrics", {})),
+            },
+            "modularity": {
+                "score": (breakdown.get("modularity") or {}).get("score", 0),
+                **((breakdown.get("modularity") or {}).get("metrics", {})),
+            },
+        },
+    )
 
 
 def _check_mcp_registry(root: Path, add_check) -> None:
@@ -2683,6 +2806,19 @@ def _find_status_regressions(
                 "reason": "status worsened",
             })
             continue
+        if name == "quality_health":
+            metric_regressions = _find_quality_metric_regressions(
+                check,
+                baseline_checks.get(name) or {},
+            )
+            if metric_regressions:
+                regressions.append({
+                    "check": name,
+                    "baseline": baseline_status,
+                    "current": current_status,
+                    "reason": "quality metric worsened",
+                    "metrics": metric_regressions,
+                })
         if current_status not in {"warn", "fail"}:
             continue
         baseline_ids = _finding_ids_from_check(baseline_checks.get(name) or {})
@@ -2699,6 +2835,64 @@ def _find_status_regressions(
                 "new_finding_ids": new_ids,
             })
     return regressions
+
+
+def _find_quality_metric_regressions(
+    current: dict[str, Any],
+    baseline: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Compare accepted quality debt without imposing an absolute threshold."""
+    current_metrics = current.get("metrics") or {}
+    baseline_metrics = baseline.get("metrics") or {}
+    comparisons = (
+        ("health_score", ("health_score",), "min"),
+        (
+            "complex_functions",
+            ("complexity", "complex_functions"),
+            "max",
+        ),
+        (
+            "complexity_burden",
+            ("complexity", "complexity_burden"),
+            "max",
+        ),
+        ("dead_code", ("dead_code", "dead_count"), "max"),
+        (
+            "documentation_score",
+            ("documentation", "score"),
+            "min",
+        ),
+    )
+    regressions = []
+    for name, path, direction in comparisons:
+        current_value = _nested_metric(current_metrics, path)
+        baseline_value = _nested_metric(baseline_metrics, path)
+        if not isinstance(current_value, (int, float)) or not isinstance(
+            baseline_value,
+            (int, float),
+        ):
+            continue
+        worsened = (
+            current_value < baseline_value
+            if direction == "min"
+            else current_value > baseline_value
+        )
+        if worsened:
+            regressions.append({
+                "metric": name,
+                "baseline": baseline_value,
+                "current": current_value,
+            })
+    return regressions
+
+
+def _nested_metric(metrics: dict[str, Any], path: tuple[str, ...]) -> Any:
+    value: Any = metrics
+    for key in path:
+        if not isinstance(value, dict):
+            return None
+        value = value.get(key)
+    return value
 
 
 def _finding_ids_from_check(check: dict[str, Any]) -> set[str]:

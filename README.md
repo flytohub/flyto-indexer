@@ -172,6 +172,9 @@ not affect production API/model signals unless
 
 Every MCP tool result includes `_runtime` metadata with the runtime version,
 commit, index freshness, elapsed time, result mode, and request deadline.
+`audit`, `structure(focus="profile")`, and `verify` also share the same
+`health-snapshot.v1`; a score or complexity count therefore means the same
+thing on every surface.
 
 ## CLI
 
@@ -197,9 +200,9 @@ flyto-index verify . \
 ```
 
 Current baselines compare stable, privacy-preserving finding IDs as well as
-check status, so a new finding cannot hide behind an already-warning check.
-Line-number-only moves keep the same ID. Legacy baselines without finding IDs
-remain valid and retain status-only behavior.
+check status and canonical quality metrics, so a new finding or newly-worse
+complexity/dead-code/documentation result cannot hide behind accepted debt.
+Line-number-only moves keep the same ID. Legacy baselines remain readable.
 
 ## CI
 
@@ -217,6 +220,8 @@ verify:
   allow_warn: [docs_coverage]
   warn_as_fail: [agent_hygiene, generated_index_ignore, mcp_registry]
   min_docs_score: 60
+  min_health_score: 80
+  max_dead_code: 14
 
 layers:
   - name: ui

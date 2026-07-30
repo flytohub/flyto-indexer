@@ -4,16 +4,133 @@ Code Quality Tools — complexity, duplicates, security, staleness, health score
 Extracted from mcp_server.py. Imports index data directly from index_store.
 """
 
+import copy
+import hashlib
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
 try:
     from .index_store import load_index, get_symbol_content_text
-    from .analyzer.complexity import _line_threshold_for_file, _is_test_file
+    from .analyzer.complexity import (
+        _line_threshold_for_file,
+        _is_test_file,
+        summarize_indexed_complexity,
+    )
 except ImportError:
     from index_store import load_index, get_symbol_content_text
-    from analyzer.complexity import _line_threshold_for_file, _is_test_file
+    from analyzer.complexity import (
+        _line_threshold_for_file,
+        _is_test_file,
+        summarize_indexed_complexity,
+    )
+
+
+_HEALTH_CACHE: dict[tuple[str, str, str, int], dict] = {}
+
+
+def _health_cache_key(index: dict, project: str | None) -> tuple | None:
+    """Return a cache identity that changes whenever the index is rebuilt."""
+    indexed_at = str(index.get("indexed_at") or "")
+    if not indexed_at:
+        return None
+    return (
+        str(index.get("root_path") or ""),
+        indexed_at,
+        project or "",
+        len(index.get("symbols") or {}),
+    )
+
+
+def _normalize_complexity_result(result: dict) -> dict:
+    """Accept public complexity detail or the equivalent profile summary."""
+    return {
+        "total_analyzed": result.get(
+            "total_analyzed",
+            result.get("total_functions", 0),
+        ),
+        "complex_count": result.get(
+            "complex_count",
+            result.get("complex_functions", 0),
+        ),
+        "complexity_burden": result.get("complexity_burden", 0),
+        "max_complexity_score": result.get("max_complexity_score", 0),
+        "avg_complexity": result.get("avg_complexity", 0.0),
+        "functions": result.get("functions", result.get("most_complex", [])),
+    }
+
+
+def _is_production_path(path: str) -> bool:
+    """Use the profile classifier so audit and profile analyze one scope."""
+    try:
+        try:
+            from .profile.filesystem import classify_path
+        except ImportError:
+            from profile.filesystem import classify_path
+        return classify_path(path) == "source"
+    except ImportError:
+        return not _is_test_file(path)
+
+
+def _project_symbols(index: dict, project: str | None) -> dict:
+    symbols = index.get("symbols", {})
+    if not project:
+        return {
+            symbol_id: symbol
+            for symbol_id, symbol in symbols.items()
+            if _is_production_path(symbol.get("path", ""))
+        }
+    prefix = project.lower() + ":"
+    return {
+        symbol_id: symbol
+        for symbol_id, symbol in symbols.items()
+        if symbol_id.lower().startswith(prefix)
+        and _is_production_path(symbol.get("path", ""))
+    }
+
+
+def _health_snapshot(project: str | None, symbols: dict) -> dict:
+    """Build a stable evidence identity shared by audit/profile/verify."""
+    digest = hashlib.sha256()
+    for symbol_id, symbol in sorted(symbols.items()):
+        digest.update(symbol_id.encode("utf-8", errors="replace"))
+        digest.update(b"\0")
+        for field in ("path", "start_line", "end_line", "ref_count"):
+            digest.update(str(symbol.get(field, "")).encode("utf-8", errors="replace"))
+            digest.update(b"\0")
+    return {
+        "schema": "health-snapshot.v1",
+        "id": digest.hexdigest(),
+        "project": project or "",
+        "analysis_scope": "production_source_only",
+        "symbol_count": len(symbols),
+    }
+
+
+def _find_complex_functions_from_index(
+    index: dict,
+    *,
+    project: str | None,
+    max_results: int,
+    min_score: int,
+    content_loader=None,
+) -> dict:
+    symbols = _project_symbols(index, project)
+    loader = content_loader or get_symbol_content_text
+    summary = summarize_indexed_complexity(
+        symbols,
+        loader,
+        min_score=min_score,
+        max_results=max_results,
+    )
+    return {
+        "total_analyzed": summary["total_functions"],
+        "complex_count": summary["complex_functions"],
+        "complexity_burden": summary["complexity_burden"],
+        "max_complexity_score": summary["max_complexity_score"],
+        "avg_complexity": summary["avg_complexity"],
+        "functions": summary["most_complex"],
+    }
 
 
 def find_complex_functions(
@@ -26,110 +143,12 @@ def find_complex_functions(
     Scores each function/method based on: line count, nesting depth,
     parameter count, and branch count. Same thresholds as ComplexityAnalyzer.
     """
-    index = load_index()
-    symbols = index.get("symbols", {})
-
-    complex_fns = []
-    total_analyzed = 0
-
-    for sym_id, sym in symbols.items():
-        if project and not sym_id.lower().startswith(project.lower() + ":"):
-            continue
-
-        sym_type = sym.get("type", "")
-        if sym_type not in ("function", "method"):
-            continue
-
-        # Skip test files — test functions are naturally long procedural flows
-        path = sym.get("path", "")
-        if _is_test_file(path):
-            continue
-
-        total_analyzed += 1
-        content = get_symbol_content_text(sym_id, sym)
-        if not content:
-            continue
-
-        lines = content.split("\n")
-        line_count = len(lines)
-        params_list = sym.get("params", [])
-        param_count = len(params_list) if isinstance(params_list, list) else 0
-
-        # Detect language from path
-        is_python = path.endswith(".py")
-        indent_unit = 4 if is_python else 2
-
-        max_depth = 0
-        branches = 0
-        returns = 0
-
-        # Find base indent of the function content
-        base_indent = 0
-        for line in lines:
-            stripped = line.strip()
-            if stripped:
-                base_indent = len(line) - len(line.lstrip())
-                break
-
-        for line in lines:
-            stripped = line.strip()
-            if not stripped:
-                continue
-
-            indent = len(line) - len(line.lstrip())
-            depth = max(0, (indent - base_indent) // indent_unit)
-            max_depth = max(max_depth, depth)
-
-            if is_python:
-                branch_kws = ("if ", "elif ", "for ", "while ", "try:", "except ", "with ")
-            else:
-                branch_kws = ("if ", "if(", "else if ", "for ", "for(", "while ", "while(", "switch ", "switch(", "try ", "try{", "catch ", "catch(")
-            for kw in branch_kws:
-                if stripped.startswith(kw):
-                    branches += 1
-                    break
-
-            if stripped.startswith("return ") or stripped == "return":
-                returns += 1
-
-        score = 0
-        issues = []
-        line_threshold = _line_threshold_for_file(path)
-        if line_count > line_threshold:
-            score += (line_count - line_threshold) // 10
-            issues.append(f"Too long ({line_count} lines, limit {line_threshold})")
-        if max_depth > 3:
-            score += (max_depth - 3) * 5
-            issues.append(f"Nesting too deep (depth={max_depth})")
-        if param_count > 5:
-            score += (param_count - 5) * 2
-            issues.append(f"Too many parameters ({param_count})")
-        if branches > 10:
-            score += (branches - 10)
-            issues.append(f"Too many branches ({branches})")
-
-        if score >= min_score:
-            complex_fns.append({
-                "symbol_id": sym_id,
-                "name": sym.get("name", ""),
-                "path": path,
-                "line": sym.get("line", 0),
-                "lines": line_count,
-                "params": param_count,
-                "max_depth": max_depth,
-                "branches": branches,
-                "returns": returns,
-                "score": score,
-                "issues": issues,
-            })
-
-    complex_fns.sort(key=lambda x: x["score"], reverse=True)
-
-    return {
-        "total_analyzed": total_analyzed,
-        "complex_count": len(complex_fns),
-        "functions": complex_fns[:max_results],
-    }
+    return _find_complex_functions_from_index(
+        load_index(),
+        project=project,
+        max_results=max_results,
+        min_score=min_score,
+    )
 
 
 def find_duplicates(
@@ -535,81 +554,68 @@ def find_stale_files(
     }
 
 
-def code_health_score(project: str = None) -> dict:
-    """Compute an aggregate code health score (0-100) with A-F grade.
+def _grade_for_health_score(score: int) -> str:
+    if score >= 90:
+        return "A"
+    if score >= 80:
+        return "B"
+    if score >= 70:
+        return "C"
+    if score >= 60:
+        return "D"
+    return "F"
 
-    Breakdown: complexity (25), dead code (25), documentation (25), modularity (25).
-    """
-    index = load_index()
-    symbols = index.get("symbols", {})
 
-    if project:
-        symbols = {k: v for k, v in symbols.items() if k.lower().startswith(project.lower() + ":")}
+def _dead_code_from_index(index: dict, project: str | None) -> dict:
+    """Run the high-confidence dead-code engine against a supplied snapshot."""
+    try:
+        try:
+            from .tools.maintenance import _find_dead_code_from_index
+        except ImportError:
+            from tools.maintenance import _find_dead_code_from_index
+        return _find_dead_code_from_index(index, project=project, min_lines=5)
+    except ImportError:
+        return {"total_dead": 0, "dead_symbols": []}
 
+
+def _code_health_score_from_index(
+    index: dict,
+    *,
+    project: str | None,
+    content_loader=None,
+    dead_result: dict | None = None,
+    complexity_result: dict | None = None,
+) -> dict:
+    """Compute the canonical health snapshot used by every public surface."""
+    cache_key = _health_cache_key(index, project)
+    cacheable = dead_result is None
+    if cacheable and cache_key in _HEALTH_CACHE:
+        return copy.deepcopy(_HEALTH_CACHE[cache_key])
+
+    symbols = _project_symbols(index, project)
     total_symbols = len(symbols)
     if total_symbols == 0:
-        return {"error": "No symbols found", "score": 0, "grade": "N/A"}
+        return {
+            "error": "No symbols found",
+            "score": 0,
+            "grade": "N/A",
+            "snapshot": _health_snapshot(project, symbols),
+        }
 
-    # 1. Complexity score (0-25): composite score (lines + depth + params + branches)
-    func_count = 0
-    complex_count = 0
-    complexity_burden = 0
-    max_complexity_score = 0
-    for sym_id, sym in symbols.items():
-        if sym.get("type") not in ("function", "method"):
-            continue
-        path = sym.get("path", "")
-        if _is_test_file(path):
-            continue
-        func_count += 1
-        content = get_symbol_content_text(sym_id, sym)
-        if not content:
-            continue
-        lines = content.split("\n")
-        line_count = len(lines)
-        # Compute composite score (same formula as FunctionComplexity.score)
-        line_threshold = _line_threshold_for_file(path)
-        score = 0
-        if line_count > line_threshold:
-            score += (line_count - line_threshold) // 10
-        # Approximate depth from indentation
-        base_indent = 0
-        for ln in lines:
-            stripped = ln.strip()
-            if stripped:
-                base_indent = len(ln) - len(ln.lstrip())
-                break
-        is_python = path.endswith(".py")
-        indent_unit = 4 if is_python else 2
-        max_depth = 0
-        branches = 0
-        param_count = len(sym.get("params", []) or [])
-        for ln in lines:
-            stripped = ln.strip()
-            if not stripped:
-                continue
-            indent = len(ln) - len(ln.lstrip())
-            depth = max(0, (indent - base_indent) // indent_unit)
-            max_depth = max(max_depth, depth)
-            if is_python:
-                branch_kws = ("if ", "elif ", "for ", "while ", "try:", "except ", "with ")
-            else:
-                branch_kws = ("if ", "if(", "else if ", "for ", "for(", "while ", "while(", "switch ", "switch(", "try ", "try{", "catch ", "catch(")
-            for kw in branch_kws:
-                if stripped.startswith(kw):
-                    branches += 1
-                    break
-        if max_depth > 3:
-            score += (max_depth - 3) * 5
-        if param_count > 5:
-            score += (param_count - 5) * 2
-        if branches > 10:
-            score += (branches - 10)
-        if score >= 5:
-            complex_count += 1
-            complexity_burden += score
-            max_complexity_score = max(max_complexity_score, score)
-
+    complexity = _normalize_complexity_result(
+        complexity_result
+        or _find_complex_functions_from_index(
+            index,
+            project=project,
+            max_results=20,
+            min_score=5,
+            content_loader=content_loader,
+        )
+    )
+    func_count = complexity["total_analyzed"]
+    complex_count = complexity["complex_count"]
+    complexity_burden = complexity["complexity_burden"]
+    max_complexity_score = complexity["max_complexity_score"]
     complexity_score = _health_complexity_score(
         func_count=func_count,
         complex_count=complex_count,
@@ -617,107 +623,148 @@ def code_health_score(project: str = None) -> dict:
         max_complexity_score=max_complexity_score,
     )
 
-    # 2. Dead code score (0-25): penalty for unreferenced symbols
-    # Lazy import to avoid circular dependency
-    try:
-        from .tools.maintenance import find_dead_code
-    except ImportError:
-        try:
-            from tools.maintenance import find_dead_code
-        except ImportError:
-            # Fallback: skip dead code scoring
-            find_dead_code = None
-
-    if find_dead_code is not None:
-        dead_result = find_dead_code(project=project, min_lines=5)
-        dead_count = dead_result.get("total_dead", 0)
-    else:
-        dead_count = 0
+    dead_result = dead_result or _dead_code_from_index(index, project)
+    dead_count = dead_result.get("total_dead", 0)
     dead_ratio = dead_count / max(total_symbols, 1)
     dead_score = max(0, 25 - int(dead_ratio * 100))
 
-    # 3. Documentation score (0-25): reward for symbols with summaries
-    non_test_symbols = {k: v for k, v in symbols.items() if "/test" not in v.get("path", "").lower()}
-    documented = sum(1 for sym in non_test_symbols.values() if sym.get("summary"))
-    doc_total = max(len(non_test_symbols), 1)
+    documented = sum(1 for symbol in symbols.values() if symbol.get("summary"))
+    doc_total = max(total_symbols, 1)
     doc_ratio = documented / doc_total
     doc_score = min(25, round(doc_ratio / 0.7 * 25))
 
-    # 4. Modularity score (0-25): % of symbols with at least 1 reference
-    #    Detect project archetype: "toolbox" projects (high ratio of public
-    #    entry-point functions) naturally have lower cross-referencing.
-    ref_counts = [sym.get("ref_count", sym.get("reference_count", 0)) for sym in symbols.values()]
-    pct_with_refs = sum(1 for r in ref_counts if r > 0) / max(len(ref_counts), 1)
-
-    # Count entry-point functions: public, top-level, non-test
+    ref_counts = [
+        symbol.get("ref_count", symbol.get("reference_count", 0))
+        for symbol in symbols.values()
+    ]
+    referenced_count = sum(1 for count in ref_counts if count > 0)
+    pct_with_refs = referenced_count / max(len(ref_counts), 1)
     entry_points = sum(
-        1 for sym in symbols.values()
-        if sym.get("type") == "function"
-        and not sym.get("name", "_").startswith("_")
-        and "/test" not in sym.get("path", "").lower()
+        1
+        for symbol in symbols.values()
+        if symbol.get("type") == "function"
+        and not symbol.get("name", "_").startswith("_")
     )
-    total_functions = sum(1 for sym in symbols.values() if sym.get("type") == "function")
-    entry_point_ratio = entry_points / max(total_functions, 1)
-    is_toolbox = entry_point_ratio > 0.4
+    total_functions = sum(
+        1 for symbol in symbols.values() if symbol.get("type") == "function"
+    )
+    is_toolbox = entry_points / max(total_functions, 1) > 0.4
     modularity_baseline = 0.03 if is_toolbox else 0.08
     archetype = "toolbox" if is_toolbox else "application"
+    modularity_score = min(
+        25,
+        round(pct_with_refs / modularity_baseline * 25),
+    )
 
-    modularity_score = min(25, round(pct_with_refs / modularity_baseline * 25))
-
-    total_score = complexity_score + dead_score + doc_score + modularity_score
-
-    if total_score >= 90:
-        grade = "A"
-    elif total_score >= 80:
-        grade = "B"
-    elif total_score >= 70:
-        grade = "C"
-    elif total_score >= 60:
-        grade = "D"
-    else:
-        grade = "F"
-
-    # next_action: point to worst dimension
-    dimensions = {
-        "complexity": (complexity_score, "find_complex_functions", "Use find_complex_functions to identify refactoring targets."),
-        "dead_code": (dead_score, "find_dead_code", "Use find_dead_code to find removable symbols."),
-        "documentation": (doc_score, "update_description", "Use update_description to document undocumented files."),
-        "modularity": (modularity_score, "dependency_graph", "Use dependency_graph to find isolated modules."),
+    scores = {
+        "complexity": complexity_score,
+        "dead_code": dead_score,
+        "documentation": doc_score,
+        "modularity": modularity_score,
     }
-    worst_dim = min(dimensions, key=lambda k: dimensions[k][0])
-    worst_score, worst_tool, worst_hint = dimensions[worst_dim]
-    if total_score >= 90:
-        next_action = "Excellent health. No immediate action needed."
-    else:
-        next_action = f"Weakest area: {worst_dim} ({worst_score}/25). {worst_hint}"
+    total_score = sum(scores.values())
+    worst_dimension = min(scores, key=scores.get)
+    worst_score = scores[worst_dimension]
+    actions = {
+        "complexity": {
+            "tool": "audit",
+            "arguments": {"project": project, "focus": "complexity"},
+        },
+        "dead_code": {
+            "tool": "audit",
+            "arguments": {"project": project, "focus": "dead_code"},
+        },
+        "documentation": {
+            "tool": "scan_documentation",
+            "arguments": {},
+        },
+        "modularity": {
+            "tool": "structure",
+            "arguments": {"project": project, "focus": "profile"},
+        },
+    }
+    next_action = (
+        None
+        if total_score >= 90
+        else {
+            "reason": f"Weakest area: {worst_dimension} ({worst_score}/25)",
+            **actions[worst_dimension],
+        }
+    )
 
-    return {
+    result = {
         "score": total_score,
-        "grade": grade,
+        "grade": _grade_for_health_score(total_score),
         "breakdown": {
             "complexity": {
-                "score": complexity_score, "max": 25,
+                "score": complexity_score,
+                "max": 25,
                 "detail": (
                     f"{complex_count}/{func_count} functions with high composite complexity "
                     f"(score >= 5, burden {complexity_burden}, top hotspot {max_complexity_score})"
                 ),
+                "metrics": {
+                    "total_functions": func_count,
+                    "complex_functions": complex_count,
+                    "complexity_burden": complexity_burden,
+                    "max_complexity_score": max_complexity_score,
+                    "avg_complexity": complexity["avg_complexity"],
+                },
+                "hotspots": complexity["functions"],
             },
             "dead_code": {
-                "score": dead_score, "max": 25,
-                "detail": f"{dead_count} unreferenced symbols",
+                "score": dead_score,
+                "max": 25,
+                "detail": f"{dead_count} high-confidence unreferenced symbols",
+                "metrics": {
+                    "dead_count": dead_count,
+                    "dead_lines": dead_result.get("total_dead_lines", 0),
+                },
+                "symbols": (dead_result.get("dead_symbols") or [])[:20],
             },
             "documentation": {
-                "score": doc_score, "max": 25,
-                "detail": f"{documented}/{doc_total} symbols documented ({doc_ratio*100:.0f}%)",
+                "score": doc_score,
+                "max": 25,
+                "detail": (
+                    f"{documented}/{doc_total} production symbols documented "
+                    f"({doc_ratio * 100:.0f}%)"
+                ),
+                "metrics": {
+                    "documented_symbols": documented,
+                    "total_symbols": doc_total,
+                    "coverage": round(doc_ratio, 4),
+                },
             },
             "modularity": {
-                "score": modularity_score, "max": 25,
-                "detail": f"{sum(1 for r in ref_counts if r > 0)}/{len(ref_counts)} symbols referenced ({pct_with_refs*100:.1f}%, {archetype} baseline {modularity_baseline*100:.0f}%)",
+                "score": modularity_score,
+                "max": 25,
+                "detail": (
+                    f"{referenced_count}/{len(ref_counts)} symbols referenced "
+                    f"({pct_with_refs * 100:.1f}%, {archetype} baseline "
+                    f"{modularity_baseline * 100:.0f}%)"
+                ),
+                "metrics": {
+                    "referenced_symbols": referenced_count,
+                    "total_symbols": len(ref_counts),
+                    "reference_ratio": round(pct_with_refs, 4),
+                    "archetype": archetype,
+                },
             },
         },
         "total_symbols": total_symbols,
+        "snapshot": _health_snapshot(project, symbols),
         "next_action": next_action,
     }
+    if cacheable and cache_key is not None:
+        if len(_HEALTH_CACHE) >= 8:
+            _HEALTH_CACHE.pop(next(iter(_HEALTH_CACHE)))
+        _HEALTH_CACHE[cache_key] = copy.deepcopy(result)
+    return result
+
+
+def code_health_score(project: str = None) -> dict:
+    """Compute the canonical aggregate code health score (0-100)."""
+    return _code_health_score_from_index(load_index(), project=project)
 
 
 def _suggest_fix_for_complexity(fn: dict) -> str:

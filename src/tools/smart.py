@@ -522,6 +522,8 @@ def _audit_health_score(project):
 
 def _determine_dimensions_to_expand(focus, breakdown):
     """Determine which audit dimensions need expansion."""
+    if focus == "all":
+        return set(breakdown) | {"security", "coverage", "rules"}
     if focus:
         return {focus}
     # Auto-expand dimensions scoring below 80% (20 out of 25)
@@ -548,7 +550,7 @@ def _expand_audit_dimensions(result, should_expand, focus, project):
             result["rules_compliance"] = r
 
     # --- Complexity ---
-    if "complexity" in should_expand or focus == "complexity":
+    if "complexity" in should_expand or focus in ("complexity", "all"):
         r = _enrich("complex_functions", quality.find_complex_functions, project=project, max_results=10)
         if r is not None:
             result["complex_functions"] = r
@@ -557,13 +559,13 @@ def _expand_audit_dimensions(result, should_expand, focus, project):
             result["duplicates"] = r
 
     # --- Dead code ---
-    if "dead_code" in should_expand or focus == "dead_code":
+    if "dead_code" in should_expand or focus in ("dead_code", "all"):
         r = _enrich("dead_code", _maint_mod().find_dead_code, project=project, min_lines=5)
         if r is not None:
             result["dead_code"] = r
 
     # --- Coverage ---
-    if "coverage" in should_expand or focus == "coverage":
+    if "coverage" in should_expand or focus in ("coverage", "all"):
         r = _enrich("coverage_gaps", _coverage_mod().coverage_gaps, project=project, max_results=10)
         if r is not None:
             result["coverage_gaps"] = r
@@ -777,6 +779,98 @@ def _task_validate(project, run_tests, test_path, task_contract=None):
     return result
 
 
+def _task_grill(
+    *,
+    grill_action,
+    description,
+    project,
+    decisions,
+    mode,
+    locale,
+    max_questions,
+    grill_session_id,
+    decision_id,
+    answer,
+    selected_option,
+    accept_recommendation,
+    request_id,
+) -> dict:
+    """Execute the persistent decision-tree branch."""
+    return _grill_mod().run_grill(
+        operation=grill_action,
+        description=description,
+        project=project,
+        decisions=decisions,
+        mode=mode,
+        locale=locale,
+        max_questions=max_questions,
+        session_id=grill_session_id,
+        decision_id=decision_id,
+        answer=answer,
+        selected_option=selected_option,
+        accept_recommendation=accept_recommendation,
+        request_id=request_id,
+        fact_resolver=lambda query, scoped_project: _search_mod().search_by_keyword(
+            query=query,
+            max_results=5,
+            project=scoped_project,
+            include_content=False,
+        ),
+    )
+
+
+def _task_gate(task_contract, next_phase, current_state, project) -> dict:
+    """Validate context and decision contracts before the phase gate."""
+    contract = task_contract or {}
+    contract_project = contract.get("task_profile", {}).get("project") or project
+    instruction_gate = _task_context_mod().validate_instruction_context(
+        contract,
+        project=contract_project,
+    )
+    ledger_gate = _task_context_mod().validate_intent_ledger(
+        contract,
+        project=contract_project,
+        check_diff=False,
+    )
+    context_failures = [
+        gate
+        for gate in (instruction_gate, ledger_gate)
+        if not gate.get("pass", False)
+    ]
+    if context_failures:
+        return {
+            "pass": False,
+            "decision": "blocked",
+            "phase": next_phase,
+            "reason_codes": [
+                (
+                    "INSTRUCTION_CONTEXT_NONCONFORMANT"
+                    if gate is instruction_gate
+                    else "INTENT_LEDGER_NONCONFORMANT"
+                )
+                for gate in context_failures
+            ],
+            "required_actions": [
+                action
+                for gate in context_failures
+                for action in gate.get("required_actions", [])
+            ],
+            "instruction_context_validation": instruction_gate,
+            "intent_ledger_validation": ledger_gate,
+        }
+    decision_gate = _grill_mod().validate_decision_contract(contract, project=project)
+    if not decision_gate.get("pass"):
+        return decision_gate
+    derived_state = dict(current_state or {})
+    if contract.get("decision_contract"):
+        derived_state["decision_completeness_done"] = True
+    return _task_mod().task_gate_check(
+        task_contract=contract,
+        next_phase=next_phase,
+        current_state=derived_state,
+    )
+
+
 def smart_task(action: str, description: str = "", targets: list = None,
                intent: str = "refactor", task_contract: dict = None,
                next_phase: str = None, current_state: dict = None,
@@ -787,90 +881,29 @@ def smart_task(action: str, description: str = "", targets: list = None,
                selected_option: str = None, accept_recommendation: bool = False,
                mode: str = "interactive", locale: str = "und",
                max_questions: int = 8, request_id: str = None) -> dict:
-    """Unified task workflow: grill, plan, gate check, or validate."""
+    """Route one task action to its atomic workflow branch."""
     if action == "grill":
-        return _grill_mod().run_grill(
-            operation=grill_action,
+        return _task_grill(
+            grill_action=grill_action,
             description=description,
             project=project,
             decisions=decisions,
             mode=mode,
             locale=locale,
             max_questions=max_questions,
-            session_id=grill_session_id,
+            grill_session_id=grill_session_id,
             decision_id=decision_id,
             answer=answer,
             selected_option=selected_option,
             accept_recommendation=accept_recommendation,
             request_id=request_id,
-            fact_resolver=lambda query, scoped_project: _search_mod().search_by_keyword(
-                query=query,
-                max_results=5,
-                project=scoped_project,
-                include_content=False,
-            ),
         )
-
     if action == "plan":
         return _task_plan(description, targets, intent, project, grill_session_id)
-
     if action == "gate":
-        contract_project = (
-            (task_contract or {}).get("task_profile", {}).get("project")
-            or project
-        )
-        instruction_gate = _task_context_mod().validate_instruction_context(
-            task_contract or {},
-            project=contract_project,
-        )
-        ledger_gate = _task_context_mod().validate_intent_ledger(
-            task_contract or {},
-            project=contract_project,
-            check_diff=False,
-        )
-        context_failures = [
-            gate
-            for gate in (instruction_gate, ledger_gate)
-            if not gate.get("pass", False)
-        ]
-        if context_failures:
-            return {
-                "pass": False,
-                "decision": "blocked",
-                "phase": next_phase,
-                "reason_codes": [
-                    (
-                        "INSTRUCTION_CONTEXT_NONCONFORMANT"
-                        if gate is instruction_gate
-                        else "INTENT_LEDGER_NONCONFORMANT"
-                    )
-                    for gate in context_failures
-                ],
-                "required_actions": [
-                    action
-                    for gate in context_failures
-                    for action in gate.get("required_actions", [])
-                ],
-                "instruction_context_validation": instruction_gate,
-                "intent_ledger_validation": ledger_gate,
-            }
-        decision_gate = _grill_mod().validate_decision_contract(
-            task_contract or {}, project=project
-        )
-        if not decision_gate.get("pass"):
-            return decision_gate
-        derived_state = dict(current_state or {})
-        if (task_contract or {}).get("decision_contract"):
-            derived_state["decision_completeness_done"] = True
-        return _task_mod().task_gate_check(
-            task_contract=task_contract or {},
-            next_phase=next_phase,
-            current_state=derived_state,
-        )
-
+        return _task_gate(task_contract, next_phase, current_state, project)
     if action == "validate":
         return _task_validate(project, run_tests, test_path, task_contract)
-
     return {
         "error": (
             f"Unknown action: {action}. Use 'grill', 'plan', 'gate', or 'validate'."
@@ -882,6 +915,138 @@ def smart_task(action: str, description: str = "", targets: list = None,
 # 5. structure — project overview with auto-enrichment
 # ---------------------------------------------------------------------------
 
+def _structure_scan_path(info, project: str | None) -> str:
+    """Resolve a bounded project root for package/profile scans."""
+    if project:
+        try:
+            for item in info.list_projects().get("projects") or []:
+                if item.get("name") == project:
+                    return item.get("root") or os.getcwd()
+        except Exception as exc:
+            logger.debug("project root lookup failed: %s", exc)
+    try:
+        index = info._load_index()
+        if hasattr(index, "root_dir"):
+            return str(index.root_dir)
+    except Exception as exc:
+        logger.debug("index root lookup failed: %s", exc)
+    return os.getcwd()
+
+
+def _structure_apis(info, project) -> dict:
+    result = {}
+    for key, fn in (
+        ("apis", info.list_apis),
+        ("categories", info.list_categories),
+    ):
+        value = _enrich(key, fn)
+        if value is not None:
+            result[key] = value
+    drift = _enrich("contract_drift", _type_mod().contract_drift, project=project)
+    if isinstance(drift, dict) and drift.get("drifts"):
+        result["contract_drift"] = drift
+    _truncate_structure_lists(result)
+    return result
+
+
+def _structure_packages(info, project) -> dict:
+    try:
+        from .. import dependency_scanner
+    except ImportError:
+        import dependency_scanner
+    return dependency_scanner.scan_dependencies(
+        _structure_scan_path(info, project)
+    ).to_dict()
+
+
+def _structure_dependencies(project, symbol_id, path) -> dict:
+    try:
+        graph = _refs_mod().dependency_graph(
+            file_path=path,
+            symbol_id=symbol_id,
+            project=project,
+            direction="both",
+            max_depth=2,
+        )
+        return {"graph": graph}
+    except Exception as exc:
+        logger.debug("dependency_graph failed: %s", exc)
+        return {"graph_error": str(exc)}
+
+
+def _structure_types(project, symbol_id) -> dict:
+    result = {}
+    contracts = _type_mod()
+    if symbol_id:
+        schema = _enrich(
+            "extract_type_schema",
+            contracts.extract_type_schema,
+            symbol_id=symbol_id,
+        )
+        if schema is not None:
+            result["schema"] = schema
+    drift = _enrich("contract_drift", contracts.contract_drift, project=project)
+    if drift is not None:
+        result["contract_drift"] = drift
+    return result
+
+
+def _structure_profile(
+    info,
+    project,
+    result_mode,
+    limit,
+    cursor,
+    include_non_production,
+) -> dict:
+    if not project:
+        try:
+            projects = _bounded_profile_projects()
+        except Exception as exc:
+            logger.debug("bounded project overview failed: %s", exc)
+            projects = {"error": str(exc), "projects": []}
+        return {
+            "profile_scope": "workspace_overview",
+            "projects": projects,
+            "next_action": {
+                "tool": "structure",
+                "arguments": {"focus": "profile", "project": "<project>"},
+            },
+        }
+    try:
+        from .. import project_profile as profile_module
+    except ImportError:
+        import project_profile as profile_module
+    from pathlib import Path as _Path
+    return profile_module.build_project_profile(
+        _Path(_structure_scan_path(info, project)),
+        result_mode=result_mode,
+        limit=limit,
+        cursor=cursor,
+        include_non_production=include_non_production,
+    )
+
+
+def _structure_overview(info, project) -> dict:
+    result = {}
+    try:
+        result["projects"] = _add_explicit_project_counts(info.list_projects())
+    except Exception as exc:
+        logger.debug("list_projects failed: %s", exc)
+        result["projects_error"] = str(exc)
+    if project:
+        for key, fn in (
+            ("apis", info.list_apis),
+            ("categories", info.list_categories),
+            ("index_status", _maint_mod().check_index_status),
+        ):
+            value = _enrich(key, fn)
+            if value is not None:
+                result[key] = value
+    _truncate_structure_lists(result)
+    return result
+
+
 def smart_structure(
     project: str = None,
     focus: str = None,
@@ -892,169 +1057,37 @@ def smart_structure(
     cursor: int = 0,
     include_non_production: bool = False,
 ) -> dict:
-    """Project structure overview. Auto-enriches based on focus."""
+    """Route structure queries to small focus-specific analyzers."""
     info = _info_mod()
-    refs = _refs_mod()
-
-    result = {}
-
-    # --- APIs focus ---
     if focus == "apis":
-        r = _enrich("list_apis", info.list_apis)
-        if r is not None:
-            result["apis"] = r
-        r = _enrich("list_categories", info.list_categories)
-        if r is not None:
-            result["categories"] = r
-
-        # Auto: check for contract drift across projects
-        tc = _type_mod()
-        drift = _enrich("contract_drift", tc.contract_drift, project=project)
-        if isinstance(drift, dict) and drift.get("drifts"):
-            result["contract_drift"] = drift
-
-        _truncate_structure_lists(result)
-        return result
-
-    # --- Packages focus (external dependency/version scan) ---
+        return _structure_apis(info, project)
     if focus == "packages":
-        try:
-            from .. import dependency_scanner
-        except ImportError:
-            import dependency_scanner
-        # Determine scan path from project or fall back to index root
-        scan_path = None
-        if project:
-            try:
-                projects = info.list_projects()
-                for p in (projects.get("projects") or []):
-                    if p.get("name") == project:
-                        scan_path = p.get("root")
-                        break
-            except Exception:
-                pass
-        if not scan_path:
-            # Use the index root directory
-            try:
-                idx = info._load_index()
-                if hasattr(idx, "root_dir"):
-                    scan_path = str(idx.root_dir)
-            except Exception:
-                pass
-        if not scan_path:
-            scan_path = os.getcwd()
-        inventory = dependency_scanner.scan_dependencies(scan_path)
-        return inventory.to_dict()
-
-    # --- Dependencies focus ---
+        return _structure_packages(info, project)
     if focus == "dependencies":
-        try:
-            result["graph"] = refs.dependency_graph(
-                file_path=path, symbol_id=symbol_id,
-                project=project, direction="both", max_depth=2,
-            )
-        except Exception as e:
-            logger.debug("dependency_graph failed: %s", e)
-            result["graph_error"] = str(e)
-        return result
-
-    # --- Types focus ---
+        return _structure_dependencies(project, symbol_id, path)
     if focus == "types":
-        tc = _type_mod()
-        if symbol_id:
-            r = _enrich("extract_type_schema", tc.extract_type_schema, symbol_id=symbol_id)
-            if r is not None:
-                result["schema"] = r
-        r = _enrich("contract_drift", tc.contract_drift, project=project)
-        if r is not None:
-            result["contract_drift"] = r
-        return result
-
-    # --- Conventions focus ---
+        return _structure_types(project, symbol_id)
     if focus == "conventions":
-        r = _enrich("conventions", _conventions_mod().extract_conventions, project=project)
-        if r is not None:
-            result["conventions"] = r
-        return result
-
-    # --- Change patterns focus ---
-    if focus == "change_patterns":
-        r = _enrich("change_clusters", _change_patterns_mod().discover_change_clusters, project=project)
-        if r is not None:
-            result["change_clusters"] = r
-        return result
-
-    # --- Profile focus (full project profile) ---
-    if focus == "profile":
-        if not project:
-            try:
-                projects = _bounded_profile_projects()
-            except Exception as e:
-                logger.debug("bounded project overview failed: %s", e)
-                projects = {"error": str(e), "projects": []}
-            return {
-                "profile_scope": "workspace_overview",
-                "projects": projects,
-                "next_action": {
-                    "tool": "structure",
-                    "arguments": {
-                        "focus": "profile",
-                        "project": "<project>",
-                    },
-                },
-            }
-        try:
-            from .. import project_profile as _pp
-        except ImportError:
-            import project_profile as _pp
-        scan_path = None
-        try:
-            projects = info.list_projects()
-            for p in (projects.get("projects") or []):
-                if p.get("name") == project:
-                    scan_path = p.get("root")
-                    break
-        except Exception:
-            pass
-        if not scan_path:
-            try:
-                idx = info._load_index()
-                if hasattr(idx, "root_dir"):
-                    scan_path = str(idx.root_dir)
-            except Exception:
-                pass
-        if not scan_path:
-            scan_path = os.getcwd()
-        from pathlib import Path as _Path
-        return _pp.build_project_profile(
-            _Path(scan_path),
-            result_mode=result_mode,
-            limit=limit,
-            cursor=cursor,
-            include_non_production=include_non_production,
+        result = _enrich(
+            "conventions",
+            _conventions_mod().extract_conventions,
+            project=project,
         )
-
-    # --- Default: project overview ---
-    try:
-        result["projects"] = _add_explicit_project_counts(info.list_projects())
-    except Exception as e:
-        logger.debug("list_projects failed: %s", e)
-        result["projects_error"] = str(e)
-
-    # If specific project, add more detail
-    if project:
-        r = _enrich("list_apis", info.list_apis)
-        if r is not None:
-            result["apis"] = r
-        r = _enrich("list_categories", info.list_categories)
-        if r is not None:
-            result["categories"] = r
-
-        # Auto: check index freshness
-        maint = _maint_mod()
-        r = _enrich("check_index_status", maint.check_index_status)
-        if r is not None:
-            result["index_status"] = r
-
-    _truncate_structure_lists(result)
-    return result
+        return {"conventions": result} if result is not None else {}
+    if focus == "change_patterns":
+        result = _enrich(
+            "change_clusters",
+            _change_patterns_mod().discover_change_clusters,
+            project=project,
+        )
+        return {"change_clusters": result} if result is not None else {}
+    if focus == "profile":
+        return _structure_profile(
+            info,
+            project,
+            result_mode,
+            limit,
+            cursor,
+            include_non_production,
+        )
+    return _structure_overview(info, project)

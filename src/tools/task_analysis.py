@@ -145,6 +145,10 @@ GATE_PHASES = ["inspect", "plan_changes", "apply_changes", "expand_changes", "fi
 # Strategy phase → gate phase mapping
 # Allows task_gate_check to accept strategy-specific phase names
 _STRATEGY_TO_GATE = {
+    # Public MCP phase names
+    "assess": "plan_changes",
+    "implement": "apply_changes",
+    "verify": "finalize",
     # inspect gate
     "inspect_references": "inspect",
     "inspect_tests": "inspect",
@@ -1257,14 +1261,18 @@ def _plan_inspect_steps(symbol_ids, file_paths, first_sid, first_path,
         for idx, sid in enumerate(individual_sids):
             # Single target: use plain purpose for V1 compatibility
             purpose = "scope_callers" if len(symbol_ids) == 1 else f"scope_callers_{idx}"
-            sid_step = _add("find_references", {"symbol_id": sid}, purpose)
+            sid_step = _add(
+                "impact",
+                {"target": sid, "change_type": "modify"},
+                purpose,
+            )
             ref_steps.append(sid_step)
         # Batch remainder if more than MAX_INDIVIDUAL_INSPECT
         if len(symbol_ids) > MAX_INDIVIDUAL_INSPECT:
             batch_sids = symbol_ids[MAX_INDIVIDUAL_INSPECT:]
             batch_step = _add(
-                "impact_analysis",
-                {"symbol_id": batch_sids[0]},
+                "impact",
+                {"target": batch_sids[0], "change_type": "modify"},
                 "batch_scope_callers",
             )
             ref_steps.append(batch_step)
@@ -1281,7 +1289,7 @@ def _plan_inspect_steps(symbol_ids, file_paths, first_sid, first_path,
         for idx, fpath in enumerate(individual_paths):
             purpose = "verify_test_coverage" if len(unique_test_paths) == 1 else f"verify_test_coverage_{idx}"
             t_step = _add(
-                "find_test_file", {"path": fpath}, purpose,
+                "search", {"query": f"tests covering {fpath}"}, purpose,
                 required=test_level in ("medium", "high"),
             )
             test_steps.append(t_step)
@@ -1294,7 +1302,9 @@ def _plan_inspect_steps(symbol_ids, file_paths, first_sid, first_path,
     cross_step = None
     if coupling_level in ("medium", "high") and first_sid:
         cross_step = _add(
-            "find_references", {"symbol_id": first_sid}, "check_cross_project",
+            "impact",
+            {"target": first_sid, "change_type": "modify"},
+            "check_cross_project",
             depends_on=[ref_step] if ref_step else [],
         )
         inspect_step_ids.append(cross_step)
@@ -1303,8 +1313,8 @@ def _plan_inspect_steps(symbol_ids, file_paths, first_sid, first_path,
     dep_step = None
     if complexity_level in ("medium", "high") and first_path:
         dep_step = _add(
-            "dependency_graph",
-            {"file_path": first_path, "direction": "both", "max_depth": 3},
+            "structure",
+            {"focus": "dependencies", "path": first_path},
             "map_dependencies",
             required=complexity_level == "high",
         )
@@ -1331,7 +1341,9 @@ def _plan_assess_steps(symbol_ids, first_sid, blast_level, breaking_level,
                 elif ref_step:
                     impact_deps.append(ref_step)
                 i_step = _add(
-                    "impact_analysis", {"symbol_id": sid}, purpose,
+                    "impact",
+                    {"target": sid, "change_type": "modify"},
+                    purpose,
                     required=blast_level in ("medium", "high"),
                     depends_on=impact_deps,
                 )
@@ -1340,7 +1352,9 @@ def _plan_assess_steps(symbol_ids, first_sid, blast_level, breaking_level,
             # Batch: single impact_analysis step using first sid as representative
             impact_deps = [ref_steps[0]] if ref_steps else []
             batch_impact = _add(
-                "impact_analysis", {"symbol_id": first_sid}, "batch_assess_blast_radius",
+                "impact",
+                {"target": first_sid, "change_type": "modify"},
+                "batch_assess_blast_radius",
                 required=blast_level in ("medium", "high"),
                 depends_on=impact_deps,
             )
@@ -1358,8 +1372,11 @@ def _plan_assess_steps(symbol_ids, first_sid, blast_level, breaking_level,
             "feature": "modify", "cleanup": "delete", "migration": "rename",
         }
         preview_step = _add(
-            "edit_impact_preview",
-            {"symbol_id": first_sid, "change_type": change_type_map.get(intent, "modify")},
+            "impact",
+            {
+                "target": first_sid,
+                "change_type": change_type_map.get(intent, "modify"),
+            },
             "preview_change_risk",
             depends_on=[impact_step] if impact_step else [],
         )
@@ -1379,7 +1396,7 @@ def _build_execution_plan(
     The execution plan is the compiled result of intent × dimensions × constraints.
     Each step has:
     - id: unique step identifier
-    - tool: MCP tool name to call
+    - tool: public MCP tool name to call
     - args: pre-filled arguments from resolved targets
     - purpose: machine-readable tag (scope_callers, verify_tests, etc.)
     - required: whether this step is mandatory
@@ -1425,10 +1442,14 @@ def _build_execution_plan(
     if all_low and intent in ("cleanup", "bugfix"):
         # Only verify no live callers if the constraint exists
         if constraints.get("must_verify_no_live_callers") and first_sid:
-            _add("find_references", {"symbol_id": first_sid}, "scope_callers")
+            _add(
+                "impact",
+                {"target": first_sid, "change_type": "modify"},
+                "scope_callers",
+            )
         _add(
-            "task_gate_check",
-            {"next_phase": "apply_changes"},
+            "task",
+            {"action": "gate", "next_phase": "implement"},
             "gate_before_apply",
         )
         return steps
@@ -1457,16 +1478,16 @@ def _build_execution_plan(
 
     gate_deps = inspect_step_ids + assess_step_ids
     gate_step = _add(
-        "task_gate_check",
-        {"next_phase": "plan_changes"},
+        "task",
+        {"action": "gate", "next_phase": "assess"},
         "gate_before_plan",
         depends_on=gate_deps,
     )
 
     # Step: final gate before applying changes
     _add(
-        "task_gate_check",
-        {"next_phase": "apply_changes"},
+        "task",
+        {"action": "gate", "next_phase": "implement"},
         "gate_before_apply",
         depends_on=[gate_step],
     )
@@ -1837,6 +1858,7 @@ def _apply_governance_gate(
         list(result.get("required_actions") or [])
         + list(gate.get("required_actions") or [])
     ))
+    result.setdefault("required_state", {})
     result["message"] = (
         f"Cannot enter {result.get('phase')}. "
         f"Governance blocked {len(gate.get('blocking') or [])} finding(s)."
@@ -1845,43 +1867,53 @@ def _apply_governance_gate(
 
 
 def _gate_check_compound(task_contract, next_phase, current_state):
-    """Handle gate check for compound contracts (multiple sub-tasks)."""
+    """Gate one compound sub-task at a time in the recommended order."""
     sub_tasks = task_contract.get("sub_tasks", [])
     if not sub_tasks:
         return {"error": "Compound contract has no sub_tasks"}
 
-    all_pass = True
-    all_blockers = []
-    for st in sub_tasks:
-        sub_result = task_gate_check(st, next_phase, current_state)
-        if sub_result.get("decision") == "blocked":
-            all_pass = False
-            for msg in sub_result.get("reason_codes", []):
-                prefixed = f"[{st['intent']}] {msg}"
-                if prefixed not in all_blockers:
-                    all_blockers.append(prefixed)
-
-    if all_pass:
+    state = current_state or {}
+    completed = set(state.get("completed_subtasks") or [])
+    pending = [
+        (index, sub_task)
+        for index, sub_task in enumerate(sub_tasks)
+        if f"subtask_{index + 1}" not in completed
+    ]
+    if not pending:
         result = {
             "pass": True,
             "decision": "pass",
             "phase": next_phase,
             "reason_codes": [],
             "message": (
-                f"Clear to proceed to {next_phase} "
-                f"(all {len(sub_tasks)} sub-tasks pass)."
+                f"Clear to proceed to {next_phase}; "
+                f"all {len(sub_tasks)} sub-tasks are complete."
             ),
             "required_actions": [],
+            "required_state": {},
+            "completed_subtasks": sorted(completed),
         }
+        return _apply_governance_gate(result, task_contract, current_state)
+
+    index, active = pending[0]
+    subtask_id = f"subtask_{index + 1}"
+    result = task_gate_check(active, next_phase, state)
+    result["active_subtask"] = {
+        "id": subtask_id,
+        "index": index,
+        "intent": active.get("intent"),
+        "targets": active.get("targets", []),
+    }
+    if result.get("pass"):
+        result["message"] = (
+            f"{result.get('message', '')} Complete {subtask_id} before "
+            "adding it to current_state.completed_subtasks."
+        )
     else:
-        result = {
-            "pass": False,
-            "decision": "blocked",
-            "phase": next_phase,
-            "reason_codes": all_blockers,
-            "message": f"Blocked: {'; '.join(all_blockers)}",
-            "required_actions": all_blockers,
-        }
+        prefix = f"[{subtask_id}:{active.get('intent', 'unknown')}] "
+        result["reason_codes"] = [
+            prefix + code for code in result.get("reason_codes", [])
+        ]
     return _apply_governance_gate(result, task_contract, current_state)
 
 
@@ -1890,6 +1922,7 @@ def _collect_gate_blockers(next_phase, state, constraints):
     blockers = []
     reason_codes = []
     required_actions = []
+    required_state = {}
 
     for state_key, constraint_key, message in _GATE_REQUIREMENTS.get(next_phase, []):
         if constraint_key is not None and not constraints.get(constraint_key):
@@ -1898,6 +1931,7 @@ def _collect_gate_blockers(next_phase, state, constraints):
             blockers.append(message)
             reason_codes.append(_REASON_CODES.get(state_key, state_key.upper()))
             required_actions.append(state_key)
+            required_state[state_key] = True
 
     # Public contract change requires human review for later phases
     if (state.get("public_contract_change_detected")
@@ -1909,8 +1943,9 @@ def _collect_gate_blockers(next_phase, state, constraints):
             blockers.append(msg)
             reason_codes.append("HUMAN_REVIEW_REQUIRED_FOR_PUBLIC_CONTRACT_CHANGE")
             required_actions.append("complete_human_review_for_public_contract_change")
+            required_state["human_review_completed"] = True
 
-    return blockers, reason_codes, required_actions
+    return blockers, reason_codes, required_actions, required_state
 
 
 def task_gate_check(
@@ -1942,7 +1977,11 @@ def task_gate_check(
     if next_phase not in GATE_PHASES and next_phase in _STRATEGY_TO_GATE:
         next_phase = _STRATEGY_TO_GATE[next_phase]
 
-    blockers, reason_codes, required_actions = _collect_gate_blockers(next_phase, state, constraints)
+    blockers, reason_codes, required_actions, required_state = _collect_gate_blockers(
+        next_phase,
+        state,
+        constraints,
+    )
 
     passed = not blockers
     result = {
@@ -1953,6 +1992,7 @@ def task_gate_check(
         "message": f"Clear to proceed to {next_phase}." if passed
                    else f"Cannot enter {next_phase}. " + " ".join(blockers),
         "required_actions": required_actions,
+        "required_state": required_state,
     }
     if original_phase != next_phase:
         result["strategy_phase"] = original_phase

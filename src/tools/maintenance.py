@@ -241,8 +241,8 @@ def _has_same_file_reference(sym_id, sym_name, sym_project, sym_path,
             # means module-level registry, callback table, test fixture list,
             # or another local reference. Treat as live; dead-code output should
             # be high-confidence, not aggressive.
-            if text and len(name_pat.findall(text)) > 1:
-                return True
+            if text:
+                return len(name_pat.findall(text)) > 1
 
         file_key = f"{sym_project}:{sym_path}"
         if file_key not in _same_file_content_cache:
@@ -463,8 +463,17 @@ def _format_dead_code_result(dead_code: list) -> dict:
     }
 
 
-def find_dead_code(project=None, symbol_type=None, min_lines=5):
-    index = load_index()
+def _find_dead_code_from_index(
+    index,
+    project=None,
+    symbol_type=None,
+    min_lines=5,
+):
+    """Find dead code from an explicit index snapshot.
+
+    Passing the snapshot lets audit, profile, and verify share identical
+    high-confidence dead-code semantics instead of reimplementing them.
+    """
     symbols = index.get("symbols", {})
     reverse_index = index.get("reverse_index", {})
     dependencies = index.get("dependencies", {})
@@ -531,6 +540,15 @@ def find_dead_code(project=None, symbol_type=None, min_lines=5):
         })
 
     return _format_dead_code_result(dead_code)
+
+
+def find_dead_code(project=None, symbol_type=None, min_lines=5):
+    return _find_dead_code_from_index(
+        load_index(),
+        project=project,
+        symbol_type=symbol_type,
+        min_lines=min_lines,
+    )
 
 
 def find_todos(project=None, priority=None, max_results=100):

@@ -12,8 +12,10 @@ Flyto2 Indexer borrows successful mechanics, not product bulk.
 | [Superpowers](https://github.com/obra/superpowers) and [Get Shit Done](https://github.com/gsd-build/get-shit-done) | Small plans, explicit verification, resumable state, and disciplined subtask boundaries | Responsibility-based atomic guidance and change-aware documentation, advisory by default |
 | [Aider](https://github.com/Aider-AI/aider) | Public, reproducible coding benchmarks make capability claims falsifiable | A committed offline accuracy/latency gate with deterministic evidence fingerprints |
 | [Semgrep](https://github.com/semgrep/semgrep) and [CodeQL](https://github.com/github/codeql) | Structured static-analysis findings, data-flow evidence, baselines, and SARIF integration | AST-first Python flow, bounded cross-file proof, stable finding IDs, finding-level regression comparison, and SARIF partial fingerprints |
+| [Sonar Clean as You Code](https://docs.sonarsource.com/sonarqube-server/10.7/core-concepts/clean-as-you-code/overview) | Gate new debt without pretending a brownfield repository is already clean | Absolute safety floors plus a reviewed baseline that rejects newly-worse health metrics |
+| [Ruff](https://github.com/astral-sh/ruff) | A broad capability surface stays usable through a common interface, caching, and measured speed | One cached dispatch registry, no new runtime dependency, bounded results, and explicit p95 budgets |
 | [ast-grep](https://github.com/ast-grep/ast-grep), [dependency-cruiser](https://github.com/sverweij/dependency-cruiser), and [ArchUnit](https://github.com/TNG/ArchUnit) | Structural matching and enforceable dependency/architecture constraints | Language-aware scanning plus repository-owned advisory/guarded/strict rules; no mandatory universal architecture |
-| [Model Context Protocol](https://github.com/modelcontextprotocol/modelcontextprotocol) | Standard cancellation and bounded request lifecycles | Interruptible stdio calls, explicit deadlines, annotation-aware retry evidence, and process survival after a failed request |
+| [Model Context Protocol](https://github.com/modelcontextprotocol/modelcontextprotocol) and its [Python SDK](https://github.com/modelcontextprotocol/python-sdk) | Standard cancellation, bounded request lifecycles, and Streamable HTTP | Interruptible calls, explicit deadlines, safe replay rules, active-child self-healing, and observable p50/p95 latency |
 
 ## Evidence gates adopted
 
@@ -27,6 +29,9 @@ Flyto2 Indexer borrows successful mechanics, not product bulk.
 - The stdio server reads input on a blocking reader thread and executes tools
   on the main thread, where POSIX timers can interrupt a stuck call. It handles
   cancellation notifications while work is active and does not poll or spin.
+- The HTTP bridge exposes rolling latency and concurrency evidence, restarts a
+  corrupt or timed-out child, and replays only declared read-only requests
+  after protocol failure. Cancellation and deadline failures are not replayed.
 
 ## Extension budget
 

@@ -92,6 +92,7 @@ layers:
   - name: entrypoints
     paths:
       - "src/cli.py"
+      - "src/mcp_http_server.py"
       - "src/mcp_server.py"
       - "src/watcher.py"
     reason: "Entrypoints are allowed to compose all lower layers."
@@ -122,6 +123,13 @@ style:
       - pattern: "subprocess\\.[A-Za-z_]+\\([^\\n)]*,\\s*shell\\s*=\\s*True"
         glob: "src/**/*.py"
     severity: high
+
+verify:
+  # Absolute floors prevent catastrophic drift; the committed regression
+  # baseline below these floors rejects any newly-worse quality metric.
+  min_health_score: 80
+  min_documentation_score: 25
+  max_dead_code: 14
 
 governance:
   mode: advisory

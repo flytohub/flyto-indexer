@@ -96,3 +96,46 @@ def test_code_health_score_reports_weighted_complexity_detail(monkeypatch):
     assert "1/2 functions with high composite complexity" in detail
     assert "burden 5" in detail
     assert "top hotspot 5" in detail
+
+
+def test_canonical_health_cache_is_index_versioned_and_copy_safe(monkeypatch):
+    index = {
+        "root_path": "/tmp/project",
+        "indexed_at": "2026-07-30T00:00:00Z",
+        "symbols": {
+            "proj:src/app.py:function:run": {
+                "type": "function",
+                "path": "src/app.py",
+                "name": "run",
+                "summary": "Run the app.",
+                "ref_count": 1,
+            },
+        },
+    }
+    calls = {"complexity": 0, "dead": 0}
+
+    def complexity(*_args, **_kwargs):
+        calls["complexity"] += 1
+        return {
+            "total_analyzed": 1,
+            "complex_count": 0,
+            "complexity_burden": 0,
+            "max_complexity_score": 0,
+            "avg_complexity": 0.0,
+            "functions": [],
+        }
+
+    def dead(*_args, **_kwargs):
+        calls["dead"] += 1
+        return {"total_dead": 0, "total_dead_lines": 0, "dead_symbols": []}
+
+    quality._HEALTH_CACHE.clear()
+    monkeypatch.setattr(quality, "_find_complex_functions_from_index", complexity)
+    monkeypatch.setattr(quality, "_dead_code_from_index", dead)
+
+    first = quality._code_health_score_from_index(index, project="proj")
+    first["score"] = -1
+    second = quality._code_health_score_from_index(index, project="proj")
+
+    assert second["score"] != -1
+    assert calls == {"complexity": 1, "dead": 1}

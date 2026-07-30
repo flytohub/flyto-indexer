@@ -486,30 +486,11 @@ class TestToolRegistryIntegration:
             assert has_tool(name), f"Smart tool '{name}' not in registered dispatch"
 
     def test_tool_names_stay_in_sync_with_dispatch(self):
-        """Drift guard: the manually-curated _TOOL_NAMES set must stay
-        identical to the keys execute_tool actually dispatches.
+        """Drift guard: declared names equal the cached runtime registry."""
+        from tool_registry import _TOOL_NAMES
+        from tool_registry.dispatch import _dispatch_table
 
-        Instead of invoking each tool (slow + flaky in CI when state
-        is partially loaded), we AST-parse the source of execute_tool
-        and pull the dict keys directly. Pure lexical check, sub-100ms.
-        """
-        import ast
-        import inspect
-        from tool_registry import _TOOL_NAMES, execute_tool
-
-        src = inspect.getsource(execute_tool)
-        tree = ast.parse(src)
-        dispatch_keys: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Assign) and len(node.targets) == 1:
-                t = node.targets[0]
-                if isinstance(t, ast.Name) and t.id == "_DISPATCH":
-                    if isinstance(node.value, ast.Dict):
-                        for k in node.value.keys:
-                            if isinstance(k, ast.Constant) and isinstance(k.value, str):
-                                dispatch_keys.add(k.value)
-                        break
-        assert dispatch_keys, "ast parse failed to find _DISPATCH dict"
+        dispatch_keys = set(_dispatch_table())
 
         names_set = set(_TOOL_NAMES)
         only_in_names = names_set - dispatch_keys

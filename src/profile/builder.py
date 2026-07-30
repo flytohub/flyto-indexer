@@ -246,7 +246,7 @@ def build_project_profile(
     )
 
     health_dims = build_health_dims(idx, project_type_info["type"])
-    health_dims["overall"] = adjust_overall_health(
+    risk_adjusted_health = adjust_overall_health(
         health_dims.get("overall", {}),
         secrets_data, taint_data, iac_data, license_policy_issues,
         documentation_data, project_type_info["type"],
@@ -255,6 +255,16 @@ def build_project_profile(
         perf_patterns_data=_eng_intel.get("perf_patterns"),
         import_health_data=_eng_intel.get("import_health"),
     )
+    canonical_score = health_dims.get("overall", {}).get("score", 0)
+    health_dims["risk_adjustment"] = {
+        **risk_adjusted_health,
+        "delta": risk_adjusted_health.get("score", 0) - canonical_score,
+        "informational": True,
+        "reason": (
+            "Security and engineering-intelligence penalties are reported "
+            "separately; canonical audit/profile/verify health remains identical."
+        ),
+    }
 
     profile = {
         "name": project_name,

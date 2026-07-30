@@ -41,6 +41,10 @@ schemas, annotations, and source locations.
 `task(action="plan")` automatically attaches target-scoped JIT Rules and an
 Intent Ledger. `gate` checks their fingerprints and conflicts. `validate`
 checks requirement coverage, diff scope, proofs, Ruff, and pytest.
+Every generated execution step names one of the callable public MCP tools.
+Blocked gates include `required_state`, the exact key/value evidence the
+caller must supply after completing each `required_actions` item. Compound
+contracts expose one active subtask at a time.
 
 `task(action="grill")` adds persistent decision closure without another public
 tool. A frozen v2 contract adds evidence freshness, decision-to-diff
@@ -78,6 +82,14 @@ result. This adds no tool, action, dependency, upload, or model call.
 - MCP `ping` returns an empty success response for connection-liveness probes.
 - `_runtime.deadline_ms` exposes the applied budget beside runtime version,
   commit, index freshness, elapsed time, and result mode.
+- The optional loopback HTTP bridge serializes stdio responses but admits
+  concurrent HTTP callers, interrupts the active child on cancellation, and
+  restarts on deadlines, EOF, broken pipes, or corrupt JSON. Only annotation-
+  safe read-only requests are replayed after protocol failure; timed-out or
+  cancelled work is never replayed.
+- `/health` reports active and peak concurrency, request/failure/restart
+  counts, the last restart reason, and rolling p50/p95 latency. The default p95
+  budget is 8000 ms and is configurable with `--p95-budget-ms`.
 - Per-process and per-session limits are configurable through environment
   variables listed in the [configuration reference](reference/configuration.md).
 

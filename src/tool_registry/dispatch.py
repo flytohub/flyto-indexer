@@ -3,8 +3,9 @@ Unified tool dispatch — single entry point for all tool execution.
 """
 
 import os
+from functools import lru_cache
 from pathlib import Path as _P
-from typing import Any, Dict, Set
+from typing import Any, Callable, Dict, Set
 
 from .lazy_imports import (
     _search, _refs, _info, _maint, _quality, _diff, _task,
@@ -85,17 +86,9 @@ def has_tool(name: str) -> bool:
     return name in _TOOL_NAMES
 
 
-def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict[str, Any]:
-    """
-    Execute an indexer tool by canonical name. Returns the tool result dict.
-
-    This is the single dispatch point used by both mcp_server.py and the VPS bridge.
-    Raises KeyError for unknown tool names.
-
-    Args:
-        _idx_module: Deprecated. Kept for backward compatibility with VPS bridge.
-    """
-    _DISPATCH = {
+def _legacy_dispatchers() -> Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]]:
+    """Build legacy search, analysis, and intelligence adapters."""
+    return {
         # Search tools
         "search_code": lambda args: _search().search_by_keyword(
             query=args.get("query", ""),
@@ -316,6 +309,12 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             args.get("path", os.getcwd()),
         ).to_dict(),
 
+    }
+
+
+def _smart_dispatchers() -> Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]]:
+    """Build the consolidated public MCP surface."""
+    return {
         # Smart tools (consolidated entry points)
         "search": lambda args: _smart().smart_search(
             query=args.get("query", ""),
@@ -365,6 +364,12 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             policy_path=args.get("policy"),
         ),
 
+    }
+
+
+def _scanner_dispatchers() -> Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]]:
+    """Build repository scanner, profile, and PR adapters."""
+    return {
         # Analysis scanners
         "scan_secrets": lambda args: (lambda r: {
             "total_files_scanned": r.total_files_scanned,
@@ -431,6 +436,12 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
             )
         ],
 
+    }
+
+
+def _policy_dispatchers() -> Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]]:
+    """Build architecture, call-graph, and taint policy adapters."""
+    return {
         # Architecture layer rules
         "check_layers": lambda args: _layers_mod().check_layers_dict(
             __import__("pathlib").Path(args.get("path") or os.getcwd()),
@@ -471,7 +482,30 @@ def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict
         ),
     }
 
-    handler = _DISPATCH.get(name)
+
+@lru_cache(maxsize=1)
+def _dispatch_table() -> Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]]:
+    """Build one cached registry from atomic domain adapter groups."""
+    return {
+        **_legacy_dispatchers(),
+        **_smart_dispatchers(),
+        **_scanner_dispatchers(),
+        **_policy_dispatchers(),
+    }
+
+
+
+def execute_tool(name: str, arguments: Dict[str, Any], _idx_module=None) -> Dict[str, Any]:
+    """
+    Execute an indexer tool by canonical name. Returns the tool result dict.
+
+    This is the single dispatch point used by both mcp_server.py and the VPS bridge.
+    Raises KeyError for unknown tool names.
+
+    Args:
+        _idx_module: Deprecated. Kept for backward compatibility with VPS bridge.
+    """
+    handler = _dispatch_table().get(name)
     if handler is None:
         raise KeyError(f"Unknown tool: {name}")
     return handler(arguments)
