@@ -90,6 +90,8 @@
   accuracy corpus and corrected taint serialization to report the sink line.
 - Classified benchmark trees as non-production taint input during a repository
   self-scan while preserving explicit per-case analysis by the evaluator.
+- Made the auto-reindex regression module add the checkout root explicitly so
+  installed pytest entrypoints collect it consistently on GitHub runners.
 
 ## [2.15.0] - 2026-07-23
 

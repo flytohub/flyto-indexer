@@ -1,7 +1,10 @@
 """Regression tests for workspace auto-reindex index isolation."""
 
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import src.engine as engine
 import src.index_store as index_store
