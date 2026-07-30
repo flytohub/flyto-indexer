@@ -1,0 +1,359 @@
+{
+  "project": "flyto-indexer",
+  "path": "/Users/chester/flytohub/flyto-indexer",
+  "pass": true,
+  "summary": {
+    "pass": 20,
+    "warn": 0,
+    "fail": 0
+  },
+  "metadata": {
+    "schema_version": "2",
+    "project": "flyto-indexer",
+    "git_head": "f2b001388d5da783e2bb3a8c9261d05ce2c19ea3",
+    "git_dirty": false,
+    "check_count": 20,
+    "check_fingerprint": "e19b6741c42927af2544b5415ce283eba03bd08eb012df627c18914989cb9bed"
+  },
+  "checks": [
+    {
+      "name": "runtime_dependencies",
+      "status": "pass",
+      "summary": "Runtime dependency boundary passed",
+      "metrics": {
+        "project": "flyto-indexer",
+        "dependency_count": 1,
+        "requires_python": ">=3.11"
+      },
+      "finding_id": "flyto-95725d87ffa97d75ff959015"
+    },
+    {
+      "name": "scan",
+      "status": "pass",
+      "summary": "Index scan completed",
+      "metrics": {
+        "project": "flyto-indexer",
+        "files_scanned": 269,
+        "symbols_found": 4272,
+        "dependencies_found": 27277,
+        "errors": 0,
+        "changes": "full rebuild",
+        "timing": {
+          "scan_files": 1.351,
+          "resolve_deps": 0.872,
+          "build_reverse": 0.414,
+          "save_index": 4.323,
+          "total": 7.0
+        }
+      },
+      "finding_id": "flyto-4d4b2e4f738d4d4fa3f3532b"
+    },
+    {
+      "name": "index_integrity",
+      "status": "pass",
+      "summary": "Index graph is internally connected",
+      "metrics": {
+        "files": 269,
+        "symbols": 4541,
+        "dependencies": 19609,
+        "reverse_targets": 3424,
+        "missing_file_symbols": 0,
+        "missing_reverse_targets": 0,
+        "missing_reverse_callers": 0
+      },
+      "finding_id": "flyto-b607b0c497aaf4f19db7863f"
+    },
+    {
+      "name": "quality_health",
+      "status": "pass",
+      "summary": "Canonical health snapshot is 81/100 (B)",
+      "metrics": {
+        "health_score": 81,
+        "health_grade": "B",
+        "snapshot": {
+          "schema": "health-snapshot.v1",
+          "id": "07b4ce598a5b1512b937102327198f93ed71a6c40f25151ce94c65b6df605fd2",
+          "project": "flyto-indexer",
+          "analysis_scope": "production_source_only",
+          "symbol_count": 2070
+        },
+        "complexity": {
+          "total_functions": 1785,
+          "complex_functions": 629,
+          "complexity_burden": 6986,
+          "max_complexity_score": 65,
+          "avg_complexity": 3.95
+        },
+        "dead_code": {
+          "dead_count": 14,
+          "dead_lines": 485
+        },
+        "documentation": {
+          "score": 25,
+          "documented_symbols": 1435,
+          "total_symbols": 2070,
+          "coverage": 0.6932
+        },
+        "modularity": {
+          "score": 25,
+          "referenced_symbols": 1864,
+          "total_symbols": 2070,
+          "reference_ratio": 0.9005,
+          "archetype": "application"
+        }
+      },
+      "finding_id": "flyto-d293d9d711d0c2e38a835221"
+    },
+    {
+      "name": "single_project_islands",
+      "status": "pass",
+      "summary": "No high-confidence single-project islands found",
+      "metrics": {
+        "candidate_symbols": 1,
+        "island_count": 0,
+        "island_samples": [],
+        "api_definitions": 0,
+        "api_calls": 0,
+        "unmatched_api_calls": 0,
+        "unmatched_api_call_samples": []
+      },
+      "finding_id": "flyto-449ac8ae2417b26467f7e818"
+    },
+    {
+      "name": "context_loop",
+      "status": "pass",
+      "summary": "Context query returned symbols",
+      "metrics": {
+        "query": "IndexEngine",
+        "symbols": 5,
+        "level": "l2"
+      },
+      "finding_id": "flyto-b493e2f7db974a62baf2cf9f"
+    },
+    {
+      "name": "impact_loop",
+      "status": "pass",
+      "summary": "Impact graph returned direct references",
+      "metrics": {
+        "symbol": "flyto-indexer:src/engine.py:class:IndexEngine",
+        "ref_count": 89,
+        "direct_references": 89,
+        "unresolved_direct_references": 0
+      },
+      "finding_id": "flyto-9a6ce5754231dea6508906bd"
+    },
+    {
+      "name": "weak_scan_secrets",
+      "status": "pass",
+      "summary": "Secret scan completed",
+      "metrics": {
+        "files_scanned": 262,
+        "findings": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "samples": []
+      },
+      "finding_id": "flyto-de6b39af3e75127d8cc6b9d4"
+    },
+    {
+      "name": "weak_scan_taint",
+      "status": "pass",
+      "summary": "Taint scan completed; no high-risk flows",
+      "metrics": {
+        "sources": 429,
+        "sinks": 819,
+        "unsanitized": 0,
+        "high_risk": 0,
+        "sanitized": 0,
+        "samples": []
+      },
+      "finding_id": "flyto-56f7c143afe1ccf8ea03cb0c"
+    },
+    {
+      "name": "docs_coverage",
+      "status": "pass",
+      "summary": "Documentation scan completed",
+      "metrics": {
+        "overall_score": 92,
+        "readme_score": 58,
+        "inline_doc_coverage": 0.666,
+        "source_reference_coverage": 0.999,
+        "symbol_doc_coverage": 0.999,
+        "suggestions": 2
+      },
+      "finding_id": "flyto-395c39903ee0f406163749a6"
+    },
+    {
+      "name": "rules_policy",
+      "status": "pass",
+      "summary": "Project rules policy passed",
+      "metrics": {
+        "policy": "/Users/chester/flytohub/flyto-indexer/.flyto-rules.yaml",
+        "rules_checked": 9,
+        "total_rules": 9,
+        "violations": 0,
+        "pass_rate": 1.0,
+        "layer_count": 7,
+        "layer_files_checked": 270,
+        "layer_edges_checked": 359,
+        "samples": []
+      },
+      "finding_id": "flyto-d754933c414e4aa80a60695d"
+    },
+    {
+      "name": "no_external_runtime",
+      "status": "pass",
+      "summary": "flyto-indexer runtime dependency boundary passed",
+      "metrics": {
+        "project": "flyto-indexer",
+        "dependency_count": 1,
+        "expected_dependencies": [
+          "PyYAML>=6.0.3"
+        ],
+        "optional_dependency_groups": [
+          "dev"
+        ],
+        "ci_policy_smoke": true,
+        "ci_metadata_assertion": true,
+        "problems": []
+      },
+      "finding_id": "flyto-089311c4fb1592283df46325"
+    },
+    {
+      "name": "package_integrity",
+      "status": "pass",
+      "summary": "Package manifest preserves the install/runtime contract",
+      "metrics": {
+        "required": {
+          "hatchling_backend": true,
+          "policy_parser_dependency": true,
+          "wheel_src_package": true,
+          "wheel_src_remap": true,
+          "rule_corpus_force_include": true,
+          "sdist_src": true,
+          "sdist_config": true,
+          "cli_entrypoint": true,
+          "license_files_exist": true
+        },
+        "missing": [],
+        "forbidden_entries": [],
+        "entries_checked": 5
+      },
+      "finding_id": "flyto-14649068ac4245618fa03f92"
+    },
+    {
+      "name": "ci_closed_loop",
+      "status": "pass",
+      "summary": "CI runs the verify/test/build loop",
+      "metrics": {
+        "files": [
+          ".github/workflows/branding-guard.yml",
+          ".github/workflows/ci.yml",
+          ".github/workflows/docker.yml",
+          ".github/workflows/documentation.yml",
+          ".github/workflows/publish-pypi.yml",
+          ".github/workflows/security.yml"
+        ],
+        "required": {
+          "verify": true,
+          "tests": true,
+          "lint": true,
+          "build": true,
+          "sarif_report": true,
+          "wheel_policy_smoke": true
+        },
+        "missing": []
+      },
+      "finding_id": "flyto-f3da6cbc4cba2c5379eb8b2a"
+    },
+    {
+      "name": "change_hygiene",
+      "status": "pass",
+      "summary": "No high-risk working tree changes",
+      "metrics": {
+        "changed": 0,
+        "generated": [],
+        "allowed_generated": [],
+        "allow_generated_patterns": [],
+        "high_risk": []
+      },
+      "finding_id": "flyto-25e602a90bdc9cc1d8d1c3c8"
+    },
+    {
+      "name": "mcp_registry",
+      "status": "pass",
+      "summary": "MCP smart tools and dispatch are in sync",
+      "metrics": {
+        "smart_tools": 20,
+        "duplicates": [],
+        "missing_dispatch": [],
+        "derived_mismatch": [],
+        "missing_schema": []
+      },
+      "finding_id": "flyto-7ea7330b94ba366318751d37"
+    },
+    {
+      "name": "mcp_runtime_smoke",
+      "status": "pass",
+      "summary": "MCP runtime imports and protocol helpers smoke cleanly",
+      "metrics": {
+        "mode": "indexer_runtime",
+        "tools": 20,
+        "protocol_versions": [
+          "2025-11-25",
+          "2025-06-18",
+          "2025-03-26",
+          "2024-11-05"
+        ],
+        "resources": 2,
+        "prompts": 3,
+        "missing_dispatch": [],
+        "problems": []
+      },
+      "finding_id": "flyto-386606d22632333d95cedb9d"
+    },
+    {
+      "name": "agent_hygiene",
+      "status": "pass",
+      "summary": "Agent instructions require indexer exploration and verification",
+      "metrics": {
+        "files": [
+          "AGENTS.md",
+          "CLAUDE.md"
+        ],
+        "mentions_indexer": true,
+        "mentions_pre_change": true,
+        "mentions_post_verify": true
+      },
+      "finding_id": "flyto-2c9c8bb0e68498b7e2aae341"
+    },
+    {
+      "name": "generated_index_ignore",
+      "status": "pass",
+      "summary": ".flyto-index is ignored",
+      "metrics": {},
+      "finding_id": "flyto-af7e03cec0af6111f5add432"
+    },
+    {
+      "name": "policy_budget",
+      "status": "pass",
+      "summary": "Verify policy budget passed",
+      "metrics": {
+        "policy": "/Users/chester/flytohub/flyto-indexer/.flyto-rules.yaml",
+        "warn_as_fail": [],
+        "allow_warn": [],
+        "min_docs_score": null,
+        "quality_budget": {
+          "min_health_score": 80,
+          "min_documentation_score": 25,
+          "max_complex_functions": null,
+          "max_complexity_burden": null,
+          "max_dead_code": 14
+        },
+        "violations": []
+      },
+      "finding_id": "flyto-cfeaaf2999aadc87995ce195"
+    }
+  ]
+}
