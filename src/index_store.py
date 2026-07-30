@@ -196,10 +196,11 @@ LOW_PRIORITY_PATHS = ["test", "tests", "__test__", "spec", "mock", "fixture", "e
 # Auto-reindex
 # ---------------------------------------------------------------------------
 
-_last_reindex_check: float = 0.0
 _REINDEX_INTERVAL_FAST = 10.0   # fast mtime check (cheap stat calls)
 _REINDEX_INTERVAL_FULL = 300.0  # full watcher scan (more expensive)
-_last_full_check: float = 0.0
+_NEVER_CHECKED = float("-inf")
+_last_reindex_check: float = _NEVER_CHECKED
+_last_full_check: float = _NEVER_CHECKED
 _project_reindex_checks: dict[str, float] = {}
 _project_full_checks: dict[str, float] = {}
 _AUTO_REINDEX_ENABLED = os.environ.get("FLYTO_AUTO_REINDEX", "1") != "0"
@@ -222,7 +223,7 @@ def _maybe_auto_reindex(project: str | None = None):
 
     # Tier 1: fast generation check (every 10s)
     if scope_key:
-        if now - _project_reindex_checks.get(scope_key, 0.0) < _REINDEX_INTERVAL_FAST:
+        if now - _project_reindex_checks.get(scope_key, _NEVER_CHECKED) < _REINDEX_INTERVAL_FAST:
             return
         _project_reindex_checks[scope_key] = now
     else:
@@ -235,7 +236,7 @@ def _maybe_auto_reindex(project: str | None = None):
 
     # Tier 2: full file watcher scan (every 300s)
     if scope_key:
-        if now - _project_full_checks.get(scope_key, 0.0) < _REINDEX_INTERVAL_FULL:
+        if now - _project_full_checks.get(scope_key, _NEVER_CHECKED) < _REINDEX_INTERVAL_FULL:
             return
         _project_full_checks[scope_key] = now
     else:

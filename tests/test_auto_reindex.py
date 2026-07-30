@@ -160,6 +160,7 @@ def test_project_auto_reindex_filters_sibling_changes(monkeypatch):
     monkeypatch.setattr(index_store, "_project_reindex_checks", {})
     monkeypatch.setattr(index_store, "_project_full_checks", {})
     monkeypatch.setattr(index_store, "_reindex_lock", threading.Lock())
+    monkeypatch.setattr(index_store._time, "monotonic", lambda: 1.0)
     monkeypatch.setattr(
         index_store,
         "load_index",
