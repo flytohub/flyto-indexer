@@ -16,13 +16,15 @@ _MARKDOWN_COMPONENT_TAG_RE = re.compile(r"<([A-Z][A-Za-z0-9]*)\b")
 
 try:
     from ..index_store import (
-        INDEX_DIR, load_index, load_project_map, get_symbol_content_text,
+        INDEX_DIR, _EXPLICIT_INDEX_DIR, load_index, load_project_map,
+        get_symbol_content_text,
         invalidate_caches, _invalidate_caches_unlocked, _get_session_store,
         _discover_index_dirs, _load_single_index,
     )
 except ImportError:
     from index_store import (
-        INDEX_DIR, load_index, load_project_map, get_symbol_content_text,
+        INDEX_DIR, _EXPLICIT_INDEX_DIR, load_index, load_project_map,
+        get_symbol_content_text,
         invalidate_caches, _invalidate_caches_unlocked, _get_session_store,
         _discover_index_dirs, _load_single_index,
     )
@@ -753,7 +755,13 @@ def _perform_live_reindex_unlocked(project=None):
             reindex_results.append({"project": proj, "error": f"Root not found: {root}"})
             continue
         try:
-            engine = IndexEngine(proj, Path(root), index_dir=INDEX_DIR)
+            project_root = Path(root)
+            index_dir = (
+                INDEX_DIR
+                if _EXPLICIT_INDEX_DIR
+                else project_root / ".flyto-index"
+            )
+            engine = IndexEngine(proj, project_root, index_dir=index_dir)
             scan_result = engine.scan(incremental=True)
             reindex_results.append({
                 "project": proj,

@@ -37,6 +37,31 @@ def _is_loopback_host(host: str) -> bool:
     return host.casefold() in {"localhost", "127.0.0.1", "::1"}
 
 
+def _authority_host(authority: str) -> str:
+    """Extract a host from an HTTP authority without accepting userinfo."""
+    value = authority.strip()
+    if not value or "@" in value:
+        return ""
+    if value.startswith("["):
+        end = value.find("]")
+        return value[1:end] if end > 0 else ""
+    if value.count(":") == 1:
+        return value.split(":", 1)[0]
+    return value
+
+
+def _is_loopback_authority(authority: str) -> bool:
+    return _is_loopback_host(_authority_host(authority))
+
+
+def _is_loopback_origin(origin: str) -> bool:
+    parts = origin.strip().split("://", 1)
+    if len(parts) != 2 or parts[0].casefold() not in {"http", "https"}:
+        return False
+    authority = parts[1].split("/", 1)[0]
+    return _is_loopback_authority(authority)
+
+
 def _is_replay_safe(payload: dict) -> bool:
     method = payload.get("method", "")
     if method in _SAFE_METHODS:
@@ -184,7 +209,21 @@ class MCPRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _reject_nonlocal_headers(self) -> bool:
+        """Block DNS-rebinding requests while allowing non-browser MCP clients."""
+        host = self.headers.get("Host", "")
+        origin = self.headers.get("Origin")
+        if not _is_loopback_authority(host):
+            self._send_json(403, {"error": "Host must resolve to loopback"})
+            return True
+        if origin and not _is_loopback_origin(origin):
+            self._send_json(403, {"error": "Origin must resolve to loopback"})
+            return True
+        return False
+
     def do_GET(self) -> None:
+        if self._reject_nonlocal_headers():
+            return
         if self.path == "/health":
             self.bridge.start()
             self._send_json(200, self.bridge.health())
@@ -197,6 +236,8 @@ class MCPRequestHandler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
+        if self._reject_nonlocal_headers():
+            return
         if self.path != "/mcp":
             self._send_json(404, {"error": "not found"})
             return

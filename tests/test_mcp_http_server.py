@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from mcp_http_server import (
     StdioMCPBridge,
+    _is_loopback_authority,
+    _is_loopback_origin,
     _is_replay_safe,
     create_server,
 )
@@ -48,6 +50,15 @@ class _FakeBridge:
 def test_server_rejects_non_loopback_bind():
     with pytest.raises(ValueError, match="loopback"):
         create_server("0.0.0.0", 0)
+
+
+def test_authority_and_origin_checks_block_dns_rebinding():
+    assert _is_loopback_authority("127.0.0.1:8765")
+    assert _is_loopback_authority("[::1]:8765")
+    assert _is_loopback_origin("http://localhost:8765")
+    assert not _is_loopback_authority("attacker.example:8765")
+    assert not _is_loopback_origin("https://attacker.example")
+    assert not _is_loopback_origin("null")
 
 
 def test_only_read_only_tool_calls_are_replay_safe():
@@ -96,6 +107,16 @@ def test_http_mcp_and_health_endpoints():
         assert health_response.status == 200
         assert health["transport"] == "streamable-http"
         assert health["stdio_child_alive"] is True
+
+        connection.request(
+            "GET",
+            "/health",
+            headers={"Origin": "https://attacker.example"},
+        )
+        rejected = connection.getresponse()
+        rejected_body = json.loads(rejected.read())
+        assert rejected.status == 403
+        assert "Origin" in rejected_body["error"]
         connection.close()
     finally:
         server.shutdown()
