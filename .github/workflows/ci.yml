@@ -59,6 +59,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install --upgrade pip
       - run: pip install ".[dev]"
+      - run: python benchmarks/evaluate.py --check --json
       - run: flyto-index verify . --full-scan --strict --report /tmp/flyto-indexer-verify.sarif --report-format sarif --json
 
   build:

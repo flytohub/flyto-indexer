@@ -23,10 +23,14 @@ Claude Code config (~/.claude/mcp_servers.json):
 import json
 import logging
 import os
+import queue
+import signal
 import subprocess
 import sys
+import threading
 import time as _time
 from collections import deque
+from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
@@ -37,6 +41,29 @@ except ImportError:  # Direct source execution.
     from version import __version__
 
 logger = logging.getLogger("flyto-indexer.mcp")
+
+_DEFAULT_TOOL_TIMEOUT_SECONDS = 120.0
+_LONG_TOOL_TIMEOUT_SECONDS = 600.0
+_MIN_TOOL_TIMEOUT_SECONDS = 1.0
+_MAX_TOOL_TIMEOUT_SECONDS = 900.0
+_MAX_CANCELLED_REQUESTS = 256
+_request_state_lock = threading.Lock()
+_cancelled_request_ids: dict[Any, None] = {}
+_active_request_id: Any = None
+_deadline_armed = False
+
+
+class ToolDeadlineExceeded(BaseException):
+    """Control flow raised when a tool exceeds its wall-clock budget.
+
+    This intentionally does not inherit from Exception: analyzers commonly
+    catch broad Exception subclasses to turn one scanner failure into a
+    structured warning, but request deadlines must escape those local guards.
+    """
+
+
+class ToolRequestCancelled(BaseException):
+    """Control flow raised when the MCP client cancels the active tool request."""
 
 
 # =============================================================================
@@ -66,8 +93,11 @@ def send_response(id: Any, result: Any):
     response = {"jsonrpc": "2.0", "id": id, "result": result}
     print(json.dumps(response), flush=True)
 
-def send_error(id: Any, code: int, message: str):
-    response = {"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}
+def send_error(id: Any, code: int, message: str, data: dict | None = None):
+    error = {"code": code, "message": message}
+    if data is not None:
+        error["data"] = data
+    response = {"jsonrpc": "2.0", "id": id, "error": error}
     print(json.dumps(response), flush=True)
 
 def send_notification(method: str, params: dict):
@@ -121,6 +151,7 @@ def _runtime_envelope(
         "index_freshness": index_freshness,
         "elapsed_ms": round((_time.monotonic() - started_at) * 1000, 2),
         "result_mode": _result_mode(tool_name, arguments),
+        "deadline_ms": round(_tool_timeout_seconds(tool_name, arguments) * 1000),
     }
 
 
@@ -151,6 +182,107 @@ def _tool_project_scope(arguments: dict) -> str | None:
         if candidate.is_dir() and (candidate / ".flyto-index").is_dir():
             return candidate.resolve().name
     return None
+
+
+def _tool_timeout_seconds(tool_name: str, arguments: dict) -> float:
+    """Return a bounded timeout, with larger defaults for full verification."""
+    long_running = (
+        tool_name in {"verify", "verify_workspace"}
+        or (
+            tool_name == "task"
+            and arguments.get("action") in {"plan", "validate"}
+        )
+    )
+    default = _LONG_TOOL_TIMEOUT_SECONDS if long_running else _DEFAULT_TOOL_TIMEOUT_SECONDS
+    raw = os.environ.get("FLYTO_INDEXER_TOOL_TIMEOUT_SECONDS", "").strip()
+    try:
+        configured = float(raw) if raw else default
+    except ValueError:
+        configured = default
+    return max(_MIN_TOOL_TIMEOUT_SECONDS, min(configured, _MAX_TOOL_TIMEOUT_SECONDS))
+
+
+def _cancel_request(request_id: Any) -> bool:
+    """Record cancellation and interrupt an armed POSIX request when possible."""
+    if request_id is None:
+        return False
+    with _request_state_lock:
+        _cancelled_request_ids[request_id] = None
+        while len(_cancelled_request_ids) > _MAX_CANCELLED_REQUESTS:
+            _cancelled_request_ids.pop(next(iter(_cancelled_request_ids)))
+        interrupt = _active_request_id == request_id and _deadline_armed
+    if interrupt and hasattr(signal, "SIGALRM"):
+        os.kill(os.getpid(), signal.SIGALRM)
+    return interrupt
+
+
+def _begin_request(request_id: Any) -> None:
+    global _active_request_id
+    with _request_state_lock:
+        _active_request_id = request_id
+
+
+def _finish_request(request_id: Any) -> None:
+    global _active_request_id, _deadline_armed
+    with _request_state_lock:
+        _cancelled_request_ids.pop(request_id, None)
+        if _active_request_id == request_id:
+            _active_request_id = None
+        _deadline_armed = False
+
+
+def _raise_if_cancelled(request_id: Any) -> None:
+    with _request_state_lock:
+        cancelled = request_id in _cancelled_request_ids
+    if cancelled:
+        raise ToolRequestCancelled(f"MCP request {request_id!r} was cancelled")
+
+
+def _deadline_signal_handler(_signum, _frame) -> None:
+    with _request_state_lock:
+        cancelled = _active_request_id in _cancelled_request_ids
+    if cancelled:
+        raise ToolRequestCancelled(f"MCP request {_active_request_id!r} was cancelled")
+    raise ToolDeadlineExceeded("MCP tool execution deadline exceeded")
+
+
+@contextmanager
+def _tool_deadline(request_id: Any, timeout_seconds: float):
+    """Interrupt Python work on POSIX while remaining a no-op on unsupported runtimes."""
+    global _deadline_armed
+    supported = (
+        hasattr(signal, "SIGALRM")
+        and hasattr(signal, "setitimer")
+        and threading.current_thread() is threading.main_thread()
+    )
+    if not supported:
+        _raise_if_cancelled(request_id)
+        yield
+        return
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_timer = signal.getitimer(signal.ITIMER_REAL)
+    started_at = _time.monotonic()
+    signal.signal(signal.SIGALRM, _deadline_signal_handler)
+    signal.setitimer(signal.ITIMER_REAL, timeout_seconds)
+    with _request_state_lock:
+        _deadline_armed = True
+    try:
+        _raise_if_cancelled(request_id)
+        yield
+    finally:
+        with _request_state_lock:
+            _deadline_armed = False
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        previous_delay, previous_interval = previous_timer
+        if previous_delay > 0:
+            elapsed = _time.monotonic() - started_at
+            signal.setitimer(
+                signal.ITIMER_REAL,
+                max(0.001, previous_delay - elapsed),
+                previous_interval,
+            )
 
 
 # =============================================================================
@@ -468,7 +600,14 @@ def handle_request(request: dict):
     elif method == "logging/setLevel":
         send_response(id, {})
 
-    elif method in ("notifications/initialized", "notifications/cancelled"):
+    elif method == "ping":
+        send_response(id, {})
+
+    elif method == "notifications/cancelled":
+        if isinstance(params, dict):
+            _cancel_request(params.get("requestId"))
+
+    elif method == "notifications/initialized":
         pass
 
     else:
@@ -476,6 +615,43 @@ def handle_request(request: dict):
 
 
 def _handle_tool_call(id: Any, params: dict):
+    """Run a tool within a bounded, cancellable request lifecycle."""
+    started_at = _time.monotonic()
+    tool_name = params.get("name", "")
+    arguments = params.get("arguments", {})
+    timeout_seconds = _tool_timeout_seconds(tool_name, arguments)
+    _begin_request(id)
+    try:
+        with _tool_deadline(id, timeout_seconds):
+            _handle_tool_call_body(id, params)
+    except ToolRequestCancelled as exc:
+        send_error(id, -32800, str(exc), {
+            "cancelled": True,
+            "tool": tool_name,
+            "elapsed_ms": round((_time.monotonic() - started_at) * 1000, 2),
+            "retryable": _is_replay_safe_tool(tool_name),
+        })
+    except ToolDeadlineExceeded:
+        send_error(id, -32001, f"Tool '{tool_name}' timed out after {timeout_seconds:g}s", {
+            "timed_out": True,
+            "tool": tool_name,
+            "deadline_ms": round(timeout_seconds * 1000),
+            "elapsed_ms": round((_time.monotonic() - started_at) * 1000, 2),
+            "retryable": _is_replay_safe_tool(tool_name),
+        })
+    finally:
+        _finish_request(id)
+
+
+def _is_replay_safe_tool(tool_name: str) -> bool:
+    return any(
+        tool.get("name") == tool_name
+        and tool.get("annotations", {}).get("readOnlyHint") is True
+        for tool in TOOLS
+    )
+
+
+def _handle_tool_call_body(id: Any, params: dict):
     """Handle tools/call — extracted from handle_request for clarity."""
     started_at = _time.monotonic()
     index_freshness = "checked"
@@ -566,6 +742,8 @@ def _handle_tool_call(id: Any, params: dict):
         if _is_plan and isinstance(result, dict):
             payload["content"][0]["text"] += _build_analyze_task_directive(result)
         send_response(id, payload)
+    except (ToolDeadlineExceeded, ToolRequestCancelled):
+        raise
     except Exception as e:
         send_error(id, -32000, str(e))
 
@@ -720,6 +898,61 @@ sys.modules[__name__].__class__ = _IndexStoreProxy
 # Main
 # =============================================================================
 
+_STDIO_EOF = object()
+
+
+def _read_stdio_requests(request_queue: queue.Queue) -> None:
+    """Read stdin independently so cancellation can interrupt an active tool."""
+    for line in sys.stdin:
+        try:
+            request = json.loads(line.strip())
+        except json.JSONDecodeError as exc:
+            request_queue.put({"_parse_error": str(exc)})
+            continue
+        if (
+            isinstance(request, dict)
+            and request.get("method") == "notifications/cancelled"
+        ):
+            params = request.get("params")
+            if isinstance(params, dict):
+                _cancel_request(params.get("requestId"))
+            continue
+        request_queue.put(request)
+    request_queue.put(_STDIO_EOF)
+
+
+def _serve_stdio() -> None:
+    """Block without polling while a reader thread accepts cancellation messages."""
+    request_queue: queue.Queue = queue.Queue()
+    reader = threading.Thread(
+        target=_read_stdio_requests,
+        args=(request_queue,),
+        name="flyto-indexer-stdio-reader",
+        daemon=True,
+    )
+    reader.start()
+    while True:
+        request = request_queue.get()
+        if request is _STDIO_EOF:
+            return
+        if not isinstance(request, dict):
+            logger.warning("Ignoring non-object JSON-RPC request")
+            continue
+        if "_parse_error" in request:
+            logger.warning("JSON decode error: %s", request["_parse_error"])
+            continue
+        try:
+            logger.debug(
+                "Received MCP method=%s id=%r",
+                request.get("method", ""),
+                request.get("id"),
+            )
+            handle_request(request)
+        except Exception as exc:
+            logger.exception("MCP request failed")
+            send_error(request.get("id"), -32000, str(exc))
+
+
 def main():
     """MCP Server main program."""
     try:
@@ -733,20 +966,7 @@ def main():
     sys.stderr.write(f"[flyto-indexer] Starting MCP server (pid={os.getpid()})\n")
     sys.stderr.flush()
 
-    for line in sys.stdin:
-        try:
-            sys.stderr.write(f"[flyto-indexer] Received: {line[:100]}...\n")
-            sys.stderr.flush()
-            request = json.loads(line.strip())
-            handle_request(request)
-        except json.JSONDecodeError as e:
-            sys.stderr.write(f"[flyto-indexer] JSON decode error: {e}\n")
-            sys.stderr.flush()
-        except Exception as e:
-            sys.stderr.write(f"[flyto-indexer] Error: {e}\n")
-            sys.stderr.flush()
-            req_id = request.get("id") if isinstance(request, dict) else None
-            print(json.dumps({"jsonrpc": "2.0", "id": req_id, "error": {"code": -32000, "message": str(e)}}), flush=True)
+    _serve_stdio()
 
 
 if __name__ == "__main__":

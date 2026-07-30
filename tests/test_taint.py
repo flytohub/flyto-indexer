@@ -467,6 +467,38 @@ class TestOutputFormat:
         assert hasattr(f, "recommendation")
         assert isinstance(f.flow_chain, list)
         assert len(f.flow_chain) >= 1
+        output = f.to_dict()
+        assert output["finding_id"].startswith("flyto-")
+
+    def test_taintflow_identity_survives_line_moves_and_honors_sink_line(self):
+        first = TaintFlow(
+            file_path="src/runner.py",
+            line=20,
+            severity="high",
+            category="rce",
+            source_expr="request.args['cmd']",
+            sink_expr="subprocess.run(cmd)",
+            source_file="src/routes.py",
+            source_line=10,
+            sink_file="src/runner.py",
+            sink_line=20,
+        ).to_dict()
+        moved = TaintFlow(
+            file_path="src/runner.py",
+            line=47,
+            severity="high",
+            category="rce",
+            source_expr="request.args['cmd']",
+            sink_expr="subprocess.run(cmd)",
+            source_file="src/routes.py",
+            source_line=31,
+            sink_file="src/runner.py",
+            sink_line=47,
+        ).to_dict()
+
+        assert first["finding_id"] == moved["finding_id"]
+        assert first["sink_line"] == 20
+        assert moved["sink_line"] == 47
 
 
 # ── Performance / limits ───────────────────────────────────────────────────
@@ -474,6 +506,22 @@ class TestOutputFormat:
 
 class TestLimits:
     """Ensure performance limits are respected."""
+
+    def test_benchmark_tree_is_skipped_from_project_scan_but_explicit_case_runs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            case_root = root / "benchmarks" / "corpus" / "python-sqli"
+            case_root.mkdir(parents=True)
+            (case_root / "app.py").write_text(textwrap.dedent("""\
+                def get_user():
+                    user_id = request.args.get("id")
+                    cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")
+            """))
+
+            assert TaintAnalyzer(root).analyze() == []
+            explicit_findings = TaintAnalyzer(case_root).analyze()
+            assert len(explicit_findings) == 1
+            assert explicit_findings[0].category == "sql_injection"
 
     def test_skips_test_directories(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -1,14 +1,46 @@
 # Flyto2 security benchmark corpus
 
+This directory has two deliberately separate layers:
+
+1. a small, committed, offline core gate that runs in every CI verification;
+2. an optional large external comparison corpus for release research.
+
+## Executable offline gate
+
+Run:
+
+```bash
+python benchmarks/evaluate.py --check --json
+```
+
+`evaluate.py` builds temporary indexes and runs the real taint analyzer against
+the committed `corpus/` cases. The manifest contains positive, negative,
+sanitized, constant-value, and cross-file examples across Python, JavaScript,
+and Go. The gate checks exact expected category counts, scan errors, cross-file
+path depth, precision, recall, negative-case false-positive rate, and a bounded
+per-case latency. Its evidence fingerprint excludes timing and memory noise, so
+identical findings produce identical proof across runs.
+
+The default gate is intentionally tiny and has no network or third-party
+scanner dependency. It catches local analyzer regressions quickly; it does not
+claim parity with a full external scanner corpus.
+
+## Optional external comparison corpus
+
+The remaining material pins a **rule baseline** and describes the larger
+sample-repo corpus used for external false-positive-rate comparison. External
+Semgrep, Checkov, and comparison scanners are not invoked by the default gate.
+
 Owner: Researcher (FLY-39)
 Consumers: QA in week 4 (FLY-11 MVP-exit gate); Backend Dev in week 2 when wiring the Semgrep adapter (FLY-42).
-
-This folder pins the **rule baseline** and the **sample-repo corpus** used to gate MVP exit on false-positive-rate parity with Aikido. Scanners are not run here — that lives with the Semgrep/Checkov adapters in `flyto-indexer/src/scanner/`.
 
 ## Files
 
 | File | Purpose |
 |---|---|
+| `evaluate.py` | Offline executable accuracy, path, latency, and memory gate. |
+| `corpus/manifest.json` | Ground truth for the committed mini-projects. |
+| `corpus/**` | Positive and negative source fixtures used by the local gate. |
 | `semgrep_baseline.csv` | Rule baseline: `rule_id,expected_severity,source_repo`. 311 rules across Python, JS/TS, Go, Terraform. |
 | `build_semgrep_baseline.py` | Reproducible generator — re-derives the CSV from the upstream Semgrep registry. |
 | `README.md` | This file. |

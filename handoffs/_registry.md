@@ -2,6 +2,7 @@
 
 | Date | Topic | File | Status |
 | --- | --- | --- | --- |
+| 2026-07-30 | Verification identity, evaluation, and MCP liveness | `2026-07-30-verification-hardening.md` | Active |
 | 2026-07-23 | Module variants and VitePress cache exclusion | `2026-07-23-module-variant-indexing.md` | Active |
 | 2026-07-22 | Source reference coverage | `2026-07-22-source-reference-coverage.md` | Active |
 | 2026-07-22 | Frontend SFC island accuracy | `2026-07-22-frontend-sfc-island-accuracy.md` | Active |

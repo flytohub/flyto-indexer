@@ -21,6 +21,7 @@ from typing import Any
 
 from .doc_scanner import scan_documentation
 from .engine import IndexEngine
+from .finding_identity import stable_finding_id
 from .models import SymbolType
 from .secret_scanner import scan_secrets
 
@@ -34,7 +35,7 @@ def _invalidate_index_store_caches() -> None:
 
 
 _STATUS_RANK = {"pass": 0, "warn": 1, "fail": 2}
-_VERIFY_RESULT_SCHEMA_VERSION = "1"
+_VERIFY_RESULT_SCHEMA_VERSION = "2"
 _PROJECT_MARKERS = (
     ".git", "pyproject.toml", "package.json", "go.mod", "Cargo.toml",
     "composer.json", "Gemfile", "src", "src-next",
@@ -872,6 +873,11 @@ def _check_weak_scanners(root: Path, add_check) -> None:
     secrets = scan_secrets(root)
     secret_samples = [
         {
+            "finding_id": stable_finding_id(
+                f"secret/{finding.pattern}",
+                finding.file,
+                anchor=finding.masked_value,
+            ),
             "file": finding.file,
             "line": finding.line,
             "pattern": finding.pattern,
@@ -913,6 +919,7 @@ def _check_weak_scanners(root: Path, add_check) -> None:
         for flow in high_risk[:10]:
             item = flow.to_dict()
             taint_samples.append({
+                "finding_id": item.get("finding_id"),
                 "source_file": item.get("source_file"),
                 "source_line": item.get("source_line"),
                 "sink_file": item.get("sink_file"),
@@ -2675,7 +2682,42 @@ def _find_status_regressions(
                 "current": current_status,
                 "reason": "status worsened",
             })
+            continue
+        if current_status not in {"warn", "fail"}:
+            continue
+        baseline_ids = _finding_ids_from_check(baseline_checks.get(name) or {})
+        current_ids = _finding_ids_from_check(check)
+        if not baseline_ids or not current_ids:
+            continue
+        new_ids = sorted(current_ids - baseline_ids)
+        if new_ids:
+            regressions.append({
+                "check": name,
+                "baseline": baseline_status,
+                "current": current_status,
+                "reason": "new finding",
+                "new_finding_ids": new_ids,
+            })
     return regressions
+
+
+def _finding_ids_from_check(check: dict[str, Any]) -> set[str]:
+    """Collect nested finding IDs without treating arbitrary metric strings as findings."""
+    found: set[str] = set()
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            finding_id = value.get("finding_id")
+            if isinstance(finding_id, str) and finding_id:
+                found.add(finding_id)
+            for nested in value.values():
+                visit(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                visit(nested)
+
+    visit(check)
+    return found
 
 
 def _discover_workspace_projects(root: Path) -> list[Path]:
@@ -2797,16 +2839,51 @@ def _render_sarif_report(result: dict[str, Any]) -> str:
         })
         if status not in {"warn", "fail"}:
             continue
-        sarif_results.append({
-            "ruleId": rule_id,
-            "level": "error" if status == "fail" else "warning",
-            "message": {"text": f"{project}: {check.get('summary', '')}"},
-            "locations": [{
-                "physicalLocation": {
-                    "artifactLocation": {"uri": path or project},
+        metrics = check.get("metrics") if isinstance(check.get("metrics"), dict) else {}
+        samples = [
+            sample
+            for sample in metrics.get("samples", [])
+            if isinstance(sample, dict) and sample.get("finding_id")
+        ]
+        candidates = samples or [{
+            "finding_id": check.get("finding_id"),
+            "file": path or project,
+        }]
+        for candidate in candidates:
+            location_path = (
+                candidate.get("sink_file")
+                or candidate.get("file")
+                or path
+                or project
+            )
+            line = candidate.get("sink_line") or candidate.get("line")
+            physical_location: dict[str, Any] = {
+                "artifactLocation": {"uri": str(location_path)},
+            }
+            if isinstance(line, int) and line > 0:
+                physical_location["region"] = {"startLine": line}
+            finding_id = str(candidate.get("finding_id") or stable_finding_id(
+                f"verify/{rule_id}",
+                location_path,
+                anchor=project,
+            ))
+            detail = candidate.get("category") or candidate.get("pattern")
+            message = f"{project}: {check.get('summary', '')}"
+            if detail:
+                message = f"{message} ({detail})"
+            sarif_results.append({
+                "ruleId": rule_id,
+                "level": "error" if status == "fail" else "warning",
+                "message": {"text": message},
+                "locations": [{"physicalLocation": physical_location}],
+                "partialFingerprints": {
+                    "flytoFindingId/v1": finding_id,
                 },
-            }],
-        })
+                "properties": {
+                    "findingId": finding_id,
+                    "project": project,
+                },
+            })
     return json.dumps({
         "version": "2.1.0",
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
@@ -2897,6 +2974,7 @@ def _checks_fingerprint(checks: list[dict[str, Any]]) -> str:
             "name": check.get("name", ""),
             "status": check.get("status", ""),
             "summary": check.get("summary", ""),
+            "finding_ids": sorted(_finding_ids_from_check(check)),
         }
         for check in checks
     ]
@@ -2918,6 +2996,14 @@ def _finalize(
     *,
     pass_override: bool | None = None,
 ) -> dict[str, Any]:
+    for check in checks:
+        check.setdefault(
+            "finding_id",
+            stable_finding_id(
+                f"verify/{check.get('name', 'check')}",
+                root.name,
+            ),
+        )
     summary = _summarize_checks(checks)
     return {
         "project": root.name,

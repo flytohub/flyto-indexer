@@ -66,6 +66,18 @@ result. This adds no tool, action, dependency, upload, or model call.
   its preferred version so the client can decide whether to continue.
 - Tool errors return structured JSON-RPC errors; analysis findings are normal
   tool results.
+- Tool calls have bounded wall-clock deadlines. Normal calls default to 120
+  seconds; full verification and task plan/validate calls default to 600
+  seconds. `FLYTO_INDEXER_TOOL_TIMEOUT_SECONDS` overrides the defaults within
+  the enforced 1–900 second range.
+- MCP `notifications/cancelled` interrupts an active POSIX stdio request and
+  returns the standard request-cancelled error. Deadline and cancellation
+  errors include a `retryable` flag derived from the tool's read-only
+  annotation, and the same server process remains available for the next
+  request.
+- MCP `ping` returns an empty success response for connection-liveness probes.
+- `_runtime.deadline_ms` exposes the applied budget beside runtime version,
+  commit, index freshness, elapsed time, and result mode.
 - Per-process and per-session limits are configurable through environment
   variables listed in the [configuration reference](reference/configuration.md).
 

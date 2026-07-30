@@ -27,6 +27,7 @@ from src.verify import (
     _check_single_project_islands,
     _extract_openapi_json_api_contracts,
     _extract_api_calls_from_text,
+    _find_status_regressions,
     _git_changed_paths,
     _looks_like_backend,
     _looks_like_frontend,
@@ -673,6 +674,48 @@ def test_regression_only_ignores_unchanged_warning(tmp_path):
     assert current["pass"] is True
     assert checks["agent_hygiene"]["status"] == "warn"
     assert checks["regression_gate"]["status"] == "pass"
+
+
+def test_regression_gate_detects_new_finding_when_status_is_unchanged():
+    baseline = {
+        "checks": [{
+            "name": "weak_scan_taint",
+            "status": "warn",
+            "finding_id": "flyto-check",
+            "metrics": {"samples": [{"finding_id": "flyto-existing"}]},
+        }],
+    }
+    current = [{
+        "name": "weak_scan_taint",
+        "status": "warn",
+        "finding_id": "flyto-check",
+        "metrics": {
+            "samples": [
+                {"finding_id": "flyto-existing"},
+                {"finding_id": "flyto-new"},
+            ],
+        },
+    }]
+
+    assert _find_status_regressions(current, baseline) == [{
+        "check": "weak_scan_taint",
+        "baseline": "warn",
+        "current": "warn",
+        "reason": "new finding",
+        "new_finding_ids": ["flyto-new"],
+    }]
+
+
+def test_legacy_baseline_without_finding_ids_keeps_status_only_behavior():
+    baseline = {"checks": [{"name": "weak_scan_taint", "status": "warn"}]}
+    current = [{
+        "name": "weak_scan_taint",
+        "status": "warn",
+        "finding_id": "flyto-check",
+        "metrics": {"samples": [{"finding_id": "flyto-new"}]},
+    }]
+
+    assert _find_status_regressions(current, baseline) == []
 
 
 def test_workspace_verification_aggregates_projects(tmp_path):
@@ -1668,10 +1711,14 @@ def test_render_report_formats(tmp_path):
     markdown = render_report(result, "markdown")
     junit = render_report(result, "junit")
     sarif = render_report(result, "sarif")
+    sarif_payload = json.loads(sarif)
 
     assert "# Flyto2 Verify" in markdown
     assert "<testsuite" in junit
     assert '"version": "2.1.0"' in sarif
+    for sarif_result in sarif_payload["runs"][0]["results"]:
+        assert sarif_result["partialFingerprints"]["flytoFindingId/v1"].startswith("flyto-")
+        assert sarif_result["properties"]["findingId"].startswith("flyto-")
 
 
 def test_cmd_verify_writes_report(tmp_path):

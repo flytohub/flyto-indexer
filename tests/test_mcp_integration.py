@@ -392,6 +392,36 @@ class TestToolsList:
         assert actual == EXPECTED_TOOL_NAMES
 
 
+class TestProtocolLiveness:
+    """Real stdio cancellation must leave the same process responsive."""
+
+    def test_pre_cancelled_read_only_call_then_ping(self, mcp_server):
+        global _next_id
+        cancelled_id = _next_id
+        _next_id += 1
+        _send_jsonrpc(
+            mcp_server,
+            "notifications/cancelled",
+            {"requestId": cancelled_id, "reason": "integration test"},
+            req_id=None,
+        )
+        _send_jsonrpc(
+            mcp_server,
+            "tools/call",
+            {"name": "search", "arguments": {"query": "login_user"}},
+            req_id=cancelled_id,
+        )
+
+        cancelled = _read_response(mcp_server)
+        assert cancelled["id"] == cancelled_id
+        assert cancelled["error"]["code"] == -32800
+        assert cancelled["error"]["data"]["cancelled"] is True
+        assert cancelled["error"]["data"]["retryable"] is True
+
+        ping = _call(mcp_server, "ping")
+        assert ping == {"jsonrpc": "2.0", "id": ping["id"], "result": {}}
+
+
 class TestToolCalls:
     """Test tools/call with real tool dispatch."""
 

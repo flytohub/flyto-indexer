@@ -35,6 +35,33 @@ update one only after reviewing the findings, commit it with the reason, and
 use comparison mode in CI to reject new regressions. See
 `flyto-index verify-baseline --help` for the exact current arguments.
 
+Verify result schema v2 assigns stable, privacy-preserving IDs to checks and
+individual secret/taint findings. IDs use rule, repository-relative path, and a
+bounded semantic anchor, but not line numbers or source excerpts. Regression
+mode therefore detects a new finding even when its parent check was already
+warning. A v1 baseline without IDs remains readable and compares status only.
+
+SARIF output carries the same ID in `partialFingerprints.flytoFindingId/v1` and
+`properties.findingId`, with file and line evidence when a sampled finding has
+it. This lets code-scanning consumers correlate a finding across line-only
+moves.
+
+## Offline Scanner Evaluation
+
+The repository includes a small committed positive/negative corpus for Python,
+JavaScript, and Go. It runs the real index and taint analyzer without network
+access and fails on missed findings, extra findings, missing cross-file path
+proof, scan errors, or latency beyond the configured bound:
+
+```bash
+python benchmarks/evaluate.py --check --json
+```
+
+The report includes precision, recall, negative-case false-positive rate,
+per-case latency and peak memory, plus a deterministic evidence fingerprint
+that excludes timing noise. This fast gate complements—not replaces—the larger
+optional external corpus described in [benchmarks/README.md](../benchmarks/README.md).
+
 ## Indexer Release Gate
 
 Run these commands from this repository before release:
@@ -46,13 +73,14 @@ python3 scripts/generate-reference.py --check
 ruff check src tests scripts
 mypy src
 pytest tests -v
+python benchmarks/evaluate.py --check --json
 python -m build
 python -m src.cli verify . --full-scan --strict --json
 ```
 
-CI repeats the reference, lint, type, test, self-verify, and wheel checks. The
-wheel smoke test installs into an isolated environment and proves that the
-shipped rule corpus is usable.
+CI repeats the reference, lint, type, test, offline scanner evaluation,
+self-verify, and wheel checks. The wheel smoke test installs into an isolated
+environment and proves that the shipped rule corpus is usable.
 
 ## Reading A Result
 

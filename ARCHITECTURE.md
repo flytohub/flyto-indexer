@@ -27,7 +27,13 @@ HTTP references.
 4. Verify combines index integrity, context lookup, impact closure, secret
    checks, taint rules, documentation checks, rules/layers policy checks, and
    release hygiene checks.
-5. CI and agents consume structured findings and decide what to fix.
+5. Stable finding identities correlate JSON baseline and SARIF evidence without
+   depending on line numbers or retaining raw source bodies.
+6. The committed offline corpus runs the real index/taint path and gates exact
+   positive/negative outcomes plus bounded latency. Repository self-scans treat
+   benchmark trees as non-production; the evaluator scans each case root
+   explicitly.
+7. CI and agents consume structured findings and decide what to fix.
 
 ## Product API Contract Detection
 
@@ -62,7 +68,9 @@ HTTP references.
 - `src/cli.py` translates shell arguments and exit-code requirements into core
   service calls.
 - `src/mcp_server.py` handles stdio JSON-RPC, protocol negotiation, rate limits,
-  tool listing, and dispatch.
+  tool listing, bounded deadlines, cancellation, and dispatch. A blocking
+  reader thread accepts cancellation notifications while the main thread keeps
+  tool execution interruptible through POSIX timers; it does not poll.
 - `src/api_server.py` provides a separate localhost bridge described by its
   embedded OpenAPI contract.
 - `src/__init__.py` exports the stable Python package entry surface.

@@ -1,5 +1,40 @@
 # Decisions
 
+## 2026-07-30 - Scanner claims require local reproducible evidence
+
+Decision: keep a small committed positive/negative Python, JavaScript, and Go
+corpus in CI. Run it through the real index and taint analyzer and gate exact
+findings, cross-file path proof, scan errors, precision, recall, false-positive
+rate, and bounded latency.
+
+Reason: external corpus plans and feature inventories do not prove current
+behavior. A fast offline gate catches regressions on every change without
+cloning repositories, adding a scanner dependency, or slowing ordinary MCP
+calls.
+
+## 2026-07-30 - Finding identity is semantic and line-independent
+
+Decision: derive privacy-preserving finding IDs from rule, normalized
+repository-relative path, bounded semantic anchor, and discriminator. Exclude
+line numbers and raw source bodies; reuse the ID in verify baselines and SARIF.
+Legacy baselines without IDs remain status-only.
+
+Reason: line-number fingerprints create review churn, while check-level status
+alone lets new findings hide inside an existing warning. One stable local ID
+closes both gaps without storing source excerpts.
+
+## 2026-07-30 - Stdio requests are bounded and cancellable
+
+Decision: give MCP tool calls bounded deadlines, accept standard cancellation
+notifications while a request is active, return structured retryable errors,
+and keep the process available afterward. Use blocking input plus POSIX
+main-thread interruption; do not add polling, worker pools, or a new public
+tool.
+
+Reason: an unbounded read-only scan can make the whole service appear dead.
+Request-scoped interruption restores liveness without recurring CPU cost or
+expanding the public API.
+
 ## 2026-07-28 - Gate failure starts remediation, not termination
 
 Decision: MCP initialize, plan, and task-tool contracts define `pass=false` as

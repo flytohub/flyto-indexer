@@ -24,6 +24,11 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
+try:
+    from ..finding_identity import stable_finding_id
+except ImportError:  # Direct source imports expose analyzer as a top-level package.
+    from finding_identity import stable_finding_id
+
 from .taint_rules import (
     GO_TAINT_PATTERNS,
     JS_TAINT_PATTERNS,
@@ -42,7 +47,8 @@ MAX_FINDINGS = 200
 MAX_CALLERS = 2000
 MAX_CROSS_DEPTH = 6
 SKIP_DIR_PATTERNS = re.compile(
-    r"(?:^|/)(?:test|tests|__tests__|mock|fixture|node_modules|__pycache__|"
+    r"(?:^|/)(?:test|tests|__tests__|mock|fixture|benchmark|benchmarks|"
+    r"node_modules|__pycache__|"
     r"\.git|dist|dist-next|build|\.venv[^/]*|venv[^/]*|site-packages|"
     r"\.next|\.nuxt|\.output|\.open-next|\.wrangler|\.cloudflare|out|coverage)(?:/|$)|"
     r"(?:^|/)[^/]*(?:_test\.go|_test\.py|\.test\.[jt]sx?|\.spec\.[jt]sx?)$"
@@ -87,13 +93,26 @@ class TaintFlow:
     sanitized: bool = False
 
     def to_dict(self) -> dict:
+        source_file = self.source_file or self.file_path
+        sink_file = self.sink_file or self.file_path
+        sink_line = self.sink_line or self.line
+        finding_id = stable_finding_id(
+            f"taint/{self.category}",
+            sink_file,
+            anchor={
+                "source_file": source_file,
+                "source": self.source_expr,
+                "sink": self.sink_expr,
+            },
+        )
         return {
+            "finding_id": finding_id,
             "source": self.source_expr,
-            "source_file": self.source_file or self.file_path,
+            "source_file": source_file,
             "source_line": self.source_line or self.line,
             "sink": self.sink_expr,
-            "sink_file": self.sink_file or self.file_path,
-            "sink_line": self.line,
+            "sink_file": sink_file,
+            "sink_line": sink_line,
             "path": self.path or self.flow_chain,
             "sanitized": self.sanitized,
             "severity": self.severity,
@@ -1376,8 +1395,13 @@ class TaintAnalyzer:
                 two_lines = line + " " + lines[i + 1]
                 for pat, vuln_type, severity, rec in patterns:
                     if re.search(pat, two_lines, re.IGNORECASE):
-                        # Avoid duplicate if single-line already matched
-                        if not re.search(pat, line, re.IGNORECASE):
+                        # Only emit a window finding when the rule genuinely
+                        # spans both lines. The next iteration owns matches
+                        # wholly contained in the second line.
+                        if (
+                            not re.search(pat, line, re.IGNORECASE)
+                            and not re.search(pat, lines[i + 1], re.IGNORECASE)
+                        ):
                             self.findings.append(TaintFlow(
                                 file_path=file_path,
                                 line=i + 1,

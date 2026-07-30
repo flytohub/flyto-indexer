@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -1092,6 +1093,21 @@ class TestGateRemediationContract:
 class TestRuntimeEnvelope:
     """MCP tool results expose cheap, backward-compatible runtime metadata."""
 
+    def test_protocol_ping_returns_empty_success(self):
+        with patch.object(mcp_server, "send_response") as send_response:
+            mcp_server.handle_request({
+                "jsonrpc": "2.0",
+                "id": 8,
+                "method": "ping",
+                "params": {},
+            })
+
+        send_response.assert_called_once_with(8, {})
+
+    def test_deadline_control_flow_escapes_generic_scanner_guards(self):
+        assert not issubclass(mcp_server.ToolDeadlineExceeded, Exception)
+        assert not issubclass(mcp_server.ToolRequestCancelled, Exception)
+
     def test_tool_result_includes_runtime_metadata(self):
         with (
             patch.object(mcp_server, "send_response") as send_response,
@@ -1123,10 +1139,58 @@ class TestRuntimeEnvelope:
             "index_freshness",
             "elapsed_ms",
             "result_mode",
+            "deadline_ms",
         }
         assert runtime["index_freshness"] == "checked"
         assert runtime["elapsed_ms"] >= 0
         assert runtime["result_mode"] == "compact"
+        assert runtime["deadline_ms"] == 120_000
+
+    def test_tool_timeout_returns_bounded_retryable_error(self):
+        def slow_tool(_name, _arguments):
+            time.sleep(0.1)
+            return {"ok": True}
+
+        with (
+            patch.object(mcp_server, "send_error") as send_error,
+            patch.object(mcp_server, "_check_rate_limit", return_value=True),
+            patch.object(mcp_server, "_tool_timeout_seconds", return_value=0.01),
+            patch.object(index_store, "_maybe_auto_reindex"),
+            patch("execution_guard.check_enforcement", return_value=None),
+            patch("execution_guard.record_tool_call"),
+            patch("tool_registry.execute_tool", side_effect=slow_tool),
+        ):
+            mcp_server._handle_tool_call(11, {
+                "name": "structure",
+                "arguments": {"focus": "profile", "project": "flyto-indexer"},
+            })
+
+        error_id, code, message, data = send_error.call_args.args
+        assert error_id == 11
+        assert code == -32001
+        assert "timed out" in message
+        assert data["timed_out"] is True
+        assert data["retryable"] is True
+        assert data["deadline_ms"] == 10
+
+    def test_pre_cancelled_tool_never_dispatches(self):
+        mcp_server._cancel_request(12)
+        with (
+            patch.object(mcp_server, "send_error") as send_error,
+            patch("tool_registry.execute_tool") as execute_tool,
+        ):
+            mcp_server._handle_tool_call(12, {
+                "name": "structure",
+                "arguments": {"focus": "profile", "project": "flyto-indexer"},
+            })
+
+        execute_tool.assert_not_called()
+        error_id, code, message, data = send_error.call_args.args
+        assert error_id == 12
+        assert code == -32800
+        assert "cancelled" in message
+        assert data["cancelled"] is True
+        assert data["retryable"] is True
 
     def test_unscoped_call_does_not_scan_workspace(self):
         with (

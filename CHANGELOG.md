@@ -42,6 +42,17 @@
   documentation governance to the existing task contract. Enforcement remains
   advisory by default, with opt-in guarded/strict modes and expiring,
   path-scoped waivers.
+- Added a committed, offline Python/JavaScript/Go scanner evaluation gate with
+  positive, negative, sanitized, and cross-file cases; deterministic evidence
+  fingerprints; precision/recall/false-positive metrics; and bounded latency.
+- Added stable, privacy-preserving finding identities to taint results,
+  verification baselines, and SARIF partial fingerprints. Verify schema v2 now
+  detects new findings inside an already-warning check while reading legacy
+  status-only baselines.
+- Added bounded, cancellable stdio MCP tool execution with structured
+  timeout/cancellation errors, annotation-aware retry evidence, deadline
+  metadata, and process survival for the next request, plus the standard
+  protocol-level `ping` liveness probe.
 
 ### Fixed
 - Made repository fact resolution require normalized exact evidence by default,
@@ -75,6 +86,10 @@
   references.
 - Scoped MCP index loading and auto-reindex checks to the requested project,
   preventing idle requests from repeatedly scanning sibling repositories.
+- Removed a duplicate two-line Go SSRF fallback finding exposed by the new
+  accuracy corpus and corrected taint serialization to report the sink line.
+- Classified benchmark trees as non-production taint input during a repository
+  self-scan while preserving explicit per-case analysis by the evaluator.
 
 ## [2.15.0] - 2026-07-23
 

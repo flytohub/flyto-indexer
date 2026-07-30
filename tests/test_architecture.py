@@ -53,7 +53,7 @@ class TestDependencyBoundary:
         "contextlib", "traceback", "argparse", "datetime", "uuid",
         "string", "struct", "base64", "signal", "inspect", "importlib",
         "unittest", "pprint", "csv", "glob", "stat", "platform", "shlex",
-        "fcntl",
+        "fcntl", "queue",
         "xml.etree.ElementTree", "xml.etree",
         "sqlite3",
     }

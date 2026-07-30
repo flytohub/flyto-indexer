@@ -154,6 +154,14 @@ flyto-index-mcp-http --port 8765
 The bridge keeps one stdio child warm, restarts it after a failure, and only
 replays requests declared read-only. It refuses non-loopback binds.
 
+Stdio tool calls have bounded deadlines and support MCP
+`notifications/cancelled`. Normal analysis defaults to 120 seconds; full
+verification and task plan/validate calls default to 600 seconds. Override
+both, within the enforced 1–900 second range, with
+`FLYTO_INDEXER_TOOL_TIMEOUT_SECONDS`. A timeout or cancellation fails only that
+request, so the same process can serve the next call instead of entering a busy
+loop.
+
 `structure(focus="profile")` and `project_profile` now default to bounded
 `compact` results. Use `limit` and `cursor` to page lists, `result_mode="paged"`
 for the complete paged shape, or explicit `result_mode="full"` for the legacy
@@ -163,7 +171,7 @@ not affect production API/model signals unless
 `include_non_production=true`.
 
 Every MCP tool result includes `_runtime` metadata with the runtime version,
-commit, index freshness, elapsed time, and result mode.
+commit, index freshness, elapsed time, result mode, and request deadline.
 
 ## CLI
 
@@ -187,6 +195,11 @@ flyto-index verify . \
   --baseline .flyto-baselines/flyto-indexer.json \
   --regression-only
 ```
+
+Current baselines compare stable, privacy-preserving finding IDs as well as
+check status, so a new finding cannot hide behind an already-warning check.
+Line-number-only moves keep the same ID. Legacy baselines without finding IDs
+remain valid and retain status-only behavior.
 
 ## CI
 
@@ -289,6 +302,7 @@ auto-editing, auto-commit, and another workflow tree. See
 ```bash
 python -m ruff check src tests
 python -m pytest
+python benchmarks/evaluate.py --check
 flyto-index verify . --strict
 ```
 

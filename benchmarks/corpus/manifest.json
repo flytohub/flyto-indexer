@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "python-cross-file-sqli",
+      "path": "python-cross-file-sqli",
+      "expected": {
+        "sql_injection": 1
+      },
+      "minimum_path_hops": 2
+    },
+    {
+      "id": "python-sanitized",
+      "path": "python-sanitized",
+      "expected": {}
+    },
+    {
+      "id": "javascript-ssrf",
+      "path": "javascript-ssrf",
+      "expected": {
+        "ssrf": 1
+      }
+    },
+    {
+      "id": "go-ssrf",
+      "path": "go-ssrf",
+      "expected": {
+        "ssrf": 1
+      }
+    },
+    {
+      "id": "go-constant-url",
+      "path": "go-constant-url",
+      "expected": {}
+    }
+  ]
+}

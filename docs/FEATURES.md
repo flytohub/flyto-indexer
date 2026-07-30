@@ -228,6 +228,17 @@ runtime, packaging, and working-tree checks for one repository.
 `verify-baseline` records or compares accepted findings so CI can detect
 regressions without hiding existing debt.
 
+Verify schema v2 assigns stable IDs to checks and individual sampled findings.
+Regression comparison catches new finding IDs inside an already-warning check,
+while legacy status-only baselines remain compatible. SARIF exports the same
+fingerprint for line-move correlation.
+
+The committed offline evaluation corpus runs real Python, JavaScript, and Go
+index/taint paths with positive, sanitized, constant, and cross-file cases. CI
+gates exact expected counts, precision, recall, negative-case false-positive
+rate, scan errors, path depth, and bounded latency without adding a runtime
+dependency or network call.
+
 See [Verification](VERIFICATION.md) for release commands and report formats.
 
 ## Software Inventory
