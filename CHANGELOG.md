@@ -92,6 +92,9 @@
   self-scan while preserving explicit per-case analysis by the evaluator.
 - Made the auto-reindex regression module add the checkout root explicitly so
   installed pytest entrypoints collect it consistently on GitHub runners.
+- Placed intentionally vulnerable benchmark cases under the established
+  `fixture/` boundary so legacy Indexer versions in shared workflows exclude
+  them from repository self-scans while the evaluator still scans them.
 
 ## [2.15.0] - 2026-07-23
 

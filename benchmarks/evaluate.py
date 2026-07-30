@@ -21,7 +21,7 @@ if str(ROOT) not in sys.path:
 from src.analyzer.taint import TaintAnalyzer
 from src.engine import IndexEngine
 
-DEFAULT_CORPUS = Path(__file__).resolve().parent / "corpus"
+DEFAULT_CORPUS = Path(__file__).resolve().parent / "fixture" / "corpus"
 
 
 def _stable_fingerprint(payload: Any) -> str:

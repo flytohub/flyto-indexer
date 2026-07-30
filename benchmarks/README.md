@@ -14,12 +14,14 @@ python benchmarks/evaluate.py --check --json
 ```
 
 `evaluate.py` builds temporary indexes and runs the real taint analyzer against
-the committed `corpus/` cases. The manifest contains positive, negative,
-sanitized, constant-value, and cross-file examples across Python, JavaScript,
-and Go. The gate checks exact expected category counts, scan errors, cross-file
-path depth, precision, recall, negative-case false-positive rate, and a bounded
-per-case latency. Its evidence fingerprint excludes timing and memory noise, so
-identical findings produce identical proof across runs.
+the committed `fixture/corpus/` cases. The `fixture/` boundary keeps
+intentionally vulnerable samples out of repository self-scans, including older
+Indexer releases used by shared workflows. The manifest contains positive,
+negative, sanitized, constant-value, and cross-file examples across Python,
+JavaScript, and Go. The gate checks exact expected category counts, scan errors,
+cross-file path depth, precision, recall, negative-case false-positive rate, and
+a bounded per-case latency. Its evidence fingerprint excludes timing and memory
+noise, so identical findings produce identical proof across runs.
 
 The default gate is intentionally tiny and has no network or third-party
 scanner dependency. It catches local analyzer regressions quickly; it does not
@@ -39,8 +41,8 @@ Consumers: QA in week 4 (FLY-11 MVP-exit gate); Backend Dev in week 2 when wirin
 | File | Purpose |
 |---|---|
 | `evaluate.py` | Offline executable accuracy, path, latency, and memory gate. |
-| `corpus/manifest.json` | Ground truth for the committed mini-projects. |
-| `corpus/**` | Positive and negative source fixtures used by the local gate. |
+| `fixture/corpus/manifest.json` | Ground truth for the committed mini-projects. |
+| `fixture/corpus/**` | Positive and negative source fixtures used by the local gate. |
 | `semgrep_baseline.csv` | Rule baseline: `rule_id,expected_severity,source_repo`. 311 rules across Python, JS/TS, Go, Terraform. |
 | `build_semgrep_baseline.py` | Reproducible generator — re-derives the CSV from the upstream Semgrep registry. |
 | `README.md` | This file. |

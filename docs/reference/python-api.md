@@ -44,24 +44,6 @@ Every declared class, function, nested function, and method in the package, supp
 | function | `def extract(registry_root: str) -> list&#91;tuple&#91;str, str, str, str&#93;&#93;` | The declaration and linked implementation are authoritative. | [`benchmarks/build_semgrep_baseline.py:53`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/build_semgrep_baseline.py#L53) |
 | function | `def main() -> int` | The declaration and linked implementation are authoritative. | [`benchmarks/build_semgrep_baseline.py:107`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/build_semgrep_baseline.py#L107) |
 
-## `benchmarks/corpus/python-cross-file-sqli/api.py`
-
-| Kind | Signature | Responsibility | Source |
-|---|---|---|---|
-| function | `def handle_request(request)` | The declaration and linked implementation are authoritative. | [`benchmarks/corpus/python-cross-file-sqli/api.py:4`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/corpus/python-cross-file-sqli/api.py#L4) |
-
-## `benchmarks/corpus/python-cross-file-sqli/db_utils.py`
-
-| Kind | Signature | Responsibility | Source |
-|---|---|---|---|
-| function | `def run_query(query)` | The declaration and linked implementation are authoritative. | [`benchmarks/corpus/python-cross-file-sqli/db_utils.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/corpus/python-cross-file-sqli/db_utils.py#L1) |
-
-## `benchmarks/corpus/python-sanitized/app.py`
-
-| Kind | Signature | Responsibility | Source |
-|---|---|---|---|
-| function | `def run_command(request)` | The declaration and linked implementation are authoritative. | [`benchmarks/corpus/python-sanitized/app.py:5`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/corpus/python-sanitized/app.py#L5) |
-
 ## `benchmarks/evaluate.py`
 
 | Kind | Signature | Responsibility | Source |
@@ -72,6 +54,24 @@ Every declared class, function, nested function, and method in the package, supp
 | function | `def evaluate_corpus(corpus_root: str \| Path=DEFAULT_CORPUS) -> dict&#91;str, Any&#93;` | Evaluate every committed case and return deterministic quality evidence. | [`benchmarks/evaluate.py:109`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/evaluate.py#L109) |
 | function | `def _threshold_pass(result: dict&#91;str, Any&#93;, args: argparse.Namespace) -> bool` | The declaration and linked implementation are authoritative. | [`benchmarks/evaluate.py:169`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/evaluate.py#L169) |
 | function | `def main() -> int` | The declaration and linked implementation are authoritative. | [`benchmarks/evaluate.py:180`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/evaluate.py#L180) |
+
+## `benchmarks/fixture/corpus/python-cross-file-sqli/api.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def handle_request(request)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-cross-file-sqli/api.py:4`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-cross-file-sqli/api.py#L4) |
+
+## `benchmarks/fixture/corpus/python-cross-file-sqli/db_utils.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def run_query(query)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-cross-file-sqli/db_utils.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-cross-file-sqli/db_utils.py#L1) |
+
+## `benchmarks/fixture/corpus/python-sanitized/app.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def run_command(request)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-sanitized/app.py:5`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-sanitized/app.py#L5) |
 
 ## `examples/audit_all.py`
 
