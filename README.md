@@ -276,7 +276,8 @@ accuracy, false positives, scan errors, and latency on every release. See the
 [reproducible benchmark](benchmarks/README.md) and
 [security model](docs/SECURITY_MODEL.md).
 
-Ignored production Ruff and mypy findings are also held to an exact baseline.
+Ignored production Ruff and dependency-isolated, Linux-targeted mypy findings
+are also held to an exact baseline.
 They can decrease through reviewed cleanup, but CI blocks new debt and requires
 every improvement to tighten the baseline immediately.
 

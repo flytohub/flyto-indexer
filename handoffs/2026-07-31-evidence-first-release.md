@@ -25,7 +25,7 @@ network call, scanner pass, or MCP tool.
 
 - Full suite: `1927 passed, 1 skipped`.
 - Ruff passed repository-wide; mypy passed 150 source files; exact quality debt
-  remained Ruff 1,141 and mypy 736 across the explicitly exempted categories.
+  remained Ruff 1,141 and mypy 735 across the explicitly exempted categories.
 - Offline corpus passed 13/13 with precision and recall 1.0, zero false
   positives, and stable fingerprint `203edae3857a360d`.
 - A clean clone of the pinned FastAPI repository reproduced public evidence

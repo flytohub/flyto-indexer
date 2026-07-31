@@ -16,6 +16,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BASELINE = ROOT / "config" / "quality-debt-baseline.json"
 MYPY_CODE_RE = re.compile(r"\[([^]]+)]$")
+MYPY_PLATFORM = "linux"
 
 
 def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
@@ -67,7 +68,15 @@ def _ruff_counts(codes: list[str]) -> dict[str, int]:
 def _mypy_counts(codes: list[str]) -> dict[str, int]:
     if not codes:
         return {}
-    command = ["mypy", "src", "--show-error-codes", "--no-error-summary"]
+    command = [
+        "mypy",
+        "src",
+        "--show-error-codes",
+        "--no-error-summary",
+        "--platform",
+        MYPY_PLATFORM,
+        "--no-site-packages",
+    ]
     for code in codes:
         command.extend(["--enable-error-code", code])
     result = _run(command)
@@ -92,6 +101,10 @@ def collect_debt() -> dict[str, Any]:
         "schema_version": 1,
         "scope": "src",
         "policy": "exact baseline; every decrease requires a baseline update",
+        "environment": {
+            "mypy_platform": MYPY_PLATFORM,
+            "mypy_site_packages": False,
+        },
         "tools": {
             "ruff": _tool_version("ruff"),
             "mypy": _tool_version("mypy"),
@@ -110,6 +123,8 @@ def collect_debt() -> dict[str, Any]:
 def compare_debt(current: dict[str, Any], baseline: dict[str, Any]) -> list[str]:
     """Return actionable drift messages; exact equality closes baseline headroom."""
     messages: list[str] = []
+    if current.get("environment") != baseline.get("environment"):
+        messages.append("quality analysis environment differs from the reviewed baseline")
     if current.get("tools") != baseline.get("tools"):
         messages.append("quality tool versions differ from the reviewed baseline")
     for tool in ("ruff", "mypy"):

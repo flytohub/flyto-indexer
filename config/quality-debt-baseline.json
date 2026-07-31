@@ -1,8 +1,12 @@
 {
+  "environment": {
+    "mypy_platform": "linux",
+    "mypy_site_packages": false
+  },
   "mypy": {
     "codes": {
       "arg-type": 43,
-      "assignment": 43,
+      "assignment": 42,
       "attr-defined": 87,
       "index": 21,
       "no-redef": 363,
@@ -11,7 +15,7 @@
       "union-attr": 43,
       "var-annotated": 117
     },
-    "total": 736
+    "total": 735
   },
   "policy": "exact baseline; every decrease requires a baseline update",
   "ruff": {

@@ -15,8 +15,9 @@ use.
 
 ## 2026-07-31 - Quality debt can decrease but cannot silently move
 
-Decision: keep the remaining Ruff and mypy exemptions visible in an exact,
-production-only baseline tied to pinned tool versions. CI fails when a count
+Decision: keep the remaining Ruff and dependency-isolated, Linux-targeted mypy
+exemptions visible in an exact, production-only baseline tied to pinned tool
+versions. CI fails when a count
 increases and also requires deliberate baseline review when debt decreases.
 
 Reason: a ceiling alone lets debt migrate between files and rules, while a

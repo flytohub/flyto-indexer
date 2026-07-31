@@ -106,8 +106,9 @@
   instead of misclassifying locale and content directories as software modules.
 - Package, MCP registry, and MCP initialization versions are synchronized and
   enforced by tests and CI. Every built-in rule YAML file is parsed in tests.
-- Remaining production-source Ruff and mypy exemptions are locked to exact
-  reviewed counts and pinned tool versions. CI fails both increases and silent
+- Remaining production-source Ruff and dependency-isolated, Linux-targeted
+  mypy exemptions are locked to exact reviewed counts and pinned tool versions.
+  CI fails both increases and silent
   decreases, so every cleanup updates the baseline deliberately; repository-
   wide Ruff remains a separate zero-finding gate.
 - Release publication is tag-only. The tag, package version, dated changelog,

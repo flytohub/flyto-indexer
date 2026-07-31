@@ -14,8 +14,9 @@
   benchmark status, and known limits are now reported separately.
 - Added public benchmark and real-repository proof workflows with readable job
   summaries and downloadable evidence artifacts.
-- Added a production-code quality-debt ratchet that locks Ruff and mypy debt to
-  exact reviewed counts, tool versions, and rule categories. High-signal
+- Added a production-code quality-debt ratchet that locks Ruff and
+  dependency-isolated, Linux-targeted mypy debt to exact reviewed counts, tool
+  versions, and rule categories. High-signal
   exemptions for duplicate imports, unused variables, ambiguous stripping,
   duplicate set members, and unsafe `zip` calls were removed and fixed.
 - Added structured bug and accuracy-report templates plus a change-evidence PR
