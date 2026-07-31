@@ -48,11 +48,18 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONUNBUFFERED=1 \
     FLYTO_INDEXER_HOME=/app
 
-# Minimal runtime deps for semgrep (requires libc + git for repo-aware rules).
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Apply all currently available Debian fixes before adding the minimal runtime
+# dependencies. The upstream slim image can lag a fixable package revision even
+# when its tag digest is current; Trivy remains the final HIGH/CRITICAL gate.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
         git \
         ca-certificates \
         tini \
+    && dpkg --compare-versions \
+        "$(dpkg-query -W -f='${Version}' libexpat1)" \
+        ge "2.8.2-1~deb13u1" \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
