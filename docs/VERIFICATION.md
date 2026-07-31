@@ -108,6 +108,20 @@ evidence fingerprint that excludes timing noise. This fast gate
 complements—not replaces—the larger optional external corpus described in
 [benchmarks/README.md](../benchmarks/README.md).
 
+Task continuity and efficiency evidence has a separate fixed contract:
+
+```bash
+python benchmarks/evaluate_task_efficiency.py --check --json
+```
+
+It always runs exactly 100 named scenarios and requires at least 90% to pass.
+The cases cover provider normalization, dependency-free estimation, read-only
+continuity, bounded retention, privacy, idempotency, honest paired comparisons,
+four portable report formats, and CLI behavior. The committed receipt keeps
+every scenario result and a deterministic fingerprint; a failing case is fixed
+and the complete 100-scenario suite is rerun rather than deleting or replacing
+the case.
+
 On Python 3.12, CI also emits coverage.py per-test contexts and JUnit XML,
 downloads both into the verify job, and proves that at least one covered line
 maps back to an executed test. These are dev/CI extras; they do not change the
@@ -127,6 +141,7 @@ ruff check .
 mypy src
 python -m pytest tests -v
 python benchmarks/evaluate.py --check --json
+python benchmarks/evaluate_task_efficiency.py --check --json
 python scripts/reproduce_impact_case.py --check-snapshot
 python -m build
 python -m src.cli verify . --full-scan --strict --json

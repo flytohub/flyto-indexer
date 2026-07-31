@@ -1,0 +1,545 @@
+{
+  "schema_version": 1,
+  "suite_id": "task-efficiency-100-v1",
+  "total": 100,
+  "passed": 100,
+  "failed": 0,
+  "success_rate": 1.0,
+  "required_success_rate": 0.9,
+  "pass": true,
+  "evidence_fingerprint": "3e319632e54fd4c12c01803ca0452627917f92a25b9d0e6f6f6a2100983ce423",
+  "categories": {
+    "cli_contract": {
+      "passed": 10,
+      "total": 10,
+      "success_rate": 1.0
+    },
+    "continuity_privacy": {
+      "passed": 20,
+      "total": 20,
+      "success_rate": 1.0
+    },
+    "estimation": {
+      "passed": 15,
+      "total": 15,
+      "success_rate": 1.0
+    },
+    "honest_comparison": {
+      "passed": 20,
+      "total": 20,
+      "success_rate": 1.0
+    },
+    "portable_reporting": {
+      "passed": 15,
+      "total": 15,
+      "success_rate": 1.0
+    },
+    "provider_usage": {
+      "passed": 20,
+      "total": 20,
+      "success_rate": 1.0
+    }
+  },
+  "scenarios": [
+    {
+      "id": "provider-01",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-02",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-03",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-04",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-05",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-06",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-07",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-08",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-09",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-10",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-11",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-12",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-13",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-14",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-15",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-16",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-17",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-18",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-19",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "provider-20",
+      "category": "provider_usage",
+      "passed": true
+    },
+    {
+      "id": "estimate-01",
+      "category": "estimation",
+      "passed": true
+    },
+    {
+      "id": "estimate-02",
+      "category": "estimation",
+      "passed": true
+    },
+    {
+      "id": "estimate-03",
+      "category": "estimation",
+      "passed": true
+    },
+    {
+      "id": "estimate-04",
+      "category": "estimation",
+      "passed": true
+    },
+    {
+      "id": "estimate-05",
+      "category": "estimation",
+      "passed": true
+    },
+    {
+      "id": "estimate-06",
+      "category": "estimation",
+      "passed": true
+    },
+    {
+      "id": "estimate-07",
+      "category": "estimation",
+      "passed": true
+    },
+    {
+      "id": "estimate-08",
+      "category": "estimation",
+      "passed": true
+    },
+    {
+      "id": "estimate-09",
+      "category": "estimation",
+      "passed": true
+    },
+    {
+      "id": "estimate-10",
+      "category": "estimation",
+      "passed": true
+    },
+    {
+      "id": "estimate-11",
+      "category": "estimation",
+      "passed": true
+    },
+    {
+      "id": "estimate-12",
+      "category": "estimation",
+      "passed": true
+    },
+    {
+      "id": "estimate-13",
+      "category": "estimation",
+      "passed": true
+    },
+    {
+      "id": "estimate-14",
+      "category": "estimation",
+      "passed": true
+    },
+    {
+      "id": "estimate-15",
+      "category": "estimation",
+      "passed": true
+    },
+    {
+      "id": "continuity-01",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-02",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-03",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-04",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-05",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-06",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-07",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-08",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-09",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-10",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-11",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-12",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-13",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-14",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-15",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-16",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-17",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-18",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-19",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "continuity-20",
+      "category": "continuity_privacy",
+      "passed": true
+    },
+    {
+      "id": "comparison-01",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-02",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-03",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-04",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-05",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-06",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-07",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-08",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-09",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-10",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-11",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-12",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-13",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-14",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-15",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-16",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-17",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-18",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-19",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "comparison-20",
+      "category": "honest_comparison",
+      "passed": true
+    },
+    {
+      "id": "report-01",
+      "category": "portable_reporting",
+      "passed": true
+    },
+    {
+      "id": "report-02",
+      "category": "portable_reporting",
+      "passed": true
+    },
+    {
+      "id": "report-03",
+      "category": "portable_reporting",
+      "passed": true
+    },
+    {
+      "id": "report-04",
+      "category": "portable_reporting",
+      "passed": true
+    },
+    {
+      "id": "report-05",
+      "category": "portable_reporting",
+      "passed": true
+    },
+    {
+      "id": "report-06",
+      "category": "portable_reporting",
+      "passed": true
+    },
+    {
+      "id": "report-07",
+      "category": "portable_reporting",
+      "passed": true
+    },
+    {
+      "id": "report-08",
+      "category": "portable_reporting",
+      "passed": true
+    },
+    {
+      "id": "report-09",
+      "category": "portable_reporting",
+      "passed": true
+    },
+    {
+      "id": "report-10",
+      "category": "portable_reporting",
+      "passed": true
+    },
+    {
+      "id": "report-11",
+      "category": "portable_reporting",
+      "passed": true
+    },
+    {
+      "id": "report-12",
+      "category": "portable_reporting",
+      "passed": true
+    },
+    {
+      "id": "report-13",
+      "category": "portable_reporting",
+      "passed": true
+    },
+    {
+      "id": "report-14",
+      "category": "portable_reporting",
+      "passed": true
+    },
+    {
+      "id": "report-15",
+      "category": "portable_reporting",
+      "passed": true
+    },
+    {
+      "id": "cli-01",
+      "category": "cli_contract",
+      "passed": true
+    },
+    {
+      "id": "cli-02",
+      "category": "cli_contract",
+      "passed": true
+    },
+    {
+      "id": "cli-03",
+      "category": "cli_contract",
+      "passed": true
+    },
+    {
+      "id": "cli-04",
+      "category": "cli_contract",
+      "passed": true
+    },
+    {
+      "id": "cli-05",
+      "category": "cli_contract",
+      "passed": true
+    },
+    {
+      "id": "cli-06",
+      "category": "cli_contract",
+      "passed": true
+    },
+    {
+      "id": "cli-07",
+      "category": "cli_contract",
+      "passed": true
+    },
+    {
+      "id": "cli-08",
+      "category": "cli_contract",
+      "passed": true
+    },
+    {
+      "id": "cli-09",
+      "category": "cli_contract",
+      "passed": true
+    },
+    {
+      "id": "cli-10",
+      "category": "cli_contract",
+      "passed": true
+    }
+  ]
+}

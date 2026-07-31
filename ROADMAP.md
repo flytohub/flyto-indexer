@@ -10,6 +10,8 @@
   disclose indexing-only support separately from gated semantic depth.
 - Preserve fast local-only defaults and the 20-tool MCP surface while evidence
   and adoption mature.
+- Keep cross-AI continuity compact and local; expand it only from a reproduced
+  handoff failure, not by adding session documents or dashboard features.
 
 ## Next
 

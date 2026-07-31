@@ -24,7 +24,15 @@ import time
 from pathlib import Path
 
 from . import __version__
-from .task_cli import configure_task_parser, execute_task_command
+from .task_cli import (
+    configure_task_evidence_parsers,
+    configure_task_parser,
+    execute_task_command,
+    execute_task_status,
+    execute_usage_record,
+    execute_usage_report,
+    task_evidence_tool_descriptions,
+)
 
 
 def _ensure_gitignore(directory: Path):
@@ -93,6 +101,7 @@ def _configure_core_commands(subparsers) -> None:
     impact_parser.add_argument("--depth", type=int, default=3, help="Max analysis depth (default: 3)")
 
     configure_task_parser(subparsers)
+    configure_task_evidence_parsers(subparsers)
 
     # context
     context_parser = subparsers.add_parser(
@@ -471,6 +480,9 @@ def _command_handlers():
         "status": cmd_status,
         "impact": cmd_impact,
         "task": cmd_task,
+        "task-status": cmd_task_status,
+        "usage-record": cmd_usage_record,
+        "usage-report": cmd_usage_report,
         "context": cmd_context,
         "brief": cmd_brief,
         "describe": cmd_describe,
@@ -967,6 +979,21 @@ def cmd_task(args):
     return result
 
 
+def cmd_task_status(args):
+    """Show project-local resumable task state."""
+    return execute_task_status(args)
+
+
+def cmd_usage_record(args):
+    """Record one normalized task usage event."""
+    return execute_usage_record(args)
+
+
+def cmd_usage_report(args):
+    """Render task efficiency evidence."""
+    return execute_usage_report(args)
+
+
 def cmd_tools(args):
     """Output structured JSON describing all available CLI commands and their arguments."""
     from datetime import datetime, timezone
@@ -1084,6 +1111,7 @@ def cmd_tools(args):
             ],
             "exit_codes": {"0": "success", "2": "gate denied, validation failed, or task error"},
         },
+        *task_evidence_tool_descriptions(),
         {
             "name": "context",
             "summary": "Get AI-ready context for a project (symbols, files, summaries)",

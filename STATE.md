@@ -7,6 +7,13 @@
   owned by private product repositories and are not shipped here.
 - CLI and MCP surfaces support indexing, context, impact, API/dependency
   closure, security checks, architecture rules, and repeatable verification.
+- Existing task plan, gate, validate, and project-profile surfaces share one
+  bounded, gitignored SQLite continuity record. It carries resumable task facts
+  across AI clients without adding an MCP tool or committed handoff file.
+  Normalized usage reports support terminal, JSON, CSV, and static HTML, while
+  reduction claims fail closed unless a same-policy verified pair exists.
+- The fixed task-continuity contract passes 100/100 scenarios against a 90%
+  release threshold with evidence fingerprint `3e319632e54fd4c12c01803ca0452627`.
 - MCP task guidance treats `pass=false` as a phase-local remediation loop:
   complete `required_actions`, update the exact `current_state` keys, and
   re-run the same gate until it passes. It is not a task-termination signal.
@@ -94,10 +101,11 @@
   compatibility definitions, seven local HTTP operations, 16 environment
   variables, and eight built-in rule files.
 - Documentation scoring distinguishes inline summaries from exact source-linked
-  reference entries. The latest score is 98/100 with a 78/100 README score,
-  66.5% inline coverage, 99.9% source-reference coverage, and 99.9% combined
+  reference entries. The latest score is 100/100 with an 88/100 README score,
+  65.0% inline coverage, 100% source-reference coverage, and 100% combined
   symbol coverage; external links count only when they resolve to the indexed
-  declaration inside the repository.
+  declaration inside the repository. Benchmark fixtures are excluded from
+  product-source documentation scoring.
 - Generated source-reference manifests accept repository-local glob patterns,
   while absolute or escaping paths remain outside the documentation trust
   boundary.
@@ -115,13 +123,14 @@
   MCP manifests, generated references, language evidence, quality ratchet,
   lint, types, tests, benchmark, and build must pass before OIDC publication;
   a GitHub Release is created only after PyPI succeeds.
-- Latest local verification: `1927 passed, 1 skipped`; Ruff passed across the
-  full repository; mypy found no issues in 150 source files; the offline corpus
+- Latest local verification: `1964 passed, 1 skipped`; Ruff passed across the
+  full repository; mypy found no issues in 153 source files; the offline corpus
   passed 13/13 with 1.0 precision, 1.0 recall, zero false positives, p95 case
-  latency 179.73 ms, and stable evidence fingerprint `203edae3857a360d`;
+  latency 173.32 ms, and stable evidence fingerprint `203edae3857a360d`; the
+  task-continuity and efficiency contract passed 100/100 against its 90% gate;
   the pinned FastAPI case matched fingerprint `691df24f16031b77` after a clean
   clone; sdist/wheel and isolated installed-policy smokes passed; strict
-  baseline-aware self-verify passed 22/22 with 298 files, 4,808 indexed symbols,
+  baseline-aware self-verify passed 22/22 with 308 files, 4,930 indexed symbols,
   health 91/100, and zero warnings.
 
 ## Release Blockers

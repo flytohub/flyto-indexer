@@ -1,5 +1,19 @@
 # Decisions
 
+## 2026-08-01 - Cross-AI continuity stays local and evidence claims stay paired
+
+Decision: update the existing task lifecycle and project profile with one
+gitignored SQLite continuity record; do not add an MCP tool, frontend, or
+per-session handoff document. Store bounded task facts and normalized counters,
+never prompts, responses, source, or raw provider payloads. Report a reduction
+only when distinct variants pass the same declared proof policy under an equal
+model, commit, task fingerprint, tool policy, and sample count.
+
+Reason: developers switch among AI tools, but repeating context wastes time and
+committing chat-shaped documents creates noise. A local shared state solves the
+handoff problem without expanding the public API. Strict paired evidence keeps
+useful efficiency measurement from becoming an unverifiable marketing claim.
+
 ## 2026-07-31 - Evidence growth precedes feature growth
 
 Decision: hold the public MCP surface at 20 tools and require a reproducible

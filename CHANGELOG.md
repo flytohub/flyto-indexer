@@ -5,6 +5,17 @@
 ## [2.18.0] - 2026-07-31
 
 ### Added
+- Added project-local task continuity to the existing plan, gate, validate, and
+  project-profile surfaces without adding an MCP tool. It keeps bounded,
+  gitignored task facts so another AI client can resume unfinished work and
+  only asks for a handoff when actionable state remains.
+- Added provider-neutral usage accounting and terminal, JSON, CSV, and static
+  HTML evidence reports. Raw prompts, responses, source, and provider payloads
+  are never stored; reductions require a verified same-policy paired
+  experiment and disclose whether counts were reported or estimated.
+- Added a deterministic 100-scenario task continuity and efficiency gate. The
+  committed receipt and CI require at least 90% success across normalization,
+  estimation, lifecycle, privacy, comparison, report, and CLI contracts.
 - Added a reproducible impact-analysis case against the pinned FastAPI full
   stack template. The checked receipt proves a real rename where exact text
   search finds one file while the dependency graph identifies four transitive
@@ -44,6 +55,8 @@
   addition to a rationale, source, scope, and expiry.
 
 ### Changed
+- Tightened the shared CLI JSON loader's generic return type, removing three
+  existing mypy exemptions and lowering the locked quality-debt baseline.
 - Changed the PyPI workflow to run the full release evidence gate before
   building, publish only from a version tag, and create the GitHub Release only
   after Trusted Publishing succeeds.

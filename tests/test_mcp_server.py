@@ -1265,7 +1265,10 @@ class TestRuntimeEnvelope:
                 project="alpha",
             )
 
-        assert result == {"project": "alpha"}
+        assert result == {
+            "project": "alpha",
+            "continuity": {"status": "closed", "handoff_required": False},
+        }
         fake_profile.build_project_profile.assert_called_once()
         assert (
             fake_profile.build_project_profile.call_args.args[0]

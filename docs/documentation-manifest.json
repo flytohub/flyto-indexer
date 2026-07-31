@@ -13,7 +13,7 @@
     "whitepaper": "docs/WHITEPAPER.md",
     "feature_reference": "docs/FEATURES.md",
     "source_reference": "docs/reference/python-api.md",
-    "source_reference_exclude": ["tests/**"],
+    "source_reference_exclude": ["tests/**", "benchmarks/fixture/**"],
     "module_roots": ["src", "scripts", "config"]
   },
   "source_areas": [
@@ -37,9 +37,9 @@
     },
     {
       "id": "task-and-verification",
-      "description": "Owns task planning and phase gates, repository and workspace verification, stable finding identities, baselines, offline evaluation, PR risk, test mapping, and structured release evidence.",
-      "paths": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/development_feedback.py", "src/tools/proof_receipts.py", "src/tools/task_context.py", "src/execution_guard.py", "src/finding_identity.py", "src/test_evidence.py", "src/verify.py", "src/pr_analyzer.py", "src/test_mapper.py", "src/tools/smart.py", "benchmarks/evaluate.py", "benchmarks/language-evidence.json", "benchmarks/fixture/corpus/**", "scripts/reproduce_impact_case.py"],
-      "documentation": ["docs/FEATURES.md#task-workflow", "docs/FEEDBACK.md", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/DESIGN_REFERENCES.md", "docs/FEATURES.md#verification-and-baselines", "docs/VERIFICATION.md", "docs/CASE_STUDY_FASTAPI.md", "docs/LANGUAGE_EVIDENCE.md", "docs/WHITEPAPER.md#risk-and-closure"]
+      "description": "Owns task planning, continuity, usage evidence and phase gates, repository and workspace verification, stable finding identities, baselines, offline evaluation, PR risk, test mapping, and structured release evidence.",
+      "paths": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/development_feedback.py", "src/tools/proof_receipts.py", "src/tools/task_context.py", "src/task_runs.py", "src/task_usage.py", "src/task_reports.py", "src/execution_guard.py", "src/finding_identity.py", "src/test_evidence.py", "src/verify.py", "src/pr_analyzer.py", "src/test_mapper.py", "src/tools/smart.py", "benchmarks/evaluate.py", "benchmarks/evaluate_task_efficiency.py", "benchmarks/language-evidence.json", "benchmarks/fixture/corpus/**", "scripts/reproduce_impact_case.py"],
+      "documentation": ["docs/FEATURES.md#task-workflow", "docs/TASK_CONTINUITY.md", "docs/FEEDBACK.md", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/DESIGN_REFERENCES.md", "docs/FEATURES.md#verification-and-baselines", "docs/VERIFICATION.md", "docs/CASE_STUDY_FASTAPI.md", "docs/LANGUAGE_EVIDENCE.md", "docs/WHITEPAPER.md#risk-and-closure"]
     },
     {
       "id": "cli-mcp-http-interfaces",
@@ -100,21 +100,21 @@
       "title": "Task and release gates",
       "kind": "workflow",
       "status": "active",
-      "description": "Resolves evidence-backed decisions, produces task plans, enforces phase evidence, validates changes, verifies repositories and workspaces, compares reviewed finding-level baselines, gates quality debt and language claims, and runs committed offline and real-repository evaluations.",
-      "source": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/development_feedback.py", "src/tools/proof_receipts.py", "src/tools/task_context.py", "src/execution_guard.py", "src/finding_identity.py", "src/verify.py", "src/tools/smart.py", "benchmarks/evaluate.py", "benchmarks/language-evidence.json", "benchmarks/fixture/corpus/**", "config/quality-debt-baseline.json", "scripts/check_language_evidence.py", "scripts/check_quality_debt.py", "scripts/check_release_tag.py", "scripts/reproduce_impact_case.py"],
-      "documentation": ["docs/FEATURES.md#task-workflow", "docs/FEEDBACK.md", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/DESIGN_REFERENCES.md", "docs/VERIFICATION.md", "docs/CASE_STUDY_FASTAPI.md", "docs/LANGUAGE_EVIDENCE.md", "docs/WHITEPAPER.md#risk-and-closure"],
-      "tests": ["tests/test_grill.py", "tests/test_grill_deep.py", "tests/test_grill_evidence.py", "tests/test_grill_conformance.py", "tests/test_grill_outcomes.py", "tests/test_development_feedback.py", "tests/test_proof_receipts.py", "tests/test_grill_real_data.py", "tests/test_grill_cli_e2e.py", "tests/test_task_context.py", "tests/test_task_adapters.py", "tests/test_task_analysis.py", "tests/test_finding_identity.py", "tests/test_verify.py", "tests/test_benchmark_evaluation.py", "tests/test_language_evidence.py", "tests/test_public_case_study.py", "tests/test_quality_debt_gate.py", "tests/test_release_tag.py", "tests/test_validation.py"],
-      "verification": ["python benchmarks/evaluate.py --check --json", "python scripts/check_language_evidence.py --check", "python scripts/check_quality_debt.py", "python scripts/reproduce_impact_case.py --check-snapshot", "python scripts/check_release_tag.py --tag vX.Y.Z"]
+      "description": "Resolves evidence-backed decisions, produces resumable task plans, records normalized efficiency evidence, enforces phase evidence, validates changes, verifies repositories and workspaces, compares reviewed finding-level baselines, gates quality debt and language claims, and runs committed offline and real-repository evaluations.",
+      "source": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/development_feedback.py", "src/tools/proof_receipts.py", "src/tools/task_context.py", "src/task_runs.py", "src/task_usage.py", "src/task_reports.py", "src/execution_guard.py", "src/finding_identity.py", "src/verify.py", "src/tools/smart.py", "benchmarks/evaluate.py", "benchmarks/evaluate_task_efficiency.py", "benchmarks/language-evidence.json", "benchmarks/fixture/corpus/**", "config/quality-debt-baseline.json", "scripts/check_language_evidence.py", "scripts/check_quality_debt.py", "scripts/check_release_tag.py", "scripts/reproduce_impact_case.py"],
+      "documentation": ["docs/FEATURES.md#task-workflow", "docs/TASK_CONTINUITY.md", "docs/FEEDBACK.md", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/DESIGN_REFERENCES.md", "docs/VERIFICATION.md", "docs/CASE_STUDY_FASTAPI.md", "docs/LANGUAGE_EVIDENCE.md", "docs/WHITEPAPER.md#risk-and-closure"],
+      "tests": ["tests/test_grill.py", "tests/test_grill_deep.py", "tests/test_grill_evidence.py", "tests/test_grill_conformance.py", "tests/test_grill_outcomes.py", "tests/test_development_feedback.py", "tests/test_proof_receipts.py", "tests/test_grill_real_data.py", "tests/test_grill_cli_e2e.py", "tests/test_task_context.py", "tests/test_task_adapters.py", "tests/test_task_analysis.py", "tests/test_task_runs.py", "tests/test_task_usage.py", "tests/test_task_reports.py", "tests/test_task_evidence_cli.py", "tests/test_task_continuity_integration.py", "tests/test_task_efficiency_evaluation.py", "tests/test_finding_identity.py", "tests/test_verify.py", "tests/test_benchmark_evaluation.py", "tests/test_language_evidence.py", "tests/test_public_case_study.py", "tests/test_quality_debt_gate.py", "tests/test_release_tag.py", "tests/test_validation.py"],
+      "verification": ["python benchmarks/evaluate.py --check --json", "python benchmarks/evaluate_task_efficiency.py --check --json", "python scripts/check_language_evidence.py --check", "python scripts/check_quality_debt.py", "python scripts/reproduce_impact_case.py --check-snapshot", "python scripts/check_release_tag.py --tag vX.Y.Z"]
     },
     {
       "id": "command-line-interface",
       "title": "Command-line interface",
       "kind": "cli",
       "status": "active",
-      "description": "Exposes setup, scan, context, impact, audit, policy, inventory, verification, baseline, export, and integration workflows to shells and CI.",
-      "source": ["src/cli.py", "src/task_cli.py"],
-      "documentation": ["docs/CLI.md", "docs/reference/cli.md"],
-      "tests": ["tests/test_cli_commands.py", "tests/test_version.py"]
+      "description": "Exposes setup, scan, context, impact, audit, task continuity, usage evidence, policy, inventory, verification, baseline, export, and integration workflows to shells and CI.",
+      "source": ["src/cli.py", "src/task_cli.py", "src/task_reports.py"],
+      "documentation": ["docs/CLI.md", "docs/TASK_CONTINUITY.md", "docs/reference/cli.md"],
+      "tests": ["tests/test_cli_commands.py", "tests/test_task_evidence_cli.py", "tests/test_version.py"]
     },
     {
       "id": "mcp-server",

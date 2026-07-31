@@ -97,6 +97,14 @@ def _proof_receipts_mod():
     return m
 
 
+def _task_runs_mod():
+    try:
+        from .. import task_runs as m
+    except ImportError:
+        from src import task_runs as m
+    return m
+
+
 def _framework_relationships_mod():
     try:
         from ..analyzer import framework_relationships as m
@@ -1108,17 +1116,36 @@ def smart_task(action: str, description: str = "", targets: list = None,
             request_id=request_id,
         )
     if action == "plan":
-        return _task_plan(description, targets, intent, project, grill_session_id)
+        result = _task_plan(description, targets, intent, project, grill_session_id)
+        return _observe_task_continuity(
+            action,
+            result,
+            project=project,
+            description=description,
+        )
     if action == "gate":
-        return _task_gate(task_contract, next_phase, current_state, project)
+        result = _task_gate(task_contract, next_phase, current_state, project)
+        return _observe_task_continuity(
+            action,
+            result,
+            project=project,
+            task_contract=task_contract,
+            current_state=current_state,
+        )
     if action == "validate":
-        return _task_validate(
+        result = _task_validate(
             project,
             run_tests,
             test_path,
             task_contract,
             proof_receipts,
             required_proof_kinds,
+        )
+        return _observe_task_continuity(
+            action,
+            result,
+            project=project,
+            task_contract=task_contract,
         )
     if action == "feedback":
         return _task_feedback(
@@ -1147,6 +1174,41 @@ def smart_task(action: str, description: str = "", targets: list = None,
             "or 'feedback'."
         )
     }
+
+
+def _observe_task_continuity(
+    action: str,
+    result: dict,
+    *,
+    project: str | None,
+    description: str = "",
+    task_contract: dict | None = None,
+    current_state: dict | None = None,
+) -> dict:
+    """Keep continuity instrumentation best-effort and project scoped."""
+    try:
+        project_root = _structure_scan_path(_info_mod(), project)
+        return _task_runs_mod().observe_task_action(
+            action,
+            result,
+            project=project,
+            project_root=project_root,
+            description=description,
+            task_contract=task_contract,
+            current_state=current_state,
+        )
+    except Exception as exc:
+        logger.debug("task continuity update failed: %s", exc)
+        if isinstance(result, dict):
+            result.setdefault(
+                "continuity",
+                {
+                    "status": "unavailable",
+                    "handoff_required": False,
+                    "reason": type(exc).__name__,
+                },
+            )
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -1332,7 +1394,7 @@ def smart_structure(
         )
         return {"change_clusters": result} if result is not None else {}
     if focus == "profile":
-        return _structure_profile(
+        result = _structure_profile(
             info,
             project,
             result_mode,
@@ -1340,4 +1402,10 @@ def smart_structure(
             cursor,
             include_non_production,
         )
+        project_root = _structure_scan_path(info, project)
+        result["continuity"] = _task_runs_mod().read_task_continuity(
+            project_root,
+            project=project,
+        )
+        return result
     return _structure_overview(info, project)

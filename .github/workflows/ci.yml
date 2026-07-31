@@ -89,6 +89,7 @@ jobs:
           name: test-evidence-3.12
           path: .
       - run: python benchmarks/evaluate.py --check --json
+      - run: python benchmarks/evaluate_task_efficiency.py --check --json
       - run: >-
           flyto-index verify . --full-scan --strict
           --baseline .flyto-baselines/flyto-indexer.json

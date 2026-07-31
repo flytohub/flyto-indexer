@@ -37,6 +37,9 @@ jobs:
       - run: >-
           python benchmarks/evaluate.py --check --json
           --output benchmark-evidence.json
+      - run: >-
+          python benchmarks/evaluate_task_efficiency.py --check --json
+          --output task-efficiency-evidence.json
       - name: Publish readable evidence summary
         run: |
           python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
@@ -56,10 +59,22 @@ jobs:
                   f"{item['p95_latency_ms']:.2f} ms |"
               )
           print("\nThis is the small committed offline regression corpus, not a universal parity claim.")
+
+          task = json.load(open("task-efficiency-evidence.json", encoding="utf-8"))
+          print("\n# Task continuity and efficiency evidence\n")
+          print(f"Result: **{task['passed']}/{task['total']}** "
+                f"({task['success_rate'] * 100:.1f}%; required 90%)\n")
+          print(f"Evidence fingerprint: `{task['evidence_fingerprint']}`\n")
+          print("| Category | Passed | Total |")
+          print("| --- | ---: | ---: |")
+          for category, item in task["categories"].items():
+              print(f"| {category} | {item['passed']} | {item['total']} |")
           PY
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: benchmark-evidence-${{ github.sha }}
-          path: benchmark-evidence.json
+          path: |
+            benchmark-evidence.json
+            task-efficiency-evidence.json
           retention-days: 30
           if-no-files-found: error

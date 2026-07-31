@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, TypeVar
+
+from .task_reports import render_task_status, render_usage_report
+from .task_runs import TaskRunStore, default_task_db, read_task_continuity
+from .task_usage import estimate_usage_from_char_counts, normalize_provider_usage
+
+JsonContainer = TypeVar("JsonContainer", dict, list)
 
 
 def configure_task_parser(subparsers) -> None:
@@ -52,21 +58,15 @@ def configure_task_parser(subparsers) -> None:
         help="Gate phase to enter, e.g. inspect, assess, implement, verify",
     )
     parser.add_argument("--test-path", help="Test file or directory for validate")
-    parser.add_argument(
-        "--no-tests", action="store_true", help="Skip pytest during validate"
-    )
+    parser.add_argument("--no-tests", action="store_true", help="Skip pytest during validate")
     parser.add_argument(
         "--grill-action",
         choices=["start", "answer", "status", "freeze", "discard"],
         default="start",
         help="Grill session operation (default: start)",
     )
-    parser.add_argument(
-        "--grill-session-id", help="Grill session to resume or attach to plan"
-    )
-    parser.add_argument(
-        "--decisions", help="Decision array as inline JSON or a JSON file"
-    )
+    parser.add_argument("--grill-session-id", help="Grill session to resume or attach to plan")
+    parser.add_argument("--decisions", help="Decision array as inline JSON or a JSON file")
     parser.add_argument("--decision-id", help="Decision to answer")
     parser.add_argument("--answer", help="Decision answer in any language")
     parser.add_argument("--selected-option", help="Stable selected option ID")
@@ -81,9 +81,7 @@ def configure_task_parser(subparsers) -> None:
         default="interactive",
         help="Grill question mode",
     )
-    parser.add_argument(
-        "--locale", default="und", help="BCP-47 language metadata (default: und)"
-    )
+    parser.add_argument("--locale", default="und", help="BCP-47 language metadata (default: und)")
     parser.add_argument(
         "--max-questions",
         type=int,
@@ -128,11 +126,223 @@ def configure_task_parser(subparsers) -> None:
     parser.add_argument("--limit", type=int, default=10)
 
 
+def configure_task_evidence_parsers(subparsers) -> None:
+    """Register local continuity and normalized usage commands."""
+    status = subparsers.add_parser(
+        "task-status",
+        help="Show resumable task state and an actionable handoff reminder",
+    )
+    status.add_argument("path", nargs="?", default=".", help="Project root path")
+    status.add_argument("--task", help="Specific task or run ID")
+    status.add_argument("--all", action="store_true", help="Include recent task runs")
+    status.add_argument("--json", action="store_true", dest="as_json")
+
+    usage = subparsers.add_parser(
+        "usage-record",
+        help="Record provider-reported or count-estimated task usage",
+    )
+    usage.add_argument("task_id", help="Task or run ID created by task plan")
+    usage.add_argument("path", nargs="?", default=".", help="Project root path")
+    usage.add_argument("--provider", required=True, help="Usage metadata provider")
+    usage.add_argument("--model", required=True, help="Model identity")
+    source = usage.add_mutually_exclusive_group(required=True)
+    source.add_argument("--usage", help="Usage JSON object or JSON file")
+    source.add_argument(
+        "--estimated-input-chars",
+        type=int,
+        help="Raw-text-free input character count fallback",
+    )
+    usage.add_argument("--estimated-output-chars", type=int, default=0)
+    usage.add_argument("--event-id", default="", help="Optional idempotency key")
+    usage.add_argument("--tool-calls", type=int, default=0)
+    usage.add_argument("--duration-ms", type=float, default=0)
+    usage.add_argument(
+        "--comparison-context",
+        help="Paired experiment identity as a JSON object or file",
+    )
+    usage.add_argument("--variant", default="", help="Experiment variant name")
+
+    report = subparsers.add_parser(
+        "usage-report",
+        help="Report verified task efficiency without claiming unpaired savings",
+    )
+    report.add_argument("path", nargs="?", default=".", help="Project root path")
+    report.add_argument("--task", help="Task or run ID; defaults to the latest")
+    report.add_argument("--compare", default="", help="Baseline task or run ID")
+    report.add_argument(
+        "--format",
+        choices=["table", "json", "csv", "html"],
+        default="table",
+    )
+    report.add_argument("--output", help="Write the rendered report to a file")
+
+
+def task_evidence_tool_descriptions() -> list[dict[str, Any]]:
+    """Describe the compact evidence CLI commands for ``flyto-index tools``."""
+    common_path = {
+        "name": "path",
+        "type": "string",
+        "required": False,
+        "default": ".",
+        "description": "Project root path",
+    }
+    return [
+        {
+            "name": "task-status",
+            "summary": "Show resumable state and actionable handoff reminders",
+            "args": [
+                common_path,
+                {
+                    "name": "--task",
+                    "type": "string",
+                    "required": False,
+                    "description": "Task or run ID",
+                },
+                {
+                    "name": "--all",
+                    "type": "boolean",
+                    "required": False,
+                    "default": False,
+                    "description": "Include recent task runs",
+                },
+                {
+                    "name": "--json",
+                    "type": "boolean",
+                    "required": False,
+                    "default": False,
+                    "description": "Output JSON",
+                },
+            ],
+            "outputs": [],
+            "side_effects": [],
+            "examples": ["flyto-index task-status . --json"],
+            "exit_codes": {"0": "success", "1": "invalid task"},
+        },
+        {
+            "name": "usage-record",
+            "summary": "Record normalized provider usage or a count estimate",
+            "args": [
+                {
+                    "name": "task_id",
+                    "type": "string",
+                    "required": True,
+                    "description": "Task or run ID",
+                },
+                common_path,
+                {
+                    "name": "--provider",
+                    "type": "string",
+                    "required": True,
+                    "description": "Usage provider",
+                },
+                {
+                    "name": "--model",
+                    "type": "string",
+                    "required": True,
+                    "description": "Model identity",
+                },
+                {
+                    "name": "--usage",
+                    "type": "json|string",
+                    "required": False,
+                    "description": "Provider usage object or JSON file",
+                },
+                {
+                    "name": "--estimated-input-chars",
+                    "type": "integer",
+                    "required": False,
+                    "description": "Input character count fallback",
+                },
+                {
+                    "name": "--estimated-output-chars",
+                    "type": "integer",
+                    "required": False,
+                    "default": 0,
+                    "description": "Output character count fallback",
+                },
+                {
+                    "name": "--event-id",
+                    "type": "string",
+                    "required": False,
+                    "description": "Idempotency key",
+                },
+                {
+                    "name": "--tool-calls",
+                    "type": "integer",
+                    "required": False,
+                    "default": 0,
+                    "description": "Tool call count",
+                },
+                {
+                    "name": "--duration-ms",
+                    "type": "number",
+                    "required": False,
+                    "default": 0,
+                    "description": "Duration in milliseconds",
+                },
+                {
+                    "name": "--comparison-context",
+                    "type": "json|string",
+                    "required": False,
+                    "description": "Paired experiment identity",
+                },
+                {
+                    "name": "--variant",
+                    "type": "string",
+                    "required": False,
+                    "description": "Experiment variant",
+                },
+            ],
+            "outputs": [".flyto-index/task-runs.sqlite"],
+            "side_effects": ["stores normalized counts in the ignored local index"],
+            "examples": ["flyto-index usage-record task-1 --help"],
+            "exit_codes": {"0": "success", "1": "invalid usage or task"},
+        },
+        {
+            "name": "usage-report",
+            "summary": "Report task efficiency without unpaired savings claims",
+            "args": [
+                common_path,
+                {
+                    "name": "--task",
+                    "type": "string",
+                    "required": False,
+                    "description": "Task or run ID; latest by default",
+                },
+                {
+                    "name": "--compare",
+                    "type": "string",
+                    "required": False,
+                    "description": "Paired baseline run",
+                },
+                {
+                    "name": "--format",
+                    "type": "string",
+                    "required": False,
+                    "default": "table",
+                    "description": "table, json, csv, or html",
+                },
+                {
+                    "name": "--output",
+                    "type": "string",
+                    "required": False,
+                    "description": "Write a portable report file",
+                },
+            ],
+            "outputs": ["terminal, JSON, CSV, or static HTML evidence"],
+            "side_effects": ["writes a report only when --output is set"],
+            "examples": ["flyto-index usage-report . --format json"],
+            "exit_codes": {"0": "success", "1": "missing evidence"},
+        },
+    ]
+
+
 def _load_json_arg(
     value: str | None,
     arg_name: str,
-    expected_type: type,
-) -> dict | list | None:
+    expected_type: type[JsonContainer],
+) -> JsonContainer | None:
+    """Load inline JSON or a JSON file with container-type validation."""
     if not value:
         return None
     raw = value.strip()
@@ -141,7 +351,7 @@ def _load_json_arg(
         candidate = Path(value)
         if candidate.exists():
             raw = candidate.read_text(encoding="utf-8")
-    data = json.loads(raw)
+    data: Any = json.loads(raw)
     if not isinstance(data, expected_type):
         label = "object" if expected_type is dict else "array"
         raise ValueError(f"{arg_name} must be a JSON {label}")
@@ -152,15 +362,15 @@ def _collect_targets(
     targets: list[str] | None,
     target_groups: list[str] | None,
 ) -> list[str]:
+    """Merge repeatable and comma-separated target arguments."""
     collected = [value.strip() for value in targets or [] if value.strip()]
     for group in target_groups or []:
-        collected.extend(
-            value.strip() for value in group.split(",") if value.strip()
-        )
+        collected.extend(value.strip() for value in group.split(",") if value.strip())
     return collected
 
 
 def _validate_args(args, task_contract: dict | None, current_state: dict | None) -> None:
+    """Fail early when an action is missing required CLI evidence."""
     if args.action == "gate":
         if task_contract is None:
             raise ValueError("task gate requires --task-contract")
@@ -173,25 +383,19 @@ def _validate_args(args, task_contract: dict | None, current_state: dict | None)
             raise ValueError("task feedback record requires --feedback-summary")
         if args.feedback_action == "resolve":
             if not args.feedback_id or not args.resolution:
-                raise ValueError(
-                    "task feedback resolve requires --feedback-id and --resolution"
-                )
+                raise ValueError("task feedback resolve requires --feedback-id and --resolution")
         return
     if args.action != "grill":
         return
     if args.grill_action == "start" and not args.description.strip():
         raise ValueError("task grill start requires --description")
     if args.grill_action != "start" and not args.grill_session_id:
-        raise ValueError(
-            f"task grill {args.grill_action} requires --grill-session-id"
-        )
+        raise ValueError(f"task grill {args.grill_action} requires --grill-session-id")
     if args.grill_action == "answer":
         if not args.decision_id:
             raise ValueError("task grill answer requires --decision-id")
         if not args.accept_recommendation and not args.answer:
-            raise ValueError(
-                "task grill answer requires --answer or --accept-recommendation"
-            )
+            raise ValueError("task grill answer requires --answer or --accept-recommendation")
 
 
 def build_task_arguments(args) -> dict[str, Any]:
@@ -251,15 +455,8 @@ def task_result_should_fail(args, result: dict) -> bool:
     if args.action == "gate" and result.get("pass") is False:
         return True
     if args.action == "validate":
-        return any(
-            result.get(key) is False
-            for key in ("lint_passed", "tests_passed", "pass")
-        )
-    return (
-        args.action == "grill"
-        and args.grill_action == "freeze"
-        and result.get("pass") is False
-    )
+        return any(result.get(key) is False for key in ("lint_passed", "tests_passed", "pass"))
+    return args.action == "grill" and args.grill_action == "freeze" and result.get("pass") is False
 
 
 def execute_task_command(
@@ -273,3 +470,79 @@ def execute_task_command(
         smart_task = default_smart_task
     result = smart_task(**build_task_arguments(args))
     return result, task_result_should_fail(args, result)
+
+
+def _public_run(run: dict[str, Any]) -> dict[str, Any]:
+    """Remove internal raw JSON helper fields from CLI output."""
+    return {key: value for key, value in run.items() if not key.endswith("_json")}
+
+
+def execute_task_status(args) -> str:
+    """Return current local continuity; only warn when actionable state remains."""
+    root = Path(args.path).resolve()
+    db_path = default_task_db(root)
+    payload: dict[str, Any] = {"continuity": read_task_continuity(root, project=root.name)}
+    if not db_path.is_file():
+        if args.task or args.all:
+            raise ValueError("no task evidence found; run task plan first")
+        return render_task_status(payload, as_json=args.as_json)
+    store = TaskRunStore(db_path, readonly=True)
+    if args.task:
+        run = store.get_run(args.task)
+        if not run:
+            raise ValueError(f"unknown task run: {args.task}")
+        payload["run"] = _public_run(run)
+    if args.all:
+        payload["runs"] = [_public_run(run) for run in store.list_runs(project=root.name, limit=50)]
+    return render_task_status(payload, as_json=args.as_json)
+
+
+def execute_usage_record(args) -> dict[str, Any]:
+    """Normalize one usage event without accepting prompt or response text."""
+    root = Path(args.path).resolve()
+    db_path = default_task_db(root)
+    if not db_path.is_file():
+        raise ValueError("no task evidence found; run task plan first")
+    store = TaskRunStore(db_path)
+    if args.usage:
+        metadata = _load_json_arg(args.usage, "--usage", dict)
+        usage = normalize_provider_usage(args.provider, metadata or {})
+    else:
+        usage = estimate_usage_from_char_counts(
+            args.estimated_input_chars,
+            args.estimated_output_chars,
+        )
+    context = _load_json_arg(args.comparison_context, "--comparison-context", dict)
+    return store.record_usage(
+        args.task_id,
+        usage,
+        provider=args.provider,
+        model=args.model,
+        event_id=args.event_id,
+        tool_calls=args.tool_calls,
+        duration_ms=args.duration_ms,
+        comparison_context=context,
+        variant=args.variant,
+    )
+
+
+def execute_usage_report(args) -> str:
+    """Render the latest or selected task evidence in one portable format."""
+    root = Path(args.path).resolve()
+    db_path = default_task_db(root)
+    if not db_path.is_file():
+        raise ValueError("no task evidence found; run task plan first")
+    store = TaskRunStore(db_path, readonly=True)
+    identifier = args.task
+    if not identifier:
+        runs = store.list_runs(project=root.name, limit=1)
+        if not runs:
+            raise ValueError("no task evidence found; run task plan first")
+        identifier = str(runs[0]["run_id"])
+    rendered = render_usage_report(store.report(identifier, compare_to=args.compare), args.format)
+    if args.output:
+        output_path = Path(args.output).expanduser().resolve()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(rendered, encoding="utf-8")
+        return f"Wrote {args.format} report to {output_path}\n"
+    return rendered

@@ -14,6 +14,7 @@ the index format, parser stack, or every scanner before Flyto2 Indexer is useful
 | “Frontend calls and backend routes keep drifting.” | See [contract drift](FEATURES.md#the-frontend-and-backend-drifted-apart). |
 | “Security and quality reports are too noisy.” | See [evidence-first audits](FEATURES.md#the-audit-is-too-noisy-to-trust). |
 | “The AI keeps repeating the same mistake or scanner complaint.” | Use the [local feedback loop](FEEDBACK.md). |
+| “I switch AI tools and lose the current task state.” | Use [local task continuity](TASK_CONTINUITY.md), without committing handoff files. |
 | “Several repositories change together.” | See [multi-repository work](FEATURES.md#one-change-crosses-several-repositories). |
 | “I need the AI to clarify decisions before writing code.” | Use the [Decision Grill protocol](GRILL_TESTING.md). |
 | “I just need a command or exact argument.” | Go straight to the [generated reference](reference/README.md). |
@@ -30,6 +31,7 @@ the index format, parser stack, or every scanner before Flyto2 Indexer is useful
 | Configure policies and optional integrations | [Configuration](CONFIGURATION.md) |
 | Add local or CI finish gates | [Verification](VERIFICATION.md) |
 | Turn repeated AI misses into an improvement backlog | [Development feedback](FEEDBACK.md) |
+| Resume the same task in another AI tool | [Task continuity and usage evidence](TASK_CONTINUITY.md) |
 
 ## Trust And Evidence
 
@@ -38,6 +40,7 @@ the index format, parser stack, or every scanner before Flyto2 Indexer is useful
 | What leaves my machine? | [Security model](SECURITY_MODEL.md) |
 | Are scanner claims reproducible? | [Benchmark corpus](../benchmarks/README.md) |
 | Does it work on a real repository? | [Pinned FastAPI impact case](CASE_STUDY_FASTAPI.md) |
+| Are continuity and efficiency claims fixed and reproducible? | [100-scenario task evidence](TASK_CONTINUITY.md#fixed-product-contract) |
 | Is precision identical across languages? | [Language evidence and limits](LANGUAGE_EVIDENCE.md) |
 | How was Decision Grill tested? | [Test protocol](GRILL_TESTING.md) and [dated closure report](GRILL_TEST_REPORT_2026-07-29.md) |
 | Why was the product designed this way? | [Design references](DESIGN_REFERENCES.md) |

@@ -19,7 +19,7 @@
 | `context.l1_max_symbols` | `50` | [`config/default.yaml:1`](https://github.com/flytohub/flyto-indexer/blob/main/config/default.yaml#L1) |
 | `context.l2_max_tokens` | `4000` | [`config/default.yaml:1`](https://github.com/flytohub/flyto-indexer/blob/main/config/default.yaml#L1) |
 
-## Environment variables (16)
+## Environment variables (19)
 
 | Variable | Readers |
 |---|---|
@@ -32,6 +32,8 @@
 | `FLYTO_INDEXER_PYTEST_TIMEOUT` | `src/tools/validation.py` |
 | `FLYTO_INDEXER_RATE_LIMIT` | `src/mcp_server.py` |
 | `FLYTO_INDEXER_SESSION_RATE_LIMIT` | `src/mcp_server.py` |
+| `FLYTO_INDEXER_TASK_DB` | `src/task_runs.py` |
+| `FLYTO_INDEXER_TASK_TRACKING` | `src/task_runs.py` |
 | `FLYTO_INDEXER_TOOL_TIMEOUT_SECONDS` | `src/mcp_server.py` |
 | `FLYTO_INDEX_DIR` | `src/index_store.py`, `src/tools/references.py` |
 | `FLYTO_LSP_ENABLED` | `src/lsp/manager.py` |
@@ -39,6 +41,7 @@
 | `FLYTO_PROJECT_ROOT` | `src/tools/references.py` |
 | `FLYTO_TREE_SITTER` | `src/tree_sitter_adapter.py` |
 | `OPENAI_API_KEY` | `examples/audit_all.py`, `examples/audit_incremental.py`, `examples/demo_audit.py`, `src/auditor/llm_auditor.py` |
+| `PYTEST_CURRENT_TEST` | `src/task_runs.py` |
 
 ## Built-in rule corpus (8 files)
 

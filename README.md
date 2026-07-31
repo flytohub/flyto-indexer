@@ -78,6 +78,7 @@ A text search finds the name. Flyto2 Indexer shows the change surface.
 | “Frontend and backend drifted apart.” | Compares calls, routes, and contracts so missing connections are visible. |
 | “Our scanner is so noisy that nobody trusts it.” | Keeps evidence local, reports confidence and provenance, and supports baselines for accepted debt. |
 | “The AI keeps hitting the same bad warning or missing the same connection.” | Records the problem locally, groups repeats, and turns them into a reviewable improvement backlog. |
+| “I switched AI tools and had to explain the whole task again.” | Keeps one local task state that any client can resume, and reminds you only when unfinished work needs a handoff. |
 | “A large repository overwhelms the agent.” | Returns bounded, relevant context instead of dumping the whole codebase. |
 
 ## Real Repository Proof: Text Search Stops, Indexer Keeps Going
@@ -154,6 +155,23 @@ Repeated problems are grouped into a local improvement backlog. Feedback never
 uploads prompts or source code and cannot automatically weaken repository
 policy. See [Learn from every AI miss](docs/FEEDBACK.md).
 
+When you switch between coding agents, the existing `task(plan)`, `task(gate)`,
+and `task(validate)` flow keeps a small resumable state under the ignored local
+index. `structure(focus="profile")` exposes that state to the next MCP client;
+no handoff file or extra MCP tool is created.
+
+```bash
+flyto-index task-status .
+flyto-index usage-record task-1 . --provider openai --model gpt-5 \
+  --usage '{"input_tokens":1200,"output_tokens":300}'
+flyto-index usage-report . --task task-1 --format json
+```
+
+Usage evidence stores normalized counts, never prompts, responses, source, or
+raw provider payloads. A reduction is reported only for two verified runs with
+the same model, commit, task fingerprint, tool policy, proof policy, and sample
+count. See [Resume across AI tools](docs/TASK_CONTINUITY.md).
+
 When a gate fails, it explains what is missing. Complete those actions and run
 the same gate again. A failed gate pauses the unsafe step; it does not abandon
 the task.
@@ -173,6 +191,19 @@ task(action="plan", grill_session_id="grill_...", ...)
 
 If there is no real product or architecture choice to make, skip Grill and go
 straight to `task(plan)`.
+
+## API And Integration Surfaces
+
+Most users need only the five short MCP tools: `search`, `impact`, `task`,
+`audit`, and `structure`. The CLI adds local setup, reports, and CI verification
+without requiring a hosted account. A loopback HTTP bridge is available for
+clients that need a persistent process, but it stays on the local machine by
+default.
+
+All public contracts are generated from the current source, so an integration
+does not have to trust a hand-maintained command list. Start with the
+[MCP guide](docs/MCP.md), [CLI guide](docs/CLI.md), or the
+[source-backed reference](docs/reference/README.md).
 
 ## The Main Questions It Can Answer
 
@@ -243,6 +274,8 @@ flyto-index verify . \
   scanner.
 - Normal analysis is local and works without a hosted service.
 - Generated data stays under `.flyto-index/` and can be deleted at any time.
+- Task continuity is one bounded local SQLite file: terminal history is kept
+  for at most 90 days and capped at 1,000 runs.
 - Flyto2 Indexer reports evidence; it does not auto-edit, auto-commit, or take
   over the coding agent.
 - Optional precision adapters remain optional. The default install keeps one

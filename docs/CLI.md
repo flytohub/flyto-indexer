@@ -46,6 +46,23 @@ allowlisted proof results. Unsupported proof commands are never executed.
 complete acceptance path is in the
 [Decision Grill test protocol](GRILL_TESTING.md).
 
+## Resume And Measure A Task
+
+```bash
+flyto-index task-status .
+flyto-index usage-record task-1 . --provider openai --model gpt-5 \
+  --usage '{"input_tokens":1200,"output_tokens":300}'
+flyto-index usage-report . --task task-1 --format html --output evidence.html
+```
+
+`task-status` reads the same local continuity state exposed by MCP project
+profiles. It does not create a file when no state exists. Usage commands accept
+normalized metadata or character counts, never prompt or response text.
+Reports may be terminal text, JSON, CSV, or one static HTML file. A savings
+claim requires a verified paired experiment; a single run reports counts only.
+See [Task continuity and usage evidence](TASK_CONTINUITY.md) for the privacy and
+comparison contract.
+
 ## Security And Policy
 
 ```bash

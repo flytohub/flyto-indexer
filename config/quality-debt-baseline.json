@@ -5,17 +5,17 @@
   },
   "mypy": {
     "codes": {
-      "arg-type": 43,
+      "arg-type": 41,
       "assignment": 42,
       "attr-defined": 87,
       "index": 21,
       "no-redef": 363,
       "operator": 11,
-      "return-value": 8,
+      "return-value": 7,
       "union-attr": 43,
       "var-annotated": 117
     },
-    "total": 735
+    "total": 732
   },
   "policy": "exact baseline; every decrease requires a baseline update",
   "ruff": {
