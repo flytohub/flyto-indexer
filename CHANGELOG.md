@@ -2,7 +2,30 @@
 
 ## Unreleased
 
+### Added
+- Added a fifth `task(action="feedback")` branch without increasing the
+  20-tool MCP surface. It records, summarizes, and resolves local AI-development
+  problems such as false positives, missing context, framework gaps, slow
+  scans, and bad recommendations. Repeated issues share a stable identity;
+  failed validations can add compact reason-code observations automatically.
+  The append-only store redacts common secrets, home paths, and fenced code,
+  never stores prompts or source code, and cannot change policy automatically.
+- Added portable external proof receipts for browser, race, container,
+  integration, runtime, security, penetration, and deployment evidence.
+  `task(validate)` can require fresh passing receipts and accepts only locally
+  trusted HMAC-attested evidence for a required proof kind.
+- Added on-demand framework relationship hints to dependency queries for React
+  lazy imports, `import.meta.glob`, mounted routers, route authorization, and
+  ORM tenant scopes. The default scan path and dependency set remain unchanged.
+- Added explicit health-score interpretation and per-dimension semantics so a
+  budget ceiling cannot be confused with zero issues or runtime correctness.
+- Added owner-aware suppression governance. Waivers now require an owner in
+  addition to a rationale, source, scope, and expiry.
+
 ### Changed
+- Fixed Git hotspot enrichment to consume the canonical complexity result,
+  combining one-year change frequency with structural complexity instead of
+  silently treating every file as complexity zero.
 - Added dual-era MCP compatibility for the final `2026-07-28` specification
   while preserving all existing handshake-based versions. Modern clients can
   discover capabilities before calling tools, send self-contained stateless

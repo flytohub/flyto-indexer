@@ -16,6 +16,8 @@ that implementation, tests, docs, and architecture remain connected.
 
 - Indexing and verification run locally without external services.
 - Results are actionable for agents and CI.
+- Repeated AI-development problems become local, privacy-preserving improvement
+  evidence instead of disappearing in chat history.
 - Project-specific rules can encode architecture, layer, taint, and release
   constraints.
 - Enterprise customers can run the tool in private or airgapped environments

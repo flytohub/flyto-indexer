@@ -127,7 +127,7 @@ SMART_TOOLS: list = [
         "title": "Task Workflow",
         "annotations": {"readOnlyHint": False, "openWorldHint": False},
         "description": (
-            "Interrogate, plan, gate-check, or validate code changes. Four actions:\n\n"
+            "Interrogate, plan, gate-check, validate, or learn from code changes. Five actions:\n\n"
             "1. grill: Build a persistent evidence-backed decision tree before planning. "
             "Repository-owned facts are resolved from the code index; human decisions are "
             "ordered by confidence and value-of-information, then asked one at a time with "
@@ -149,8 +149,14 @@ SMART_TOOLS: list = [
             "provided, also verify instruction/spec freshness, requirement coverage, "
             "declared proof results, and decision-to-diff conformance. The result is recorded in a "
             "privacy-preserving local outcome store to calibrate future confidence. "
-            "Auto-attaches untested change analysis if validation fails.\n\n"
-            "Workflow: grill → freeze → plan → gate → edit → validate"
+            "Optional attested external proof receipts can close browser, race, container, "
+            "security, integration, and deployment requirements without embedding those "
+            "runtimes. Auto-attaches untested change analysis if validation fails.\n"
+            "5. feedback: Record, summarize, or resolve local AI-development problems such "
+            "as false positives, missing context, framework gaps, slow scans, and bad "
+            "recommendations. Feedback never stores prompts or source code and cannot "
+            "automatically weaken policy.\n\n"
+            "Workflow: grill → freeze → plan → gate → edit → validate → feedback"
         ),
         "inputSchema": {
             "type": "object",
@@ -158,7 +164,7 @@ SMART_TOOLS: list = [
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["grill", "plan", "gate", "validate"],
+                    "enum": ["grill", "plan", "gate", "validate", "feedback"],
                     "description": "Workflow action to perform",
                 },
                 "description": {
@@ -267,7 +273,103 @@ SMART_TOOLS: list = [
                 },
                 "request_id": {
                     "type": "string",
-                    "description": "(grill answer) Idempotency key",
+                    "description": "(grill/feedback) Idempotency key",
+                },
+                "proof_receipts": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "(validate) Local external proof receipts to verify",
+                },
+                "required_proof_kinds": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "browser", "container_build", "deployment", "integration",
+                            "penetration", "race", "runtime", "security",
+                        ],
+                    },
+                    "description": "(validate) Proof kinds that need fresh trusted passing receipts",
+                },
+                "feedback_action": {
+                    "type": "string",
+                    "enum": ["record", "summary", "resolve"],
+                    "default": "record",
+                    "description": "(feedback) Lifecycle operation",
+                },
+                "feedback_category": {
+                    "type": "string",
+                    "enum": [
+                        "bad_recommendation", "false_negative", "false_positive",
+                        "framework_gap", "gate_friction", "missing_context",
+                        "runtime_mismatch", "slow_scan", "validation_failure", "other",
+                    ],
+                    "default": "other",
+                    "description": "(feedback record) Problem category",
+                },
+                "feedback_summary": {
+                    "type": "string",
+                    "description": "(feedback record) Bounded problem description; do not include source code",
+                },
+                "feedback_severity": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high", "critical"],
+                    "default": "medium",
+                },
+                "feedback_tool": {
+                    "type": "string",
+                    "description": "(feedback record) Tool or workflow that exposed the problem",
+                },
+                "finding_id": {
+                    "type": "string",
+                    "description": "(feedback record) Stable finding ID when applicable",
+                },
+                "rule_id": {
+                    "type": "string",
+                    "description": "(feedback record) Scanner or policy rule when applicable",
+                },
+                "framework": {
+                    "type": "string",
+                    "description": "(feedback record) Relevant framework",
+                },
+                "duration_ms": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "(feedback record) Observed latency",
+                },
+                "expected": {
+                    "type": "string",
+                    "description": "(feedback record) Bounded expected behavior",
+                },
+                "actual": {
+                    "type": "string",
+                    "description": "(feedback record) Bounded observed behavior",
+                },
+                "feedback_id": {
+                    "type": "string",
+                    "description": "(feedback resolve) Feedback group to resolve",
+                },
+                "resolution": {
+                    "type": "string",
+                    "description": "(feedback resolve) Bounded resolution note",
+                },
+                "resolved_by": {
+                    "type": "string",
+                    "description": "(feedback resolve) Local owner or automation identity",
+                },
+                "since_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3650,
+                    "default": 90,
+                    "description": "(feedback summary) Lookback window",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 10,
+                    "description": "(feedback summary) Maximum improvement candidates",
                 },
             },
         },
@@ -281,7 +383,7 @@ SMART_TOOLS: list = [
             "Focus modes:\n"
             "- (default/overview): lists all projects with symbol/file counts + index status\n"
             "- apis: all API endpoints + categories + contract drift detection\n"
-            "- dependencies: import/dependent graph for a file or symbol\n"
+            "- dependencies: import/dependent graph plus on-demand framework relationships for a file or symbol\n"
             "- packages: external package dependencies with versions from manifest files\n"
             "- types: type schemas + cross-project contract drift\n"
             "- conventions: naming styles, patterns, imports, error handling conventions\n"

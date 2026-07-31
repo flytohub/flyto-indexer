@@ -57,6 +57,9 @@ def test_evidence_envelope_keeps_identity_stable_when_triage_changes():
             mechanism="waiver",
             rule_id="accepted-risk",
             reason="migration",
+            source=".flyto-rules.yaml",
+            expires="2099-01-01",
+            owner="platform-team",
         ),
     )
 
@@ -66,3 +69,17 @@ def test_evidence_envelope_keeps_identity_stable_when_triage_changes():
     assert active["confidence"]["score"] == 0.9
     assert suppressed["suppression"]["status"] == "suppressed"
     assert suppressed["suppression"]["rule_id"] == "accepted-risk"
+    assert suppressed["suppression"]["governance"]["status"] == "complete"
+
+
+def test_governed_suppression_exposes_missing_owner_and_expiry():
+    suppression = suppression_provenance(
+        suppressed=True,
+        mechanism="waiver",
+        reason="Temporary migration",
+        source=".flyto-rules.yaml",
+    )
+
+    assert suppression["governance"]["status"] == "incomplete"
+    assert suppression["governance"]["missing"] == ["expires", "owner"]
+    assert suppression["governance"]["automatic_policy_change"] is False

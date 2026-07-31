@@ -958,7 +958,7 @@ def cmd_describe(args):
 
 
 def cmd_task(args):
-    """Run local task grill/plan/gate/validate workflow through smart_task."""
+    """Run local task grill/plan/gate/validate/feedback workflow through smart_task."""
     result, should_fail = execute_task_command(args)
     if should_fail:
         print(json.dumps(result, indent=2, ensure_ascii=False))
@@ -1027,9 +1027,9 @@ def cmd_tools(args):
         },
         {
             "name": "task",
-            "summary": "Run local grill, plan, gate, or validate workflow with the latest source",
+            "summary": "Run local grill, plan, gate, validate, or feedback workflow with the latest source",
             "args": [
-                {"name": "action", "type": "string", "required": True, "description": "grill, plan, gate, or validate"},
+                {"name": "action", "type": "string", "required": True, "description": "grill, plan, gate, validate, or feedback"},
                 {"name": "--description", "type": "string", "required": False, "description": "Task description for grill start or plan"},
                 {"name": "--target", "type": "string[]", "required": False, "description": "Target file or symbol. Repeatable"},
                 {"name": "--targets", "type": "string[]", "required": False, "description": "Comma-separated target files or symbols"},
@@ -1050,7 +1050,25 @@ def cmd_tools(args):
                 {"name": "--mode", "type": "string", "required": False, "default": "interactive", "description": "interactive or batch"},
                 {"name": "--locale", "type": "string", "required": False, "default": "und", "description": "BCP-47 metadata"},
                 {"name": "--max-questions", "type": "integer", "required": False, "default": 8, "description": "Batch/frontier cap (1-20)"},
-                {"name": "--request-id", "type": "string", "required": False, "description": "Answer idempotency key"},
+                {"name": "--request-id", "type": "string", "required": False, "description": "State-change idempotency key"},
+                {"name": "--proof-receipts", "type": "json[]|string", "required": False, "description": "External proof receipt array or JSON file path"},
+                {"name": "--require-proof", "type": "string[]", "required": False, "description": "Required external proof kind. Repeatable"},
+                {"name": "--feedback-action", "type": "string", "required": False, "default": "record", "description": "record, summary, or resolve"},
+                {"name": "--feedback-category", "type": "string", "required": False, "default": "other", "description": "Structured problem category"},
+                {"name": "--feedback-summary", "type": "string", "required": False, "description": "Bounded problem note without source code"},
+                {"name": "--feedback-severity", "type": "string", "required": False, "default": "medium", "description": "low, medium, high, or critical"},
+                {"name": "--feedback-tool", "type": "string", "required": False, "description": "Tool or workflow that exposed the problem"},
+                {"name": "--finding-id", "type": "string", "required": False, "description": "Stable finding identity"},
+                {"name": "--rule-id", "type": "string", "required": False, "description": "Scanner or policy rule"},
+                {"name": "--framework", "type": "string", "required": False, "description": "Relevant framework"},
+                {"name": "--duration-ms", "type": "number", "required": False, "description": "Observed latency"},
+                {"name": "--expected", "type": "string", "required": False, "description": "Expected behavior"},
+                {"name": "--actual", "type": "string", "required": False, "description": "Observed behavior"},
+                {"name": "--feedback-id", "type": "string", "required": False, "description": "Feedback group to resolve"},
+                {"name": "--resolution", "type": "string", "required": False, "description": "Resolution note"},
+                {"name": "--resolved-by", "type": "string", "required": False, "description": "Resolution owner"},
+                {"name": "--since-days", "type": "integer", "required": False, "default": 90, "description": "Feedback summary lookback"},
+                {"name": "--limit", "type": "integer", "required": False, "default": 10, "description": "Maximum feedback candidates"},
             ],
             "outputs": [],
             "side_effects": ["validate may run ruff and pytest"],
@@ -1061,6 +1079,8 @@ def cmd_tools(args):
                 "flyto-index task plan --project flyto-engine --description 'split worker' --target cmd/worker/main.go",
                 "flyto-index task gate --next-phase apply_changes --task-contract contract.json --current-state state.json",
                 "flyto-index task validate --project flyto-indexer --test-path tests/test_cli_commands.py",
+                "flyto-index task feedback --project flyto-indexer --feedback-category false_positive --feedback-summary 'Demo credential was classified as a real secret'",
+                "flyto-index task feedback --project flyto-indexer --feedback-action summary",
             ],
             "exit_codes": {"0": "success", "2": "gate denied, validation failed, or task error"},
         },
@@ -1390,6 +1410,7 @@ flyto-index scan .
 - **Checking impact** → `impact(target='symbol_name')` or `impact(mode='unstaged')`
 - **During modifications** → `task(action='gate')` at each phase gate before proceeding
 - **After modifications** → `task(action='validate')` to run ruff + pytest
+- **When analysis or guidance is wrong, slow, or incomplete** → `task(action='feedback')`
 
 ### Workflow for code changes
 1. `task(action='plan')` — get risk dimensions, constraints, and execution plan
@@ -1397,6 +1418,7 @@ flyto-index scan .
 3. `task(action='gate')` at gate steps — server-side enforcement blocks skipping gates
 4. Respect `constraints.max_files_per_step`
 5. `task(action='validate')` — run linter + tests after making changes
+6. `task(action='feedback')` — record structured local evidence for future improvement
 
 ### Project Rules (`.flyto-rules.yaml`)
 

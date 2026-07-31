@@ -80,6 +80,7 @@ class TestMCPTools:
         properties = task_tool["inputSchema"]["properties"]
 
         assert "grill" in properties["action"]["enum"]
+        assert "feedback" in properties["action"]["enum"]
         assert properties["grill_action"]["enum"] == [
             "start",
             "answer",
@@ -94,6 +95,13 @@ class TestMCPTools:
         assert "gate/validate" in properties["task_contract"]["description"]
         assert "decision-to-diff" in task_tool["description"]
         assert "outcome store" in task_tool["description"]
+        assert "cannot automatically weaken policy" in task_tool["description"]
+        assert properties["feedback_action"]["enum"] == [
+            "record",
+            "summary",
+            "resolve",
+        ]
+        assert "browser" in properties["required_proof_kinds"]["items"]["enum"]
         assert len(SMART_TOOLS) == 20
 
     def test_impact_adds_move_preflight_without_another_tool(self):

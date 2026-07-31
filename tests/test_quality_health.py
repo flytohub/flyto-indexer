@@ -96,6 +96,10 @@ def test_code_health_score_reports_weighted_complexity_detail(monkeypatch):
     assert "1/2 functions with high composite complexity" in detail
     assert "burden 5" in detail
     assert "top hotspot 5" in detail
+    assert result["interpretation"]["kind"] == "engineering_risk_signal"
+    assert "runtime_correctness" in result["interpretation"]["does_not_claim"]
+    assert result["interpretation"]["confidence"]["product_correctness"] == "not_assessed"
+    assert "not 100%" in result["breakdown"]["documentation"]["score_semantics"]
 
 
 def test_canonical_health_cache_is_index_versioned_and_copy_safe(monkeypatch):

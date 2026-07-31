@@ -43,7 +43,16 @@ HTTP references.
    positive/negative outcomes plus bounded latency. Repository self-scans treat
    benchmark trees as non-production; the evaluator scans each case root
    explicitly.
-10. CI and agents consume structured findings and decide what to fix.
+10. On-demand framework relationship adapters enrich only an explicitly
+    requested dependency file. They surface dynamic imports, mounted routes,
+    authorization guards, and tenant scopes without slowing the default scan.
+11. External runtime systems return content-addressed proof receipts. Optional
+    local HMAC trust lets `task(validate)` distinguish visible evidence from
+    evidence allowed to close a required proof kind.
+12. Failed validation and explicit agent observations enter an append-only,
+    local feedback store. Aggregation proposes improvement candidates; only a
+    reviewed rule and benchmark may change enforcement.
+13. CI and agents consume structured findings and decide what to fix.
 
 ## Product API Contract Detection
 
@@ -86,6 +95,11 @@ HTTP references.
 - `src/scip_adapter.py`, `src/test_evidence.py`, and
   `src/tree_sitter_adapter.py` are optional evidence adapters. They parse local
   artifacts only and do not own protocol or tool registration.
+- `src/analyzer/framework_relationships.py` is an on-demand heuristic adapter;
+  it is not part of the default repository walk.
+- `src/tools/proof_receipts.py` verifies external evidence without executing
+  the producing runtime. `src/tools/development_feedback.py` owns the bounded
+  local learning lifecycle without network calls or automatic policy edits.
 - `src/__init__.py` exports the stable Python package entry surface.
 
 Adapters compose shared scanners, analyzers, indexes, and tools; lower layers

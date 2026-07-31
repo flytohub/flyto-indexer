@@ -6,18 +6,23 @@
 - Keep source-backed interface references and the documentation contract
   enforced in CI.
 - Preserve local-only operation for default audit and verification paths.
+- Calibrate the feedback backlog against reviewed fixes and committed
+  regression benchmarks without allowing automatic policy weakening.
 
 ## Next
 
 - Improve workspace-level verification across mixed-language repositories.
 - Expand airgap dependency boundaries, generated-index hygiene, and no-egress
   checks without encoding product-specific edition policy.
+- Expand the on-demand framework relationship adapters from the initial lazy
+  import, router, authorization, and ORM scope evidence.
 - Add richer contract drift reporting for capability, API, and route schemas.
 - Improve generated references with language-specific public/private filtering
   while retaining the exhaustive maintainer inventory.
 
 ## Later
 
-- Add optional signed verification baselines.
+- Add asymmetric signature adapters for proof receipts where organizations do
+  not want shared HMAC trust keys.
 - Add deeper language server call hierarchy coverage where local LSPs are
   available.

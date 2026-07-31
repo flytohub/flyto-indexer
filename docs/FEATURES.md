@@ -46,7 +46,7 @@ without proof, validation fails with a specific remediation.
 
 Projects may keep this guidance advisory or make deterministic architecture,
 atomicity, and documentation checks blocking. Waivers must be narrow, explained,
-path-scoped, and time-limited.
+path-scoped, owned, and time-limited.
 
 ## “The Task Is Too Vague To Plan Safely”
 
@@ -76,6 +76,12 @@ See the [Decision Grill test protocol](GRILL_TESTING.md).
 against the rules, requirements, decisions, paths, and proof recorded in the
 plan.
 
+Runtime checks remain owned by the tools that can actually perform them.
+Browser, race, container, integration, security, and deployment systems can
+return proof receipts. Indexer validates their subject, freshness, content
+identity, and optional local attestation instead of pretending to run those
+environments itself.
+
 A failed gate returns the missing actions. The agent completes them and reruns
 the same gate; it does not treat the failure as permission to stop the task.
 
@@ -88,6 +94,12 @@ cross-project type differences become visible before release.
 Real product contracts remain strict. Mock and development fixtures can be
 kept outside the product gate so test helpers do not create false failures.
 
+When a dependency query targets a TypeScript, JavaScript, or Python file,
+Indexer can also add on-demand hints for React lazy imports, dynamic import
+globs, mounted routers, route authorization, and ORM tenant scopes. These
+heuristic hints include confidence and limits; they do not claim to prove
+runtime authorization.
+
 ## “The Audit Is Too Noisy To Trust”
 
 Audits rank quality and security findings instead of presenting an unbounded
@@ -97,10 +109,28 @@ dependencies, licenses, documentation, and git hotspots.
 
 Findings carry a stable identity, confidence basis, bounded trace, and
 suppression history. Moving a line does not create a brand-new issue. Accepted
-debt can be baselined while newly worse findings still fail CI.
+debt can be baselined while newly worse findings still fail CI. Governed
+waivers name an owner, rationale, source, and expiry.
+
+The health grade is an engineering-risk signal, not a correctness verdict. A
+full dimension score means its configured budget was met. For example, the
+default documentation dimension reaches its ceiling at 70% indexed-symbol
+coverage; the raw coverage remains visible beside the score.
 
 Target code is treated as untrusted input. Static checks do not intentionally
 import or execute the repository being analyzed.
+
+## “The AI Keeps Repeating The Same Mistake”
+
+`task(feedback)` records a compact local observation when an agent sees a false
+positive, false negative, missing relationship, slow scan, awkward gate, or bad
+recommendation. Repeated observations share a stable identity and are ranked by
+frequency, severity, and latency.
+
+Failed validations can add their reason codes automatically. Prompts, answers,
+patches, and source code are not stored. Feedback cannot alter policy by itself;
+a maintainer still reviews the evidence and adds a benchmark or regression test
+before changing a rule. See [Learn from every AI miss](FEEDBACK.md).
 
 ## “One Change Crosses Several Repositories”
 

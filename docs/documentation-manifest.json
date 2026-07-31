@@ -26,7 +26,7 @@
     {
       "id": "context-impact-contracts",
       "description": "Owns bounded context, project profiles, reference and call graphs, Git diff impact, API extraction, and cross-project contract drift.",
-      "paths": ["src/context/**", "src/profile/**", "src/engine.py", "src/diff_impact.py", "src/lsp/**", "src/scip_adapter.py", "src/test_evidence.py", "src/tools/references.py", "src/tools/coverage_intel.py", "src/analyzer/api_consistency.py", "src/analyzer/api_drift.py"],
+      "paths": ["src/context/**", "src/profile/**", "src/engine.py", "src/diff_impact.py", "src/lsp/**", "src/scip_adapter.py", "src/test_evidence.py", "src/tools/references.py", "src/tools/coverage_intel.py", "src/analyzer/api_consistency.py", "src/analyzer/api_drift.py", "src/analyzer/framework_relationships.py"],
       "documentation": ["docs/FEATURES.md#context-and-project-profiles", "docs/FEATURES.md#impact-and-call-graphs", "docs/FEATURES.md#api-and-contract-drift", "docs/DESIGN_REFERENCES.md", "ARCHITECTURE.md#product-api-contract-detection"]
     },
     {
@@ -38,8 +38,8 @@
     {
       "id": "task-and-verification",
       "description": "Owns task planning and phase gates, repository and workspace verification, stable finding identities, baselines, offline evaluation, PR risk, test mapping, and structured release evidence.",
-      "paths": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/task_context.py", "src/execution_guard.py", "src/finding_identity.py", "src/test_evidence.py", "src/verify.py", "src/pr_analyzer.py", "src/test_mapper.py", "src/tools/smart.py", "benchmarks/evaluate.py", "benchmarks/fixture/corpus/**"],
-      "documentation": ["docs/FEATURES.md#task-workflow", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/DESIGN_REFERENCES.md", "docs/FEATURES.md#verification-and-baselines", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"]
+      "paths": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/development_feedback.py", "src/tools/proof_receipts.py", "src/tools/task_context.py", "src/execution_guard.py", "src/finding_identity.py", "src/test_evidence.py", "src/verify.py", "src/pr_analyzer.py", "src/test_mapper.py", "src/tools/smart.py", "benchmarks/evaluate.py", "benchmarks/fixture/corpus/**"],
+      "documentation": ["docs/FEATURES.md#task-workflow", "docs/FEEDBACK.md", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/DESIGN_REFERENCES.md", "docs/FEATURES.md#verification-and-baselines", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"]
     },
     {
       "id": "cli-mcp-http-interfaces",
@@ -71,9 +71,9 @@
       "kind": "library",
       "status": "active",
       "description": "Maps callers, transitive blast radius, likely tests, cross-project dependencies, APIs, and route-call contract drift.",
-      "source": ["src/engine.py", "src/diff_impact.py", "src/lsp/call_graph.py", "src/scip_adapter.py", "src/test_evidence.py", "src/tools/coverage_intel.py", "src/tools/references.py", "src/analyzer/api_consistency.py", "src/analyzer/api_drift.py"],
+      "source": ["src/engine.py", "src/diff_impact.py", "src/lsp/call_graph.py", "src/scip_adapter.py", "src/test_evidence.py", "src/tools/coverage_intel.py", "src/tools/references.py", "src/analyzer/api_consistency.py", "src/analyzer/api_drift.py", "src/analyzer/framework_relationships.py"],
       "documentation": ["docs/FEATURES.md#impact-and-call-graphs", "docs/FEATURES.md#api-and-contract-drift", "docs/DESIGN_REFERENCES.md", "ARCHITECTURE.md#product-api-contract-detection"],
-      "tests": ["tests/test_diff_impact.py", "tests/test_cross_language_api.py", "tests/test_call_sites_layer4.py", "tests/test_semantic_preflight.py", "tests/test_scip_adapter.py", "tests/test_test_evidence.py"]
+      "tests": ["tests/test_diff_impact.py", "tests/test_cross_language_api.py", "tests/test_call_sites_layer4.py", "tests/test_semantic_preflight.py", "tests/test_scip_adapter.py", "tests/test_test_evidence.py", "tests/test_framework_relationships.py"]
     },
     {
       "id": "quality-security-audits",
@@ -101,9 +101,9 @@
       "kind": "workflow",
       "status": "active",
       "description": "Resolves evidence-backed decisions, produces task plans, enforces phase evidence, validates changes, verifies repositories and workspaces, compares reviewed finding-level baselines, and runs a committed offline scanner evaluation.",
-      "source": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/task_context.py", "src/execution_guard.py", "src/finding_identity.py", "src/verify.py", "src/tools/smart.py", "benchmarks/evaluate.py", "benchmarks/fixture/corpus/**"],
-      "documentation": ["docs/FEATURES.md#task-workflow", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/DESIGN_REFERENCES.md", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"],
-      "tests": ["tests/test_grill.py", "tests/test_grill_deep.py", "tests/test_grill_evidence.py", "tests/test_grill_conformance.py", "tests/test_grill_outcomes.py", "tests/test_grill_real_data.py", "tests/test_grill_cli_e2e.py", "tests/test_task_context.py", "tests/test_task_adapters.py", "tests/test_task_analysis.py", "tests/test_finding_identity.py", "tests/test_verify.py", "tests/test_benchmark_evaluation.py", "tests/test_validation.py"],
+      "source": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/development_feedback.py", "src/tools/proof_receipts.py", "src/tools/task_context.py", "src/execution_guard.py", "src/finding_identity.py", "src/verify.py", "src/tools/smart.py", "benchmarks/evaluate.py", "benchmarks/fixture/corpus/**"],
+      "documentation": ["docs/FEATURES.md#task-workflow", "docs/FEEDBACK.md", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/DESIGN_REFERENCES.md", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"],
+      "tests": ["tests/test_grill.py", "tests/test_grill_deep.py", "tests/test_grill_evidence.py", "tests/test_grill_conformance.py", "tests/test_grill_outcomes.py", "tests/test_development_feedback.py", "tests/test_proof_receipts.py", "tests/test_grill_real_data.py", "tests/test_grill_cli_e2e.py", "tests/test_task_context.py", "tests/test_task_adapters.py", "tests/test_task_analysis.py", "tests/test_finding_identity.py", "tests/test_verify.py", "tests/test_benchmark_evaluation.py", "tests/test_validation.py"],
       "verification": ["python benchmarks/evaluate.py --check --json"]
     },
     {

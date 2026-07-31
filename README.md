@@ -75,6 +75,7 @@ A text search finds the name. Flyto2 Indexer shows the change surface.
 | “Tests passed, but the change still was not ready.” | Verifies the index, impact, security checks, documentation, policy, package state, and working tree together. |
 | “Frontend and backend drifted apart.” | Compares calls, routes, and contracts so missing connections are visible. |
 | “Our scanner is so noisy that nobody trusts it.” | Keeps evidence local, reports confidence and provenance, and supports baselines for accepted debt. |
+| “The AI keeps hitting the same bad warning or missing the same connection.” | Records the problem locally, groups repeats, and turns them into a reviewable improvement backlog. |
 | “A large repository overwhelms the agent.” | Returns bounded, relevant context instead of dumping the whole codebase. |
 
 ## Before And After: Rename One Shared Function
@@ -126,6 +127,22 @@ search → impact → task(plan) → task(gate) → edit → task(validate) → 
 - `task` keeps decisions, project rules, requirements, and proof connected.
 - `verify` checks whether the repository is actually ready to finish or merge.
 
+When a session exposes a weak rule, missing relationship, slow scan, or poor
+recommendation, keep that evidence instead of losing it in chat history:
+
+```text
+task(
+  action="feedback",
+  feedback_action="record",
+  feedback_category="framework_gap",
+  feedback_summary="A lazy-loaded route was missing from impact analysis"
+)
+```
+
+Repeated problems are grouped into a local improvement backlog. Feedback never
+uploads prompts or source code and cannot automatically weaken repository
+policy. See [Learn from every AI miss](docs/FEEDBACK.md).
+
 When a gate fails, it explains what is missing. Complete those actions and run
 the same gate again. A failed gate pauses the unsafe step; it does not abandon
 the task.
@@ -173,8 +190,10 @@ and multi-repository verification. The exact tool contracts live in the
 - Is the working tree clean enough for the requested gate?
 
 It does not pretend static analysis proves runtime behavior. Browser, service,
-integration, and deployment checks can remain project-owned proof commands and
-be attached to the task contract.
+integration, race, container, security, and deployment checks remain
+project-owned. Their local results can be attached as content-addressed,
+optionally attested proof receipts; only fresh trusted receipts satisfy a
+required runtime-proof gate.
 
 ## CLI
 
@@ -250,6 +269,7 @@ accuracy, false positives, scan errors, and latency on every release. See the
 - [MCP setup and runtime](docs/MCP.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Verification](docs/VERIFICATION.md)
+- [Learning from AI development problems](docs/FEEDBACK.md)
 - [Technical whitepaper](docs/WHITEPAPER.md)
 - [Generated references](docs/reference/)
 

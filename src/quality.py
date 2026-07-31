@@ -707,6 +707,25 @@ def _code_health_score_from_index(
     result = {
         "score": total_score,
         "grade": _grade_for_health_score(total_score),
+        "interpretation": {
+            "schema": "health-interpretation.v1",
+            "kind": "engineering_risk_signal",
+            "claim": "Prioritizes static engineering risk inside the indexed source scope.",
+            "does_not_claim": [
+                "runtime_correctness",
+                "business_correctness",
+                "security_completeness",
+                "deployment_readiness",
+            ],
+            "confidence": {
+                "measurement": "high",
+                "product_correctness": "not_assessed",
+            },
+            "full_score_semantics": (
+                "A dimension met its configured density or coverage budget; it does not "
+                "mean the measured issue count is zero."
+            ),
+        },
         "breakdown": {
             "complexity": {
                 "score": complexity_score,
@@ -722,6 +741,7 @@ def _code_health_score_from_index(
                     "max_complexity_score": max_complexity_score,
                     "avg_complexity": complexity["avg_complexity"],
                 },
+                "score_semantics": "weighted structural complexity budget",
                 "hotspots": complexity["functions"],
             },
             "dead_code": {
@@ -732,6 +752,7 @@ def _code_health_score_from_index(
                     "dead_count": dead_count,
                     "dead_lines": dead_result.get("total_dead_lines", 0),
                 },
+                "score_semantics": "unreferenced-symbol density budget",
                 "symbols": (dead_result.get("dead_symbols") or [])[:20],
             },
             "documentation": {
@@ -746,6 +767,10 @@ def _code_health_score_from_index(
                     "total_symbols": doc_total,
                     "coverage": round(doc_ratio, 4),
                 },
+                "score_semantics": (
+                    "70% indexed-symbol documentation reaches the default budget ceiling; "
+                    "25/25 is not 100% documentation coverage"
+                ),
             },
             "modularity": {
                 "score": modularity_score,
@@ -761,6 +786,10 @@ def _code_health_score_from_index(
                     "reference_ratio": round(pct_with_refs, 4),
                     "archetype": archetype,
                 },
+                "score_semantics": (
+                    "reference-density baseline for the detected project archetype; "
+                    "not a product-quality score"
+                ),
             },
         },
         "total_symbols": total_symbols,

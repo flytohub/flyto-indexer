@@ -163,6 +163,7 @@ def test_valid_narrow_waiver_suppresses_one_matching_check():
             "paths": ["src/legacy/**"],
             "rationale": "Remove after legacy adapter migration.",
             "expires": "2099-01-01",
+            "owner": "platform-team",
         }],
         "invalid": [],
     }
@@ -188,6 +189,12 @@ def test_valid_narrow_waiver_suppresses_one_matching_check():
         "reason": "Remove after legacy adapter migration.",
         "source": ".flyto-rules.yaml",
         "expires": "2099-01-01",
+        "owner": "platform-team",
+        "governance": {
+            "status": "complete",
+            "missing": [],
+            "automatic_policy_change": False,
+        },
     }
     assert result["waived"][0]["confidence"]["level"] == "high"
     assert result["waived"][0]["trace"][0]["path"] == "src/legacy/service.py"
@@ -205,6 +212,7 @@ def test_expired_waiver_is_invalid():
                     "paths": ["src/legacy/**"],
                     "rationale": "Temporary migration.",
                     "expires": "2000-01-01",
+                    "owner": "platform-team",
                 }],
             },
         },
@@ -212,6 +220,27 @@ def test_expired_waiver_is_invalid():
 
     assert policy["waivers"]["valid"] == []
     assert "expired" in policy["waivers"]["invalid"][0]["reasons"]
+
+
+def test_waiver_without_owner_is_invalid():
+    policy = load_governance_policy(
+        None,
+        {
+            "governance": {
+                "mode": "guarded",
+                "waivers": [{
+                    "id": "ownerless",
+                    "checks": ["forbidden_layer_edge"],
+                    "paths": ["src/legacy/**"],
+                    "rationale": "Temporary migration.",
+                    "expires": "2099-01-01",
+                }],
+            },
+        },
+    )
+
+    assert policy["waivers"]["valid"] == []
+    assert "missing_owner" in policy["waivers"]["invalid"][0]["reasons"]
 
 
 def test_validate_intent_ledger_applies_strict_diff_governance():

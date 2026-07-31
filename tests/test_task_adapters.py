@@ -98,6 +98,32 @@ def test_dispatch_task_calls_smart_task_once_with_canonical_mapping():
     assert kwargs["run_tests"] is True
 
 
+def test_cli_and_dispatch_adapters_expose_feedback_and_external_proof():
+    feedback_args = _parse(
+        "feedback",
+        "--project",
+        "demo",
+        "--feedback-category",
+        "framework_gap",
+        "--feedback-summary",
+        "Lazy route edge was missing",
+        "--framework",
+        "react",
+    )
+    mapped_feedback = build_cli_arguments(feedback_args)
+    mapped_validate = build_dispatch_arguments({
+        "action": "validate",
+        "required_proof_kinds": ["browser"],
+        "proof_receipts": [{"schema": "flyto-proof-receipt.v1"}],
+    })
+
+    assert mapped_feedback["action"] == "feedback"
+    assert mapped_feedback["feedback_category"] == "framework_gap"
+    assert mapped_feedback["framework"] == "react"
+    assert mapped_validate["required_proof_kinds"] == ["browser"]
+    assert mapped_validate["proof_receipts"][0]["schema"] == "flyto-proof-receipt.v1"
+
+
 def test_generated_cli_reference_keeps_extracted_task_surface():
     reference = (
         Path(__file__).parents[1] / "docs" / "reference" / "cli.md"

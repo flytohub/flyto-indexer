@@ -22,7 +22,10 @@
   exports the IDs as SARIF partial fingerprints.
 - Canonical `health-snapshot.v2` evidence is content-addressed and shared by
   audit, verification, and smart-tool expansions; divergent evidence fails
-  closed instead of presenting contradictory health scores.
+  closed instead of presenting contradictory health scores. Health output now
+  identifies itself as a static engineering-risk signal and explains that a
+  dimension ceiling means its configured budget was met, not that the issue
+  count is zero or runtime behavior is proven.
 - A committed offline Python/JavaScript/TypeScript/Go evaluation corpus gates
   13 exact positive/negative cases, cross-file proof, four metamorphic
   relations, pinned differential categories, precision, recall,
@@ -34,7 +37,21 @@
   explicit confidence.
 - Secret, SAST, IaC, taint, verification, and SARIF findings carry stable
   fingerprints, confidence basis, traces, and suppression provenance while
-  preserving legacy scanner fields.
+  preserving legacy scanner fields. Governed waivers require an owner,
+  rationale, source, scope, and unexpired expiry.
+- The existing 20-tool MCP surface now exposes a fifth `task` action for local
+  AI-development feedback. Explicit observations and failed-validation reason
+  codes enter an append-only store with stable issue grouping, bounded
+  summaries, common-secret/code redaction, resolution history, and no
+  automatic policy changes.
+- `task(validate)` accepts external browser, race, container, integration,
+  runtime, security, penetration, and deployment proof receipts. Content
+  identity and freshness are always checked; a required proof kind closes only
+  with a passing locally trusted HMAC attestation.
+- Dependency-focused structure queries add on-demand React lazy import,
+  dynamic glob, route mount, route authorization, and ORM tenant-scope hints
+  for explicitly requested TypeScript, JavaScript, or Python files. The default
+  indexing path does not run this adapter.
 - Incremental manifests hash full content and the scanner/parser pipeline.
   Optional Tree-sitter validation is lazy, environment-gated, and falls back
   to native scanners; the default path imports no parser dependency.
@@ -63,13 +80,13 @@
   parsing still fails verification closed, and wheel CI verifies the runtime
   dependency boundary in an isolated environment.
 - Durable user, operator, security, architecture, and whitepaper documentation
-  links to a generated source reference covering 168 non-test Python modules,
-  2,081 declarations, 36 CLI commands, 20 published MCP tools, 47 granular
-  compatibility definitions, seven local HTTP operations, 14 environment
+  links to a generated source reference covering 171 non-test Python modules,
+  2,113 declarations, 36 CLI commands, 20 published MCP tools, 47 granular
+  compatibility definitions, seven local HTTP operations, 16 environment
   variables, and eight built-in rule files.
 - Documentation scoring distinguishes inline summaries from exact source-linked
   reference entries. The latest score is 98/100 with a 78/100 README score,
-  67.1% inline coverage, 99.9% source-reference coverage, and 99.9% combined
+  66.6% inline coverage, 99.9% source-reference coverage, and 99.9% combined
   symbol coverage; external links count only when they resolve to the indexed
   declaration inside the repository.
 - Generated source-reference manifests accept repository-local glob patterns,
@@ -80,13 +97,13 @@
   instead of misclassifying locale and content directories as software modules.
 - Package, MCP registry, and MCP initialization versions are synchronized and
   enforced by tests and CI. Every built-in rule YAML file is parsed in tests.
-- Latest local verification: `1898 passed, 1 skipped`; Ruff passed across the
-  repository; mypy found no issues in 147 source files; the offline corpus
+- Latest local verification: `1915 passed, 1 skipped`; Ruff passed across the
+  repository; mypy found no issues in 150 source files; the offline corpus
   passed 13/13 with 1.0 precision, 1.0 recall, zero false positives, p95 case
-  latency 175.03 ms, and stable evidence fingerprint `203edae3857a360d`;
+  latency 170.66 ms, and stable evidence fingerprint `203edae3857a360d`;
   sdist/wheel, isolated installed-feature, and real optional Tree-sitter
-  grammar smokes passed; strict self-verify passed 20/20 with 284 files,
-  4,697 indexed symbols, health 82/100, and zero warnings.
+  grammar smokes passed; strict self-verify passed 20/20 with 290 files,
+  4,753 indexed symbols, health 82/100, and zero warnings.
 
 ## Release Blockers
 

@@ -1,4 +1,4 @@
-"""Focused CLI adapter for the task grill/plan/gate/validate workflow."""
+"""Focused CLI adapter for the task grill/plan/gate/validate/feedback workflow."""
 
 from __future__ import annotations
 
@@ -11,15 +11,15 @@ def configure_task_parser(subparsers) -> None:
     """Register the backward-compatible ``flyto-index task`` arguments."""
     parser = subparsers.add_parser(
         "task",
-        help="Run local task grill/plan/gate/validate workflow",
+        help="Run local task grill/plan/gate/validate/feedback workflow",
         description=(
-            "Run the same grill, plan, gate, and validate workflow exposed by the MCP "
+            "Run the same grill, plan, gate, validate, and feedback workflow exposed by the MCP "
             "task tool. Useful when a long-running MCP server has stale source."
         ),
     )
     parser.add_argument(
         "action",
-        choices=["grill", "plan", "gate", "validate"],
+        choices=["grill", "plan", "gate", "validate", "feedback"],
         help="Task workflow action",
     )
     parser.add_argument("--description", default="", help="Task description for plan")
@@ -90,7 +90,42 @@ def configure_task_parser(subparsers) -> None:
         default=8,
         help="Batch/frontier limit (1-20)",
     )
-    parser.add_argument("--request-id", help="Idempotency key for a grill answer")
+    parser.add_argument("--request-id", help="Idempotency key for a state-changing action")
+    parser.add_argument(
+        "--proof-receipts",
+        help="External proof receipt array as inline JSON or a JSON file",
+    )
+    parser.add_argument(
+        "--require-proof",
+        action="append",
+        default=[],
+        help="Required external proof kind. Repeatable",
+    )
+    parser.add_argument(
+        "--feedback-action",
+        choices=["record", "summary", "resolve"],
+        default="record",
+        help="Feedback lifecycle operation",
+    )
+    parser.add_argument("--feedback-category", default="other")
+    parser.add_argument("--feedback-summary")
+    parser.add_argument(
+        "--feedback-severity",
+        choices=["low", "medium", "high", "critical"],
+        default="medium",
+    )
+    parser.add_argument("--feedback-tool")
+    parser.add_argument("--finding-id")
+    parser.add_argument("--rule-id")
+    parser.add_argument("--framework")
+    parser.add_argument("--duration-ms", type=float)
+    parser.add_argument("--expected")
+    parser.add_argument("--actual")
+    parser.add_argument("--feedback-id")
+    parser.add_argument("--resolution")
+    parser.add_argument("--resolved-by")
+    parser.add_argument("--since-days", type=int, default=90)
+    parser.add_argument("--limit", type=int, default=10)
 
 
 def _load_json_arg(
@@ -133,6 +168,15 @@ def _validate_args(args, task_contract: dict | None, current_state: dict | None)
             raise ValueError("task gate requires --current-state")
         if not args.next_phase:
             raise ValueError("task gate requires --next-phase")
+    if args.action == "feedback":
+        if args.feedback_action == "record" and not args.feedback_summary:
+            raise ValueError("task feedback record requires --feedback-summary")
+        if args.feedback_action == "resolve":
+            if not args.feedback_id or not args.resolution:
+                raise ValueError(
+                    "task feedback resolve requires --feedback-id and --resolution"
+                )
+        return
     if args.action != "grill":
         return
     if args.grill_action == "start" and not args.description.strip():
@@ -155,6 +199,7 @@ def build_task_arguments(args) -> dict[str, Any]:
     task_contract = _load_json_arg(args.task_contract, "--task-contract", dict)
     current_state = _load_json_arg(args.current_state, "--current-state", dict)
     decisions = _load_json_arg(args.decisions, "--decisions", list)
+    proof_receipts = _load_json_arg(args.proof_receipts, "--proof-receipts", list)
     _validate_args(args, task_contract, current_state)
     return {
         "action": args.action,
@@ -178,6 +223,24 @@ def build_task_arguments(args) -> dict[str, Any]:
         "locale": args.locale,
         "max_questions": args.max_questions,
         "request_id": args.request_id,
+        "proof_receipts": proof_receipts,
+        "required_proof_kinds": args.require_proof,
+        "feedback_action": args.feedback_action,
+        "feedback_category": args.feedback_category,
+        "feedback_summary": args.feedback_summary or "",
+        "feedback_severity": args.feedback_severity,
+        "feedback_tool": args.feedback_tool or "",
+        "finding_id": args.finding_id or "",
+        "rule_id": args.rule_id or "",
+        "framework": args.framework or "",
+        "duration_ms": args.duration_ms,
+        "expected": args.expected or "",
+        "actual": args.actual or "",
+        "feedback_id": args.feedback_id or "",
+        "resolution": args.resolution or "",
+        "resolved_by": args.resolved_by or "",
+        "since_days": args.since_days,
+        "limit": args.limit,
     }
 
 

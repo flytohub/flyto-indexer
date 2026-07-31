@@ -269,7 +269,7 @@ def git_hotspots(project: Optional[str] = None, max_results: int = 20) -> dict:
     complexity_lookup = {}  # type: Dict[str, float]
     try:
         cx_result = _lazy_quality().find_complex_functions(project=proj_name, max_results=500, min_score=0)
-        for item in cx_result.get("results", []):
+        for item in cx_result.get("functions", cx_result.get("results", [])):
             path = item.get("path", "")
             score = item.get("score", 0)
             if path in complexity_lookup:
@@ -291,6 +291,7 @@ def git_hotspots(project: Optional[str] = None, max_results: int = 20) -> dict:
             "commit_count": count,
             "complexity_score": cx,
             "hotspot_score": round(hotspot_score, 2),
+            "risk_basis": ["one_year_commit_frequency", "structural_complexity"],
             "recent_authors": sorted(author_counts.keys()),
             "primary_author": max(author_counts, key=author_counts.get) if author_counts else "",
         })

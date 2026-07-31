@@ -1,5 +1,40 @@
 # Decisions
 
+## 2026-07-31 - Development feedback proposes evidence, never policy
+
+Decision: add record, summary, and resolve operations to the existing `task`
+tool. Keep observations append-only and local, redact common source/secret
+material, aggregate repeats by stable semantic identity, and require human
+review plus a benchmark or regression test before changing any scanner rule,
+suppression, baseline, or CI policy.
+
+Reason: LLM sessions repeatedly expose false positives, missing relationships,
+slow paths, and poor recommendations, but chat history is not a durable product
+backlog. Automatic rule learning would create a new path for noisy or hostile
+input to weaken enforcement.
+
+## 2026-07-31 - Runtime proof is federated through attestable receipts
+
+Decision: keep browser, race, container, integration, penetration, and
+deployment execution in their owning systems. Accept content-addressed receipts
+in `task(validate)` and require a fresh passing locally trusted HMAC attestation
+when a proof kind is mandatory.
+
+Reason: embedding every runtime would make the indexer slow and operationally
+heavy. Visible unsigned evidence remains useful, while trusted required proof
+must fail closed on tampering, staleness, cross-project reuse, or unknown keys.
+
+## 2026-07-31 - Framework heuristics stay on the dependency-query path
+
+Decision: detect React lazy imports, dynamic import globs, mounted routers,
+authorization guards, and ORM tenant scopes only when a caller requests
+dependencies for a concrete supported source file. Label these edges as
+heuristic evidence with explicit limits.
+
+Reason: dynamic framework wiring matters for impact analysis, but a universal
+deep framework pass would slow ordinary indexing and still could not prove
+runtime authorization or business correctness.
+
 ## 2026-07-30 - Scanner claims require local reproducible evidence
 
 Decision: keep a small committed positive/negative Python, JavaScript, and Go

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -94,6 +95,7 @@ def suppression_provenance(
     reason: str = "",
     source: str = "",
     expires: str = "",
+    owner: str = "",
 ) -> dict[str, Any]:
     """Create an explicit, bounded record for active or suppressed findings."""
     result: dict[str, Any] = {
@@ -105,12 +107,32 @@ def suppression_provenance(
         "reason": reason,
         "source": source,
         "expires": expires,
+        "owner": owner,
     }
     result.update({
         key: normalize_finding_anchor(value)
         for key, value in optional.items()
         if value
     })
+    governed = suppressed and mechanism in {"baseline", "ignore", "waiver"}
+    missing = []
+    if governed:
+        for key in ("reason", "source", "expires", "owner"):
+            if not result.get(key):
+                missing.append(key)
+        if result.get("expires"):
+            try:
+                if date.fromisoformat(str(result["expires"])) < date.today():
+                    missing.append("unexpired_expiry")
+            except ValueError:
+                missing.append("valid_expiry")
+    result["governance"] = {
+        "status": (
+            "not_applicable" if not governed else "complete" if not missing else "incomplete"
+        ),
+        "missing": missing,
+        "automatic_policy_change": False,
+    }
     return result
 
 

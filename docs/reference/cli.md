@@ -2,7 +2,7 @@
 
 # CLI Command Reference
 
-The `flyto-index` argparse surface contains **36 subcommands** and **149 command arguments**.
+The `flyto-index` argparse surface contains **36 subcommands** and **167 command arguments**.
 
 ## `flyto-index init`
 
@@ -448,13 +448,13 @@ Handler: `inline dispatch`. Source: [`src/cli.py:459`](https://github.com/flytoh
 
 ## `flyto-index task`
 
-Run the same grill, plan, gate, and validate workflow exposed by the MCP task tool. Useful when a long-running MCP server has stale source.
+Run the same grill, plan, gate, validate, and feedback workflow exposed by the MCP task tool. Useful when a long-running MCP server has stale source.
 
 Handler: `inline dispatch`. Source: [`src/task_cli.py:12`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L12).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `action` | no | `required` | `grill, plan, gate, validate` | Task workflow action | [`src/task_cli.py:20`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L20) |
+| `action` | no | `required` | `grill, plan, gate, validate, feedback` | Task workflow action | [`src/task_cli.py:20`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L20) |
 | `--description` | no | `` | `` | Task description for plan | [`src/task_cli.py:25`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L25) |
 | `--target` | no | `&#91;&#93;` | `` | Target file or symbol. Repeatable | [`src/task_cli.py:26`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L26) |
 | `--targets` | no | `&#91;&#93;` | `` | Comma-separated target files or symbols | [`src/task_cli.py:29`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L29) |
@@ -475,4 +475,22 @@ Handler: `inline dispatch`. Source: [`src/task_cli.py:12`](https://github.com/fl
 | `--mode` | no | `interactive` | `interactive, batch` | Grill question mode | [`src/task_cli.py:78`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L78) |
 | `--locale` | no | `und` | `` | BCP-47 language metadata (default: und) | [`src/task_cli.py:84`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L84) |
 | `--max-questions` | no | `8` | `` | Batch/frontier limit (1-20) | [`src/task_cli.py:87`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L87) |
-| `--request-id` | no | `` | `` | Idempotency key for a grill answer | [`src/task_cli.py:93`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L93) |
+| `--request-id` | no | `` | `` | Idempotency key for a state-changing action | [`src/task_cli.py:93`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L93) |
+| `--proof-receipts` | no | `` | `` | External proof receipt array as inline JSON or a JSON file | [`src/task_cli.py:94`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L94) |
+| `--require-proof` | no | `&#91;&#93;` | `` | Required external proof kind. Repeatable | [`src/task_cli.py:98`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L98) |
+| `--feedback-action` | no | `record` | `record, summary, resolve` | Feedback lifecycle operation | [`src/task_cli.py:104`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L104) |
+| `--feedback-category` | no | `other` | `` |  | [`src/task_cli.py:110`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L110) |
+| `--feedback-summary` | no | `` | `` |  | [`src/task_cli.py:111`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L111) |
+| `--feedback-severity` | no | `medium` | `low, medium, high, critical` |  | [`src/task_cli.py:112`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L112) |
+| `--feedback-tool` | no | `` | `` |  | [`src/task_cli.py:117`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L117) |
+| `--finding-id` | no | `` | `` |  | [`src/task_cli.py:118`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L118) |
+| `--rule-id` | no | `` | `` |  | [`src/task_cli.py:119`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L119) |
+| `--framework` | no | `` | `` |  | [`src/task_cli.py:120`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L120) |
+| `--duration-ms` | no | `` | `` |  | [`src/task_cli.py:121`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L121) |
+| `--expected` | no | `` | `` |  | [`src/task_cli.py:122`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L122) |
+| `--actual` | no | `` | `` |  | [`src/task_cli.py:123`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L123) |
+| `--feedback-id` | no | `` | `` |  | [`src/task_cli.py:124`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L124) |
+| `--resolution` | no | `` | `` |  | [`src/task_cli.py:125`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L125) |
+| `--resolved-by` | no | `` | `` |  | [`src/task_cli.py:126`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L126) |
+| `--since-days` | no | `90` | `` |  | [`src/task_cli.py:127`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L127) |
+| `--limit` | no | `10` | `` |  | [`src/task_cli.py:128`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L128) |

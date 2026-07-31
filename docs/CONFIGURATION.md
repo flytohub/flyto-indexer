@@ -70,3 +70,15 @@ write the key to a repository file or generated report.
 The generated [configuration reference](reference/configuration.md) lists all
 detected environment readers, flattened defaults, and the complete built-in
 rule corpus.
+
+## Local Learning And Proof
+
+`FLYTO_INDEXER_FEEDBACK_DIR` changes the local directory used by the
+development-feedback event store. The default is
+`~/.flyto-indexer/feedback/`. No network destination is configured or used.
+
+`FLYTO_INDEXER_PROOF_KEYS_JSON` is an optional JSON object mapping local key
+IDs to HMAC secrets used to validate external proof receipts. Keep it in the
+process environment or an approved secret manager; never commit it. An
+unsigned receipt remains visible as content-addressed evidence but cannot
+satisfy a required trusted-proof gate.

@@ -19,14 +19,16 @@
 | `context.l1_max_symbols` | `50` | [`config/default.yaml:1`](https://github.com/flytohub/flyto-indexer/blob/main/config/default.yaml#L1) |
 | `context.l2_max_tokens` | `4000` | [`config/default.yaml:1`](https://github.com/flytohub/flyto-indexer/blob/main/config/default.yaml#L1) |
 
-## Environment variables (14)
+## Environment variables (16)
 
 | Variable | Readers |
 |---|---|
 | `FLYTO_AUTO_REINDEX` | `src/index_store.py` |
 | `FLYTO_INDEXER_COMMIT` | `src/mcp_server.py` |
+| `FLYTO_INDEXER_FEEDBACK_DIR` | `src/tools/development_feedback.py` |
 | `FLYTO_INDEXER_GRILL_DIR` | `src/tools/grill.py`, `src/tools/grill_outcomes.py` |
 | `FLYTO_INDEXER_LOG_LEVEL` | `src/mcp_http_server.py` |
+| `FLYTO_INDEXER_PROOF_KEYS_JSON` | `src/tools/proof_receipts.py` |
 | `FLYTO_INDEXER_PYTEST_TIMEOUT` | `src/tools/validation.py` |
 | `FLYTO_INDEXER_RATE_LIMIT` | `src/mcp_server.py` |
 | `FLYTO_INDEXER_SESSION_RATE_LIMIT` | `src/mcp_server.py` |

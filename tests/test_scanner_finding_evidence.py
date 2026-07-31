@@ -15,9 +15,12 @@ def _assert_envelope(finding: dict, expected_origin: str) -> None:
     assert finding["origin"] == expected_origin
     assert finding["confidence"]["level"] in {"medium", "high"}
     assert finding["trace"]
-    assert finding["suppression"] == {
-        "status": "active",
-        "mechanism": "none",
+    assert finding["suppression"]["status"] == "active"
+    assert finding["suppression"]["mechanism"] == "none"
+    assert finding["suppression"]["governance"] == {
+        "status": "not_applicable",
+        "missing": [],
+        "automatic_policy_change": False,
     }
 
 

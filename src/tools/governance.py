@@ -79,6 +79,7 @@ def _normalize_waivers(entries: Any, *, today: date | None = None) -> dict:
         paths = entry.get("paths")
         rationale = str(entry.get("rationale") or "").strip()
         expires = str(entry.get("expires") or "").strip()
+        owner = str(entry.get("owner") or "").strip()
         reasons = []
         if not str(entry.get("id") or "").strip():
             reasons.append("missing_id")
@@ -88,6 +89,8 @@ def _normalize_waivers(entries: Any, *, today: date | None = None) -> dict:
             reasons.append("missing_paths")
         if not rationale:
             reasons.append("missing_rationale")
+        if not owner:
+            reasons.append("missing_owner")
         try:
             expiry = date.fromisoformat(expires)
         except ValueError:
@@ -101,6 +104,7 @@ def _normalize_waivers(entries: Any, *, today: date | None = None) -> dict:
             "paths": [str(item) for item in paths or []],
             "rationale": rationale,
             "expires": expires,
+            "owner": owner,
         }
         if reasons:
             invalid.append({**normalized, "reasons": reasons})
@@ -452,6 +456,7 @@ def _finding_with_evidence(finding: dict, waiver: dict | None = None) -> dict:
             reason=str(waiver.get("rationale", "")) if waiver else "",
             source=".flyto-rules.yaml" if waiver else "",
             expires=str(waiver.get("expires", "")) if waiver else "",
+            owner=str(waiver.get("owner", "")) if waiver else "",
         ),
         origin="governance.diff",
     )

@@ -13,6 +13,7 @@ the index format, parser stack, or every scanner before Flyto2 Indexer is useful
 | “The tests are green, but I still do not trust the change.” | Use the [verification guide](VERIFICATION.md). |
 | “Frontend calls and backend routes keep drifting.” | See [contract drift](FEATURES.md#the-frontend-and-backend-drifted-apart). |
 | “Security and quality reports are too noisy.” | See [evidence-first audits](FEATURES.md#the-audit-is-too-noisy-to-trust). |
+| “The AI keeps repeating the same mistake or scanner complaint.” | Use the [local feedback loop](FEEDBACK.md). |
 | “Several repositories change together.” | See [multi-repository work](FEATURES.md#one-change-crosses-several-repositories). |
 | “I need the AI to clarify decisions before writing code.” | Use the [Decision Grill protocol](GRILL_TESTING.md). |
 | “I just need a command or exact argument.” | Go straight to the [generated reference](reference/README.md). |
@@ -28,6 +29,7 @@ the index format, parser stack, or every scanner before Flyto2 Indexer is useful
 | Connect an AI coding client | [MCP guide](MCP.md) |
 | Configure policies and optional integrations | [Configuration](CONFIGURATION.md) |
 | Add local or CI finish gates | [Verification](VERIFICATION.md) |
+| Turn repeated AI misses into an improvement backlog | [Development feedback](FEEDBACK.md) |
 
 ## Trust And Evidence
 

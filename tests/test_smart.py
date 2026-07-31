@@ -405,6 +405,45 @@ class TestSmartTask:
         result = smart_task(action="validate")
         assert result["tests_passed"] is True
 
+    def test_validate_can_require_external_proof(self, mock_validation):
+        with (
+            patch("tools.smart._proof_receipts_mod") as proof_mod,
+            patch("tools.smart._feedback_mod") as feedback_mod,
+        ):
+            proof_mod.return_value.validate_proof_receipts.return_value = {
+                "pass": False,
+                "reason_codes": ["EXTERNAL_PROOF_NONCONFORMANT"],
+                "required_actions": ["attach browser receipt"],
+            }
+            feedback_mod.return_value.record_validation_feedback.return_value = {
+                "status": "recorded"
+            }
+            result = smart_task(
+                action="validate",
+                project="demo",
+                required_proof_kinds=["browser"],
+            )
+
+        assert result["pass"] is False
+        assert "EXTERNAL_PROOF_NONCONFORMANT" in result["reason_codes"]
+        assert "external_proof_validation" in result
+
+    def test_feedback_action_uses_local_learning_branch(self):
+        with patch("tools.smart._feedback_mod") as feedback_mod:
+            feedback_mod.return_value.record_feedback.return_value = {
+                "status": "recorded",
+                "feedback_id": "feedback-1",
+            }
+            result = smart_task(
+                action="feedback",
+                project="demo",
+                feedback_category="false_positive",
+                feedback_summary="Demo value was noisy",
+            )
+
+        assert result["feedback_id"] == "feedback-1"
+        feedback_mod.return_value.record_feedback.assert_called_once()
+
     def test_unknown_action(self):
         result = smart_task(action="unknown")
         assert "error" in result
@@ -479,8 +518,10 @@ class TestSmartTask:
 class TestSmartStructure:
 
     def test_default_overview(self, mock_info, mock_maint):
-        result = smart_structure()
+        with patch("tools.smart._framework_relationships_mod") as relationships:
+            result = smart_structure()
         assert "projects" in result
+        relationships.assert_not_called()
 
     def test_project_detail(self, mock_info, mock_maint):
         result = smart_structure(project="proj-a")
@@ -496,8 +537,14 @@ class TestSmartStructure:
             assert "categories" in result
 
     def test_dependencies_focus(self, mock_refs):
-        result = smart_structure(focus="dependencies", path="src/pay.py")
+        with patch("tools.smart._framework_relationships_mod") as relationships:
+            relationships.return_value.analyze_framework_relationships.return_value = {
+                "status": "analyzed",
+                "relationships": [{"kind": "react_lazy_import"}],
+            }
+            result = smart_structure(focus="dependencies", path="src/pay.py")
         assert "graph" in result
+        assert result["framework_relationships"]["relationships"][0]["kind"] == "react_lazy_import"
         mock_refs.dependency_graph.assert_called_once()
 
     def test_types_focus(self):

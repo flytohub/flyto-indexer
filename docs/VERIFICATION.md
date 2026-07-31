@@ -23,6 +23,36 @@ project profiles. Project policy may set `min_health_score`,
 `min_documentation_score`, `max_complex_functions`,
 `max_complexity_burden`, and `max_dead_code`.
 
+The grade prioritizes measured static engineering risk. It does not prove
+business behavior, browser behavior, concurrency safety, deployment readiness,
+or complete security. Each dimension includes its score semantics and raw
+measurement so a budget ceiling cannot be mistaken for zero remaining issues.
+
+## External Runtime Proof
+
+`task(validate)` can require proof produced by the systems that actually own a
+runtime check:
+
+```text
+task(
+  action="validate",
+  task_contract=contract,
+  required_proof_kinds=["browser", "race", "container_build"],
+  proof_receipts=receipts
+)
+```
+
+A receipt names the proof kind, producer, subject, project, result, issuance
+time, and SHA-256 evidence digest. Content addressing detects accidental
+changes. When a proof kind is required, the receipt must also carry a valid
+HMAC-SHA256 attestation from a key ID trusted through the local
+`FLYTO_INDEXER_PROOF_KEYS_JSON` environment setting. Missing, stale, failed,
+tampered, cross-project, or untrusted receipts fail closed.
+
+This is federation, not runtime emulation: flyto-core can own browser proof,
+CI can own race and container proof, and a security runner can own penetration
+proof. Indexer only verifies and closes the declared evidence contract.
+
 ## Workspace Gate
 
 Use an explicit workspace path and report location:

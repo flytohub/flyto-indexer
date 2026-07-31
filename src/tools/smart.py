@@ -87,6 +87,24 @@ def _outcomes_mod():
     return m
 
 
+def _feedback_mod():
+    from . import development_feedback as m
+    return m
+
+
+def _proof_receipts_mod():
+    from . import proof_receipts as m
+    return m
+
+
+def _framework_relationships_mod():
+    try:
+        from ..analyzer import framework_relationships as m
+    except ImportError:
+        from analyzer import framework_relationships as m
+    return m
+
+
 def _task_context_mod():
     from . import task_context as m
     return m
@@ -760,7 +778,14 @@ def _task_plan(description, targets, intent, project, grill_session_id=None):
     )
 
 
-def _task_validate(project, run_tests, test_path, task_contract=None):
+def _task_validate(
+    project,
+    run_tests,
+    test_path,
+    task_contract=None,
+    proof_receipts=None,
+    required_proof_kinds=None,
+):
     """Run code checks and every contract-backed closure gate."""
     val = _validation_mod()
     result = val.validate_changes(
@@ -809,6 +834,23 @@ def _task_validate(project, run_tests, test_path, task_contract=None):
             reason_codes.append("INSTRUCTION_CONTEXT_NONCONFORMANT")
             required_actions.extend(instruction_gate.get("required_actions", []))
 
+    declared_receipts = list(proof_receipts or contract.get("proof_receipts") or [])
+    declared_required_kinds = sorted(set(
+        list(required_proof_kinds or [])
+        + list(contract.get("required_proof_kinds") or [])
+    ))
+    if declared_receipts or declared_required_kinds:
+        external_proof = _proof_receipts_mod().validate_proof_receipts(
+            declared_receipts,
+            required_kinds=declared_required_kinds,
+            project=contract_project,
+        )
+        result["external_proof_validation"] = external_proof
+        if not external_proof.get("pass"):
+            closed_loop_passed = False
+            reason_codes.extend(external_proof.get("reason_codes", []))
+            required_actions.extend(external_proof.get("required_actions", []))
+
     decision_contract = (
         contract.get("decision_contract")
     )
@@ -850,7 +892,7 @@ def _task_validate(project, run_tests, test_path, task_contract=None):
                 validation=result,
                 conformance=conformance,
             )
-    has_contract_gates = any(
+    has_contract_gates = bool(declared_receipts or declared_required_kinds) or any(
         key in contract
         for key in ("instruction_context", "intent_ledger", "decision_contract")
     )
@@ -864,6 +906,15 @@ def _task_validate(project, run_tests, test_path, task_contract=None):
         r = _enrich("untested_changes", _coverage_mod().untested_changes, project=project, mode="unstaged")
         if r is not None:
             result["untested_changes"] = r
+        feedback = _enrich(
+            "validation_feedback",
+            _feedback_mod().record_validation_feedback,
+            result,
+            project=contract_project,
+            task_id=str(contract.get("task_profile", {}).get("task_id") or ""),
+        )
+        if feedback is not None:
+            result["feedback_learning"] = feedback
     return result
 
 
@@ -959,6 +1010,68 @@ def _task_gate(task_contract, next_phase, current_state, project) -> dict:
     )
 
 
+def _task_feedback(
+    *,
+    feedback_action,
+    project,
+    feedback_category,
+    feedback_summary,
+    feedback_severity,
+    feedback_tool,
+    finding_id,
+    rule_id,
+    framework,
+    duration_ms,
+    expected,
+    actual,
+    feedback_id,
+    resolution,
+    resolved_by,
+    since_days,
+    limit,
+    request_id,
+) -> dict:
+    """Record, aggregate, or resolve local AI-development feedback."""
+    feedback = _feedback_mod()
+    try:
+        if feedback_action == "record":
+            return feedback.record_feedback(
+                project=project,
+                category=feedback_category,
+                summary=feedback_summary,
+                severity=feedback_severity,
+                tool_name=feedback_tool,
+                finding_id=finding_id,
+                rule_id=rule_id,
+                framework=framework,
+                duration_ms=duration_ms,
+                expected=expected,
+                actual=actual,
+                request_id=request_id,
+            )
+        if feedback_action == "summary":
+            return feedback.summarize_feedback(
+                project=project,
+                since_days=since_days,
+                limit=limit,
+            )
+        if feedback_action == "resolve":
+            return feedback.resolve_feedback(
+                feedback_id,
+                resolution=resolution,
+                resolved_by=resolved_by,
+                request_id=request_id,
+            )
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {
+        "error": (
+            f"Unknown feedback action: {feedback_action}. "
+            "Use 'record', 'summary', or 'resolve'."
+        )
+    }
+
+
 def smart_task(action: str, description: str = "", targets: list = None,
                intent: str = "refactor", task_contract: dict = None,
                next_phase: str = None, current_state: dict = None,
@@ -968,7 +1081,15 @@ def smart_task(action: str, description: str = "", targets: list = None,
                decision_id: str = None, answer: str = None,
                selected_option: str = None, accept_recommendation: bool = False,
                mode: str = "interactive", locale: str = "und",
-               max_questions: int = 8, request_id: str = None) -> dict:
+               max_questions: int = 8, request_id: str = None,
+               proof_receipts: list = None, required_proof_kinds: list = None,
+               feedback_action: str = "record", feedback_category: str = "other",
+               feedback_summary: str = "", feedback_severity: str = "medium",
+               feedback_tool: str = "", finding_id: str = "", rule_id: str = "",
+               framework: str = "", duration_ms: float = None,
+               expected: str = "", actual: str = "", feedback_id: str = "",
+               resolution: str = "", resolved_by: str = "",
+               since_days: int = 90, limit: int = 10) -> dict:
     """Route one task action to its atomic workflow branch."""
     if action == "grill":
         return _task_grill(
@@ -991,10 +1112,39 @@ def smart_task(action: str, description: str = "", targets: list = None,
     if action == "gate":
         return _task_gate(task_contract, next_phase, current_state, project)
     if action == "validate":
-        return _task_validate(project, run_tests, test_path, task_contract)
+        return _task_validate(
+            project,
+            run_tests,
+            test_path,
+            task_contract,
+            proof_receipts,
+            required_proof_kinds,
+        )
+    if action == "feedback":
+        return _task_feedback(
+            feedback_action=feedback_action,
+            project=project,
+            feedback_category=feedback_category,
+            feedback_summary=feedback_summary,
+            feedback_severity=feedback_severity,
+            feedback_tool=feedback_tool,
+            finding_id=finding_id,
+            rule_id=rule_id,
+            framework=framework,
+            duration_ms=duration_ms,
+            expected=expected,
+            actual=actual,
+            feedback_id=feedback_id,
+            resolution=resolution,
+            resolved_by=resolved_by,
+            since_days=since_days,
+            limit=limit,
+            request_id=request_id,
+        )
     return {
         "error": (
-            f"Unknown action: {action}. Use 'grill', 'plan', 'gate', or 'validate'."
+            f"Unknown action: {action}. Use 'grill', 'plan', 'gate', 'validate', "
+            "or 'feedback'."
         )
     }
 
@@ -1056,7 +1206,19 @@ def _structure_dependencies(project, symbol_id, path) -> dict:
             direction="both",
             max_depth=2,
         )
-        return {"graph": graph}
+        result = {"graph": graph}
+        if path:
+            relationships = _enrich(
+                "framework_relationships",
+                _framework_relationships_mod().analyze_framework_relationships,
+                path=path,
+                project=project,
+            )
+            if isinstance(relationships, dict) and relationships.get(
+                "status"
+            ) not in {"not_applicable", "skipped"}:
+                result["framework_relationships"] = relationships
+        return result
     except Exception as exc:
         logger.debug("dependency_graph failed: %s", exc)
         return {"graph_error": str(exc)}
