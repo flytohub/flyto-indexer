@@ -37,6 +37,8 @@ the index format, parser stack, or every scanner before Flyto2 Indexer is useful
 | --- | --- |
 | What leaves my machine? | [Security model](SECURITY_MODEL.md) |
 | Are scanner claims reproducible? | [Benchmark corpus](../benchmarks/README.md) |
+| Does it work on a real repository? | [Pinned FastAPI impact case](CASE_STUDY_FASTAPI.md) |
+| Is precision identical across languages? | [Language evidence and limits](LANGUAGE_EVIDENCE.md) |
 | How was Decision Grill tested? | [Test protocol](GRILL_TESTING.md) and [dated closure report](GRILL_TEST_REPORT_2026-07-29.md) |
 | Why was the product designed this way? | [Design references](DESIGN_REFERENCES.md) |
 | How does it work internally? | [Technical whitepaper](WHITEPAPER.md) |

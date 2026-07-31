@@ -320,7 +320,7 @@ class TestSemanticIndex:
         original = index_with_graph.search("refund", top_k=5)
         restored = loaded.search("refund", top_k=5)
         assert len(original) == len(restored)
-        for (id1, s1), (id2, s2) in zip(original, restored):
+        for (id1, s1), (id2, s2) in zip(original, restored, strict=True):
             assert id1 == id2
             assert abs(s1 - s2) < 0.001
 

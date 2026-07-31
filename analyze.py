@@ -216,7 +216,7 @@ def cmd_grep(project_path: Path, pattern: str = None):
     print(f"\n{'='*70}")
     print(f"Found {len(matches)} matches in {files_searched} files")
     if len(matches) > 100:
-        print(f"(showing first 100)")
+        print("(showing first 100)")
 
 
 def analyze_complexity(project_path: Path):

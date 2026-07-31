@@ -308,8 +308,8 @@ class RustScanner(BaseScanner):
                     summary=self._extract_doc_comment(lines, start_line - 1),
                     language="rust",
                     params=self._parse_params(params),
-                    returns=returns.strip(),
-                    imports=[impl_type],
+                    returns=(returns or "").strip(),
+                    imports=[impl_type] if impl_type else [],
                 )
             else:
                 # Top-level function
@@ -325,7 +325,7 @@ class RustScanner(BaseScanner):
                     language="rust",
                     exports=[name] if "pub" in match.group(0) else [],
                     params=self._parse_params(params),
-                    returns=returns.strip(),
+                    returns=(returns or "").strip(),
                 )
 
             symbols.append(symbol)

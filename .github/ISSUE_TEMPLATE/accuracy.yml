@@ -1,0 +1,57 @@
+name: Accuracy report
+description: Report a false positive, false negative, or missing relationship
+title: "[Accuracy]: "
+labels: ["accuracy"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Accuracy reports become regression cases. Please use public or synthetic code only.
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - False positive
+        - False negative
+        - Missing dependency or caller
+        - Incorrect API relationship
+        - Framework gap
+        - Slow or unstable scan
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `flyto-index --version`
+    validations:
+      required: true
+  - type: input
+    id: language
+    attributes:
+      label: Language and framework
+      placeholder: TypeScript / React Router 7
+    validations:
+      required: true
+  - type: textarea
+    id: public_fixture
+    attributes:
+      label: Public or synthetic reproduction
+      description: Link a public commit or provide the smallest synthetic example.
+    validations:
+      required: true
+  - type: textarea
+    id: expectation
+    attributes:
+      label: Expected and actual evidence
+      description: Include the expected edge/finding and the redacted result actually returned.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: This report contains no private source, prompts, credentials, tokens, or customer data.
+          required: true

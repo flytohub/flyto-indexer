@@ -16,7 +16,7 @@ def main():
     project_path = FLYTOHUB_ROOT / "flyto-cloud"
 
     print(f"\n{'#' * 70}")
-    print(f"# Stale Files Analysis: flyto-cloud")
+    print("# Stale Files Analysis: flyto-cloud")
     print(f"{'#' * 70}")
 
     detector = StaleFileDetector(

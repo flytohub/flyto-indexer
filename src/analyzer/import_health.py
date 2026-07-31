@@ -159,8 +159,6 @@ def analyze_import_health(
     Can use pre-built index (dependencies/reverse_index) or scan from scratch.
     """
     project_root = Path(project_root)
-    report = ImportHealthReport()
-
     # Strategy 1: Use index if available (much faster)
     if index and index.get("dependencies"):
         return _analyze_from_index(index, god_module_threshold)

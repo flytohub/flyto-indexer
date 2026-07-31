@@ -3,13 +3,15 @@
   <p><strong>Know what breaks. Prove the fix.</strong></p>
   <p>
     <a href="https://github.com/flytohub/flyto-indexer/actions"><img src="https://github.com/flytohub/flyto-indexer/workflows/CI/badge.svg" alt="CI"></a>
+    <a href="https://github.com/flytohub/flyto-indexer/actions/workflows/benchmark.yml"><img src="https://github.com/flytohub/flyto-indexer/actions/workflows/benchmark.yml/badge.svg" alt="Benchmark evidence"></a>
+    <a href="https://github.com/flytohub/flyto-indexer/actions/workflows/public-proof.yml"><img src="https://github.com/flytohub/flyto-indexer/actions/workflows/public-proof.yml/badge.svg" alt="Public proof"></a>
     <a href="https://pypi.org/project/flyto-indexer/"><img src="https://img.shields.io/pypi/v/flyto-indexer.svg" alt="PyPI"></a>
     <a href="https://github.com/flytohub/flyto-indexer/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License"></a>
     <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+"></a>
   </p>
   <p>
     <a href="#installation-and-first-result">Quick start</a> ·
-    <a href="#before-and-after-rename-one-shared-function">See it in action</a> ·
+    <a href="#real-repository-proof-text-search-stops-indexer-keeps-going">Real proof</a> ·
     <a href="docs/README.md">Documentation</a>
   </p>
 </div>
@@ -78,21 +80,30 @@ A text search finds the name. Flyto2 Indexer shows the change surface.
 | “The AI keeps hitting the same bad warning or missing the same connection.” | Records the problem locally, groups repeats, and turns them into a reviewable improvement backlog. |
 | “A large repository overwhelms the agent.” | Returns bounded, relevant context instead of dumping the whole codebase. |
 
-## Before And After: Rename One Shared Function
+## Real Repository Proof: Text Search Stops, Indexer Keeps Going
 
-Suppose `validateOrder` must be renamed. This is an illustrative walkthrough
-using the sample result above, not a customer case study.
+On the pinned, public
+[`fastapi/full-stack-fastapi-template`](https://github.com/fastapi/full-stack-fastapi-template)
+commit used by our reproducible case, a literal search for
+`render_email_template` returns four lines in one file. A depth-two impact query
+finds four request handlers in three additional files above those direct calls.
 
-**Before:** Search for the name, edit the obvious files, run the nearest test,
-and discover missed callers or dynamic references later.
+```text
+git grep:  4 matching lines · 1 file
+impact:    7 affected functions · 4 files · 0 scan errors
+missed by literal search: 4 request handlers
+```
 
-**After:** `impact` makes the seven call sites, three projects, two likely test
-files, and one manual-review item visible before the edit. The agent turns that
-list into a scoped plan, runs the relevant proof, and keeps the unresolved item
-visible until someone reviews it.
+Run the proof yourself:
 
-**Practical difference:** hidden work becomes an explicit checklist before it
-becomes a regression.
+```bash
+python scripts/reproduce_impact_case.py --check-snapshot
+```
+
+Read the [method, pinned source, exact result, and limits](docs/CASE_STUDY_FASTAPI.md)
+or inspect the [machine-readable receipt](docs/evidence/fastapi-full-stack-0.10.0.json).
+This proves static transitive discovery for the pinned case; it does not replace
+runtime tests.
 
 ## Why It Fits Your Existing Workflow
 
@@ -248,6 +259,10 @@ the [MCP guide](docs/MCP.md).
 Built-in indexing covers Python, TypeScript and JavaScript, Vue, Go, Rust,
 Java, Dart, and C/C++. Local language servers and SCIP data can improve
 reference precision when available; the built-in index remains the fallback.
+Precision is not presented as identical across languages. The
+[language evidence matrix](docs/LANGUAGE_EVIDENCE.md) separates indexing,
+relationship analysis, security depth, committed positive/negative cases, and
+known limits.
 
 ## Evidence, Privacy, And Limits
 
@@ -261,6 +276,10 @@ accuracy, false positives, scan errors, and latency on every release. See the
 [reproducible benchmark](benchmarks/README.md) and
 [security model](docs/SECURITY_MODEL.md).
 
+Ignored production Ruff and mypy findings are also held to an exact baseline.
+They can decrease through reviewed cleanup, but CI blocks new debt and requires
+every improvement to tighten the baseline immediately.
+
 ## Documentation
 
 - [Choose a guide by your pain](docs/README.md)
@@ -271,6 +290,8 @@ accuracy, false positives, scan errors, and latency on every release. See the
 - [Verification](docs/VERIFICATION.md)
 - [Learning from AI development problems](docs/FEEDBACK.md)
 - [Technical whitepaper](docs/WHITEPAPER.md)
+- [Real-repository impact case](docs/CASE_STUDY_FASTAPI.md)
+- [Language evidence and limits](docs/LANGUAGE_EVIDENCE.md)
 - [Generated references](docs/reference/)
 
 The [design references](docs/DESIGN_REFERENCES.md) explain what was borrowed
@@ -280,7 +301,7 @@ what was deliberately left out to avoid bloat.
 ## Contributing
 
 ```bash
-python -m ruff check src tests
+python -m ruff check .
 python -m pytest
 python benchmarks/evaluate.py --check
 flyto-index verify . --strict

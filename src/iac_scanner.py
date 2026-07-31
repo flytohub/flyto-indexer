@@ -306,7 +306,6 @@ def _check_terraform(file_path: str, content: str) -> list[IaCFinding]:
     # --- Resource block checks ---
     for match in _TF_RESOURCE_RE.finditer(content):
         res_type = match.group(1)
-        res_name = match.group(2)
         block_start = match.start()
         block_text, _ = _extract_tf_block(content, match.end() - 1)
         block_line = _line_number_at(content, block_start)
@@ -495,9 +494,6 @@ def _check_kubernetes(file_path: str, content: str) -> list[IaCFinding]:
         # Build quick lookup sets
         has_run_as_non_root = False
         has_resource_limits = False
-        has_privileged = False
-        has_host_network = False
-        has_host_path = False
         images: list[tuple[str, int]] = []
 
         for e in entries:
@@ -511,7 +507,6 @@ def _check_kubernetes(file_path: str, content: str) -> list[IaCFinding]:
 
             # IAC_K8S_PRIVILEGED
             if key == "privileged" and val.lower() == "true":
-                has_privileged = True
                 findings.append(IaCFinding(
                     file_path=rel_path,
                     resource_type=kind,
@@ -529,7 +524,6 @@ def _check_kubernetes(file_path: str, content: str) -> list[IaCFinding]:
 
             # IAC_K8S_HOST_NETWORK
             if key == "hostNetwork" and val.lower() == "true":
-                has_host_network = True
                 findings.append(IaCFinding(
                     file_path=rel_path,
                     resource_type=kind,
@@ -543,7 +537,6 @@ def _check_kubernetes(file_path: str, content: str) -> list[IaCFinding]:
 
             # IAC_K8S_HOST_PATH
             if key == "hostPath":
-                has_host_path = True
                 findings.append(IaCFinding(
                     file_path=rel_path,
                     resource_type=kind,
@@ -627,8 +620,6 @@ def _check_docker_compose(file_path: str, content: str) -> list[IaCFinding]:
     service_has_limits: dict[str, bool] = {}
 
     in_services = False
-    services_indent = -1
-
     for e in entries:
         path = e["path"]
         key = e["key"]
@@ -638,7 +629,6 @@ def _check_docker_compose(file_path: str, content: str) -> list[IaCFinding]:
         # Detect top-level "services" key
         if key == "services" and e["indent"] == 0:
             in_services = True
-            services_indent = e["indent"]
             continue
 
         if not in_services:
@@ -681,23 +671,12 @@ def _check_docker_compose(file_path: str, content: str) -> list[IaCFinding]:
     # Look for lines like: - "3306:3306" or - 5432:5432
     port_re = re.compile(r'^\s*-\s*["\']?(\d+)(?::(\d+))?["\']?\s*$')
     in_ports = False
-    current_svc_for_ports = ""
-
     for line_num, raw_line in enumerate(content.splitlines(), start=1):
         stripped = raw_line.strip()
 
         # Detect "ports:" section
         if stripped == "ports:":
             in_ports = True
-            # Find which service this belongs to by looking at indent context
-            indent = len(raw_line) - len(raw_line.lstrip())
-            # Walk backwards to find service name
-            for e in reversed(entries):
-                if e["line"] < line_num and e["indent"] < indent:
-                    path_parts = e["path"].split(".")
-                    if len(path_parts) >= 2 and path_parts[0] == "services":
-                        current_svc_for_ports = path_parts[1]
-                    break
             continue
 
         if in_ports:

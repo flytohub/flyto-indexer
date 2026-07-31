@@ -461,7 +461,9 @@ def build_test_impact_evidence(
         path: sorted(set(lines))
         for path, lines in changed_files.items()
     }
-    changed_line_count = sum(len(lines) for lines in changed_files.values())
+    changed_line_count = 0
+    for lines in changed_files.values():
+        changed_line_count += len(lines)
     if not coverage_path or coverage_format == "none":
         return {
             "schema": TEST_IMPACT_SCHEMA,

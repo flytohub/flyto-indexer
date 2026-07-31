@@ -188,10 +188,6 @@ class _PerfVisitor(ast.NodeVisitor):
 def _scan_unbounded_queries(project_root: Path) -> list[PerfIssue]:
     """Regex scan for SQL queries without LIMIT across all languages."""
     issues = []
-    sql_pattern = re.compile(
-        r"""(?:SELECT\s+.+?\s+FROM\s+\w+)(?!.*\bLIMIT\b)""",
-        re.IGNORECASE | re.DOTALL,
-    )
     # Match raw SQL strings (Python f-strings, Go backtick, JS template)
     raw_sql = re.compile(
         r'''(?:f?["'`]{1,3})(SELECT\s+.+?FROM\s+\w+.*?)["'`]{1,3}''',

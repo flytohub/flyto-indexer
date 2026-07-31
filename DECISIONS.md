@@ -1,5 +1,28 @@
 # Decisions
 
+## 2026-07-31 - Evidence growth precedes feature growth
+
+Decision: hold the public MCP surface at 20 tools and require a reproducible
+external failure, a bounded implementation, positive and negative fixtures,
+and measured runtime cost before adding a scanner, framework adapter, or
+language-depth claim. Publish indexing support separately from semantic and
+security evidence.
+
+Reason: a broad inventory makes a code-intelligence product look impressive
+but does not make its conclusions trustworthy. Real cases and explicit limits
+increase confidence without slowing every scan or making the package harder to
+use.
+
+## 2026-07-31 - Quality debt can decrease but cannot silently move
+
+Decision: keep the remaining Ruff and mypy exemptions visible in an exact,
+production-only baseline tied to pinned tool versions. CI fails when a count
+increases and also requires deliberate baseline review when debt decreases.
+
+Reason: a ceiling alone lets debt migrate between files and rules, while a
+one-shot strict conversion would produce hundreds of unrelated edits. The
+ratchet prevents new debt and makes each cleanup auditable.
+
 ## 2026-07-31 - Development feedback proposes evidence, never policy
 
 Decision: add record, summary, and resolve operations to the existing `task`

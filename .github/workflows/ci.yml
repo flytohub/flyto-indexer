@@ -24,8 +24,10 @@ jobs:
       - run: pip install ".[dev]"
       - run: python scripts/sync-version.py --check
       - run: python scripts/generate-reference.py --check
-      - run: ruff check src/ tests/ scripts/
+      - run: python scripts/check_language_evidence.py --check
+      - run: ruff check .
       - run: mypy src/
+      - run: python scripts/check_quality_debt.py
 
   test:
     runs-on: ubuntu-latest

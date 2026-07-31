@@ -370,7 +370,7 @@ def _check_symbol_doc_coverage(project_path: Path) -> tuple[float, float, float]
     reference_coverage = sum(referenced) / len(documentable)
     combined_coverage = sum(
         has_inline or has_reference
-        for has_inline, has_reference in zip(inline, referenced)
+        for has_inline, has_reference in zip(inline, referenced, strict=True)
     ) / len(documentable)
     return inline_coverage, reference_coverage, combined_coverage
 

@@ -514,8 +514,6 @@ class TestIncrementalScan:
 
         # Initial full scan
         engine.scan(incremental=False)
-        old_symbols = dict(engine.index.symbols)
-
         # Modify the file (add a new function)
         new_content = SIMPLE_PYTHON + "\ndef extra():\n    return 42\n"
         (project_dir / "hello.py").write_text(new_content)
@@ -869,7 +867,7 @@ class TestErrorHandling:
             "good.py": SIMPLE_PYTHON,
             "bad.py": SYNTAX_ERROR_PYTHON,
         })
-        result = engine.scan(incremental=False)
+        engine.scan(incremental=False)
 
         # good.py should still be indexed
         symbol_names = [s.name for s in engine.index.symbols.values()]

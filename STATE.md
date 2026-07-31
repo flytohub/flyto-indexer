@@ -31,6 +31,15 @@
   relations, pinned differential categories, precision, recall,
   false-positive rate, scan errors, p50/p95/max latency, and memory without
   network access.
+- A generated language-evidence contract now separates built-in indexing,
+  relationship depth, security-analysis depth, committed positive/negative
+  cases, and known limits. CI rejects any capability claim stronger than the
+  corpus.
+- A pinned FastAPI full-stack public case proves the primary product promise:
+  exact text search sees four lines in one implementation file, while depth-2
+  impact identifies four transitive request handlers across four files. A
+  scheduled workflow reclones the exact commit and requires the checked
+  evidence fingerprint to match.
 - Optional SCIP artifacts precede LSP and native reverse-index fallback for
   precise references. Coverage.py contexts, LCOV, and JUnit artifacts map
   changed lines and symbols to executed tests with hashes, freshness, and
@@ -74,14 +83,14 @@
   active runtime version.
 - `scripts/install-local-cli.sh` installs the current checkout into an isolated
   venv and verifies that the executable version matches the checkout.
-- Version 2.17.0 retains PyYAML as the sole runtime dependency. Coverage test
+- Version 2.18.0 retains PyYAML as the sole runtime dependency. Coverage test
   evidence and Tree-sitter grammars are explicit optional extras, so the
   default install and scan path remain small. Missing or malformed policy
   parsing still fails verification closed, and wheel CI verifies the runtime
   dependency boundary in an isolated environment.
 - Durable user, operator, security, architecture, and whitepaper documentation
-  links to a generated source reference covering 171 non-test Python modules,
-  2,120 declarations, 36 CLI commands, 20 published MCP tools, 47 granular
+  links to a generated source reference covering 175 non-test Python modules,
+  2,144 declarations, 36 CLI commands, 20 published MCP tools, 47 granular
   compatibility definitions, seven local HTTP operations, 16 environment
   variables, and eight built-in rule files.
 - Documentation scoring distinguishes inline summaries from exact source-linked
@@ -97,20 +106,32 @@
   instead of misclassifying locale and content directories as software modules.
 - Package, MCP registry, and MCP initialization versions are synchronized and
   enforced by tests and CI. Every built-in rule YAML file is parsed in tests.
-- Latest local verification: `1919 passed, 1 skipped`; Ruff passed across the
-  repository; mypy found no issues in 150 source files; the offline corpus
+- Remaining production-source Ruff and mypy exemptions are locked to exact
+  reviewed counts and pinned tool versions. CI fails both increases and silent
+  decreases, so every cleanup updates the baseline deliberately; repository-
+  wide Ruff remains a separate zero-finding gate.
+- Release publication is tag-only. The tag, package version, dated changelog,
+  MCP manifests, generated references, language evidence, quality ratchet,
+  lint, types, tests, benchmark, and build must pass before OIDC publication;
+  a GitHub Release is created only after PyPI succeeds.
+- Latest local verification: `1927 passed, 1 skipped`; Ruff passed across the
+  full repository; mypy found no issues in 150 source files; the offline corpus
   passed 13/13 with 1.0 precision, 1.0 recall, zero false positives, p95 case
-  latency 209.08 ms, and stable evidence fingerprint `203edae3857a360d`;
-  sdist/wheel, isolated installed-feature, and real optional Tree-sitter
-  grammar smokes passed; strict baseline-aware self-verify passed 22/22 with
-  290 files, 4,765 indexed symbols, health 91/100, and zero warnings.
+  latency 179.73 ms, and stable evidence fingerprint `203edae3857a360d`;
+  the pinned FastAPI case matched fingerprint `691df24f16031b77` after a clean
+  clone; sdist/wheel and isolated installed-policy smokes passed; strict
+  baseline-aware self-verify passed 22/22 with 298 files, 4,808 indexed symbols,
+  health 91/100, and zero warnings.
 
 ## Release Blockers
 
 - No repository-local release blocker is currently recorded.
-- Remote package publication and hosted CI still require valid provider-side
-  permissions and successful remote workflows; local verification cannot prove
-  those external conditions.
+- PyPI previously rejected the repository's OIDC claim because its Trusted
+  Publisher did not match `flytohub/flyto-indexer`,
+  `.github/workflows/publish-pypi.yml`, and environment `pypi`. The v2.18.0 tag
+  must not be pushed until that provider-side setting is confirmed.
+- Hosted CI, issue intake access, package publication, and release creation
+  still require provider-side evidence; local verification cannot prove them.
 
 ## Verification Matrix
 
@@ -118,10 +139,13 @@
 | --- | --- | --- |
 | Project memory | `bash scripts/lint-project-memory.sh` | Required docs, handoffs, headings, secret-like material |
 | Generated docs | `python3 scripts/generate-reference.py --check` | Source-backed API, CLI, MCP, HTTP, configuration, and rule references |
+| Language claims | `python3 scripts/check_language_evidence.py --check` | Capability wording does not exceed the committed corpus |
+| Quality debt | `python3 scripts/check_quality_debt.py` | Exact production-source Ruff/mypy debt and pinned tools |
 | Version metadata | `python3 scripts/sync-version.py --check` | Package, registry manifest, and runtime version parity |
-| Lint | `ruff check src tests scripts` | Python style and static checks |
+| Lint | `ruff check .` | Repository-wide Python style and static checks |
 | Types | `mypy src` | Type consistency |
 | Tests | `pytest tests -v` | Functional and regression coverage |
+| Public case | `python scripts/reproduce_impact_case.py --check-snapshot` | Pinned FastAPI impact evidence and fingerprint |
 | Verify | `python -m src.cli verify . --full-scan --strict --json` | Self-verification from current source |
 | Build | `python -m build` | Source and wheel package integrity |
 | Installed CLI | `scripts/install-local-cli.sh && flyto-index --version` | Isolated local installation and version parity |

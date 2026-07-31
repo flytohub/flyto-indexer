@@ -111,7 +111,7 @@ def _build_purl(name: str, version: str, ecosystem: str) -> str:
     # Add version
     if version:
         # Use pinned version if available, otherwise the constraint
-        clean_version = version.lstrip("^~>=!<= ")
+        clean_version = re.sub(r"^[\^~><=! ]+", "", version)
         if clean_version:
             purl += f"@{clean_version}"
 

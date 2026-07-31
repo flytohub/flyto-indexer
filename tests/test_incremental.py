@@ -296,7 +296,7 @@ class TestIncrementalReverseIndex:
                 'def main():\n    pass  # no longer calls do_work\n'
             )
 
-            result2 = engine.scan(incremental=True)
+            engine.scan(incremental=True)
             # After incremental update, do_work should have no callers from caller.py
             rev2 = engine.index.reverse_index
             do_work_callers2 = []

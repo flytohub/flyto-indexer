@@ -273,7 +273,7 @@ class TestCheck:
             cmd_check(args)
             captured = capsys.readouterr()
             assert "Risk:" in captured.out
-        except SystemExit as e:
+        except SystemExit:
             captured = capsys.readouterr()
             assert "Risk:" in captured.out
 

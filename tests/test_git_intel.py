@@ -241,7 +241,6 @@ class TestGitCochange:
         assert result["target_path"] == "src/main.py"
         assert result["total_commits"] > 0
         # src/utils.py changed with src/main.py in commits 4 and 5
-        cochange_paths = [c["path"] for c in result["cochanges"]]
         # At minimum, we should get some cochanges
         assert isinstance(result["cochanges"], list)
 
@@ -303,7 +302,6 @@ class TestGitRiskCommits:
         assert len(result["commits"]) > 0
 
         # The "workaround" commit and "fix:" commit should have risk scores > 0
-        messages = [c["message"] for c in result["commits"]]
         risky = [c for c in result["commits"] if c["risk_score"] > 0]
         assert len(risky) > 0
 

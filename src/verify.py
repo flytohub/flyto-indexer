@@ -2455,7 +2455,7 @@ def _check_mcp_registry(root: Path, add_check) -> None:
     missing_dispatch = sorted(name for name in names if name and not has_tool(name))
     derived_mismatch = sorted(set(names) ^ set(SMART_TOOL_NAMES))
     missing_schema = sorted(
-        name for name, tool in zip(names, SMART_TOOLS)
+        name for name, tool in zip(names, SMART_TOOLS, strict=True)
         if not tool.get("inputSchema") or not tool.get("description")
     )
 

@@ -1,0 +1,65 @@
+name: Benchmark evidence
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'benchmarks/**'
+      - 'scripts/check_language_evidence.py'
+      - 'pyproject.toml'
+      - '.github/workflows/benchmark.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'benchmarks/**'
+      - 'scripts/check_language_evidence.py'
+      - 'pyproject.toml'
+      - '.github/workflows/benchmark.yml'
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-corpus:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - run: python -m pip install ".[dev]"
+      - run: python scripts/check_language_evidence.py --check
+      - run: >-
+          python benchmarks/evaluate.py --check --json
+          --output benchmark-evidence.json
+      - name: Publish readable evidence summary
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+
+          result = json.load(open("benchmark-evidence.json", encoding="utf-8"))
+          summary = result["summary"]
+          print("# Flyto2 Indexer benchmark evidence\n")
+          print(f"Evidence fingerprint: `{result['evidence_fingerprint']}`\n")
+          print("| Language | Cases | Positive | Negative | Precision | Recall | FPR | p95 |")
+          print("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+          for language, item in summary["by_language"].items():
+              print(
+                  f"| {language} | {item['cases']} | {item['positive_cases']} | "
+                  f"{item['negative_cases']} | {item['precision']:.3f} | "
+                  f"{item['recall']:.3f} | {item['false_positive_rate']:.3f} | "
+                  f"{item['p95_latency_ms']:.2f} ms |"
+              )
+          print("\nThis is the small committed offline regression corpus, not a universal parity claim.")
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: benchmark-evidence-${{ github.sha }}
+          path: benchmark-evidence.json
+          retention-days: 30
+          if-no-files-found: error

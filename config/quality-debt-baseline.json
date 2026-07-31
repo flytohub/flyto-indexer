@@ -1,0 +1,42 @@
+{
+  "mypy": {
+    "codes": {
+      "arg-type": 43,
+      "assignment": 43,
+      "attr-defined": 87,
+      "index": 21,
+      "no-redef": 363,
+      "operator": 11,
+      "return-value": 8,
+      "union-attr": 43,
+      "var-annotated": 117
+    },
+    "total": 736
+  },
+  "policy": "exact baseline; every decrease requires a baseline update",
+  "ruff": {
+    "codes": {
+      "B007": 12,
+      "B904": 2,
+      "C401": 3,
+      "E402": 6,
+      "E501": 861,
+      "E741": 6,
+      "F401": 83,
+      "I001": 86,
+      "SIM102": 30,
+      "SIM103": 13,
+      "SIM105": 19,
+      "SIM108": 7,
+      "SIM110": 2,
+      "SIM114": 11
+    },
+    "total": 1141
+  },
+  "schema_version": 1,
+  "scope": "src",
+  "tools": {
+    "mypy": "mypy 2.3.0 (compiled: yes)",
+    "ruff": "ruff 0.15.15"
+  }
+}

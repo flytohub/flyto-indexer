@@ -95,7 +95,7 @@ python -m pytest -q \
 Run the complete repository release evidence:
 
 ```bash
-ruff check src tests scripts
+ruff check .
 mypy src
 python -m pytest tests -v
 python scripts/generate-reference.py --check

@@ -15,22 +15,31 @@ pytest tests/ -v
 # Run release checks
 python3 scripts/sync-version.py --check
 python3 scripts/generate-reference.py --check
-ruff check src/ tests/ scripts/
+ruff check .
 mypy src/
+python3 scripts/check_quality_debt.py
+python3 scripts/check_language_evidence.py --check
+python3 benchmarks/evaluate.py --check --json
 ```
 
 ## What to Contribute
 
 **Good first issues:**
-- Add support for a new language parser (see `src/scanner/` for examples)
-- Improve an existing parser's symbol extraction
-- Add test cases for edge cases in parsing
-- Improve documentation or integration guides
+- Turn a public or synthetic false positive into a negative regression case
+- Turn a missed relationship into the smallest reproducible fixture
+- Improve an existing parser's precision without widening noisy matches
+- Clarify a limitation, setup failure, or integration guide
 
 **Bigger contributions:**
-- New MCP tools
-- Performance improvements to indexing
-- Better dependency graph resolution
+- Reproducible real-repository impact cases pinned to an immutable commit
+- Performance improvements backed by before/after p50 and p95 evidence
+- Better dependency resolution with positive and negative tests
+- Framework precision adapters that remain optional and bounded
+
+Please do not start by adding another public MCP tool or broad scanner category.
+Open an issue with the user pain, evidence, expected precision, runtime cost, and
+smallest viable change first. New language support needs a parser, positive and
+negative fixtures, documented limits, and an owner for ongoing accuracy.
 
 ## Code Style
 

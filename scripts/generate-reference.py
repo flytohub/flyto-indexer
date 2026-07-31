@@ -275,7 +275,7 @@ def tool_definitions(path: Path, variable: str) -> list[dict[str, Any]]:
         if assignment_value is not None:
             value = literal(assignment_value, [])
             if isinstance(value, list):
-                for item, source_node in zip(value, assignment_value.elts):
+                for item, source_node in zip(value, assignment_value.elts, strict=True):
                     if isinstance(item, dict):
                         tools.append({**item, "_line": source_node.lineno})
         elif (

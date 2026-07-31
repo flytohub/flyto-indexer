@@ -1,0 +1,50 @@
+name: Bug report
+description: Report incorrect behavior or a regression
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Flyto2 Indexer. Do not paste private source code, credentials, prompts, or customer data.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `flyto-index --version`
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - MCP
+        - CLI
+        - CI / verify gate
+        - Indexing
+        - Packaging / installation
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Use a public repository, a synthetic fixture, or redacted structure only.
+      placeholder: Commands, expected result, and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: Include reason codes or structured output after removing paths, source, and secrets.
+      render: shell
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed private source, prompts, credentials, tokens, and customer data.
+          required: true

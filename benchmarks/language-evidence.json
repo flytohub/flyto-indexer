@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "languages": {
+    "python": {
+      "label": "Python",
+      "indexing": "AST definitions, imports, calls, decorators, and routes",
+      "relationship_analysis": "Resolved call graph with optional LSP and SCIP precision",
+      "security_analysis": "AST taint with assignment, interpolation, call, and sanitizer tracking",
+      "evidence_level": "gated",
+      "limitations": "Dynamic imports, monkey patching, and runtime dependency injection can require manual review."
+    },
+    "javascript": {
+      "label": "JavaScript",
+      "indexing": "Token-aware structural extraction with import and call edges",
+      "relationship_analysis": "Static graph plus optional LSP and SCIP precision",
+      "security_analysis": "Pattern-based taint fallback for common source-to-sink shapes",
+      "evidence_level": "positive-only",
+      "limitations": "The committed corpus has positive cases but no JavaScript negative control yet."
+    },
+    "typescript": {
+      "label": "TypeScript",
+      "indexing": "Token-aware functions, classes, types, imports, calls, and routes",
+      "relationship_analysis": "Static graph plus optional LSP and SCIP precision",
+      "security_analysis": "Pattern-based taint fallback for common source-to-sink shapes",
+      "evidence_level": "gated",
+      "limitations": "Generated clients, path aliases, and dynamic framework wiring may need LSP, SCIP, or manual review."
+    },
+    "vue": {
+      "label": "Vue",
+      "indexing": "SFC script and template-aware component, import, and API-call extraction",
+      "relationship_analysis": "Component and call relationships with static fallback",
+      "security_analysis": "JavaScript and TypeScript pattern fallback inside extracted scripts",
+      "evidence_level": "indexing-only",
+      "limitations": "No committed standalone Vue accuracy corpus is claimed."
+    },
+    "go": {
+      "label": "Go",
+      "indexing": "Native definitions, receivers, imports, and call edges",
+      "relationship_analysis": "Static graph plus optional LSP and SCIP precision",
+      "security_analysis": "Pattern-based taint fallback for common source-to-sink shapes",
+      "evidence_level": "gated",
+      "limitations": "Interface dispatch, reflection, and generated code can require manual review."
+    },
+    "rust": {
+      "label": "Rust",
+      "indexing": "Native functions, impl methods, traits, enums, use paths, and calls",
+      "relationship_analysis": "Static graph plus optional LSP and SCIP precision",
+      "security_analysis": "Repository rules and generic pattern checks; no Rust taint parity claim",
+      "evidence_level": "indexing-only",
+      "limitations": "No committed Rust accuracy corpus is claimed."
+    },
+    "java": {
+      "label": "Java",
+      "indexing": "Native classes, interfaces, methods, enums, imports, and calls",
+      "relationship_analysis": "Static graph plus optional LSP and SCIP precision",
+      "security_analysis": "Repository rules and generic pattern checks; no Java taint parity claim",
+      "evidence_level": "indexing-only",
+      "limitations": "No committed Java accuracy corpus is claimed."
+    },
+    "dart": {
+      "label": "Dart / Flutter",
+      "indexing": "Native widgets, classes, constructors, methods, getters, functions, and imports",
+      "relationship_analysis": "Static dependency graph",
+      "security_analysis": "Repository rules and generic pattern checks; no Dart taint parity claim",
+      "evidence_level": "indexing-only",
+      "limitations": "No committed Dart or Flutter accuracy corpus is claimed."
+    },
+    "c_cpp": {
+      "label": "C / C++",
+      "indexing": "Dependency-free functions, typedef structs, includes, and call edges",
+      "relationship_analysis": "Static dependency graph with optional SCIP precision",
+      "security_analysis": "Repository rules and generic pattern checks; no C/C++ taint parity claim",
+      "evidence_level": "indexing-only",
+      "limitations": "Macros, templates, conditional compilation, and build flags can require compiler-backed evidence."
+    }
+  }
+}

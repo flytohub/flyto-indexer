@@ -2,7 +2,27 @@
 
 ## Unreleased
 
+## [2.18.0] - 2026-07-31
+
 ### Added
+- Added a reproducible impact-analysis case against the pinned FastAPI full
+  stack template. The checked receipt proves a real rename where exact text
+  search finds one file while the dependency graph identifies four transitive
+  request handlers across four files.
+- Added an explicit per-language evidence matrix generated from the committed
+  benchmark manifest. Indexing support, relationship depth, security depth,
+  benchmark status, and known limits are now reported separately.
+- Added public benchmark and real-repository proof workflows with readable job
+  summaries and downloadable evidence artifacts.
+- Added a production-code quality-debt ratchet that locks Ruff and mypy debt to
+  exact reviewed counts, tool versions, and rule categories. High-signal
+  exemptions for duplicate imports, unused variables, ambiguous stripping,
+  duplicate set members, and unsafe `zip` calls were removed and fixed.
+- Added structured bug and accuracy-report templates plus a change-evidence PR
+  template so false positives, false negatives, performance regressions, and
+  missing relationships become reproducible product input.
+- Added a release-tag gate that requires the Git tag, package version, MCP
+  manifests, generated documentation, and dated changelog entry to agree.
 - Added a fifth `task(action="feedback")` branch without increasing the
   20-tool MCP surface. It records, summarizes, and resolves local AI-development
   problems such as false positives, missing context, framework gaps, slow
@@ -23,6 +43,11 @@
   addition to a rationale, source, scope, and expiry.
 
 ### Changed
+- Changed the PyPI workflow to run the full release evidence gate before
+  building, publish only from a version tag, and create the GitHub Release only
+  after Trusted Publishing succeeds.
+- Refocused the README, contributor path, and roadmap on the measurable
+  impact-to-verify loop instead of adding more scanners or public MCP tools.
 - Corrected canonical Python complexity measurement to count actual control
   flow from the syntax tree instead of visual indentation inside multiline
   signatures, calls, or data literals. `elif` chains remain sibling branches,

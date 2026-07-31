@@ -1536,7 +1536,7 @@ def cmd_setup(args):
     print("  [3/3] Configuring MCP server...")
     _configure_mcp_settings()
 
-    print(f"\nDone! Restart Claude Code to activate.")
+    print("\nDone! Restart Claude Code to activate.")
     print("Try: ask Claude to audit this project.")
     return None
 

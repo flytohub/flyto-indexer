@@ -745,7 +745,6 @@ class IndexEngine(
 
         # Restore dependencies
         for did, ddata in data.get("dependencies", {}).items():
-            from .models import DependencyType
             index.dependencies[did] = Dependency(
                 source_id=ddata["source"],
                 target_id=ddata["target"],

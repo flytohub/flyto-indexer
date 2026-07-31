@@ -276,8 +276,6 @@ class JavaScanner(BaseScanner):
 
         for match in self.ENUM_PATTERN.finditer(content):
             name = match.group(1)
-            implements = match.group(2)
-
             start_line = content[:match.start()].count('\n') + 1
             end_line = self._find_block_end(content, match.end(), start_line)
             block_content = self._extract_block(lines, start_line, end_line)

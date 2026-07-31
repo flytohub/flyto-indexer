@@ -9,6 +9,7 @@ import hashlib
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 try:
     from .index_store import load_index, get_symbol_content_text
@@ -287,17 +288,18 @@ def security_scan(
             })
 
         # Taint analysis (AST-based flow tracking)
+        taint_analyzer_class: Any = None
         try:
-            from .analyzer.taint import TaintAnalyzer
+            from .analyzer.taint import TaintAnalyzer as taint_analyzer_class
         except ImportError:
             try:
-                from analyzer.taint import TaintAnalyzer
+                from analyzer.taint import TaintAnalyzer as taint_analyzer_class
             except ImportError:
-                TaintAnalyzer = None
+                pass
 
-        if TaintAnalyzer is not None:
+        if taint_analyzer_class is not None:
             try:
-                taint_analyzer = TaintAnalyzer(Path(root), index=index)
+                taint_analyzer = taint_analyzer_class(Path(root), index=index)
                 taint_flows = taint_analyzer.analyze()
                 for flow in taint_flows:
                     if severity and flow.severity != severity:

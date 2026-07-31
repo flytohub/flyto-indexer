@@ -404,7 +404,7 @@ def main():
 
         # Skip unchanged projects
         if not force_full and ws_manifest["projects"].get(name) == proj_hash:
-            print(f"  [skip] No changes detected")
+            print("  [skip] No changes detected")
             skipped_projects += 1
             if existing_index:
                 total_symbols += copy_existing_project_data(name, path, existing_index, combined_index)

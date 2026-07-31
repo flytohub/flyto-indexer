@@ -62,8 +62,6 @@ class TestDependencyBoundary:
     OPTIONAL_GUARDED = {
         "yaml", "sentence_transformers", "anthropic", "httpx",
         "tqdm", "requests", "openai",
-        # yaml is optional (taint_dsl falls back gracefully)
-        "yaml",
         # tomli is the Python 3.10 backport of tomllib (stdlib in 3.11+)
         "tomli",
     }
@@ -458,7 +456,6 @@ class TestDataSovereignty:
 
         # Smart tools should NOT have "content" as a default return field
         # (content is opt-in via specific tools like get_symbol_content)
-        smart_tool_section = source.split("SMART_TOOLS")[1] if "SMART_TOOLS" in source else ""
         # It's OK if content is available as opt-in, but search/impact/audit
         # should default to metadata-only
         # This is a structural check — the design principle matters
@@ -1132,8 +1129,6 @@ class TestTaintAnalysis:
 
             analyzer = TaintAnalyzer(Path(tmpdir), index={})
             result = analyzer.analyze_full()
-            flows = [f for f in result.taint_flows if not f.sanitized]
-
             # JS uses regex fallback — may or may not detect depending on pattern
             # At minimum, the analyzer should not crash
             assert isinstance(result.taint_flows, list)
@@ -1619,17 +1614,17 @@ class TestMinimalInput:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Secret scanner
             from secret_scanner import scan_secrets
-            result = scan_secrets(tmpdir)
+            scan_secrets(tmpdir)
             # Must not crash
 
             # Dependency scanner
             from dependency_scanner import scan_dependencies
-            result = scan_dependencies(tmpdir)
+            scan_dependencies(tmpdir)
             # Must not crash
 
             # IaC scanner
             from iac_scanner import scan_iac
-            result = scan_iac(tmpdir)
+            scan_iac(tmpdir)
             # Must not crash
 
     def test_binary_file_no_crash(self):
@@ -1640,7 +1635,7 @@ class TestMinimalInput:
 
             from secret_scanner import scan_secrets
             # Must not crash on binary
-            result = scan_secrets(tmpdir)
+            scan_secrets(tmpdir)
 
     def test_unicode_file_no_crash(self):
         """Scanners must handle files with unusual Unicode."""
@@ -1655,7 +1650,7 @@ class TestMinimalInput:
             )
 
             from secret_scanner import scan_secrets
-            result = scan_secrets(tmpdir)
+            scan_secrets(tmpdir)
             # Must not crash, and should still detect the long password
 
     def test_large_file_respects_size_limit(self):
@@ -1667,7 +1662,7 @@ class TestMinimalInput:
 
             from secret_scanner import scan_secrets
             # Must complete without OOM
-            result = scan_secrets(tmpdir)
+            scan_secrets(tmpdir)
 
 
 # ===========================================================================

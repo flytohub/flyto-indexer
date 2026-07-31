@@ -3,7 +3,7 @@
 import logging
 import re
 from collections import Counter, defaultdict
-from typing import Optional
+from typing import Optional, cast
 
 logger = logging.getLogger("flyto-indexer.conventions")
 
@@ -205,8 +205,8 @@ def _analyze_file_organization(symbols: dict) -> dict:
         return {}
 
     total_files = len(file_stats)
-    avg_symbols = sum(f["count"] for f in file_stats.values()) / total_files
-    avg_lines = sum(f["total_lines"] for f in file_stats.values()) / total_files
+    avg_symbols = sum(cast(int, f["count"]) for f in file_stats.values()) / total_files
+    avg_lines = sum(cast(int, f["total_lines"]) for f in file_stats.values()) / total_files
 
     # File patterns: how many files have 1 class, how many have multiple functions, etc.
     patterns = Counter()

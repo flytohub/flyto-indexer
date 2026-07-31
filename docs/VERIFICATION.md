@@ -121,17 +121,33 @@ Run these commands from this repository before release:
 bash scripts/lint-project-memory.sh
 python3 scripts/sync-version.py --check
 python3 scripts/generate-reference.py --check
-ruff check src tests scripts
+python3 scripts/check_language_evidence.py --check
+python3 scripts/check_quality_debt.py
+ruff check .
 mypy src
-pytest tests -v
+python -m pytest tests -v
 python benchmarks/evaluate.py --check --json
+python scripts/reproduce_impact_case.py --check-snapshot
 python -m build
 python -m src.cli verify . --full-scan --strict --json
 ```
 
-CI repeats the reference, lint, type, test, offline scanner evaluation,
-self-verify, and wheel checks. The wheel smoke test installs into an isolated
-environment and proves that the shipped rule corpus is usable.
+Before pushing a release tag, also run:
+
+```bash
+python scripts/check_release_tag.py --tag vX.Y.Z
+```
+
+CI repeats the reference, language evidence, quality-debt ratchet, lint, type,
+test, offline scanner evaluation, self-verify, and wheel checks. The wheel
+smoke test installs into an isolated environment and proves that the shipped
+rule corpus is usable. A tag publishes only after the same release gate passes;
+the GitHub Release is created only after PyPI Trusted Publishing succeeds.
+
+The real-repository proof is intentionally a separate scheduled and pull
+request workflow because it clones a pinned external repository. Its committed
+receipt is deterministic; normal indexing and installed-package use remain
+offline and network-free.
 
 ## Reading A Result
 

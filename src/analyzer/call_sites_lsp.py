@@ -96,8 +96,8 @@ def enrich_with_lsp(project_root: Path, existing: dict) -> dict:
         bucket = graph.setdefault(fqn, [])
         existing_set = set(bucket) if isinstance(bucket, list) else set(bucket.keys())
 
-        for e in edges:
-            target = e.to_name or ""
+        for edge in edges:
+            target = edge.to_name or ""
             if not target or target in existing_set:
                 continue
             existing_set.add(target)

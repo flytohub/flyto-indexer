@@ -331,7 +331,8 @@ class ContextLoader:
 
         # Sort and take top_k
         results.sort(key=lambda item: (item[0], item[1], item[2]), reverse=True)
-        return [self.load_l2(sid) for _, _, sid in results[:top_k]]
+        loaded = [self.load_l2(sid) for _, _, sid in results[:top_k]]
+        return [context for context in loaded if context is not None]
 
     def _query_terms(self, query: str) -> list[str]:
         """Tokenize natural-language and CamelCase queries for keyword fallback."""

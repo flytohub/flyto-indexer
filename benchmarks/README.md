@@ -29,6 +29,17 @@ The default gate is intentionally tiny and has no network or third-party
 scanner dependency. It catches local analyzer regressions quickly; it does not
 claim parity with a full external scanner corpus.
 
+Per-language indexing depth, security-analysis depth, case counts, and known
+limits are published in the generated
+[language evidence matrix](../docs/LANGUAGE_EVIDENCE.md). JavaScript currently
+has positive-only corpus evidence; Python, TypeScript, and Go have both positive
+and negative committed cases. CI rejects a `gated` label unless both kinds are
+present.
+
+The separate [real-repository impact case](../docs/CASE_STUDY_FASTAPI.md) is not
+part of this security corpus. It pins an external full-stack source commit and
+demonstrates transitive change impact beyond a literal text search.
+
 ## Optional external comparison corpus
 
 The remaining material pins a **rule baseline** and describes the larger

@@ -268,6 +268,8 @@ def execute_task_command(
 ) -> tuple[dict, bool]:
     """Run one CLI task call and return the result plus exit-code decision."""
     if smart_task is None:
-        from .tools.smart import smart_task
+        from .tools.smart import smart_task as default_smart_task
+
+        smart_task = default_smart_task
     result = smart_task(**build_task_arguments(args))
     return result, task_result_should_fail(args, result)

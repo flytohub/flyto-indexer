@@ -397,6 +397,7 @@ class TestYAMLRules:
 
             analyzer = TaintAnalyzer(root)
             findings = analyzer.analyze()
+            assert isinstance(findings, list)
             # request.args is removed, but request.args.get still matches
             # because other sources like request.form, etc. are still active
             # The key test is that the override mechanism works

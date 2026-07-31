@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "flyto-indexer"
-version = "2.17.0"
+version = "2.18.0"
 description = "Code intelligence MCP server for AI coding agents with impact analysis, semantic search, dependency graphs, and local release gates"
 readme = "README.md"
 license = "Apache-2.0"
@@ -35,8 +35,8 @@ dev = [
     "pytest-timeout>=2.4.0",
     "pytest-cov>=7.1.0",
     "hypothesis>=6.0",
-    "ruff>=0.4.0",
-    "mypy>=1.10.0",
+    "ruff==0.15.15",
+    "mypy==2.3.0",
     "tomli>=2.0.0; python_version < '3.11'",
 ]
 test-evidence = [
@@ -110,14 +110,8 @@ ignore = [
     "E741",    # ambiguous variable name
     "I001",    # import sorting — pre-existing mixed try/except import patterns
     "F401",    # unused imports — re-exports in __init__.py
-    "F541",    # f-string without placeholders
-    "F811",    # redefinition of unused name
-    "F841",    # local variable assigned but never used
-    "B005",    # strip multi-char — pre-existing
     "B007",    # unused loop variable — pre-existing
-    "B033",    # duplicate value in set
     "B904",    # raise from — pre-existing
-    "B905",    # zip without strict
     "C401",    # set comprehension over list comp
     "SIM102",  # nested if — pre-existing
     "SIM103",  # return condition — pre-existing
@@ -143,8 +137,4 @@ disable_error_code = [
     "arg-type",
     "assignment",
     "return-value",
-    "list-item",
-    "misc",
-    "import-untyped",
-    "truthy-function",
 ]

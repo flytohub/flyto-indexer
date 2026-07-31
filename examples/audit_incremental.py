@@ -183,7 +183,7 @@ def main():
     auditor = None
     if not args.dry_run:
         auditor = LLMAuditor(provider="openai", model="gpt-4o-mini")
-        print(f"\nUsing: OpenAI gpt-4o-mini")
+        print("\nUsing: OpenAI gpt-4o-mini")
 
     # Select projects
     projects = [args.project] if args.project else PROJECTS

@@ -84,7 +84,7 @@ def _path_matches(def_path: str, call_path: str) -> bool:
     if len(def_parts) != len(call_parts):
         return False
 
-    for dp, cp in zip(def_parts, call_parts):
+    for dp, cp in zip(def_parts, call_parts, strict=True):
         if dp.startswith("{") or cp.startswith("{"):
             continue  # param segment — matches anything
         if dp != cp:

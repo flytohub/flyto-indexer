@@ -897,11 +897,7 @@ def _find_consumer_mismatches(handler_sid: str, api_sid: str, api_project: str,
             consumer_refs.add((ref_id, ref_project))
 
     consumers = []
-    for ref_id, ref_project in consumer_refs:
-        ref_sym = symbols.get(ref_id, {})
-        ref_path = ref_sym.get("path", "")
-        ref_lang = _detect_language(ref_path)
-
+    for _ref_id, ref_project in consumer_refs:
         # Search ALL type symbols in the consumer project (not just same file)
         for csid, csym in symbols.items():
             csym_project = csid.split(":")[0] if ":" in csid else ""

@@ -186,7 +186,7 @@ def _collect_dependency_licenses(project_path: Path) -> tuple[dict, list]:
     pkg_json = project_path / "package.json"
     if pkg_json.is_file():
         try:
-            data = json.loads(pkg_json.read_text(encoding="utf-8"))
+            json.loads(pkg_json.read_text(encoding="utf-8"))
             # Check individual dependencies in node_modules if available
             node_modules = project_path / "node_modules"
             if node_modules.is_dir():

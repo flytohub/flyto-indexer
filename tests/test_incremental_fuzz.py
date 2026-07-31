@@ -329,7 +329,7 @@ class TestDependencyResolutionFuzz:
                 "",
                 f"def {func_names[change_idx]}():",
                 f"    func_{other}()",
-                f"    return 42",
+                "    return 42",
                 "",
             ]
             (root / file_names[change_idx]).write_text("\n".join(new_lines))

@@ -182,7 +182,7 @@ def main():
 
     # Create auditor
     auditor = LLMAuditor(provider="openai", model="gpt-4o-mini")
-    print(f"\nUsing: OpenAI gpt-4o-mini")
+    print("\nUsing: OpenAI gpt-4o-mini")
 
     # Audit all projects
     all_results = {}

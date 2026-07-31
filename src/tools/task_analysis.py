@@ -1131,7 +1131,6 @@ def _derive_constraints(dimensions: Dict[str, dict], intent: str) -> dict:
         constraints.setdefault("max_files_per_step", 2)
     else:
         # Normal max_files_per_step based on blast_radius alone
-        blast_score = dimensions.get("blast_radius", {}).get("score", 0)
         if blast_level == "high":
             constraints.setdefault("max_files_per_step", 2)
         elif blast_level == "medium" or constraints.get("must_use_small_steps"):

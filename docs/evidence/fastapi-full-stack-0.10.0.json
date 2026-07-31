@@ -1,0 +1,66 @@
+{
+  "case": {
+    "commit": "d40de23896d27d15c17a7bf9649123fd167a0aa8",
+    "depth": 2,
+    "license": "MIT",
+    "repository": "https://github.com/fastapi/full-stack-fastapi-template",
+    "tag": "0.10.0",
+    "target": "render_email_template"
+  },
+  "evidence_fingerprint": "691df24f16031b77e3da6d19f59f72ed7e09cfaf6ae62d1c448d862541690043",
+  "indexer": {
+    "affected_files_through_depth_2": [
+      "backend/app/api/routes/login.py",
+      "backend/app/api/routes/users.py",
+      "backend/app/api/routes/utils.py",
+      "backend/app/utils.py"
+    ],
+    "affected_functions_through_depth_2": [
+      "backend/app/api/routes/login.py::recover_password",
+      "backend/app/api/routes/login.py::recover_password_html_content",
+      "backend/app/api/routes/users.py::create_user",
+      "backend/app/api/routes/utils.py::test_email",
+      "backend/app/utils.py::generate_new_account_email",
+      "backend/app/utils.py::generate_reset_password_email",
+      "backend/app/utils.py::generate_test_email"
+    ],
+    "direct_references": 3,
+    "files_scanned": 141,
+    "scan_errors": 0,
+    "symbols_found": 486
+  },
+  "limits": [
+    "This proves static transitive impact discovery, not runtime correctness.",
+    "The source commit and expected functions are pinned; no customer code is used."
+  ],
+  "proof": {
+    "functions_in_files_missed_by_text_search": [
+      "backend/app/api/routes/login.py::recover_password",
+      "backend/app/api/routes/login.py::recover_password_html_content",
+      "backend/app/api/routes/users.py::create_user",
+      "backend/app/api/routes/utils.py::test_email"
+    ],
+    "pass": true,
+    "required_found": [
+      "backend/app/api/routes/login.py::recover_password",
+      "backend/app/api/routes/login.py::recover_password_html_content",
+      "backend/app/api/routes/users.py::create_user",
+      "backend/app/api/routes/utils.py::test_email"
+    ],
+    "required_missing": [],
+    "required_transitive_functions": [
+      "backend/app/api/routes/login.py::recover_password",
+      "backend/app/api/routes/login.py::recover_password_html_content",
+      "backend/app/api/routes/users.py::create_user",
+      "backend/app/api/routes/utils.py::test_email"
+    ]
+  },
+  "schema_version": 1,
+  "text_search": {
+    "command": "git grep -n -w render_email_template -- backend frontend",
+    "matching_files": [
+      "backend/app/utils.py"
+    ],
+    "matching_lines": 4
+  }
+}

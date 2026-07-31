@@ -171,7 +171,7 @@ def main():
 
     project_name = project_path.name
     print(f"\n{'='*60}")
-    print(f"Flyto2 Indexer Demo")
+    print("Flyto2 Indexer Demo")
     print(f"Project: {project_name}")
     print(f"Path: {project_path}")
     print(f"{'='*60}\n")
@@ -225,7 +225,7 @@ def main():
         print("  No symbols indexed")
 
     print(f"\n{'='*60}")
-    print(f"Demo completed!")
+    print("Demo completed!")
     print(f"{'='*60}")
 
 

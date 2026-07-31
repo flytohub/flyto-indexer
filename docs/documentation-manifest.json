@@ -38,8 +38,8 @@
     {
       "id": "task-and-verification",
       "description": "Owns task planning and phase gates, repository and workspace verification, stable finding identities, baselines, offline evaluation, PR risk, test mapping, and structured release evidence.",
-      "paths": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/development_feedback.py", "src/tools/proof_receipts.py", "src/tools/task_context.py", "src/execution_guard.py", "src/finding_identity.py", "src/test_evidence.py", "src/verify.py", "src/pr_analyzer.py", "src/test_mapper.py", "src/tools/smart.py", "benchmarks/evaluate.py", "benchmarks/fixture/corpus/**"],
-      "documentation": ["docs/FEATURES.md#task-workflow", "docs/FEEDBACK.md", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/DESIGN_REFERENCES.md", "docs/FEATURES.md#verification-and-baselines", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"]
+      "paths": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/development_feedback.py", "src/tools/proof_receipts.py", "src/tools/task_context.py", "src/execution_guard.py", "src/finding_identity.py", "src/test_evidence.py", "src/verify.py", "src/pr_analyzer.py", "src/test_mapper.py", "src/tools/smart.py", "benchmarks/evaluate.py", "benchmarks/language-evidence.json", "benchmarks/fixture/corpus/**", "scripts/reproduce_impact_case.py"],
+      "documentation": ["docs/FEATURES.md#task-workflow", "docs/FEEDBACK.md", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/DESIGN_REFERENCES.md", "docs/FEATURES.md#verification-and-baselines", "docs/VERIFICATION.md", "docs/CASE_STUDY_FASTAPI.md", "docs/LANGUAGE_EVIDENCE.md", "docs/WHITEPAPER.md#risk-and-closure"]
     },
     {
       "id": "cli-mcp-http-interfaces",
@@ -51,7 +51,7 @@
       "id": "package-and-automation",
       "description": "Owns package metadata, version synchronization, generated reference material, local installation, build scripts, CI verification, and PyPI publication.",
       "paths": ["pyproject.toml", "server.json", ".mcp/server.json", "scripts/**", ".github/workflows/**"],
-      "documentation": ["docs/VERIFICATION.md#indexer-release-gate", "CONTRIBUTING.md", "docs/reference/README.md", "docs/reference/configuration.md"]
+      "documentation": ["docs/VERIFICATION.md#indexer-release-gate", "docs/LANGUAGE_EVIDENCE.md", "CONTRIBUTING.md", "docs/reference/README.md", "docs/reference/configuration.md"]
     }
   ],
   "feature_surfaces": [
@@ -100,11 +100,11 @@
       "title": "Task and release gates",
       "kind": "workflow",
       "status": "active",
-      "description": "Resolves evidence-backed decisions, produces task plans, enforces phase evidence, validates changes, verifies repositories and workspaces, compares reviewed finding-level baselines, and runs a committed offline scanner evaluation.",
-      "source": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/development_feedback.py", "src/tools/proof_receipts.py", "src/tools/task_context.py", "src/execution_guard.py", "src/finding_identity.py", "src/verify.py", "src/tools/smart.py", "benchmarks/evaluate.py", "benchmarks/fixture/corpus/**"],
-      "documentation": ["docs/FEATURES.md#task-workflow", "docs/FEEDBACK.md", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/DESIGN_REFERENCES.md", "docs/VERIFICATION.md", "docs/WHITEPAPER.md#risk-and-closure"],
-      "tests": ["tests/test_grill.py", "tests/test_grill_deep.py", "tests/test_grill_evidence.py", "tests/test_grill_conformance.py", "tests/test_grill_outcomes.py", "tests/test_development_feedback.py", "tests/test_proof_receipts.py", "tests/test_grill_real_data.py", "tests/test_grill_cli_e2e.py", "tests/test_task_context.py", "tests/test_task_adapters.py", "tests/test_task_analysis.py", "tests/test_finding_identity.py", "tests/test_verify.py", "tests/test_benchmark_evaluation.py", "tests/test_validation.py"],
-      "verification": ["python benchmarks/evaluate.py --check --json"]
+      "description": "Resolves evidence-backed decisions, produces task plans, enforces phase evidence, validates changes, verifies repositories and workspaces, compares reviewed finding-level baselines, gates quality debt and language claims, and runs committed offline and real-repository evaluations.",
+      "source": ["src/tools/task_analysis.py", "src/tools/grill.py", "src/tools/grill_intelligence.py", "src/tools/grill_evidence.py", "src/tools/grill_conformance.py", "src/tools/grill_outcomes.py", "src/tools/development_feedback.py", "src/tools/proof_receipts.py", "src/tools/task_context.py", "src/execution_guard.py", "src/finding_identity.py", "src/verify.py", "src/tools/smart.py", "benchmarks/evaluate.py", "benchmarks/language-evidence.json", "benchmarks/fixture/corpus/**", "config/quality-debt-baseline.json", "scripts/check_language_evidence.py", "scripts/check_quality_debt.py", "scripts/check_release_tag.py", "scripts/reproduce_impact_case.py"],
+      "documentation": ["docs/FEATURES.md#task-workflow", "docs/FEEDBACK.md", "docs/GRILL_TESTING.md", "docs/GRILL_TEST_REPORT_2026-07-29.md", "docs/DESIGN_REFERENCES.md", "docs/VERIFICATION.md", "docs/CASE_STUDY_FASTAPI.md", "docs/LANGUAGE_EVIDENCE.md", "docs/WHITEPAPER.md#risk-and-closure"],
+      "tests": ["tests/test_grill.py", "tests/test_grill_deep.py", "tests/test_grill_evidence.py", "tests/test_grill_conformance.py", "tests/test_grill_outcomes.py", "tests/test_development_feedback.py", "tests/test_proof_receipts.py", "tests/test_grill_real_data.py", "tests/test_grill_cli_e2e.py", "tests/test_task_context.py", "tests/test_task_adapters.py", "tests/test_task_analysis.py", "tests/test_finding_identity.py", "tests/test_verify.py", "tests/test_benchmark_evaluation.py", "tests/test_language_evidence.py", "tests/test_public_case_study.py", "tests/test_quality_debt_gate.py", "tests/test_release_tag.py", "tests/test_validation.py"],
+      "verification": ["python benchmarks/evaluate.py --check --json", "python scripts/check_language_evidence.py --check", "python scripts/check_quality_debt.py", "python scripts/reproduce_impact_case.py --check-snapshot", "python scripts/check_release_tag.py --tag vX.Y.Z"]
     },
     {
       "id": "command-line-interface",

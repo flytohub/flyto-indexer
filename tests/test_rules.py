@@ -424,6 +424,7 @@ class TestEdgeCases:
             })
             # Should not crash
             report = RulesChecker(root).check()
+            assert report.total_rules >= 0
 
     def test_severity_override(self):
         with tempfile.TemporaryDirectory() as tmpdir:
