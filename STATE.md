@@ -81,12 +81,12 @@
   dependency boundary in an isolated environment.
 - Durable user, operator, security, architecture, and whitepaper documentation
   links to a generated source reference covering 171 non-test Python modules,
-  2,113 declarations, 36 CLI commands, 20 published MCP tools, 47 granular
+  2,120 declarations, 36 CLI commands, 20 published MCP tools, 47 granular
   compatibility definitions, seven local HTTP operations, 16 environment
   variables, and eight built-in rule files.
 - Documentation scoring distinguishes inline summaries from exact source-linked
   reference entries. The latest score is 98/100 with a 78/100 README score,
-  66.6% inline coverage, 99.9% source-reference coverage, and 99.9% combined
+  66.5% inline coverage, 99.9% source-reference coverage, and 99.9% combined
   symbol coverage; external links count only when they resolve to the indexed
   declaration inside the repository.
 - Generated source-reference manifests accept repository-local glob patterns,
@@ -97,13 +97,13 @@
   instead of misclassifying locale and content directories as software modules.
 - Package, MCP registry, and MCP initialization versions are synchronized and
   enforced by tests and CI. Every built-in rule YAML file is parsed in tests.
-- Latest local verification: `1915 passed, 1 skipped`; Ruff passed across the
+- Latest local verification: `1919 passed, 1 skipped`; Ruff passed across the
   repository; mypy found no issues in 150 source files; the offline corpus
   passed 13/13 with 1.0 precision, 1.0 recall, zero false positives, p95 case
-  latency 170.66 ms, and stable evidence fingerprint `203edae3857a360d`;
+  latency 209.08 ms, and stable evidence fingerprint `203edae3857a360d`;
   sdist/wheel, isolated installed-feature, and real optional Tree-sitter
-  grammar smokes passed; strict self-verify passed 20/20 with 290 files,
-  4,753 indexed symbols, health 82/100, and zero warnings.
+  grammar smokes passed; strict baseline-aware self-verify passed 22/22 with
+  290 files, 4,765 indexed symbols, health 91/100, and zero warnings.
 
 ## Release Blockers
 

@@ -117,6 +117,11 @@ full dimension score means its configured budget was met. For example, the
 default documentation dimension reaches its ceiling at 70% indexed-symbol
 coverage; the raw coverage remains visible beside the score.
 
+Python complexity follows actual branches and control-flow nesting. Formatting
+a long function signature, call, or data literal across several lines does not
+make the function risky by itself, and an `elif` chain is not reported as a
+deeply nested decision tree.
+
 Target code is treated as untrusted input. Static checks do not intentionally
 import or execute the repository being analyzed.
 

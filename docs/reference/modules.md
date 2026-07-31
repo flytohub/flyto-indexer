@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **171 Python modules**, **68,974 lines**, and **2,113 class/function/method declarations**.
+Generated inventory: **171 Python modules**, **69,063 lines**, and **2,120 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -35,7 +35,7 @@ Generated inventory: **171 Python modules**, **68,974 lines**, and **2,113 class
 | [`src/analyzer/bus_factor.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/bus_factor.py#L1) | 153 | 5 | `collections, dataclasses, pathlib, subprocess` | Bus Factor analyzer — identify files with dangerously low contributor count. |
 | [`src/analyzer/call_sites_lsp.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/call_sites_lsp.py#L1) | 113 | 1 | `__future__, json, logging, lsp, pathlib, typing` | LSP-resolved call site enrichment. |
 | [`src/analyzer/call_sites_regex.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/call_sites_regex.py#L1) | 438 | 10 | `__future__, pathlib, re, typing` | Regex-based per-package call site + local call graph extractor. |
-| [`src/analyzer/complexity.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/complexity.py#L1) | 681 | 25 | `ast, dataclasses, pathlib, re, rule_loader, typing` | Code complexity analysis - find overly complex functions |
+| [`src/analyzer/complexity.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/complexity.py#L1) | 770 | 32 | `ast, dataclasses, pathlib, re, rule_loader, textwrap, typing` | Code complexity analysis - find overly complex functions |
 | [`src/analyzer/config_drift.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/config_drift.py#L1) | 261 | 8 | `dataclasses, pathlib, re` | Config Drift detector — find mismatches between .env definitions and code references. |
 | [`src/analyzer/coverage.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/coverage.py#L1) | 397 | 20 | `ast, collections, dataclasses, pathlib, re` | Test coverage analysis - find code without corresponding tests |
 | [`src/analyzer/dead_code.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/dead_code.py#L1) | 310 | 14 | `ast, collections, dataclasses, pathlib, re` | Dead code detector -- find unreferenced files and functions |

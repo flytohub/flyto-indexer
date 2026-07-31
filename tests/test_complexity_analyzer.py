@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from analyzer.complexity import (
     FunctionComplexity, ComplexityReport, ComplexityAnalyzer,
-    _line_threshold_for_file, _is_test_file,
+    _line_threshold_for_file, _is_test_file, measure_indexed_function,
 )
 
 
@@ -145,6 +145,132 @@ class TestFunctionComplexity:
             branches=2, returns=1,
         )
         assert fc.issues == []
+
+
+class TestIndexedPythonComplexity:
+    """Canonical index metrics should measure flow, not visual indentation."""
+
+    def test_multiline_signatures_and_literals_do_not_inflate_depth(self):
+        content = '''
+def build_receipt(
+    *,
+    producer: str,
+    subject: str,
+):
+    receipt = {
+        "producer": producer,
+        "metadata": {
+            "subject": subject,
+        },
+    }
+    if producer:
+        receipt["ready"] = True
+    return receipt
+'''
+
+        result = measure_indexed_function(
+            "demo:builder",
+            {
+                "type": "function",
+                "name": "build_receipt",
+                "path": "src/builder.py",
+                "params": ["producer", "subject"],
+                "start_line": 1,
+            },
+            content,
+        )
+
+        assert result is not None
+        assert result["max_depth"] == 1
+        assert result["branches"] == 1
+        assert result["score"] == 0
+
+    def test_real_nested_control_flow_remains_complex(self):
+        content = '''
+def process(items):
+    if items:
+        for item in items:
+            while item.pending:
+                try:
+                    item.run()
+                except RuntimeError:
+                    return False
+    return True
+'''
+
+        result = measure_indexed_function(
+            "demo:processor",
+            {
+                "type": "function",
+                "name": "process",
+                "path": "src/processor.py",
+                "params": ["items"],
+                "start_line": 1,
+            },
+            content,
+        )
+
+        assert result is not None
+        assert result["max_depth"] == 4
+        assert result["branches"] == 4
+        assert result["score"] >= 5
+
+    def test_nested_callable_does_not_inflate_its_parent(self):
+        content = '''
+def outer(value):
+    def inner():
+        if value:
+            for item in value:
+                while item:
+                    return item
+    return inner
+'''
+
+        result = measure_indexed_function(
+            "demo:outer",
+            {
+                "type": "function",
+                "name": "outer",
+                "path": "src/outer.py",
+                "params": ["value"],
+                "start_line": 1,
+            },
+            content,
+        )
+
+        assert result is not None
+        assert result["max_depth"] == 0
+        assert result["branches"] == 0
+        assert result["returns"] == 1
+
+    def test_elif_chain_is_not_reported_as_deep_nesting(self):
+        content = '''
+def classify(value):
+    if value == 1:
+        return "one"
+    elif value == 2:
+        return "two"
+    elif value == 3:
+        return "three"
+    return "other"
+'''
+
+        result = measure_indexed_function(
+            "demo:classify",
+            {
+                "type": "function",
+                "name": "classify",
+                "path": "src/classify.py",
+                "params": ["value"],
+                "start_line": 1,
+            },
+            content,
+        )
+
+        assert result is not None
+        assert result["max_depth"] == 1
+        assert result["branches"] == 3
+        assert result["score"] == 0
 
 
 class TestComplexityReport:

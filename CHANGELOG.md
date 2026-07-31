@@ -23,6 +23,12 @@
   addition to a rationale, source, scope, and expiry.
 
 ### Changed
+- Corrected canonical Python complexity measurement to count actual control
+  flow from the syntax tree instead of visual indentation inside multiline
+  signatures, calls, or data literals. `elif` chains remain sibling branches,
+  while genuinely nested conditions, loops, context managers, and exception
+  handling still contribute depth. This removes false complexity regressions
+  without raising or replacing the reviewed baseline.
 - Fixed Git hotspot enrichment to consume the canonical complexity result,
   combining one-year change frequency with structural complexity instead of
   silently treating every file as complexity zero.

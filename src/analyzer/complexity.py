@@ -10,6 +10,7 @@ Metrics:
 
 import ast
 import re
+import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
@@ -101,6 +102,90 @@ class FunctionComplexity:
         return issues
 
 
+_PYTHON_CONTROL_FLOW_NODES = (
+    ast.For,
+    ast.AsyncFor,
+    ast.While,
+    ast.With,
+    ast.AsyncWith,
+    ast.Try,
+    ast.Match,
+)
+_PYTHON_NESTED_SCOPE_NODES = (
+    ast.FunctionDef,
+    ast.AsyncFunctionDef,
+    ast.ClassDef,
+    ast.Lambda,
+)
+
+
+class _PythonFlowVisitor(ast.NodeVisitor):
+    """Measure executable control flow without treating formatting as nesting."""
+
+    def __init__(self):
+        self.depth = 0
+        self.max_depth = 0
+        self.branches = 0
+        self.returns = 0
+
+    def _enter_control_flow(self) -> None:
+        self.depth += 1
+        self.max_depth = max(self.max_depth, self.depth)
+        self.branches += 1
+
+    def _leave_control_flow(self) -> None:
+        self.depth -= 1
+
+    def visit_If(self, node: ast.If):
+        """Count an elif chain as sibling branches, not artificial nesting."""
+        self._enter_control_flow()
+        self.visit(node.test)
+        for statement in node.body:
+            self.visit(statement)
+        if len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
+            self._leave_control_flow()
+            return self.visit(node.orelse[0])
+        for statement in node.orelse:
+            self.visit(statement)
+        self._leave_control_flow()
+        return None
+
+    def visit(self, node):
+        if isinstance(node, _PYTHON_NESTED_SCOPE_NODES):
+            return None
+        is_control_flow = isinstance(node, _PYTHON_CONTROL_FLOW_NODES)
+        if is_control_flow:
+            self._enter_control_flow()
+        if isinstance(node, ast.Return):
+            self.returns += 1
+        result = super().visit(node)
+        if is_control_flow:
+            self._leave_control_flow()
+        return result
+
+
+def _python_flow_metrics(content: str) -> tuple[int, int, int] | None:
+    """Return AST control-flow depth, branches, and returns for one snippet."""
+    try:
+        tree = ast.parse(textwrap.dedent(content))
+    except (IndentationError, SyntaxError):
+        return None
+    function = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ),
+        None,
+    )
+    if function is None:
+        return None
+    visitor = _PythonFlowVisitor()
+    for statement in function.body:
+        visitor.visit(statement)
+    return visitor.max_depth, visitor.branches, visitor.returns
+
+
 def measure_indexed_function(
     symbol_id: str,
     symbol: dict,
@@ -141,16 +226,20 @@ def measure_indexed_function(
     )
     branch_keywords = python_branches if is_python else other_branches
 
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            continue
-        indent = len(line) - len(line.lstrip())
-        max_depth = max(max_depth, max(0, (indent - base_indent) // indent_unit))
-        if any(stripped.startswith(keyword) for keyword in branch_keywords):
-            branches += 1
-        if stripped == "return" or stripped.startswith("return "):
-            returns += 1
+    python_metrics = _python_flow_metrics(content) if is_python else None
+    if python_metrics is not None:
+        max_depth, branches, returns = python_metrics
+    else:
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            indent = len(line) - len(line.lstrip())
+            max_depth = max(max_depth, max(0, (indent - base_indent) // indent_unit))
+            if any(stripped.startswith(keyword) for keyword in branch_keywords):
+                branches += 1
+            if stripped == "return" or stripped.startswith("return "):
+                returns += 1
 
     measured = FunctionComplexity(
         file_path=path,
