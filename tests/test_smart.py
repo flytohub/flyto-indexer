@@ -405,6 +405,36 @@ class TestSmartTask:
         result = smart_task(action="validate")
         assert result["tests_passed"] is True
 
+    def test_validate_contract_scopes_lint_to_declared_python_paths(
+        self,
+        mock_validation,
+    ):
+        contract = {
+            "task_profile": {"project": "demo"},
+            "intent_ledger": {
+                "allowed_paths": [
+                    "src/app.py",
+                    "tests/test_app.py",
+                    "README.md",
+                    "deleted.py",
+                ],
+            },
+        }
+
+        smart_task(
+            action="validate",
+            project="demo",
+            task_contract=contract,
+            run_tests=False,
+        )
+
+        mock_validation.validate_changes.assert_called_once_with(
+            project="demo",
+            run_tests=False,
+            test_path=None,
+            lint_paths=["deleted.py", "src/app.py", "tests/test_app.py"],
+        )
+
     def test_validate_can_require_external_proof(self, mock_validation):
         with (
             patch("tools.smart._proof_receipts_mod") as proof_mod,

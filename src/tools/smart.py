@@ -796,12 +796,21 @@ def _task_validate(
 ):
     """Run code checks and every contract-backed closure gate."""
     val = _validation_mod()
+    contract = task_contract if isinstance(task_contract, dict) else {}
+    ledger = contract.get("intent_ledger")
+    lint_paths = None
+    if isinstance(ledger, dict):
+        lint_paths = sorted({
+            path
+            for path in ledger.get("allowed_paths") or []
+            if isinstance(path, str) and path.endswith(".py")
+        })
     result = val.validate_changes(
         project=project,
         run_tests=run_tests,
         test_path=test_path,
+        lint_paths=lint_paths,
     )
-    contract = task_contract if isinstance(task_contract, dict) else {}
     contract_project = (
         contract.get("task_profile", {}).get("project") or project
     )

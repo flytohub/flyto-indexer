@@ -11,6 +11,73 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.tools import validation
 
 
+def test_run_ruff_defaults_to_repository_wide(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_run(cmd, cwd, capture_output, text, timeout):
+        captured["cmd"] = cmd
+        return SimpleNamespace(returncode=0, stdout="All checks passed!", stderr="")
+
+    monkeypatch.setattr(validation.subprocess, "run", fake_run)
+
+    result = validation._run_ruff(str(tmp_path))
+
+    assert result["status"] == "pass"
+    assert result["scope"] == "repository"
+    assert result["targets"] == ["."]
+    assert captured["cmd"] == ["ruff", "check", "."]
+
+
+def test_run_ruff_scopes_existing_python_targets_and_rejects_escape(
+    monkeypatch,
+    tmp_path,
+):
+    source = tmp_path / "src" / "app.py"
+    source.parent.mkdir()
+    source.write_text("value = 1\n", encoding="utf-8")
+    docs = tmp_path / "README.md"
+    docs.write_text("docs\n", encoding="utf-8")
+    outside = tmp_path.parent / "outside.py"
+    outside.write_text("value = 2\n", encoding="utf-8")
+    captured = {}
+
+    def fake_run(cmd, cwd, capture_output, text, timeout):
+        captured["cmd"] = cmd
+        return SimpleNamespace(returncode=0, stdout="All checks passed!", stderr="")
+
+    monkeypatch.setattr(validation.subprocess, "run", fake_run)
+
+    result = validation._run_ruff(
+        str(tmp_path),
+        ["src/app.py", "README.md", "missing.py", "../outside.py"],
+    )
+
+    assert result["status"] == "pass"
+    assert result["scope"] == "task_targets"
+    assert result["targets"] == ["src/app.py"]
+    assert captured["cmd"] == ["ruff", "check", "src/app.py"]
+
+
+def test_run_ruff_skips_docs_only_task_without_repo_fallback(
+    monkeypatch,
+    tmp_path,
+):
+    (tmp_path / "README.md").write_text("docs\n", encoding="utf-8")
+    monkeypatch.setattr(
+        validation.subprocess,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("Ruff must not run for a docs-only task"),
+        ),
+    )
+
+    result = validation._run_ruff(str(tmp_path), ["README.md"])
+
+    assert result["status"] == "skipped"
+    assert result["scope"] == "task_targets"
+    assert result["targets"] == []
+
+
 def test_run_pytest_without_explicit_path_defers_to_pytest_config(
     monkeypatch, tmp_path
 ):
@@ -132,6 +199,42 @@ def test_validate_changes_resolves_relative_project_directory(monkeypatch, tmp_p
     assert captured == {
         "root": str(project_root.resolve()),
         "test_path": "tests/test_bm25.py tests/test_verify.py",
+    }
+
+
+def test_validate_changes_passes_explicit_lint_paths(monkeypatch, tmp_path):
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    captured = {}
+
+    monkeypatch.setattr(
+        validation,
+        "load_index",
+        lambda: {"project_roots": {"project": str(project_root)}},
+    )
+
+    def fake_ruff(root, lint_paths):
+        captured["root"] = root
+        captured["lint_paths"] = lint_paths
+        return {
+            "status": "pass",
+            "errors": 0,
+            "warnings": 0,
+            "output": "",
+        }
+
+    monkeypatch.setattr(validation, "_run_ruff", fake_ruff)
+
+    result = validation.validate_changes(
+        project="project",
+        run_tests=False,
+        lint_paths=["src/app.py"],
+    )
+
+    assert result["overall"] == "pass"
+    assert captured == {
+        "root": str(project_root),
+        "lint_paths": ["src/app.py"],
     }
 
 

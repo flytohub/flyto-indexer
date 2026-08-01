@@ -33,18 +33,58 @@ def _pytest_timeout_seconds() -> int:
     return max(MIN_PYTEST_TIMEOUT_SECONDS, min(configured, MAX_PYTEST_TIMEOUT_SECONDS))
 
 
-def _run_ruff(project_root: str) -> dict:
-    """Run ruff check on project root. Returns status dict."""
+def _lint_targets(project_root: str, lint_paths: list[str]) -> list[str]:
+    """Return existing in-project Python files/directories for a task lint."""
+    root = Path(project_root).resolve()
+    targets: set[str] = set()
+    for raw in lint_paths:
+        if not isinstance(raw, str) or not raw.strip():
+            continue
+        requested = Path(raw.strip())
+        candidate = (
+            requested.resolve()
+            if requested.is_absolute()
+            else (root / requested).resolve()
+        )
+        try:
+            relative = candidate.relative_to(root)
+        except ValueError:
+            continue
+        if not candidate.exists():
+            continue
+        if candidate.is_file() and candidate.suffix != ".py":
+            continue
+        if not (candidate.is_file() or candidate.is_dir()):
+            continue
+        targets.add(relative.as_posix() or ".")
+    return sorted(targets)
+
+
+def _run_ruff(
+    project_root: str,
+    lint_paths: list[str] | None = None,
+) -> dict:
+    """Run Ruff repository-wide or on one frozen task's Python targets."""
+    targets = ["."] if lint_paths is None else _lint_targets(
+        project_root,
+        lint_paths,
+    )
     result = {
         "status": "skipped",
         "errors": 0,
         "warnings": 0,
         "output": "",
+        "scope": "repository" if lint_paths is None else "task_targets",
+        "targets": targets,
     }
 
+    if not targets:
+        result["output"] = "No existing Python targets declared by task contract"
+        return result
+
     cmds = [
-        ["ruff", "check", "."],
-        [sys.executable, "-m", "ruff", "check", "."],
+        ["ruff", "check", *targets],
+        [sys.executable, "-m", "ruff", "check", *targets],
     ]
 
     for cmd in cmds:
@@ -165,6 +205,7 @@ def validate_changes(
     project: str = None,
     run_tests: bool = True,
     test_path: str = None,
+    lint_paths: list[str] | None = None,
 ) -> dict:
     """
     Run code quality checks (ruff) and tests (pytest) on a project.
@@ -173,6 +214,9 @@ def validate_changes(
         project: Project name from index. If omitted, auto-detect.
         run_tests: Whether to run pytest. Default: True.
         test_path: Specific test file or directory. If omitted, runs all tests.
+        lint_paths: Exact task-owned paths to lint. ``None`` preserves the
+            repository-wide validation contract; an empty list is a docs-only
+            task and does not fall back to linting unrelated legacy files.
 
     Returns:
         Dict with ruff results, pytest results, and overall pass/fail.
@@ -213,7 +257,10 @@ def validate_changes(
         project_name = Path(project_root).name
 
     # Run ruff
-    ruff_result = _run_ruff(project_root)
+    if lint_paths is None:
+        ruff_result = _run_ruff(project_root)
+    else:
+        ruff_result = _run_ruff(project_root, lint_paths)
 
     # Run pytest
     if run_tests:

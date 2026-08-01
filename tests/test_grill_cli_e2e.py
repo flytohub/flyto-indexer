@@ -177,7 +177,12 @@ def test_real_cli_scan_grill_freeze_plan_gate_validate_and_tamper(tmp_path):
         "tests/test_grill.py tests/test_grill_real_data.py",
     )
     assert validation["overall"] == "pass"
-    assert validation["ruff"]["status"] == "pass"
+    assert validation["ruff"]["status"] == "skipped"
+    assert validation["ruff"]["scope"] == "task_targets"
+    assert validation["ruff"]["targets"] == []
+    assert validation["ruff"]["output"] == (
+        "No existing Python targets declared by task contract"
+    )
     assert validation["pytest"]["status"] == "pass"
     assert validation["pytest"]["passed"] > 0
     assert validation["decision_contract_validation"]["pass"] is True
