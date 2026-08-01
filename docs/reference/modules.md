@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **179 Python modules**, **72,147 lines**, and **2,225 class/function/method declarations**.
+Generated inventory: **179 Python modules**, **72,164 lines**, and **2,226 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -173,7 +173,7 @@ Generated inventory: **179 Python modules**, **72,147 lines**, and **2,225 class
 | [`src/tools/proof_receipts.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/proof_receipts.py#L1) | 230 | 6 | `__future__, datetime, hashlib, hmac, json, os, typing` | Validation for content-addressed and optionally attested external proof receipts. |
 | [`src/tools/references.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/references.py#L1) | 1301 | 31 | `index_store, logging, lsp, os, pathlib, re, resolver, scip_adapter` | Reference and impact analysis tools for flyto-indexer MCP server. |
 | [`src/tools/resolver.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/resolver.py#L1) | 79 | 2 | `none` | Shared symbol resolution — single implementation used by all reference/impact tools. |
-| [`src/tools/search.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L1) | 676 | 16 | `bm25, index_store, re, synonyms` | Search tools for flyto-indexer MCP server. |
+| [`src/tools/search.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L1) | 693 | 17 | `bm25, importlib, index_store, re, synonyms` | Search tools for flyto-indexer MCP server. |
 | [`src/tools/smart.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L1) | 1420 | 63 | `analyzer, change_patterns, code_info, context_budget, conventions, coverage_intel, data_flow, dependency_scanner, diff_impact, git_intel, grill, index_store` | Smart tools — 5 consolidated entry points with association-based triggering. |
 | [`src/tools/staleness.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/staleness.py#L1) | 215 | 4 | `datetime, git_intel, index_store, logging, os, subprocess, tools, typing` | Staleness detection — identify stale but heavily-referenced symbols via git. |
 | [`src/tools/task_analysis.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_analysis.py#L1) | 1999 | 33 | `code_info, datetime, governance, hashlib, index_store, pathlib, quality, references, search, time, tools, typing` | Task Analysis — multi-dimensional task contract generation. |

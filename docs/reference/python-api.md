@@ -2,7 +2,7 @@
 
 # Python API Reference
 
-Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,225 declarations across 163 files**.
+Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,226 declarations across 163 files**.
 
 ## `analyze.py`
 
@@ -2662,22 +2662,23 @@ Every declared class, function, nested function, and method in the package, supp
 
 | Kind | Signature | Responsibility | Source |
 |---|---|---|---|
-| function | `def _tokens(text: str) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/tools/search.py:49`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L49) |
-| function | `def _token_overlap(query_tokens: list&#91;str&#93;, field_tokens: set&#91;str&#93;) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/tools/search.py:53`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L53) |
-| function | `def _long_partial_match(query_tokens: list&#91;str&#93;, value: str) -> bool` | The declaration and linked implementation are authoritative. | [`src/tools/search.py:57`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L57) |
-| function | `def _compact(text: str) -> str` | The declaration and linked implementation are authoritative. | [`src/tools/search.py:61`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L61) |
-| function | `def _search_todos(content: str, query_lower: str, sym: dict) -> list` | Search for TODO/FIXME/XXX/HACK/NOTE matches in content. | [`src/tools/search.py:65`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L65) |
-| function | `def _search_comments(content: str, query_lower: str, sym: dict) -> list` | Search comments (Python + JS single-line + multi-line) for query. | [`src/tools/search.py:80`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L80) |
-| function | `def _search_strings(content: str, query_lower: str, sym: dict) -> list` | Search string literals for query. | [`src/tools/search.py:116`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L116) |
-| function | `def _search_general(content: str, query_pattern, sym: dict) -> list` | General content search — returns at most one match per symbol. | [`src/tools/search.py:131`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L131) |
-| function | `def _score_symbol(symbol_id: str, symbol: dict, query_lower: str, query_words: list, synonym_tokens: set, all_search_words: list, bm25_scores: dict, boost_paths: set) -> tuple` | Score a symbol for keyword search. | [`src/tools/search.py:149`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L149) |
-| function | `def _fuzzy_score(query: str, name: str) -> float` | Levenshtein-based similarity between query and symbol name, 0.0 to 1.0. | [`src/tools/search.py:270`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L270) |
-| function | `def _get_bm25_scores(query, synonym_tokens)` | Compute BM25 pre-scores for all symbols, normalized to 0-30. | [`src/tools/search.py:304`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L304) |
-| function | `def _build_candidates(all_symbols, bm25_scores, query_lower, query_words, synonym_tokens)` | Build candidate set: BM25 hits + name matches, or full scan as fallback. | [`src/tools/search.py:322`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L322) |
-| function | `def _dedup_and_group(results, max_results)` | Deduplicate results by symbol_id and group by project. | [`src/tools/search.py:355`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L355) |
-| function | `def search_by_keyword(query: str, max_results: int=20, symbol_type: str=None, project: str=None, include_content: bool=False, session_id: str=None) -> dict` | Cross-project search with smart ranking. | [`src/tools/search.py:374`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L374) |
-| function | `def fulltext_search(query: str, search_type: str='all', project: str=None, max_results: int=50) -> dict` | Full-text search across all indexed code. | [`src/tools/search.py:471`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L471) |
-| function | `def semantic_search(query: str, project: str=None, max_results: int=20, include_content: bool=False) -> dict` | Natural language → code search using TF-IDF cosine similarity with concept expansion. | [`src/tools/search.py:553`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L553) |
+| function | `def _project_index_scope(project: str)` | Resolve the shared index-store scope in source and installed layouts. | [`src/tools/search.py:50`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L50) |
+| function | `def _tokens(text: str) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/tools/search.py:61`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L61) |
+| function | `def _token_overlap(query_tokens: list&#91;str&#93;, field_tokens: set&#91;str&#93;) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/tools/search.py:65`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L65) |
+| function | `def _long_partial_match(query_tokens: list&#91;str&#93;, value: str) -> bool` | The declaration and linked implementation are authoritative. | [`src/tools/search.py:69`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L69) |
+| function | `def _compact(text: str) -> str` | The declaration and linked implementation are authoritative. | [`src/tools/search.py:73`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L73) |
+| function | `def _search_todos(content: str, query_lower: str, sym: dict) -> list` | Search for TODO/FIXME/XXX/HACK/NOTE matches in content. | [`src/tools/search.py:77`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L77) |
+| function | `def _search_comments(content: str, query_lower: str, sym: dict) -> list` | Search comments (Python + JS single-line + multi-line) for query. | [`src/tools/search.py:92`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L92) |
+| function | `def _search_strings(content: str, query_lower: str, sym: dict) -> list` | Search string literals for query. | [`src/tools/search.py:128`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L128) |
+| function | `def _search_general(content: str, query_pattern, sym: dict) -> list` | General content search — returns at most one match per symbol. | [`src/tools/search.py:143`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L143) |
+| function | `def _score_symbol(symbol_id: str, symbol: dict, query_lower: str, query_words: list, synonym_tokens: set, all_search_words: list, bm25_scores: dict, boost_paths: set) -> tuple` | Score a symbol for keyword search. | [`src/tools/search.py:161`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L161) |
+| function | `def _fuzzy_score(query: str, name: str) -> float` | Levenshtein-based similarity between query and symbol name, 0.0 to 1.0. | [`src/tools/search.py:282`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L282) |
+| function | `def _get_bm25_scores(query, synonym_tokens)` | Compute BM25 pre-scores for all symbols, normalized to 0-30. | [`src/tools/search.py:316`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L316) |
+| function | `def _build_candidates(all_symbols, bm25_scores, query_lower, query_words, synonym_tokens)` | Build candidate set: BM25 hits + name matches, or full scan as fallback. | [`src/tools/search.py:334`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L334) |
+| function | `def _dedup_and_group(results, max_results)` | Deduplicate results by symbol_id and group by project. | [`src/tools/search.py:367`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L367) |
+| function | `def search_by_keyword(query: str, max_results: int=20, symbol_type: str=None, project: str=None, include_content: bool=False, session_id: str=None) -> dict` | Cross-project search with smart ranking. | [`src/tools/search.py:386`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L386) |
+| function | `def fulltext_search(query: str, search_type: str='all', project: str=None, max_results: int=50) -> dict` | Full-text search across all indexed code. | [`src/tools/search.py:483`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L483) |
+| function | `def semantic_search(query: str, project: str=None, max_results: int=20, include_content: bool=False) -> dict` | Natural language → code search using TF-IDF cosine similarity with concept expansion. | [`src/tools/search.py:565`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L565) |
 
 ## `src/tools/smart.py`
 

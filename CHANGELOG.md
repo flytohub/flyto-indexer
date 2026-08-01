@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+- Scoped project-filtered semantic index loading and lazy rebuilds to the
+  requested project, preventing stale sibling indexes from timing out an
+  isolated MCP search while preserving unfiltered workspace search.
+
 ## [2.18.0] - 2026-07-31
 
 ### Added

@@ -7,6 +7,9 @@
   owned by private product repositories and are not shipped here.
 - CLI and MCP surfaces support indexing, context, impact, API/dependency
   closure, security checks, architecture rules, and repeatable verification.
+- Project-filtered semantic searches now load and lazily rebuild only the
+  selected project's index. Stale sibling project markers no longer consume a
+  bounded MCP request's deadline; unfiltered workspace search is unchanged.
 - Existing task plan, gate, validate, and project-profile surfaces share one
   bounded, gitignored SQLite continuity record. It carries resumable task facts
   across AI clients without adding an MCP tool or committed handoff file.
@@ -123,15 +126,16 @@
   MCP manifests, generated references, language evidence, quality ratchet,
   lint, types, tests, benchmark, and build must pass before OIDC publication;
   a GitHub Release is created only after PyPI succeeds.
-- Latest local verification: `1964 passed, 1 skipped`; Ruff passed across the
+- Latest local verification: `1971 passed, 1 skipped`; Ruff passed across the
   full repository; mypy found no issues in 153 source files; the offline corpus
   passed 13/13 with 1.0 precision, 1.0 recall, zero false positives, p95 case
   latency 173.32 ms, and stable evidence fingerprint `203edae3857a360d`; the
   task-continuity and efficiency contract passed 100/100 against its 90% gate;
   the pinned FastAPI case matched fingerprint `691df24f16031b77` after a clean
   clone; sdist/wheel and isolated installed-policy smokes passed; strict
-  baseline-aware self-verify passed 22/22 with 308 files, 4,930 indexed symbols,
-  health 91/100, and zero warnings.
+  baseline-aware self-verify passed 20/20 with 308 files, 4,945 indexed symbols,
+  health 91/100, and zero warnings. The current sdist/wheel build and Twine
+  metadata checks also passed.
 
 ## Release Blockers
 

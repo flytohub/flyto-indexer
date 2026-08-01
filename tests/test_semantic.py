@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from semantic import SemanticIndex, ConceptGraph
+from tools import search as search_tools
 
 
 # ---------------------------------------------------------------------------
@@ -341,3 +343,60 @@ class TestSemanticIndex:
         corrupt = tmp_path / "bad.json"
         corrupt.write_text("not json")
         assert SemanticIndex.load(corrupt) is None
+
+
+class TestSemanticSearchProjectScope:
+
+    def test_project_scope_wraps_index_and_semantic_loads(self, monkeypatch):
+        active_scope = []
+        load_events = []
+
+        @contextmanager
+        def fake_scope(project):
+            active_scope.append(project)
+            try:
+                yield
+            finally:
+                active_scope.pop()
+
+        class EmptySemantic:
+            def search(self, _query, top_k):
+                assert top_k == 200
+                return []
+
+        def fake_load_index():
+            load_events.append(("index", tuple(active_scope)))
+            return {"symbols": {}}
+
+        def fake_load_semantic():
+            load_events.append(("semantic", tuple(active_scope)))
+            return EmptySemantic()
+
+        monkeypatch.setattr(search_tools, "_project_index_scope", fake_scope)
+        monkeypatch.setattr(search_tools, "load_index", fake_load_index)
+        monkeypatch.setattr(search_tools, "_load_semantic", fake_load_semantic)
+
+        result = search_tools.semantic_search("agent runtime", project="flyto-ai")
+
+        assert result["results"] == []
+        assert load_events == [
+            ("index", ("flyto-ai",)),
+            ("semantic", ("flyto-ai",)),
+        ]
+
+    def test_unscoped_search_preserves_aggregate_loading(self, monkeypatch):
+        class EmptySemantic:
+            def search(self, _query, top_k):
+                assert top_k == 200
+                return []
+
+        def unexpected_scope(_project):
+            raise AssertionError("unscoped search must not enter a project scope")
+
+        monkeypatch.setattr(search_tools, "_project_index_scope", unexpected_scope)
+        monkeypatch.setattr(search_tools, "load_index", lambda: {"symbols": {}})
+        monkeypatch.setattr(search_tools, "_load_semantic", lambda: EmptySemantic())
+
+        result = search_tools.semantic_search("agent runtime")
+
+        assert result["results"] == []

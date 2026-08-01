@@ -1,5 +1,15 @@
 # Decisions
 
+## 2026-08-02 - Project-filtered semantic search owns its index scope
+
+Decision: enter `project_index_scope` before loading both symbol and semantic
+indexes whenever semantic search receives a project filter. Preserve aggregate
+multi-project discovery only when no filter is provided.
+
+Reason: loading a selected project while rebuilding stale sibling indexes made
+an otherwise isolated MCP search exceed its request deadline. The filter must
+constrain storage work as well as final result filtering.
+
 ## 2026-08-01 - Cross-AI continuity stays local and evidence claims stay paired
 
 Decision: update the existing task lifecycle and project profile with one

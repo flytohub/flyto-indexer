@@ -1,6 +1,7 @@
 """Search tools for flyto-indexer MCP server."""
 
 import re
+from importlib import import_module
 
 try:
     from ..bm25 import tokenize
@@ -44,6 +45,17 @@ _STRING_PATTERNS = [
     re.compile(r"'([^'\\]*(?:\\.[^'\\]*)*)'"),
     re.compile(r'`([^`]*)`'),
 ]
+
+
+def _project_index_scope(project: str):
+    """Resolve the shared index-store scope in source and installed layouts."""
+    package = __package__ or ""
+    module_name = (
+        "{}.index_store".format(package.split(".", 1)[0])
+        if "." in package
+        else "index_store"
+    )
+    return import_module(module_name).project_index_scope(project)
 
 
 def _tokens(text: str) -> set[str]:
@@ -568,8 +580,13 @@ def semantic_search(
         - Reference count: +0.5 per ref (max +10)
         - Path importance: -5 if in tests/
     """
-    index = load_index()
-    semantic = _load_semantic()
+    if project:
+        with _project_index_scope(project):
+            index = load_index()
+            semantic = _load_semantic()
+    else:
+        index = load_index()
+        semantic = _load_semantic()
 
     if not semantic:
         # Fallback: if no semantic index exists, delegate to keyword search

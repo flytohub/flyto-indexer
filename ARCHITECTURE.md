@@ -24,6 +24,10 @@ HTTP references.
    dependencies, docs, and security signals.
 2. Index data is stored locally under generated index directories.
 3. Query and impact tools read that local index plus current filesystem state.
+   A project-filtered semantic search enters the same project scope before it
+   loads either the symbol or TF-IDF index, so stale sibling indexes cannot
+   delay or contaminate an isolated MCP lane. Unfiltered searches retain the
+   aggregate workspace behavior.
 4. Verify combines index integrity, context lookup, impact closure, secret
    checks, taint rules, documentation checks, rules/layers policy checks, and
    release hygiene checks.
