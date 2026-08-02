@@ -129,6 +129,10 @@
   MCP manifests, generated references, language evidence, quality ratchet,
   lint, types, tests, benchmark, and build must pass before OIDC publication;
   a GitHub Release is created only after PyPI succeeds.
+- PyPI 2.18.1 is published through Trusted Publishing with wheel and sdist
+  artifacts. Its GitHub Release contains the verified CI build artifacts; the
+  future release step now identifies the repository explicitly and does not
+  depend on a checkout in its artifact-only job.
 - Latest local verification: `1972 passed, 1 skipped`; Ruff passed across the
   full repository; mypy found no issues in 153 source files; the offline corpus
   passed 13/13 with 1.0 precision, 1.0 recall, zero false positives, p95 case
@@ -147,8 +151,9 @@
   `.github/workflows/publish-pypi.yml`, and environment `pypi`. The v2.18.0 tag
   remains unpublished because its Linux verification job stopped before build
   and publication; v2.18.1 supersedes that failed release attempt.
-- Hosted CI, issue intake access, package publication, and release creation
-  still require provider-side evidence; local verification cannot prove them.
+- Provider-side evidence records successful main-branch CI, tag verification,
+  build provenance, PyPI OIDC publication, and the repaired GitHub Release for
+  v2.18.1. Future provider state must still be checked per release.
 
 ## Verification Matrix
 
