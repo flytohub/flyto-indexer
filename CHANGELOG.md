@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+- Made the post-publication GitHub Release step repository-explicit so it works
+  in the artifact-only job without requiring a repository checkout.
+
 ## [2.18.1] - 2026-08-03
 
 ### Fixed
