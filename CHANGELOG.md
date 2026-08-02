@@ -2,10 +2,15 @@
 
 ## Unreleased
 
+## [2.18.1] - 2026-08-03
+
 ### Fixed
 - Scoped project-filtered semantic index loading and lazy rebuilds to the
   requested project, preventing stale sibling indexes from timing out an
   isolated MCP search while preserving unfiltered workspace search.
+- Made automatic index discovery skip inaccessible sibling directories instead
+  of aborting the entire scan, including Linux temporary directories protected
+  by service-specific filesystem permissions.
 
 ## [2.18.0] - 2026-07-31
 

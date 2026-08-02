@@ -1,5 +1,7 @@
 """Project-scope regression tests for merged index consumers."""
 
+from pathlib import Path
+
 from src import index_store
 from src.tools import code_info
 
@@ -23,6 +25,32 @@ def _multi_project_index():
         },
         "dependencies": {},
     }
+
+
+def test_discovery_skips_inaccessible_sibling_index(monkeypatch, tmp_path):
+    """An unreadable sibling must not block otherwise valid index discovery."""
+    project_index = tmp_path / "project" / ".flyto-index"
+    sibling_index = tmp_path / "sibling" / ".flyto-index"
+    blocked_index = tmp_path / "blocked" / ".flyto-index"
+    project_index.mkdir(parents=True)
+    sibling_index.mkdir(parents=True)
+    blocked_index.parent.mkdir()
+
+    original_exists = Path.exists
+
+    def guarded_exists(path):
+        if path == blocked_index:
+            raise PermissionError("inaccessible system directory")
+        return original_exists(path)
+
+    monkeypatch.setattr(index_store, "INDEX_DIR", project_index)
+    monkeypatch.setattr(index_store, "_EXPLICIT_INDEX_DIR", None)
+    monkeypatch.setattr(Path, "exists", guarded_exists)
+
+    discovered = index_store._discover_index_dirs()
+
+    assert project_index.resolve() in discovered
+    assert sibling_index.resolve() in discovered
 
 
 def test_record_project_roots_preserves_explicit_and_single_index_roots():

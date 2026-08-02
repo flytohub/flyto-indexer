@@ -45,35 +45,37 @@ def _discover_index_dirs() -> list:
     dirs = []
 
     def _add(p: Path):
-        rp = p.resolve()
-        if rp not in seen and rp.exists():
+        try:
+            rp = p.resolve()
+            exists = rp.exists()
+        except OSError:
+            return
+        if rp not in seen and exists:
             seen.add(rp)
             dirs.append(rp)
 
+    def _scan_children(directory: Path):
+        try:
+            for child in directory.iterdir():
+                try:
+                    if child.is_dir() and not child.name.startswith("."):
+                        _add(child / ".flyto-index")
+                except OSError:
+                    continue
+        except OSError:
+            return
+
     # 1. CWD/.flyto-index
-    if INDEX_DIR.exists():
-        _add(INDEX_DIR)
+    _add(INDEX_DIR)
 
     # 2. Scan child directories for .flyto-index/
     base = INDEX_DIR.parent  # CWD
-    if base.exists():
-        for child in base.iterdir():
-            if child.is_dir() and not child.name.startswith("."):
-                sub_index = child / ".flyto-index"
-                if sub_index.exists():
-                    _add(sub_index)
+    _scan_children(base)
 
     # 3. Also scan parent dir (sub-project → monorepo root pattern)
     parent = base.parent
-    parent_index = parent / ".flyto-index"
-    if parent_index.exists():
-        _add(parent_index)
-    if parent.exists():
-        for child in parent.iterdir():
-            if child.is_dir() and not child.name.startswith("."):
-                sub_index = child / ".flyto-index"
-                if sub_index.exists():
-                    _add(sub_index)
+    _add(parent / ".flyto-index")
+    _scan_children(parent)
 
     return dirs
 

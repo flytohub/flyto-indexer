@@ -2,7 +2,7 @@
 
 # Python API Reference
 
-Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,226 declarations across 163 files**.
+Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,227 declarations across 163 files**.
 
 ## `analyze.py`
 
@@ -1200,32 +1200,33 @@ Every declared class, function, nested function, and method in the package, supp
 |---|---|---|---|
 | function | `def _discover_index_dirs() -> list` | Discover all .flyto-index/ directories. | [`src/index_store.py:31`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L31) |
 | function | `def _discover_index_dirs._add(p: Path)` | The declaration and linked implementation are authoritative. | [`src/index_store.py:47`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L47) |
-| function | `def _normalize_project_name(project: str \| None) -> str` | The declaration and linked implementation are authoritative. | [`src/index_store.py:81`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L81) |
-| function | `def _peek_index_project(index_dir: Path) -> str` | Read only the small index header needed to identify a project. | [`src/index_store.py:87`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L87) |
-| function | `def _active_index_dirs(project: str \| None=None) -> list&#91;Path&#93;` | Return all indexes, or only the index matching the active project. | [`src/index_store.py:111`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L111) |
-| function | `def project_index_scope(project: str \| None)` | Limit index loading to one project for the duration of a tool call. | [`src/index_store.py:135`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L135) |
-| function | `def _current_project_scope() -> str \| None` | Return the current thread's project scope, if one is active. | [`src/index_store.py:146`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L146) |
-| function | `def _maybe_auto_reindex(project: str \| None=None)` | Check for file changes and trigger incremental reindex if needed. | [`src/index_store.py:209`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L209) |
-| function | `def _load_single_index(index_dir: Path) -> dict` | Load index.json(.gz) from a single directory. | [`src/index_store.py:310`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L310) |
-| function | `def _check_generation() -> bool` | Return True if any discovered index dir has a newer .generation file. | [`src/index_store.py:322`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L322) |
-| function | `def _write_generation(index_dir: Path)` | Write current timestamp to index_dir/.generation to signal cache staleness. | [`src/index_store.py:337`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L337) |
-| function | `def _merge_index_into(merged: dict, idx: dict)` | Merge a single index dict into the base merged dict in-place. | [`src/index_store.py:346`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L346) |
-| function | `def _record_project_roots(index: dict, roots: dict&#91;str, str&#93;) -> None` | Preserve every project root while combining independently-built indexes. | [`src/index_store.py:381`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L381) |
-| function | `def _index_dirs_fingerprint(dirs: list&#91;Path&#93;) -> tuple` | Return a stable freshness fingerprint without loading index bodies. | [`src/index_store.py:392`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L392) |
-| function | `def _load_merged_indexes(dirs: list&#91;Path&#93;) -> dict` | Load and combine a preselected set of project indexes. | [`src/index_store.py:407`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L407) |
-| function | `def load_index() -> dict` | Load and merge all discovered indexes, with caching. | [`src/index_store.py:439`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L439) |
-| function | `def load_project_map() -> dict` | Load and merge project maps from all discovered index dirs. | [`src/index_store.py:493`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L493) |
-| function | `def load_content_file() -> dict` | Lazily load content.jsonl from all discovered index dirs. | [`src/index_store.py:517`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L517) |
-| function | `def get_symbol_content_text(symbol_id: str, symbol_data: dict) -> str` | Return the content text for a symbol, falling back to content.jsonl. | [`src/index_store.py:549`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L549) |
-| function | `def _load_bm25()` | Load or return the cached BM25 index. | [`src/index_store.py:562`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L562) |
-| function | `def _rebuild_semantic_index(index_dir: Path)` | Rebuild the semantic index from current index data. | [`src/index_store.py:589`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L589) |
-| function | `def _load_semantic()` | Load or return the cached semantic (TF-IDF) index. | [`src/index_store.py:629`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L629) |
-| function | `def _get_test_mapper(project: str \| None=None)` | Return a cached mapper, scoped to one project when available. | [`src/index_store.py:681`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L681) |
-| function | `def _get_session_store()` | Return the cached SessionStore instance. | [`src/index_store.py:708`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L708) |
-| function | `def _get_lsp_manager()` | Return the cached LSPManager instance, or None if LSP is disabled. | [`src/index_store.py:720`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L720) |
-| function | `def _update_cache_generation()` | Record the max .generation mtime across all discovered index dirs. | [`src/index_store.py:739`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L739) |
-| function | `def invalidate_caches()` | Reset all caches to their initial states, forcing a fresh reload. | [`src/index_store.py:755`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L755) |
-| function | `def _invalidate_caches_unlocked()` | Internal cache reset — caller must hold _reindex_lock or _load_lock. | [`src/index_store.py:765`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L765) |
+| function | `def _discover_index_dirs._scan_children(directory: Path)` | The declaration and linked implementation are authoritative. | [`src/index_store.py:57`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L57) |
+| function | `def _normalize_project_name(project: str \| None) -> str` | The declaration and linked implementation are authoritative. | [`src/index_store.py:83`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L83) |
+| function | `def _peek_index_project(index_dir: Path) -> str` | Read only the small index header needed to identify a project. | [`src/index_store.py:89`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L89) |
+| function | `def _active_index_dirs(project: str \| None=None) -> list&#91;Path&#93;` | Return all indexes, or only the index matching the active project. | [`src/index_store.py:113`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L113) |
+| function | `def project_index_scope(project: str \| None)` | Limit index loading to one project for the duration of a tool call. | [`src/index_store.py:137`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L137) |
+| function | `def _current_project_scope() -> str \| None` | Return the current thread's project scope, if one is active. | [`src/index_store.py:148`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L148) |
+| function | `def _maybe_auto_reindex(project: str \| None=None)` | Check for file changes and trigger incremental reindex if needed. | [`src/index_store.py:211`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L211) |
+| function | `def _load_single_index(index_dir: Path) -> dict` | Load index.json(.gz) from a single directory. | [`src/index_store.py:312`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L312) |
+| function | `def _check_generation() -> bool` | Return True if any discovered index dir has a newer .generation file. | [`src/index_store.py:324`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L324) |
+| function | `def _write_generation(index_dir: Path)` | Write current timestamp to index_dir/.generation to signal cache staleness. | [`src/index_store.py:339`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L339) |
+| function | `def _merge_index_into(merged: dict, idx: dict)` | Merge a single index dict into the base merged dict in-place. | [`src/index_store.py:348`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L348) |
+| function | `def _record_project_roots(index: dict, roots: dict&#91;str, str&#93;) -> None` | Preserve every project root while combining independently-built indexes. | [`src/index_store.py:383`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L383) |
+| function | `def _index_dirs_fingerprint(dirs: list&#91;Path&#93;) -> tuple` | Return a stable freshness fingerprint without loading index bodies. | [`src/index_store.py:394`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L394) |
+| function | `def _load_merged_indexes(dirs: list&#91;Path&#93;) -> dict` | Load and combine a preselected set of project indexes. | [`src/index_store.py:409`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L409) |
+| function | `def load_index() -> dict` | Load and merge all discovered indexes, with caching. | [`src/index_store.py:441`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L441) |
+| function | `def load_project_map() -> dict` | Load and merge project maps from all discovered index dirs. | [`src/index_store.py:495`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L495) |
+| function | `def load_content_file() -> dict` | Lazily load content.jsonl from all discovered index dirs. | [`src/index_store.py:519`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L519) |
+| function | `def get_symbol_content_text(symbol_id: str, symbol_data: dict) -> str` | Return the content text for a symbol, falling back to content.jsonl. | [`src/index_store.py:551`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L551) |
+| function | `def _load_bm25()` | Load or return the cached BM25 index. | [`src/index_store.py:564`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L564) |
+| function | `def _rebuild_semantic_index(index_dir: Path)` | Rebuild the semantic index from current index data. | [`src/index_store.py:591`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L591) |
+| function | `def _load_semantic()` | Load or return the cached semantic (TF-IDF) index. | [`src/index_store.py:631`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L631) |
+| function | `def _get_test_mapper(project: str \| None=None)` | Return a cached mapper, scoped to one project when available. | [`src/index_store.py:683`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L683) |
+| function | `def _get_session_store()` | Return the cached SessionStore instance. | [`src/index_store.py:710`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L710) |
+| function | `def _get_lsp_manager()` | Return the cached LSPManager instance, or None if LSP is disabled. | [`src/index_store.py:722`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L722) |
+| function | `def _update_cache_generation()` | Record the max .generation mtime across all discovered index dirs. | [`src/index_store.py:741`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L741) |
+| function | `def invalidate_caches()` | Reset all caches to their initial states, forcing a fresh reload. | [`src/index_store.py:757`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L757) |
+| function | `def _invalidate_caches_unlocked()` | Internal cache reset — caller must hold _reindex_lock or _load_lock. | [`src/index_store.py:767`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L767) |
 
 ## `src/indexer/incremental.py`
 

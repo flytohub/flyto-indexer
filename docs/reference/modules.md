@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **179 Python modules**, **72,164 lines**, and **2,226 class/function/method declarations**.
+Generated inventory: **179 Python modules**, **72,166 lines**, and **2,227 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -83,7 +83,7 @@ Generated inventory: **179 Python modules**, **72,164 lines**, and **2,226 class
 | [`src/framework_detector.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/framework_detector.py#L1) | 788 | 18 | `dataclasses, json, logging, os, pathlib, re, tomli, tomllib, typing` | Framework-Aware Analysis — detect project frameworks and apply framework-specific rules. |
 | [`src/git_secret_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/git_secret_scanner.py#L1) | 197 | 1 | `logging, os, pathlib, re, secret_scanner, subprocess` | Git History Secret Scanner — detect leaked secrets in git commit history. |
 | [`src/iac_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/iac_scanner.py#L1) | 923 | 20 | `dataclasses, finding_identity, logging, os, pathlib, re, typing` | IaC Scanner — security checks for Terraform, Kubernetes, Docker Compose configs. |
-| [`src/index_store.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L1) | 796 | 28 | `bm25, contextlib, gzip, json, logging, lsp, os, pathlib, re, safe_io, search_documents, semantic` | Index store — centralized index loading, caching, and content management. |
+| [`src/index_store.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L1) | 798 | 29 | `bm25, contextlib, gzip, json, logging, lsp, os, pathlib, re, safe_io, search_documents, semantic` | Index store — centralized index loading, caching, and content management. |
 | [`src/indexer/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/indexer/__init__.py#L1) | 17 | 0 | `incremental` | Indexer module exports. |
 | [`src/indexer/incremental.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/indexer/incremental.py#L1) | 330 | 25 | `dataclasses, hashlib, json, models, os, pathlib, safe_io, typing` | Incremental indexing - only update what changed. |
 | [`src/license_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/license_scanner.py#L1) | 372 | 11 | `dataclasses, dependency_scanner, json, logging, os, pathlib, re, rule_loader, tomli, tomllib, typing` | License Scanner — detect project license and dependency licenses. |
