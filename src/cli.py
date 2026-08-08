@@ -1273,7 +1273,9 @@ HOOK_MARKER_BEGIN = "# --- flyto-indexer begin ---"
 HOOK_MARKER_END = "# --- flyto-indexer end ---"
 HOOK_CONTENT = """\
 # --- flyto-indexer begin ---
-flyto-index scan . 2>/dev/null &
+# stdout is discarded too: scan prints a JSON report, and a post-commit hook
+# that writes to stdout floods the terminal after every commit.
+flyto-index scan . >/dev/null 2>&1 &
 # --- flyto-indexer end ---
 """
 
