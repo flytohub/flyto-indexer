@@ -260,6 +260,10 @@ class IndexEngine(
                 "node_modules", "__pycache__", ".git", "dist", "build",
                 ".venv", "venv", ".pytest_cache", ".flyto-index", ".flyto",
                 ".vitepress/cache", ".next", ".open-next", ".nuxt", ".output",
+                # Agent scratch checkouts are full copies of the project; indexing
+                # them duplicates every symbol and makes impact analysis point at
+                # stale ghost files.
+                ".claude/worktrees", ".codex/worktrees",
             ]
         )
 

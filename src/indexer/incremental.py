@@ -293,6 +293,7 @@ def scan_directory_hashes(
         "node_modules", "__pycache__", ".git", "dist", "build",
         ".venv", "venv", ".pytest_cache", ".mypy_cache",
         ".vitepress/cache", ".next", ".open-next", ".nuxt", ".output",
+        ".claude/worktrees", ".codex/worktrees",
     ]
 
     ignore_set = set(ignore_patterns)
