@@ -29,6 +29,7 @@ from src.verify import (
     _extract_api_calls_from_text,
     _find_status_regressions,
     _git_changed_paths,
+    _is_generated_change_path,
     _looks_like_backend,
     _looks_like_frontend,
     _normalize_api_path,
@@ -1773,6 +1774,103 @@ def test_change_hygiene_allows_policy_owned_generated_dist(tmp_path):
     assert checks["change_hygiene"]["status"] == "pass"
     assert checks["change_hygiene"]["metrics"]["generated"] == []
     assert checks["change_hygiene"]["metrics"]["allowed_generated"] == ["dist/bundle.json"]
+
+
+def test_generated_change_path_exempts_only_the_exact_coding_config():
+    assert _is_generated_change_path(".flyto/coding.yaml") is False
+
+    for path in (
+        ".flyto/coding.yml",
+        ".flyto/coding.yaml.bak",
+        ".flyto/coding/coding.yaml",
+        ".flyto/nav/map.json",
+        ".flyto/runs/latest.json",
+        ".flyto-index/index.json",
+    ):
+        assert _is_generated_change_path(path) is True, path
+
+
+def test_change_hygiene_accepts_source_owned_coding_config(tmp_path):
+    _write_project(tmp_path)
+    coding_config = tmp_path / ".flyto" / "coding.yaml"
+    coding_config.parent.mkdir(parents=True, exist_ok=True)
+    coding_config.write_text("version: flyto.coding-config.v1\nchecks: []\n", encoding="utf-8")
+    subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], capture_output=True, check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "-c", "user.email=dev@flyto2.com", "-c", "user.name=Test", "commit", "-m", "init"],
+        capture_output=True,
+        check=True,
+    )
+    coding_config.write_text(
+        "version: flyto.coding-config.v1\nchecks: []\ncapabilities: []\n",
+        encoding="utf-8",
+    )
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert ".flyto/coding.yaml" in _git_changed_paths(tmp_path)
+    assert checks["change_hygiene"]["status"] == "pass"
+    assert checks["change_hygiene"]["metrics"]["generated"] == []
+    assert checks["change_hygiene"]["metrics"]["allowed_generated"] == []
+    assert checks["change_hygiene"]["metrics"]["allow_generated_patterns"] == []
+
+
+def test_change_hygiene_still_fails_other_flyto_generated_paths(tmp_path):
+    _write_project(tmp_path)
+    coding_config = tmp_path / ".flyto" / "coding.yaml"
+    coding_config.parent.mkdir(parents=True, exist_ok=True)
+    coding_config.write_text("version: flyto.coding-config.v1\nchecks: []\n", encoding="utf-8")
+    nav = tmp_path / ".flyto" / "nav" / "map.json"
+    nav.parent.mkdir(parents=True, exist_ok=True)
+    nav.write_text("{}\n", encoding="utf-8")
+    subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], capture_output=True, check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "-c", "user.email=dev@flyto2.com", "-c", "user.name=Test", "commit", "-m", "init"],
+        capture_output=True,
+        check=True,
+    )
+    coding_config.write_text(
+        "version: flyto.coding-config.v1\nchecks: []\ncapabilities: []\n",
+        encoding="utf-8",
+    )
+    nav.write_text('{"changed": true}\n', encoding="utf-8")
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["change_hygiene"]["status"] == "fail"
+    assert checks["change_hygiene"]["metrics"]["generated"] == [".flyto/nav/map.json"]
+
+
+def test_change_hygiene_allows_policy_owned_generated_flyto_state(tmp_path):
+    _write_project(tmp_path)
+    nav = tmp_path / ".flyto" / "nav" / "map.json"
+    nav.parent.mkdir(parents=True, exist_ok=True)
+    nav.write_text("{}\n", encoding="utf-8")
+    (tmp_path / ".flyto-rules.yaml").write_text(
+        "verify:\n"
+        "  allow_generated_changes:\n"
+        "    - .flyto/**\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], capture_output=True, check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "-c", "user.email=dev@flyto2.com", "-c", "user.name=Test", "commit", "-m", "init"],
+        capture_output=True,
+        check=True,
+    )
+    nav.write_text('{"changed": true}\n', encoding="utf-8")
+
+    result = run_verification(tmp_path, full_scan=True)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["change_hygiene"]["status"] == "pass"
+    assert checks["change_hygiene"]["metrics"]["generated"] == []
+    assert checks["change_hygiene"]["metrics"]["allowed_generated"] == [".flyto/nav/map.json"]
 
 
 def test_render_report_formats(tmp_path):

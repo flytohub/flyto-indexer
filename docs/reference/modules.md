@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **179 Python modules**, **72,166 lines**, and **2,227 class/function/method declarations**.
+Generated inventory: **179 Python modules**, **72,184 lines**, and **2,228 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -182,6 +182,6 @@ Generated inventory: **179 Python modules**, **72,166 lines**, and **2,227 class
 | [`src/tools/type_contracts.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/type_contracts.py#L1) | 1099 | 26 | `ast, index_store, re, typing` | Cross-repo Type Contract checking for flyto-indexer MCP server. |
 | [`src/tools/validation.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L1) | 288 | 5 | `index_store, os, pathlib, re, shlex, subprocess, sys` | Post-change validation — run ruff (lint) and pytest on a project. |
 | [`src/tree_sitter_adapter.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tree_sitter_adapter.py#L1) | 216 | 10 | `__future__, hashlib, importlib, json, os, pathlib, typing` | Optional Tree-sitter structural validation with deterministic fallback. |
-| [`src/verify.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/verify.py#L1) | 3209 | 122 | `__future__, analyzer, ast, doc_scanner, engine, finding_identity, fnmatch, hashlib, html, index_store, json, mcp_server` | Self-contained verification gate for flyto-indexer. |
+| [`src/verify.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/verify.py#L1) | 3227 | 123 | `__future__, analyzer, ast, doc_scanner, engine, finding_identity, fnmatch, hashlib, html, index_store, json, mcp_server` | Self-contained verification gate for flyto-indexer. |
 | [`src/version.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/version.py#L1) | 25 | 1 | `importlib, pathlib, tomllib` | Resolve the Flyto2 Indexer package version in source and installed modes. |
 | [`src/watcher.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/watcher.py#L1) | 185 | 7 | `dataclasses, index_store, os, pathlib, typing` | File Change Watcher — polling-based change detection. |

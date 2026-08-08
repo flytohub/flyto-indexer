@@ -32,6 +32,10 @@ htmlcov/
 # Local index data
 .flyto-index/
 
+# Flyto runtime state. Only the source-owned verification policy is committed.
+.flyto/*
+!.flyto/coding.yaml
+
 # Environment
 .env
 

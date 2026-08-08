@@ -61,6 +61,11 @@ _GENERATED_CHANGE_PATTERNS = (
     "node_modules/*",
     "__pycache__/*",
 )
+# Exact repository-relative paths that look generated but are source-owned
+# policy. `.flyto/coding.yaml` is the committed `flyto.coding-config.v1`
+# verification contract read by `flyto-ai code-mcp`; every other `.flyto/`
+# path (indexes, navs, tags, runs, logs) stays generated runtime state.
+_SOURCE_OWNED_CHANGE_PATHS = frozenset({".flyto/coding.yaml"})
 _HIGH_RISK_CHANGE_PATTERNS = (
     ".env",
     ".env.*",
@@ -1153,7 +1158,7 @@ def _check_change_hygiene(root: Path, add_check) -> None:
         if str(pattern).strip()
     )
     generated_candidates = [
-        path for path in changed if _matches_any(path, _GENERATED_CHANGE_PATTERNS)
+        path for path in changed if _is_generated_change_path(path)
     ]
     generated = [
         path for path in generated_candidates if not _matches_any(path, allow_generated_patterns)
@@ -2591,6 +2596,19 @@ def _decode_process_output(output: str | bytes | None) -> str:
     if isinstance(output, bytes):
         return output.decode("utf-8", errors="replace")
     return output
+
+
+def _is_generated_change_path(path: str) -> bool:
+    """Classify a changed working-tree path as generated runtime state.
+
+    Exact source-owned policy paths are excluded so a committed verification
+    contract does not need a repository waiver; nested copies and every other
+    path under the same directory keep the generated classification.
+    """
+    normalized = path.replace("\\", "/")
+    if normalized in _SOURCE_OWNED_CHANGE_PATHS:
+        return False
+    return _matches_any(normalized, _GENERATED_CHANGE_PATTERNS)
 
 
 def _is_high_risk_change_path(path: str) -> bool:
