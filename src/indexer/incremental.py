@@ -168,6 +168,34 @@ class IncrementalIndexer:
             pipeline_fingerprint=pipeline_fingerprint,
         )
 
+    def _orphaned_index_paths(self, current_files: dict[str, str]) -> set[str]:
+        """Vanished files index.json still describes but the manifest has lost.
+
+        Eviction candidates come from the manifest alone, so a path the manifest
+        dropped - a truncated write, an index carried across a tool upgrade -
+        can never reach ChangeSet.deleted. Its symbols, BM25 docs and content
+        rows then survive every incremental scan and only --full-scan clears
+        them, which is how a stale index keeps describing a deleted tree while
+        `verify --strict` measures the phantom.
+
+        The manifest has no opinion on these paths, so the filesystem decides:
+        only files that are genuinely gone are evicted.
+        """
+        try:
+            data = json.loads((self.index_dir / "index.json").read_text())
+        except (json.JSONDecodeError, OSError):
+            return set()
+
+        files = data.get("files")
+        if not isinstance(files, dict):
+            return set()
+
+        return {
+            path for path in files
+            if path not in current_files
+            and not (self.project_root / path).exists()
+        }
+
     def detect_changes(self, current_files: dict[str, str]) -> ChangeSet:
         """
         Detect changes
@@ -182,6 +210,7 @@ class IncrementalIndexer:
         compatible = self.manifest_store.is_compatible()
 
         old_paths = self.manifest_store.get_all_paths()
+        old_paths |= self._orphaned_index_paths(current_files)
         new_paths = set(current_files.keys())
 
         added = []

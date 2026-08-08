@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -220,6 +221,73 @@ class TestContentAddressedManifest:
         assert len(manifest["pipeline_fingerprint"]) == 64
         assert len(manifest["files"]["app.py"]["hash"]) == 64
         assert second["changes"] == "+0 ~0 -0"
+
+
+class TestDriftedManifestEviction:
+    """Deleting a file must evict it even when the manifest lost the path."""
+
+    def test_orphan_index_path_is_deleted_but_live_one_is_kept(self, tmp_path):
+        from src.indexer.incremental import IncrementalIndexer, compute_file_hash
+
+        index_dir = tmp_path / ".flyto-index"
+        index_dir.mkdir()
+        (tmp_path / "live.py").write_text("def live():\n    pass\n")
+        (index_dir / "index.json").write_text(json.dumps({
+            "files": {"gone/removed.py": {}, "live.py": {}},
+        }))
+        (index_dir / "manifest.json").write_text(json.dumps({
+            "project": "demo",
+            "version": 2,
+            "hash_algorithm": "sha256",
+            "pipeline_fingerprint": "a" * 64,
+            "files": {},
+        }))
+
+        indexer = IncrementalIndexer(
+            tmp_path,
+            index_dir,
+            pipeline_fingerprint="a" * 64,
+        )
+        # live.py is absent from current_files (an ignore rule, an unreadable
+        # file) yet still on disk, so it must never be evicted.
+        changes = indexer.detect_changes({})
+
+        assert changes.deleted == ["gone/removed.py"]
+
+    def test_vanished_directory_is_evicted_from_every_store(self, tmp_path):
+        from src.engine import IndexEngine
+
+        root = tmp_path / "project"
+        (root / "src" / "components").mkdir(parents=True)
+        (root / "keep").mkdir()
+        (root / "keep" / "alive.py").write_text("def alive():\n    return 1\n")
+        (root / "src" / "lonely.py").write_text("def lonely():\n    return 2\n")
+        (root / "src" / "components" / "SettingsView.py").write_text(
+            "class SettingsView:\n    def render(self):\n        return 3\n"
+        )
+        idx_dir = root / ".flyto-index"
+
+        IndexEngine("project", root, index_dir=idx_dir).scan(incremental=False)
+
+        # The manifest is the only source of eviction candidates; losing it
+        # used to make every indexed path unreachable by ChangeSet.deleted.
+        (idx_dir / "manifest.json").write_text("{ truncated")
+        shutil.rmtree(root / "src")
+
+        IndexEngine("project", root, index_dir=idx_dir).scan(incremental=True)
+
+        index = json.loads((idx_dir / "index.json").read_text())
+        bm25 = json.loads((idx_dir / "bm25.json").read_text())
+        content = [
+            json.loads(line)
+            for line in (idx_dir / "content.jsonl").read_text().splitlines()
+            if line.strip()
+        ]
+
+        assert set(index["files"]) == {"keep/alive.py"}
+        assert not [sid for sid in index["symbols"] if ":src/" in sid]
+        assert not [did for did in bm25["doc_ids"] if ":src/" in did]
+        assert not [record for record in content if ":src/" in record["id"]]
 
 
 # =============================================================================
