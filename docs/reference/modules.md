@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **179 Python modules**, **72,184 lines**, and **2,228 class/function/method declarations**.
+Generated inventory: **179 Python modules**, **72,251 lines**, and **2,230 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -177,7 +177,7 @@ Generated inventory: **179 Python modules**, **72,184 lines**, and **2,228 class
 | [`src/tools/smart.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L1) | 1420 | 63 | `analyzer, change_patterns, code_info, context_budget, conventions, coverage_intel, data_flow, dependency_scanner, diff_impact, git_intel, grill, index_store` | Smart tools — 5 consolidated entry points with association-based triggering. |
 | [`src/tools/staleness.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/staleness.py#L1) | 215 | 4 | `datetime, git_intel, index_store, logging, os, subprocess, tools, typing` | Staleness detection — identify stale but heavily-referenced symbols via git. |
 | [`src/tools/task_analysis.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_analysis.py#L1) | 1999 | 33 | `code_info, datetime, governance, hashlib, index_store, pathlib, quality, references, search, time, tools, typing` | Task Analysis — multi-dimensional task contract generation. |
-| [`src/tools/task_context.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_context.py#L1) | 1001 | 32 | `__future__, fnmatch, governance, grill_conformance, grill_evidence, hashlib, json, pathlib, re, typing` | Lean task context: scoped instructions and requirement traceability. |
+| [`src/tools/task_context.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_context.py#L1) | 1068 | 34 | `__future__, fnmatch, governance, grill_conformance, grill_evidence, hashlib, json, pathlib, re, typing` | Lean task context: scoped instructions and requirement traceability. |
 | [`src/tools/trace.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/trace.py#L1) | 233 | 7 | `collections, index_store, logging, typing` | Call path tracing — find execution paths through the call graph. |
 | [`src/tools/type_contracts.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/type_contracts.py#L1) | 1099 | 26 | `ast, index_store, re, typing` | Cross-repo Type Contract checking for flyto-indexer MCP server. |
 | [`src/tools/validation.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L1) | 288 | 5 | `index_store, os, pathlib, re, shlex, subprocess, sys` | Post-change validation — run ruff (lint) and pytest on a project. |

@@ -76,6 +76,13 @@ _CODE_SPAN_RE = re.compile(r"`([^`\n]+)`")
 _PROOF_RE = re.compile(
     r"^(?:python(?:\d+(?:\.\d+)*)?\s+-m\s+)?(?:pytest|ruff)\b"
 )
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
+_SYMBOL_KIND_RE = re.compile(r"[a-z][a-z0-9_]{0,31}")
+MAX_SYMBOL_PROJECT_LENGTH = 128
+MAX_SYMBOL_NAME_LENGTH = 256
+MAX_SYMBOL_PATH_LENGTH = 512
+MAX_SYMBOL_PATH_SEGMENTS = 24
+MAX_SYMBOL_PATH_SEGMENT_LENGTH = 255
 
 
 def _canonical_json(value: Any) -> str:
@@ -93,11 +100,71 @@ def _safe_relative(root: Path, candidate: Path) -> str | None:
         return None
 
 
+def _symbol_segment(value: str, limit: int) -> bool:
+    """Accept a bounded, non-blank scanner segment that holds no separator."""
+    return bool(
+        value
+        and value.strip()
+        and len(value) <= limit
+        and "/" not in value
+        and "\\" not in value
+    )
+
+
+def _symbol_id_path(value: str, kind: str, name: str) -> str | None:
+    """Return ``value`` when it is a bounded, project-local relative path.
+
+    Scanners build ids from the real repository-relative path, so ordinary
+    spaces and Unicode are preserved verbatim. Only unsafe structure is
+    refused: backslashes, absolute paths, ``~`` prefixes, and empty, ``.``, or
+    ``..`` components. Nothing is normalized.
+    """
+    if not value or len(value) > MAX_SYMBOL_PATH_LENGTH:
+        return None
+    if value.startswith("~") or "\\" in value or Path(value).is_absolute():
+        return None
+    segments = value.split("/")
+    if len(segments) > MAX_SYMBOL_PATH_SEGMENTS:
+        return None
+    for segment in segments:
+        if (
+            not segment
+            or segment in {".", ".."}
+            or len(segment) > MAX_SYMBOL_PATH_SEGMENT_LENGTH
+        ):
+            return None
+    # Repository-root files such as Makefile carry no extension. Only the
+    # canonical file symbol, whose name is the file stem, may claim one.
+    if (
+        len(segments) == 1
+        and not Path(value).suffix
+        and (kind != "file" or name != Path(value).stem)
+    ):
+        return None
+    return value
+
+
 def _symbol_path(target: str) -> str | None:
+    """Extract the repository-relative path from a ``project:path:kind:name`` id.
+
+    Repository-root files carry no ``/`` in the path segment, so every segment
+    is checked against the canonical symbol grammar instead of requiring a
+    separator. Segments holding an ASCII control character are always rejected.
+    """
     parts = target.split(":")
-    if len(parts) >= 4 and "/" in parts[1]:
-        return parts[1]
-    return None
+    if len(parts) < 4:
+        return None
+    project, raw_path, kind = parts[0], parts[1], parts[2]
+    name = ":".join(parts[3:])
+    if any(_CONTROL_CHAR_RE.search(part) for part in (project, raw_path, kind, name)):
+        return None
+    if not _symbol_segment(project, MAX_SYMBOL_PROJECT_LENGTH):
+        return None
+    if not _symbol_segment(name, MAX_SYMBOL_NAME_LENGTH):
+        return None
+    if not _SYMBOL_KIND_RE.fullmatch(kind):
+        return None
+    return _symbol_id_path(raw_path, kind, name)
 
 
 def _target_path(root: Path, target: str) -> tuple[Path, str]:

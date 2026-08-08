@@ -13,6 +13,15 @@
 - Automatic index discovery skips inaccessible sibling directories while
   retaining every readable project index, so Linux service-private temporary
   directories cannot abort MCP startup or release validation.
+- The task intent ledger derives allowed paths from repository-root file symbol
+  IDs, including extensionless ones, as well as nested ones, so a planned
+  root-level target validates instead of failing as
+  `INTENT_LEDGER_NONCONFORMANT / unplanned_diff`. Extraction preserves the
+  spaces and Unicode that scanners put in real repository paths and stays
+  project-local and deterministic by rejecting, never normalizing, absolute
+  paths, `..` traversal, tilde prefixes, backslash separators, ASCII control
+  characters, blank project or name segments, oversized paths, and
+  non-conforming symbol IDs.
 - Existing task plan, gate, validate, and project-profile surfaces share one
   bounded, gitignored SQLite continuity record. It carries resumable task facts
   across AI clients without adding an MCP tool or committed handoff file.

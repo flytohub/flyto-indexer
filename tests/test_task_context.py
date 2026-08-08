@@ -2,7 +2,10 @@
 
 from pathlib import Path
 
+import pytest
+
 from src.tools.task_context import (
+    _symbol_path,
     attach_task_context,
     build_intent_ledger,
     resolve_instruction_context,
@@ -30,6 +33,208 @@ def _plan() -> list[dict]:
             "purpose": "run_validation",
         },
     ]
+
+
+CONTROL_CHARACTERS = ("\x00", "\x01", "\t", "\n", "\r", "\x1f", "\x7f")
+
+
+@pytest.mark.parametrize(
+    "target,expected",
+    [
+        ("repo:smoke.py:file:smoke", "smoke.py"),
+        ("repo:README.md:file:README", "README.md"),
+        ("repo:Makefile:file:Makefile", "Makefile"),
+        ("repo:Dockerfile:file:Dockerfile", "Dockerfile"),
+        ("flyto-ai:src/app.py:file:app", "src/app.py"),
+        ("repo:src/tools/task_context.py:file:task_context", "src/tools/task_context.py"),
+        ("repo:src/app.py:function:main", "src/app.py"),
+        ("repo:src/pkg/mod.go:method:Server.Handle", "src/pkg/mod.go"),
+        ("repo:src/rs/lib.rs:function:module::helper", "src/rs/lib.rs"),
+        # Scanners build ids from the real relative path, so ordinary spaces
+        # and Unicode reach _symbol_path() unnormalized.
+        ("repo:my dir/smoke.py:file:smoke", "my dir/smoke.py"),
+        ("repo:my file.py:file:my file", "my file.py"),
+        ("repo:資料/程式.py:file:程式", "資料/程式.py"),
+        ("repo:src/données.ts:function:charger", "src/données.ts"),
+        ("my project:src/app.py:file:app", "src/app.py"),
+        ("repo:Makefile légal:file:Makefile légal", "Makefile légal"),
+    ],
+)
+def test_symbol_path_accepts_root_and_nested_symbol_ids(target, expected):
+    assert _symbol_path(target) == expected
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "",
+        "smoke.py",
+        "repo:smoke.py",
+        "repo:smoke.py:file",
+        ":smoke.py:file:smoke",
+        "repo::file:smoke",
+        "repo:smoke.py:file:",
+        "repo:smoke.py::smoke",
+        "repo:smoke.py:File:smoke",
+        "repo:smoke.py:9file:smoke",
+        "repo:Makefile:function:build",
+        "repo:draft:file:notes",
+        "repo:/etc/passwd:file:passwd",
+        "repo:~/secrets.env:file:secrets",
+        "repo:~backup/secrets.env:file:secrets",
+        "repo:../../etc/passwd:file:passwd",
+        "repo:src/../../etc/passwd:file:passwd",
+        "repo:./smoke.py:file:smoke",
+        "repo:.:file:smoke",
+        "repo:src\\app.py:file:app",
+        "repo:src//app.py:file:app",
+        "repo:src/app.py/:file:app",
+        "repo:my dir\\smoke.py:file:smoke",
+        "   :smoke.py:file:smoke",
+        "repo:smoke.py:file:   ",
+        "note: fix the bug: in src: today",
+        "note:rewrite the parser:file:notes",
+        "C:\\repo\\smoke.py:file:smoke",
+        "repo:" + "a/" * 24 + "app.py:file:app",
+        "repo:" + "a" * 513 + ".py:file:app",
+        "repo:" + "a" * 256 + "/app.py:file:app",
+        "repo:src/app.py:file:" + "a" * 257,
+        "a" * 129 + ":src/app.py:file:app",
+    ],
+)
+def test_symbol_path_rejects_unsafe_or_malformed_ids(target):
+    assert _symbol_path(target) is None
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "re{control}po:smoke.py:file:smoke",
+        "repo:smo{control}ke.py:file:smoke",
+        "repo:src/smo{control}ke.py:file:smoke",
+        "repo:smoke.py:fi{control}le:smoke",
+        "repo:smoke.py:file:smo{control}ke",
+        "repo:Makefile{control}:file:Makefile{control}",
+    ],
+)
+@pytest.mark.parametrize("control", CONTROL_CHARACTERS)
+def test_symbol_path_rejects_control_characters(template, control):
+    assert _symbol_path(template.format(control=control)) is None
+
+
+def test_intent_ledger_allows_root_file_symbol_target(tmp_path):
+    _write(tmp_path, "smoke.py", "print('hi')\n")
+
+    ledger = build_intent_ledger(
+        str(tmp_path),
+        "Fix the root smoke script",
+        ["repo:smoke.py:file:smoke"],
+        _plan(),
+    )
+
+    assert ledger["allowed_paths"] == ["smoke.py"]
+    contract = {
+        "task_profile": {"project": str(tmp_path)},
+        "intent_ledger": ledger,
+    }
+
+    result = validate_intent_ledger(
+        contract,
+        project=str(tmp_path),
+        validation={"pytest": {"status": "pass"}},
+        change_set={"status": "captured", "changed_paths": ["smoke.py"]},
+    )
+
+    assert result["pass"] is True
+    assert result["violations"] == []
+
+
+def test_intent_ledger_allows_extensionless_root_file_symbol_target(tmp_path):
+    _write(tmp_path, "Makefile", "build:\n\techo hi\n")
+
+    ledger = build_intent_ledger(
+        str(tmp_path),
+        "Fix the root Makefile",
+        ["repo:Makefile:file:Makefile"],
+        _plan(),
+    )
+
+    assert ledger["allowed_paths"] == ["Makefile"]
+    contract = {
+        "task_profile": {"project": str(tmp_path)},
+        "intent_ledger": ledger,
+    }
+
+    result = validate_intent_ledger(
+        contract,
+        project=str(tmp_path),
+        validation={"pytest": {"status": "pass"}},
+        change_set={"status": "captured", "changed_paths": ["Makefile"]},
+    )
+
+    assert result["pass"] is True
+    assert result["violations"] == []
+
+
+def test_intent_ledger_allows_space_and_unicode_symbol_targets(tmp_path):
+    _write(tmp_path, "my dir/smoke.py", "print('hi')\n")
+    _write(tmp_path, "資料/程式.py", "print('hi')\n")
+
+    ledger = build_intent_ledger(
+        str(tmp_path),
+        "Fix the scanner-produced targets",
+        ["repo:my dir/smoke.py:file:smoke", "repo:資料/程式.py:file:程式"],
+        _plan(),
+    )
+
+    assert ledger["allowed_paths"] == ["my dir/smoke.py", "資料/程式.py"]
+    contract = {
+        "task_profile": {"project": str(tmp_path)},
+        "intent_ledger": ledger,
+    }
+
+    result = validate_intent_ledger(
+        contract,
+        project=str(tmp_path),
+        validation={"pytest": {"status": "pass"}},
+        change_set={
+            "status": "captured",
+            "changed_paths": ["my dir/smoke.py", "資料/程式.py"],
+        },
+    )
+
+    assert result["pass"] is True
+    assert result["violations"] == []
+
+
+def test_intent_ledger_keeps_root_symbol_scope_bounded(tmp_path):
+    _write(tmp_path, "smoke.py", "print('hi')\n")
+    ledger = build_intent_ledger(
+        str(tmp_path),
+        "Fix the root smoke script",
+        ["repo:smoke.py:file:smoke"],
+        _plan(),
+    )
+    contract = {
+        "task_profile": {"project": str(tmp_path)},
+        "intent_ledger": ledger,
+    }
+
+    result = validate_intent_ledger(
+        contract,
+        project=str(tmp_path),
+        validation={"pytest": {"status": "pass"}},
+        change_set={
+            "status": "captured",
+            "changed_paths": ["smoke.py", "ops/deploy.sh"],
+        },
+    )
+
+    assert result["pass"] is False
+    violation = next(
+        item for item in result["violations"] if item["type"] == "unplanned_diff"
+    )
+    assert violation["changed_paths"] == ["ops/deploy.sh"]
 
 
 def test_instruction_context_resolves_nested_precedence(tmp_path):

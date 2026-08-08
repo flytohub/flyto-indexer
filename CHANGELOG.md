@@ -5,6 +5,15 @@
 ### Fixed
 - Made the post-publication GitHub Release step repository-explicit so it works
   in the artifact-only job without requiring a repository checkout.
+- Made the task intent ledger accept repository-root file symbol IDs such as
+  `repo:smoke.py:file:smoke` and extensionless ones such as
+  `repo:Makefile:file:Makefile`, so `task(validate)` no longer rejects the
+  planned root-level edit as an unplanned diff. Scanner-produced paths and
+  names keep their ordinary spaces and Unicode verbatim, and nested symbol IDs
+  still resolve. Only unsafe structure is refused, without normalization:
+  absolute paths, `..` traversal, tilde prefixes, backslash separators, ASCII
+  control characters, blank project or name segments, non-conforming kinds,
+  oversized paths, and prose-shaped IDs.
 
 ## [2.18.1] - 2026-08-03
 
