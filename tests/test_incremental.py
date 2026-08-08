@@ -554,3 +554,90 @@ class TestExtractPathFromSid:
     def test_no_colon(self):
         from src.engine import IndexEngine
         assert IndexEngine._extract_path_from_sid("nocolon") == ""
+
+
+# =============================================================================
+# scan_directory_hashes ignore-pattern matching
+# =============================================================================
+
+class TestIgnorePatternsMatchComponents:
+    """Ignore patterns match whole path components, never substrings.
+
+    A raw `pattern in str(rel_path)` test dropped every path that merely
+    contained a pattern: "build" hid src/profile/builder.py, and the same
+    applied to any name spelling dist or venv inside a longer word. Those
+    files carried no symbols, so search, impact and dead-code analysis were
+    blind to them with nothing to signal the gap.
+    """
+
+    @staticmethod
+    def _tree(paths):
+        root = Path(tempfile.mkdtemp())
+        for rel in paths:
+            target = root / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("x = 1\n")
+        return root
+
+    def test_names_merely_containing_a_pattern_are_indexed(self):
+        from indexer.incremental import scan_directory_hashes
+
+        root = self._tree([
+            "src/profile/builder.py",
+            "src/distributed/queue.py",
+            "src/adventure.py",
+        ])
+        indexed = set(scan_directory_hashes(root, [".py"]))
+        assert indexed == {
+            "src/profile/builder.py",
+            "src/distributed/queue.py",
+            "src/adventure.py",
+        }
+
+    def test_real_ignored_directories_stay_ignored(self):
+        from indexer.incremental import scan_directory_hashes
+
+        root = self._tree([
+            "keep.py",
+            "build/generated.py",
+            "dist/bundle.py",
+            "node_modules/pkg/index.py",
+            ".git/hooks/hook.py",
+        ])
+        assert set(scan_directory_hashes(root, [".py"])) == {"keep.py"}
+
+    def test_multi_component_patterns_still_match(self):
+        """`.claude/worktrees` holds whole repo copies — it must not be walked."""
+        from indexer.incremental import scan_directory_hashes
+
+        root = self._tree([
+            "keep.py",
+            ".claude/worktrees/copy/app.py",
+            ".vitepress/cache/entry.py",
+        ])
+        assert set(scan_directory_hashes(root, [".py"])) == {"keep.py"}
+
+    def test_build_output_siblings_of_dist_stay_ignored(self):
+        """dist-next / dist-ce were excluded only because "dist" was a
+        substring of them. Component matching drops that accident, so they are
+        named explicitly — indexing a bundle yields symbols nobody wrote and
+        trips the taint rules on vendored code.
+        """
+        from indexer.incremental import scan_directory_hashes
+
+        root = self._tree([
+            "src/app.ts",
+            "dist-next/assets/vendor-a1b2.js",
+            "dist-ce/assets/vendor-c3d4.js",
+            "dist-ssr/entry.js",
+        ])
+        assert set(scan_directory_hashes(root, [".ts", ".js"])) == {"src/app.ts"}
+
+    def test_a_directory_named_like_a_pattern_prefix_is_kept(self):
+        from indexer.incremental import scan_directory_hashes
+
+        root = self._tree(["buildings/plan.py", "distance/metric.py"])
+        assert set(scan_directory_hashes(root, [".py"])) == {
+            "buildings/plan.py",
+            "distance/metric.py",
+        }

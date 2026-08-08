@@ -320,20 +320,58 @@ def scan_directory_hashes(
     """
     ignore_patterns = ignore_patterns or [
         "node_modules", "__pycache__", ".git", "dist", "build",
+        # Vite/Rollup emit these siblings of dist/. They were previously
+        # excluded only as an accident of substring matching ("dist" occurs
+        # inside "dist-next"), so they need naming now that patterns match
+        # whole components. Indexing a bundle is worse than useless: minified
+        # vendor code produces symbols nobody wrote and trips the taint rules.
+        "dist-ce", "dist-next", "dist-ssr",
         ".venv", "venv", ".pytest_cache", ".mypy_cache",
         ".vitepress/cache", ".next", ".open-next", ".nuxt", ".output",
         ".claude/worktrees", ".codex/worktrees",
     ]
 
-    ignore_set = set(ignore_patterns)
+    # Patterns match whole path COMPONENTS, never substrings. A raw
+    # `pattern in str(rel_path)` test silently dropped every path that merely
+    # contained one — "build" hid src/profile/builder.py, and the same went for
+    # any path spelling dist or venv inside a longer name. Those files then had
+    # no symbols, so search, impact and dead-code analysis were blind to them
+    # with nothing to indicate anything was missing.
+    ignore_names = set()
+    ignore_sequences = []
+    for pattern in ignore_patterns:
+        parts = tuple(p for p in Path(pattern).parts if p not in ("", "."))
+        if not parts:
+            continue
+        if len(parts) == 1:
+            ignore_names.add(parts[0])
+        else:
+            ignore_sequences.append(parts)
+
+    def is_ignored(parts: tuple[str, ...]) -> bool:
+        if ignore_names.intersection(parts):
+            return True
+        for seq in ignore_sequences:
+            span = len(seq)
+            if any(
+                parts[i:i + span] == seq
+                for i in range(len(parts) - span + 1)
+            ):
+                return True
+        return False
+
     ext_set = set(extensions)
     result = {}
 
     for dirpath, dirnames, filenames in os.walk(root):
-        # Prune ignored directories in-place so os.walk skips them entirely
+        rel_dir = Path(dirpath).relative_to(root).parts
+        # Prune ignored directories in-place so os.walk skips them entirely.
+        # Multi-component patterns are pruned here too: `.claude/worktrees`
+        # holds whole repository copies, and matching it only per-file meant
+        # walking every one of them just to discard the result.
         dirnames[:] = [
             d for d in dirnames
-            if d not in ignore_set
+            if not is_ignored(rel_dir + (d,))
         ]
 
         for fname in filenames:
@@ -344,10 +382,9 @@ def scan_directory_hashes(
 
             file_path = Path(dirpath) / fname
             rel_path = file_path.relative_to(root)
-
-            # Also check substring match for nested ignore patterns
             rel_str = str(rel_path)
-            if any(p in rel_str for p in ignore_patterns):
+
+            if is_ignored(rel_path.parts):
                 continue
 
             try:
