@@ -20,7 +20,11 @@ from .safe_io import atomic_write_text, atomic_write_lines, atomic_write_json
 
 from .context.loader import ContextLoader
 from .dependency_resolver import DependencyResolverMixin
-from .indexer import IncrementalIndexer, scan_directory_hashes
+from .indexer import (
+    DEFAULT_IGNORE_PATTERNS,
+    IncrementalIndexer,
+    scan_directory_hashes,
+)
 from .models import Dependency, DependencyType, FileManifest, ProjectIndex, Symbol, SymbolType
 from .reverse_index import ReverseIndexMixin
 from .scanner import (
@@ -256,15 +260,9 @@ class IndexEngine(
         current_hashes = scan_directory_hashes(
             self.project_root,
             extensions,
-            ignore_patterns=[
-                "node_modules", "__pycache__", ".git", "dist", "build",
-                ".venv", "venv", ".pytest_cache", ".flyto-index", ".flyto",
-                ".vitepress/cache", ".next", ".open-next", ".nuxt", ".output",
-                # Agent scratch checkouts are full copies of the project; indexing
-                # them duplicates every symbol and makes impact analysis point at
-                # stale ghost files.
-                ".claude/worktrees", ".codex/worktrees",
-            ]
+            # Shared defaults plus this caller's own artifacts. Restating the
+            # list here is what let the two copies drift apart.
+            ignore_patterns=[*DEFAULT_IGNORE_PATTERNS, ".flyto-index", ".flyto"]
         )
 
         # Detect changes

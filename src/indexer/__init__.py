@@ -2,6 +2,7 @@
 
 from .incremental import (
     ChangeSet,
+    DEFAULT_IGNORE_PATTERNS,
     IncrementalIndexer,
     ManifestStore,
     compute_file_hash,
@@ -9,6 +10,7 @@ from .incremental import (
 )
 
 __all__ = [
+    "DEFAULT_IGNORE_PATTERNS",
     "IncrementalIndexer",
     "ManifestStore",
     "ChangeSet",

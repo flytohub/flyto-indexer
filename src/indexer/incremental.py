@@ -302,6 +302,27 @@ def compute_file_hash(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
+# The one list every caller starts from. It used to be duplicated in
+# engine.scan(), and the copies drifted: the engine's lacked .mypy_cache and
+# both lacked the dist siblings, so a scan driven through the engine indexed
+# 193 build bundles that a direct call correctly skipped. Callers with extra
+# needs spread this and add to it rather than restating it.
+DEFAULT_IGNORE_PATTERNS = [
+    "node_modules", "__pycache__", ".git", "dist", "build",
+    # Vite/Rollup emit these siblings of dist/. They were previously excluded
+    # only as an accident of substring matching ("dist" occurs inside
+    # "dist-next"), so they need naming now that patterns match whole
+    # components. Indexing a bundle is worse than useless: minified vendor
+    # code produces symbols nobody wrote and trips the taint rules.
+    "dist-ce", "dist-next", "dist-ssr",
+    ".venv", "venv", ".pytest_cache", ".mypy_cache",
+    ".vitepress/cache", ".next", ".open-next", ".nuxt", ".output",
+    # Agent scratch checkouts are full copies of the project; indexing them
+    # duplicates every symbol and makes impact analysis point at ghost files.
+    ".claude/worktrees", ".codex/worktrees",
+]
+
+
 def scan_directory_hashes(
     root: Path,
     extensions: list[str],
@@ -318,18 +339,7 @@ def scan_directory_hashes(
     Returns:
         {relative_path: content_hash}
     """
-    ignore_patterns = ignore_patterns or [
-        "node_modules", "__pycache__", ".git", "dist", "build",
-        # Vite/Rollup emit these siblings of dist/. They were previously
-        # excluded only as an accident of substring matching ("dist" occurs
-        # inside "dist-next"), so they need naming now that patterns match
-        # whole components. Indexing a bundle is worse than useless: minified
-        # vendor code produces symbols nobody wrote and trips the taint rules.
-        "dist-ce", "dist-next", "dist-ssr",
-        ".venv", "venv", ".pytest_cache", ".mypy_cache",
-        ".vitepress/cache", ".next", ".open-next", ".nuxt", ".output",
-        ".claude/worktrees", ".codex/worktrees",
-    ]
+    ignore_patterns = ignore_patterns or list(DEFAULT_IGNORE_PATTERNS)
 
     # Patterns match whole path COMPONENTS, never substrings. A raw
     # `pattern in str(rel_path)` test silently dropped every path that merely
