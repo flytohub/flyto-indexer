@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -220,6 +221,73 @@ class TestContentAddressedManifest:
         assert len(manifest["pipeline_fingerprint"]) == 64
         assert len(manifest["files"]["app.py"]["hash"]) == 64
         assert second["changes"] == "+0 ~0 -0"
+
+
+class TestDriftedManifestEviction:
+    """Deleting a file must evict it even when the manifest lost the path."""
+
+    def test_orphan_index_path_is_deleted_but_live_one_is_kept(self, tmp_path):
+        from src.indexer.incremental import IncrementalIndexer, compute_file_hash
+
+        index_dir = tmp_path / ".flyto-index"
+        index_dir.mkdir()
+        (tmp_path / "live.py").write_text("def live():\n    pass\n")
+        (index_dir / "index.json").write_text(json.dumps({
+            "files": {"gone/removed.py": {}, "live.py": {}},
+        }))
+        (index_dir / "manifest.json").write_text(json.dumps({
+            "project": "demo",
+            "version": 2,
+            "hash_algorithm": "sha256",
+            "pipeline_fingerprint": "a" * 64,
+            "files": {},
+        }))
+
+        indexer = IncrementalIndexer(
+            tmp_path,
+            index_dir,
+            pipeline_fingerprint="a" * 64,
+        )
+        # live.py is absent from current_files (an ignore rule, an unreadable
+        # file) yet still on disk, so it must never be evicted.
+        changes = indexer.detect_changes({})
+
+        assert changes.deleted == ["gone/removed.py"]
+
+    def test_vanished_directory_is_evicted_from_every_store(self, tmp_path):
+        from src.engine import IndexEngine
+
+        root = tmp_path / "project"
+        (root / "src" / "components").mkdir(parents=True)
+        (root / "keep").mkdir()
+        (root / "keep" / "alive.py").write_text("def alive():\n    return 1\n")
+        (root / "src" / "lonely.py").write_text("def lonely():\n    return 2\n")
+        (root / "src" / "components" / "SettingsView.py").write_text(
+            "class SettingsView:\n    def render(self):\n        return 3\n"
+        )
+        idx_dir = root / ".flyto-index"
+
+        IndexEngine("project", root, index_dir=idx_dir).scan(incremental=False)
+
+        # The manifest is the only source of eviction candidates; losing it
+        # used to make every indexed path unreachable by ChangeSet.deleted.
+        (idx_dir / "manifest.json").write_text("{ truncated")
+        shutil.rmtree(root / "src")
+
+        IndexEngine("project", root, index_dir=idx_dir).scan(incremental=True)
+
+        index = json.loads((idx_dir / "index.json").read_text())
+        bm25 = json.loads((idx_dir / "bm25.json").read_text())
+        content = [
+            json.loads(line)
+            for line in (idx_dir / "content.jsonl").read_text().splitlines()
+            if line.strip()
+        ]
+
+        assert set(index["files"]) == {"keep/alive.py"}
+        assert not [sid for sid in index["symbols"] if ":src/" in sid]
+        assert not [did for did in bm25["doc_ids"] if ":src/" in did]
+        assert not [record for record in content if ":src/" in record["id"]]
 
 
 # =============================================================================
@@ -486,3 +554,90 @@ class TestExtractPathFromSid:
     def test_no_colon(self):
         from src.engine import IndexEngine
         assert IndexEngine._extract_path_from_sid("nocolon") == ""
+
+
+# =============================================================================
+# scan_directory_hashes ignore-pattern matching
+# =============================================================================
+
+class TestIgnorePatternsMatchComponents:
+    """Ignore patterns match whole path components, never substrings.
+
+    A raw `pattern in str(rel_path)` test dropped every path that merely
+    contained a pattern: "build" hid src/profile/builder.py, and the same
+    applied to any name spelling dist or venv inside a longer word. Those
+    files carried no symbols, so search, impact and dead-code analysis were
+    blind to them with nothing to signal the gap.
+    """
+
+    @staticmethod
+    def _tree(paths):
+        root = Path(tempfile.mkdtemp())
+        for rel in paths:
+            target = root / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("x = 1\n")
+        return root
+
+    def test_names_merely_containing_a_pattern_are_indexed(self):
+        from indexer.incremental import scan_directory_hashes
+
+        root = self._tree([
+            "src/profile/builder.py",
+            "src/distributed/queue.py",
+            "src/adventure.py",
+        ])
+        indexed = set(scan_directory_hashes(root, [".py"]))
+        assert indexed == {
+            "src/profile/builder.py",
+            "src/distributed/queue.py",
+            "src/adventure.py",
+        }
+
+    def test_real_ignored_directories_stay_ignored(self):
+        from indexer.incremental import scan_directory_hashes
+
+        root = self._tree([
+            "keep.py",
+            "build/generated.py",
+            "dist/bundle.py",
+            "node_modules/pkg/index.py",
+            ".git/hooks/hook.py",
+        ])
+        assert set(scan_directory_hashes(root, [".py"])) == {"keep.py"}
+
+    def test_multi_component_patterns_still_match(self):
+        """`.claude/worktrees` holds whole repo copies — it must not be walked."""
+        from indexer.incremental import scan_directory_hashes
+
+        root = self._tree([
+            "keep.py",
+            ".claude/worktrees/copy/app.py",
+            ".vitepress/cache/entry.py",
+        ])
+        assert set(scan_directory_hashes(root, [".py"])) == {"keep.py"}
+
+    def test_build_output_siblings_of_dist_stay_ignored(self):
+        """dist-next / dist-ce were excluded only because "dist" was a
+        substring of them. Component matching drops that accident, so they are
+        named explicitly — indexing a bundle yields symbols nobody wrote and
+        trips the taint rules on vendored code.
+        """
+        from indexer.incremental import scan_directory_hashes
+
+        root = self._tree([
+            "src/app.ts",
+            "dist-next/assets/vendor-a1b2.js",
+            "dist-ce/assets/vendor-c3d4.js",
+            "dist-ssr/entry.js",
+        ])
+        assert set(scan_directory_hashes(root, [".ts", ".js"])) == {"src/app.ts"}
+
+    def test_a_directory_named_like_a_pattern_prefix_is_kept(self):
+        from indexer.incremental import scan_directory_hashes
+
+        root = self._tree(["buildings/plan.py", "distance/metric.py"])
+        assert set(scan_directory_hashes(root, [".py"])) == {
+            "buildings/plan.py",
+            "distance/metric.py",
+        }

@@ -1,3 +1,8 @@
 #!/bin/bash
+# Shared MCP entry point. Both Claude Code (.mcp.json) and Codex
+# (~/.codex/config.toml) launch the server through this script so the two
+# agents always run the same interpreter and the same code.
 cd "$(dirname "$0")"
-exec python3 -m src.mcp_server 2>/tmp/flyto-indexer.log
+PY="$(pwd)/.venv/bin/python"
+[ -x "$PY" ] || PY=python3
+exec "$PY" -m src.mcp_server 2>/tmp/flyto-indexer.log
