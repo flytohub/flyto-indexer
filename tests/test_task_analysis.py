@@ -700,6 +700,23 @@ class TestTaskGateCheck:
         assert "HUMAN_REVIEW_REQUIRED_FOR_PUBLIC_CONTRACT_CHANGE" in result["reason_codes"]
         assert result["required_state"] == {"human_review_completed": True}
 
+    def test_review_constraint_does_not_invent_a_public_contract_change(self):
+        """Review is conditional on detected public-contract evidence."""
+        from tools.task_analysis import task_gate_check
+        contract = self._make_contract(
+            must_request_human_review_on_public_contract_change=True,
+        )
+
+        result = task_gate_check(
+            task_contract=contract,
+            next_phase="apply_changes",
+            current_state={},
+        )
+
+        assert result["pass"] is True
+        assert result["required_actions"] == []
+        assert result["required_state"] == {}
+
     def test_pass_public_contract_after_review(self):
         from tools.task_analysis import task_gate_check
         contract = self._make_contract(

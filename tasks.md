@@ -15,6 +15,8 @@
 
 ## Done
 
+- Fixed dotted module IDs being misclassified as required diff paths by the
+  task intent ledger.
 - Bootstrapped project memory skeleton and lint gate.
 - Removed product release policy from the public package boundary.
 - Added observable runtime version and verified local installation.

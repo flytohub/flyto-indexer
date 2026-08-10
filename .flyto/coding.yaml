@@ -11,6 +11,16 @@
 # concerns and are deliberately not declared here.
 version: flyto.coding-config.v1
 
+# Deterministic source-to-reference rewrite available to the audited
+# implementer by name only. The argv is fixed here, runs in the isolated
+# project-action sandbox, and is still followed by the required
+# generated-reference check below.
+actions:
+  - name: generate_reference
+    argv: [python, scripts/generate-reference.py]
+    timeout_seconds: 300
+    description: Rewrite generated reference docs from the current Indexer source.
+
 checks:
   - name: project-memory
     argv: [bash, scripts/lint-project-memory.sh]

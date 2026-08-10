@@ -7,6 +7,10 @@
   owned by private product repositories and are not shipped here.
 - CLI and MCP surfaces support indexing, context, impact, API/dependency
   closure, security checks, architecture rules, and repeatable verification.
+- The apply-change gate now requests `human_review_completed` only after
+  `public_contract_change_detected` is present in current task state. High
+  breaking-risk policy alone no longer fabricates external authority, while a
+  detected public contract change still blocks until reviewed.
 - Project-filtered semantic searches now load and lazily rebuild only the
   selected project's index. Stale sibling project markers no longer consume a
   bounded MCP request's deadline; unfiltered workspace search is unchanged.
@@ -22,6 +26,10 @@
   paths, `..` traversal, tilde prefixes, backslash separators, ASCII control
   characters, blank project or name segments, oversized paths, and
   non-conforming symbol IDs.
+- Inline requirement parsing now distinguishes supported file suffixes and
+  conventional repository filenames from dotted module or capability IDs.
+  Identifiers such as `human.approval` remain symbols and no longer fabricate
+  an impossible required diff path during `task(validate)`.
 - Existing task plan, gate, validate, and project-profile surfaces share one
   bounded, gitignored SQLite continuity record. It carries resumable task facts
   across AI clients without adding an MCP tool or committed handoff file.
@@ -142,7 +150,14 @@
   artifacts. Its GitHub Release contains the verified CI build artifacts; the
   future release step now identifies the repository explicitly and does not
   depend on a checkout in its artifact-only job.
-- Latest local verification: `1972 passed, 1 skipped`; Ruff passed across the
+- Latest task-local verification: `2081 passed, 1 skipped`; Ruff passed across
+  the full repository; the quality-debt ratchet passed at Ruff 1,141 and mypy
+  732; generated references, language evidence, and project-memory lint passed.
+  Rebuilding the exact flyto-core requirement ledger now records
+  `human.approval` only as a symbol and validates the script-only change with
+  zero violations. Strict full-scan self-verify passed 20/20 with 310 files,
+  4,985 indexed symbols, health 91/A, and zero warnings or failures.
+- Latest release verification: `1972 passed, 1 skipped`; Ruff passed across the
   full repository; mypy found no issues in 153 source files; the offline corpus
   passed 13/13 with 1.0 precision, 1.0 recall, zero false positives, p95 case
   latency 197.28 ms, and stable evidence fingerprint `203edae3857a360d`; the

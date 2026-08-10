@@ -1,8 +1,81 @@
 """Tests for documentation scanner scoring edge cases."""
 
 import json
+from pathlib import Path
 
-from src.doc_scanner import scan_documentation
+from src.doc_scanner import _check_module_doc_coverage, scan_documentation
+
+
+def _marked_env(parent: Path, name: str) -> Path:
+    """Create a virtual environment under an arbitrary, unlisted name.
+
+    PEP 405 writes a regular `pyvenv.cfg` at the environment root; that
+    marker, not the name, is what discovery must react to.
+    """
+    env = parent / name
+    site_packages = env / "lib" / "python3.11" / "site-packages"
+    site_packages.mkdir(parents=True)
+    (site_packages / "typing_extensions.py").write_text(
+        "Any = object()\n", encoding="utf-8"
+    )
+    (env / "pyvenv.cfg").write_text(
+        "home = /usr/bin\nversion = 3.11.9\n", encoding="utf-8"
+    )
+    return env
+
+
+def test_marked_virtualenv_is_not_an_undocumented_module_root(tmp_path):
+    """An environment owns no documentation this repository answers for."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "README.md").write_text("# src\n", encoding="utf-8")
+    # Neither name is dot-prefixed or on any skip list, so only the marker
+    # can keep them out of the denominator.
+    _marked_env(tmp_path, "env311")
+    _marked_env(tmp_path, "SecSandbox")
+
+    assert _check_module_doc_coverage(tmp_path) == 1.0
+
+
+def test_unmarked_lookalike_directories_are_still_discovered(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "README.md").write_text("# src\n", encoding="utf-8")
+    # No marker: a source directory that merely spells venv is still a module
+    # root this repository owns, so it still counts as undocumented.
+    (tmp_path / "venv_tools").mkdir()
+    (tmp_path / "venv_tools" / "loader.py").write_text("x = 1\n", encoding="utf-8")
+    # A directory named like the marker is not a regular marker file.
+    (tmp_path / "pyvenv_docs" / "pyvenv.cfg").mkdir(parents=True)
+
+    assert _check_module_doc_coverage(tmp_path) == 1 / 3
+
+
+def test_marked_virtualenv_does_not_move_the_documentation_score(tmp_path):
+    """The gate failure reproduced: a local env dragged the docs score down."""
+    (tmp_path / "README.md").write_text(
+        "# Demo\n\n## Installation\n\nInstall.\n\n## Usage\n\nRun.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "README.md").write_text("# src\n", encoding="utf-8")
+    (tmp_path / "src" / "app.py").write_text('"""App."""\n', encoding="utf-8")
+    index_dir = tmp_path / ".flyto-index"
+    index_dir.mkdir()
+    (index_dir / "index.json").write_text(
+        json.dumps({
+            "project": "demo",
+            "root_path": str(tmp_path),
+            "symbols": {},
+        }),
+        encoding="utf-8",
+    )
+
+    before = scan_documentation(tmp_path)
+    _marked_env(tmp_path, "sec-sandbox")
+    after = scan_documentation(tmp_path)
+
+    assert before.module_doc_coverage == 1.0
+    assert after.module_doc_coverage == 1.0
+    assert after.overall_score == before.overall_score
 
 
 def test_no_api_symbols_is_not_penalized(tmp_path):

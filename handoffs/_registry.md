@@ -2,6 +2,8 @@
 
 | Date | Topic | File | Status |
 | --- | --- | --- | --- |
+| 2026-08-10 | Evidence-gated public contract review | `2026-08-10-public-contract-review-gate.md` | Active |
+| 2026-08-09 | Dotted symbol intent-ledger classification | `2026-08-09-dotted-symbol-intent-ledger.md` | Active |
 | 2026-07-31 | Evidence-first proof and release hardening | `2026-07-31-evidence-first-release.md` | Active |
 | 2026-07-30 | Verification identity, evaluation, and MCP liveness | `2026-07-30-verification-hardening.md` | Active |
 | 2026-07-23 | Module variants and VitePress cache exclusion | `2026-07-23-module-variant-indexing.md` | Active |

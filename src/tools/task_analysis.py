@@ -185,8 +185,6 @@ _GATE_REQUIREMENTS = {
          "Cross-project usage check required but not completed"),
         ("tests_reviewed", "must_add_or_update_tests",
          "Test review/addition required before applying changes"),
-        ("human_review_completed", "must_request_human_review_on_public_contract_change",
-         "Human review required for public contract change"),
     ],
     "expand_changes": [
         ("validation_passed", None,

@@ -118,6 +118,11 @@ def _task_context_mod():
     return m
 
 
+def _task_amendment_mod():
+    from . import task_amendment as m
+    return m
+
+
 def _quality_mod():
     try:
         from .. import quality as m
@@ -750,8 +755,30 @@ def smart_audit(project: str = None, focus: str = None) -> dict:
 # 4. task — plan / gate / validate workflow
 # ---------------------------------------------------------------------------
 
-def _task_plan(description, targets, intent, project, grill_session_id=None):
-    """Build one risk, instruction, and intent contract."""
+def _task_plan(description, targets, intent, project, grill_session_id=None,
+               task_contract=None):
+    """Build one risk, instruction, and intent contract.
+
+    With no parent contract this is the legacy fresh plan, byte-for-byte. When
+    the caller passes back the contract it just received, the same action
+    builds one cumulative successor on the same immutable root identity.
+    """
+    amend = _task_amendment_mod()
+    amendment = None
+    if amend.is_amendment_request(task_contract):
+        request = amend.build_amendment_request(
+            task_contract,
+            project=project,
+            description=description,
+            targets=targets or [],
+        )
+        if not request.get("pass"):
+            return amend.blocked_result(request)
+        amendment = request
+        # The root objective and main axis are immutable; only scope grows.
+        description = request["objective"]
+        targets = list(request["cumulative_targets"])
+        intent = request["intent"] or intent
     task = _task_mod()
     result = task.analyze_task(
         description=description,
@@ -778,12 +805,18 @@ def _task_plan(description, targets, intent, project, grill_session_id=None):
             }
         result["decision_contract"] = decision_contract
         result.setdefault("task_profile", {})["decision_session_id"] = grill_session_id
-    return _task_context_mod().attach_task_context(
+    result = _task_context_mod().attach_task_context(
         result,
         project=project,
         description=description,
         targets=targets or [],
+        amendment_requirements=(
+            amendment["amendment_requirements"] if amendment else None
+        ),
     )
+    if amendment:
+        result = amend.finalize_amended_contract(result, amendment)
+    return result
 
 
 def _task_validate(
@@ -791,6 +824,7 @@ def _task_validate(
     run_tests,
     test_path,
     task_contract=None,
+    current_state=None,
     proof_receipts=None,
     required_proof_kinds=None,
 ):
@@ -822,10 +856,30 @@ def _task_validate(
         reason_codes.append("CODE_VALIDATION_FAILED")
         required_actions.append("fix_lint_or_tests")
 
+    change_set = None
+    if isinstance(current_state, dict) and "changed_paths" in current_state:
+        changed_paths = current_state.get("changed_paths")
+        if isinstance(changed_paths, (list, tuple)) and all(
+            isinstance(path, str) and path for path in changed_paths
+        ):
+            change_set = {
+                "status": "captured",
+                "changed_paths": list(dict.fromkeys(changed_paths)),
+            }
+        else:
+            # Supplying malformed host evidence must not fall back to the
+            # repository-wide diff and accidentally validate another scope.
+            change_set = {
+                "status": "invalid",
+                "reason": "invalid_current_state_changed_paths",
+                "changed_paths": [],
+            }
+
     ledger_gate = _task_context_mod().validate_intent_ledger(
         contract,
         project=contract_project,
         validation=result,
+        change_set=change_set,
     )
     if ledger_gate.get("status") != "not_required":
         result["intent_ledger_validation"] = ledger_gate
@@ -1125,12 +1179,21 @@ def smart_task(action: str, description: str = "", targets: list = None,
             request_id=request_id,
         )
     if action == "plan":
-        result = _task_plan(description, targets, intent, project, grill_session_id)
+        result = _task_plan(
+            description, targets, intent, project, grill_session_id, task_contract
+        )
+        # An amendment continues the root task, so continuity keeps recording
+        # the original objective instead of superseding it with the amendment.
+        objective = description
+        if isinstance(result, dict):
+            state = result.get("task_amendment") or {}
+            if state.get("status") == "amended" and state.get("objective"):
+                objective = state["objective"]
         return _observe_task_continuity(
             action,
             result,
             project=project,
-            description=description,
+            description=objective,
         )
     if action == "gate":
         result = _task_gate(task_contract, next_phase, current_state, project)
@@ -1147,6 +1210,7 @@ def smart_task(action: str, description: str = "", targets: list = None,
             run_tests,
             test_path,
             task_contract,
+            current_state,
             proof_receipts,
             required_proof_kinds,
         )

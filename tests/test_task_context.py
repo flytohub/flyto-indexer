@@ -5,6 +5,9 @@ from pathlib import Path
 import pytest
 
 from src.tools.task_context import (
+    _content_only_drift,
+    _inline_contract,
+    _match_allowed,
     _symbol_path,
     attach_task_context,
     build_intent_ledger,
@@ -36,6 +39,60 @@ def _plan() -> list[dict]:
 
 
 CONTROL_CHARACTERS = ("\x00", "\x01", "\t", "\n", "\r", "\x1f", "\x7f")
+
+
+def test_inline_contract_keeps_dotted_module_ids_as_symbols():
+    paths, symbols, proofs = _inline_contract(
+        "`human.approval` MUST NOT be declared as produced."
+    )
+
+    assert paths == []
+    assert symbols == ["human.approval"]
+    assert proofs == []
+
+
+def test_inline_contract_still_recognizes_real_relative_files():
+    paths, symbols, proofs = _inline_contract(
+        "Update `README.md`, `src/app.py`, and `Makefile`; keep `module.identifier`."
+    )
+
+    assert paths == ["README.md", "src/app.py", "Makefile"]
+    assert symbols == ["module.identifier"]
+    assert proofs == []
+
+
+def test_dotted_spec_identifier_does_not_invent_a_required_diff_path(tmp_path):
+    _write(tmp_path, "scripts/verify.sh", "#!/bin/sh\n")
+    _write(
+        tmp_path,
+        "docs/specs/plugin.md",
+        "`human.approval` MUST NOT be declared as produced.\n",
+    )
+
+    ledger = build_intent_ledger(
+        str(tmp_path),
+        "Fix scripts/verify.sh",
+        ["scripts/verify.sh"],
+        _plan(),
+    )
+    requirement = next(
+        item for item in ledger["requirements"] if item["source"] == "docs/specs/plugin.md"
+    )
+    assert requirement["expected_paths"] == []
+    assert requirement["expected_symbols"] == ["human.approval"]
+
+    result = validate_intent_ledger(
+        {
+            "task_profile": {"project": str(tmp_path)},
+            "intent_ledger": ledger,
+        },
+        project=str(tmp_path),
+        validation={"pytest": {"status": "pass"}},
+        change_set={"status": "captured", "changed_paths": ["scripts/verify.sh"]},
+    )
+
+    assert result["pass"] is True
+    assert result["violations"] == []
 
 
 @pytest.mark.parametrize(
@@ -281,7 +338,266 @@ def test_instruction_context_fingerprint_detects_drift(tmp_path):
     result = validate_instruction_context(contract, project=str(tmp_path))
 
     assert result["pass"] is False
-    assert result["violations"] == [{"type": "instruction_context_stale"}]
+    assert result["violations"] == [
+        {"type": "instruction_context_stale", "instruction_files": ["AGENTS.md"]}
+    ]
+
+
+def test_allowed_paths_preserve_repository_dotfiles(tmp_path):
+    _write(tmp_path, ".gitignore", "dist/\n")
+    _write(tmp_path, ".github/workflows/ci.yml", "name: CI\n")
+
+    ledger = build_intent_ledger(
+        str(tmp_path),
+        "Document the offline CI loop",
+        [".gitignore", "./.github/workflows/ci.yml"],
+        _plan(),
+    )
+
+    assert ledger["allowed_paths"] == [".gitignore", ".github/workflows/ci.yml"]
+
+    result = validate_intent_ledger(
+        {"task_profile": {"project": str(tmp_path)}, "intent_ledger": ledger},
+        project=str(tmp_path),
+        change_set={
+            "status": "captured",
+            "changed_paths": [".gitignore", ".github/workflows/ci.yml"],
+        },
+    )
+
+    assert result["pass"] is True
+    assert result["violations"] == []
+
+
+def test_match_allowed_keeps_leading_dot_and_refuses_escapes():
+    assert _match_allowed("./.gitignore", [".gitignore"]) is True
+    assert _match_allowed(".github/workflows/ci.yml", [".github"]) is True
+    assert _match_allowed(".github/workflows/ci.yml", [".github/workflows"]) is True
+    # A dot-stripped impostor must never satisfy the dotted plan.
+    assert _match_allowed("gitignore", [".gitignore"]) is False
+    assert _match_allowed("github/workflows/ci.yml", [".github"]) is False
+    # Absolute and traversal paths stay refused on both sides.
+    assert _match_allowed("/etc/passwd", ["/etc/passwd"]) is False
+    assert _match_allowed("../outside/app.py", ["../outside/app.py"]) is False
+    assert _match_allowed("outside/app.py", ["../outside/app.py"]) is False
+
+
+def test_allowed_paths_refuse_absolute_and_traversal_targets(tmp_path):
+    _write(tmp_path, ".gitignore", "dist/\n")
+
+    ledger = build_intent_ledger(
+        str(tmp_path),
+        "Escape the repository",
+        ["/etc/passwd", "../outside/app.py", ".gitignore"],
+        _plan(),
+    )
+
+    assert ledger["allowed_paths"] == [".gitignore"]
+
+
+OUT_OF_REPOSITORY_TARGETS = (
+    "C:/repo/app.py",
+    "c:/repo/app.py",
+    "C:\\repo\\app.py",
+    "C:app.py",
+    "\\\\server\\share\\app.py",
+    "//server/share/app.py",
+    "/etc/passwd",
+    "../outside/app.py",
+)
+
+
+@pytest.mark.parametrize("target", OUT_OF_REPOSITORY_TARGETS)
+def test_allowed_paths_refuse_out_of_repository_targets(tmp_path, target):
+    """A drive, UNC, absolute, or traversal target never becomes a scope."""
+    _write(tmp_path, ".gitignore", "dist/\n")
+
+    ledger = build_intent_ledger(
+        str(tmp_path),
+        "Escape the repository",
+        [target, ".gitignore"],
+        _plan(),
+    )
+
+    assert ledger["allowed_paths"] == [".gitignore"]
+    # The same target is refused as a pattern, so a plan cannot be tricked
+    # into licensing itself.
+    assert _match_allowed(target, [target]) is False
+
+
+@pytest.mark.parametrize("target", OUT_OF_REPOSITORY_TARGETS)
+def test_match_allowed_refuses_out_of_repository_paths_under_full_scope(target):
+    """Even the whole-repository scope cannot admit a path outside the repo."""
+    assert _match_allowed(target, ["**"]) is False
+
+
+def test_match_allowed_keeps_relative_forms_while_refusing_drive_paths():
+    # Literal `./` stripping and dotted repository names stay intact.
+    assert _match_allowed("./src/app.py", ["src/app.py"]) is True
+    assert _match_allowed(".gitignore", ["./.gitignore"]) is True
+    assert _match_allowed(".github/workflows/ci.yml", [".github"]) is True
+    # A drive-qualified path is neither a usable target nor a usable pattern.
+    assert _match_allowed("src/app.py", ["C:/repo/src/app.py"]) is False
+    assert _match_allowed("C:/repo/src/app.py", ["src/app.py"]) is False
+
+
+def test_intent_ledger_reports_drive_qualified_change_as_unplanned(tmp_path):
+    _write(tmp_path, "src/app.py", "")
+    ledger = build_intent_ledger(
+        str(tmp_path),
+        "Change the app",
+        ["src/app.py"],
+        _plan(),
+    )
+
+    result = validate_intent_ledger(
+        {"task_profile": {"project": str(tmp_path)}, "intent_ledger": ledger},
+        project=str(tmp_path),
+        change_set={
+            "status": "captured",
+            "changed_paths": ["src/app.py", "C:/repo/src/app.py"],
+        },
+    )
+
+    assert result["pass"] is False
+    violation = next(
+        item for item in result["violations"] if item["type"] == "unplanned_diff"
+    )
+    assert violation["changed_paths"] == ["C:/repo/src/app.py"]
+
+
+def test_inline_contract_preserves_dot_directory_paths():
+    paths, symbols, proofs = _inline_contract(
+        "Update `./src/app.py` and `.github/workflows/ci.yml`."
+    )
+
+    assert paths == ["src/app.py", ".github/workflows/ci.yml"]
+    assert symbols == []
+    assert proofs == []
+
+
+def _instruction_contract(tmp_path, targets: list[str]) -> dict:
+    return attach_task_context(
+        {
+            "task_profile": {"project": str(tmp_path)},
+            "execution_plan": _plan(),
+        },
+        project=str(tmp_path),
+        description="Document the offline verification loop",
+        targets=targets,
+    )
+
+
+def test_instruction_context_allows_planned_instruction_file_edit(tmp_path):
+    _write(tmp_path, "AGENTS.md", "- Always run pytest.\n")
+    _write(tmp_path, "docs/README.md", "# Docs\n")
+    contract = _instruction_contract(tmp_path, ["AGENTS.md", "docs/README.md"])
+    _write(
+        tmp_path,
+        "AGENTS.md",
+        "- Always run pytest.\n- Always run python -m unittest offline.\n",
+    )
+
+    result = validate_instruction_context(
+        contract,
+        project=str(tmp_path),
+        changed_paths=["AGENTS.md", "docs/README.md"],
+    )
+
+    assert result["pass"] is True
+    assert result["violations"] == []
+
+
+def test_instruction_context_blocks_mixed_unrelated_instruction_drift(tmp_path):
+    _write(tmp_path, "AGENTS.md", "- Always run pytest.\n")
+    _write(tmp_path, "CLAUDE.md", "- Always write a handoff.\n")
+    contract = _instruction_contract(tmp_path, ["AGENTS.md"])
+    _write(
+        tmp_path,
+        "AGENTS.md",
+        "- Always run pytest.\n- Always run python -m unittest offline.\n",
+    )
+    _write(
+        tmp_path,
+        "CLAUDE.md",
+        "- Always write a handoff.\n- Always update STATE.md.\n",
+    )
+
+    result = validate_instruction_context(
+        contract,
+        project=str(tmp_path),
+        changed_paths=["AGENTS.md", "CLAUDE.md"],
+    )
+
+    assert result["pass"] is False
+    assert result["violations"] == [
+        {"type": "instruction_context_stale", "instruction_files": ["CLAUDE.md"]}
+    ]
+    assert result["required_actions"] == [
+        "refresh_task_context:instruction_context_stale"
+    ]
+
+
+def test_instruction_context_blocks_unplanned_edit_of_scoped_instructions(tmp_path):
+    _write(tmp_path, "AGENTS.md", "- Always run pytest.\n")
+    _write(tmp_path, "docs/README.md", "# Docs\n")
+    contract = _instruction_contract(tmp_path, ["docs/README.md"])
+    _write(
+        tmp_path,
+        "AGENTS.md",
+        "- Always run pytest.\n- Always run python -m unittest offline.\n",
+    )
+
+    result = validate_instruction_context(
+        contract,
+        project=str(tmp_path),
+        changed_paths=["AGENTS.md", "docs/README.md"],
+    )
+
+    assert result["pass"] is False
+    assert result["violations"] == [
+        {"type": "instruction_context_stale", "instruction_files": ["AGENTS.md"]}
+    ]
+
+
+def test_content_only_drift_requires_identical_scope_metadata():
+    """Only a digest change is a planned edit; any scope change stays stale."""
+    expected = {
+        "path": "AGENTS.md",
+        "provider": "agents",
+        "scope": ".",
+        "depth": 0,
+        "sha256": "a",
+        "applies_to": ["."],
+    }
+
+    assert _content_only_drift(expected, {**expected, "sha256": "b"}) is True
+    assert _content_only_drift(expected, dict(expected)) is False
+    assert _content_only_drift(
+        expected, {**expected, "sha256": "b", "scope": "src"}
+    ) is False
+    assert _content_only_drift(
+        expected, {**expected, "sha256": "b", "applies_to": ["src"]}
+    ) is False
+
+
+def test_instruction_context_blocks_added_instruction_scope(tmp_path):
+    _write(tmp_path, "AGENTS.md", "- Always run pytest.\n")
+    _write(tmp_path, "src/app.py", "")
+    contract = _instruction_contract(tmp_path, ["AGENTS.md", "src"])
+    _write(tmp_path, "src/AGENTS.md", "- Always run pytest.\n")
+
+    result = validate_instruction_context(
+        contract,
+        project=str(tmp_path),
+        changed_paths=["src/AGENTS.md"],
+    )
+
+    assert result["pass"] is False
+    assert {item["type"] for item in result["violations"]} == {
+        "instruction_context_stale",
+        "unplanned_instruction_scope",
+    }
 
 
 def test_intent_ledger_parses_openspec_requirements_and_proofs(tmp_path):

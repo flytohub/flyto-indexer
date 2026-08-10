@@ -26,6 +26,26 @@ _GENERATED_NAMES = frozenset({
 })
 FILE_CLASSES = ("source", "test", "fixture", "example", "generated")
 
+# Byte-identical copy of `indexer.incremental.is_virtualenv_root`; see that
+# module for why the marker, not the directory name, decides. Kept local so
+# the profile walk keeps its narrow import surface.
+VIRTUALENV_MARKER = "pyvenv.cfg"
+
+
+def _is_virtualenv_root(directory) -> bool:
+    """True when *directory* itself is the root of a virtual environment.
+
+    Exactly one entry is probed - the PEP 405 marker directly inside
+    *directory* - with no recursion and no link resolution, so a marked
+    environment under any name is pruned while a source directory that merely
+    spells venv inside a longer name is untouched.
+    """
+    path = os.fspath(directory)
+    if os.path.islink(path):
+        return False
+    marker = os.path.join(path, VIRTUALENV_MARKER)
+    return not os.path.islink(marker) and os.path.isfile(marker)
+
 
 def classify_path(path: str) -> str:
     """Classify a project-relative path for profile scoring and reporting."""
@@ -78,11 +98,19 @@ def scan_filesystem(project_path: Path) -> dict:
         # Filter skip dirs in-place + drop symlinked dirs (followlinks
         # bounds the walker but doesn't suppress them appearing in
         # dirnames; explicitly drop so they don't get scanned via
-        # alternative path traversal).
-        dirnames[:] = [
-            d for d in dirnames
-            if d not in SKIP_DIRS and not os.path.islink(os.path.join(dirpath, d))
-        ]
+        # alternative path traversal). A marked virtual environment goes
+        # too, whatever it is called: these counters are the profile
+        # denominator, and one unlisted environment name buries the
+        # project's own code under site-packages.
+        kept = []
+        for d in dirnames:
+            child = os.path.join(dirpath, d)
+            if d in SKIP_DIRS or os.path.islink(child):
+                continue
+            if _is_virtualenv_root(child):
+                continue
+            kept.append(d)
+        dirnames[:] = kept
 
         rel_dir = os.path.relpath(dirpath, project_path)
         depth = 0 if rel_dir == "." else rel_dir.count(os.sep) + 1

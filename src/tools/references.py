@@ -49,7 +49,8 @@ def _get_dedup_key(source_id: str) -> str:
 def _find_refs_from_reverse_index(resolved_id, reverse_index, symbols, target_path, seen_keys, seen_paths, dependencies):
     """Method 0: Use pre-computed reverse index (fastest & most accurate), plus name-based reverse index lookup."""
     references = []
-    target_name = symbols.get(resolved_id, {}).get("name", "")
+    target_symbol = symbols.get(resolved_id, {})
+    target_name = target_symbol.get("name", "")
 
     # Exact resolved_id lookup
     if resolved_id in reverse_index:
@@ -90,7 +91,11 @@ def _find_refs_from_reverse_index(resolved_id, reverse_index, symbols, target_pa
             })
 
     # Also check reverse index by name (some deps might not be fully resolved)
-    if target_name in reverse_index:
+    # A file symbol's name is only its basename stem (for example ``map``).
+    # Treating that as a callable-name fallback pulls in every unrelated
+    # function named map across every indexed project. File impact must stay on
+    # the exact canonical symbol id and real dependency edges.
+    if target_symbol.get("type") != "file" and target_name in reverse_index:
         for caller_id in reverse_index[target_name]:
             caller_symbol = symbols.get(caller_id, {})
             from_path = caller_symbol.get("path", "") or _extract_path_from_source_id(caller_id)
@@ -131,7 +136,8 @@ def _find_refs_from_dependencies(resolved_id, target_name, dependencies, symbols
         resolved_target = dep.get("metadata", {}).get("resolved_target", "")
 
         # Check if this dependency targets our symbol
-        if dep_type in ("calls", "extends", "implements", "uses") and (target in (resolved_id, target_name) or resolved_target == resolved_id):
+        name_match = bool(target_name) and target == target_name
+        if dep_type in ("calls", "extends", "implements", "uses") and (target == resolved_id or name_match or resolved_target == resolved_id):
                 source_id = dep.get("source", "")
                 source_symbol = symbols.get(source_id, {})
 
@@ -275,14 +281,22 @@ def find_references(symbol_id: str) -> dict:
     ))
 
     # Method 3: Search dependencies (calls, extends, implements, uses).
+    is_file_symbol = target_symbol.get("type") == "file"
     references.extend(_find_refs_from_dependencies(
-        resolved_id, target_name, dependencies, symbols, target_path, seen_keys, seen_paths
+        resolved_id,
+        "" if is_file_symbol else target_name,
+        dependencies,
+        symbols,
+        target_path,
+        seen_keys,
+        seen_paths,
     ))
 
     # Method 4: Content fallback (capped to avoid O(N*C) at scale).
-    references.extend(_find_refs_from_content(
-        resolved_id, target_name, target_path, symbols, seen_keys, seen_paths
-    ))
+    if not is_file_symbol:
+        references.extend(_find_refs_from_content(
+            resolved_id, target_name, target_path, symbols, seen_keys, seen_paths
+        ))
 
     # Sort by confidence (high first), then by path
     confidence_order = {"high": 0, "medium": 1, "low": 2}

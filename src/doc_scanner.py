@@ -26,6 +26,27 @@ _SKIP_DIRS = frozenset({
     "bower_components", ".eggs", "egg-info", "~",
 })
 
+# Byte-identical copy of `indexer.incremental.is_virtualenv_root`; see that
+# module for why the PEP 405 marker, not the directory name, decides. Kept
+# local because this scanner deliberately takes no intra-project import.
+VIRTUALENV_MARKER = "pyvenv.cfg"
+
+
+def _is_virtualenv_root(directory) -> bool:
+    """True when *directory* itself is the root of a virtual environment.
+
+    Exactly one entry is probed - the marker directly inside *directory* -
+    with no recursion and no link resolution, so a marked environment under
+    any name is skipped while a source directory that merely spells venv
+    inside a longer name still counts as a documentable module root.
+    """
+    path = os.fspath(directory)
+    if os.path.islink(path):
+        return False
+    marker = os.path.join(path, VIRTUALENV_MARKER)
+    return not os.path.islink(marker) and os.path.isfile(marker)
+
+
 # README section keywords to detect
 _README_SECTIONS = {
     "installation": re.compile(r"(?i)^#+\s*(install|installation|getting\s*started|setup|quick\s*start)", re.MULTILINE),
@@ -188,6 +209,11 @@ def _check_module_doc_coverage(project_path: Path) -> float:
                     entry_path.is_dir()
                     and entry not in _SKIP_DIRS
                     and not entry.startswith(".")
+                    # A virtual environment owns no documentation this
+                    # repository is answerable for, and the name it was
+                    # created under says nothing about that - only the
+                    # PEP 405 marker does.
+                    and not _is_virtualenv_root(entry_path)
                 ):
                     module_roots.append(entry_path)
         except OSError:

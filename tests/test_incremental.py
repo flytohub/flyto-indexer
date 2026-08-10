@@ -641,3 +641,99 @@ class TestIgnorePatternsMatchComponents:
             "buildings/plan.py",
             "distance/metric.py",
         }
+
+
+# =============================================================================
+# Virtual environments are pruned by marker, never by name
+# =============================================================================
+
+class TestMarkedVirtualEnvironmentsArePruned:
+    """A PEP 405 marker, not a directory name, identifies an environment.
+
+    A strict scan of flyto-core walked `.venv-sec/` — a local environment
+    with a root `pyvenv.cfg`, ignored by git info/exclude — and swept 3,952
+    site-packages files into the symbol and documentation denominators;
+    `typing_extensions.py:Any` was then selected as project context. No
+    ignore-name list can anticipate the next spelling an operator picks, so
+    discovery has to read the structure instead.
+    """
+
+    @staticmethod
+    def _marked_env(parent: Path, name: str) -> Path:
+        """Create a virtual environment under an arbitrary, unlisted name."""
+        env = parent / name
+        site_packages = env / "lib" / "python3.11" / "site-packages"
+        site_packages.mkdir(parents=True)
+        (site_packages / "typing_extensions.py").write_text("Any = object()\n")
+        (env / "pyvenv.cfg").write_text("home = /usr/bin\nversion = 3.11.9\n")
+        return env
+
+    @staticmethod
+    def _write(root: Path, relative: str, content: str = "x = 1\n") -> None:
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content)
+
+    def test_marked_environment_is_never_indexed_whatever_its_name(self, tmp_path):
+        from indexer.incremental import scan_directory_hashes
+
+        self._write(tmp_path, "src/app.py", "def run():\n    return 1\n")
+        self._marked_env(tmp_path, "sec-sandbox")
+        self._marked_env(tmp_path / "src", "toolchain-3.11")
+
+        assert set(scan_directory_hashes(tmp_path, [".py"])) == {"src/app.py"}
+
+    def test_unmarked_lookalike_directories_stay_indexed(self, tmp_path):
+        from indexer.incremental import scan_directory_hashes
+
+        self._write(tmp_path, "venv_tools/loader.py")
+        self._write(tmp_path, "src/pyvenv_helpers/reader.py")
+        self._write(tmp_path, "environments/staging.py")
+        # A file merely named after the marker is not the marker.
+        self._write(tmp_path, "venv_tools/pyvenv.cfg.example", "home = /usr\n")
+
+        assert set(scan_directory_hashes(tmp_path, [".py"])) == {
+            "venv_tools/loader.py",
+            "src/pyvenv_helpers/reader.py",
+            "environments/staging.py",
+        }
+
+    def test_a_marker_that_is_not_a_regular_file_does_not_prune(self, tmp_path):
+        from indexer.incremental import scan_directory_hashes
+
+        (tmp_path / "venv_docs" / "pyvenv.cfg").mkdir(parents=True)
+        self._write(tmp_path, "venv_docs/notes.py")
+
+        assert set(scan_directory_hashes(tmp_path, [".py"])) == {"venv_docs/notes.py"}
+
+    def test_component_and_multi_component_ignores_still_hold(self, tmp_path):
+        """Marker pruning is additive: the existing guarantees are unchanged."""
+        from indexer.incremental import scan_directory_hashes
+
+        self._write(tmp_path, "keep.py")
+        self._write(tmp_path, "src/profile/builder.py")
+        self._write(tmp_path, "src/distributed/queue.py")
+        self._write(tmp_path, "build/generated.py")
+        self._write(tmp_path, "dist-next/bundle.py")
+        self._write(tmp_path, ".claude/worktrees/copy/app.py")
+        self._marked_env(tmp_path, "runtime-env")
+
+        assert set(scan_directory_hashes(tmp_path, [".py"])) == {
+            "keep.py",
+            "src/profile/builder.py",
+            "src/distributed/queue.py",
+        }
+
+    def test_profile_walk_prunes_marked_env_and_keeps_lookalike(self, tmp_path):
+        from profile.filesystem import scan_filesystem
+
+        self._write(tmp_path, "src/app.py", "def run():\n    return 1\n")
+        self._write(tmp_path, "venv_tools/loader.py")
+        self._marked_env(tmp_path, "sec-sandbox")
+
+        result = scan_filesystem(tmp_path)
+        walked = {path.replace(os.sep, "/") for path in result["_all_files"]}
+
+        assert walked == {"src/app.py", "venv_tools/loader.py"}
+        assert result["file_count"] == 2
+        assert result["languages"] == {"Python": 2}

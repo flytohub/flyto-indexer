@@ -16,7 +16,6 @@ from typing import Any, Iterable
 
 from .grill_evidence import resolve_project_root
 
-
 CONTEXT_VERSION = "task-context.v1"
 MAX_INSTRUCTION_BYTES = 256 * 1024
 MAX_SPEC_BYTES = 512 * 1024
@@ -44,6 +43,87 @@ SPEC_DIRS = (
     "adr",
     "adrs",
     "openspec/changes",
+)
+
+# A dotted identifier is not automatically a file path.  Module and capability
+# IDs such as ``human.approval`` are common in the specifications this parser
+# reads; treating an arbitrary suffix as a file extension invents impossible
+# diff requirements.  Keep the path inference bounded to file kinds the
+# indexer actually understands, plus conventional repository-root filenames.
+_PATHLIKE_BASENAMES = frozenset(
+    {
+        "dockerfile",
+        "gemfile",
+        "license",
+        "makefile",
+        "procfile",
+    }
+)
+_PATHLIKE_SUFFIXES = frozenset(
+    {
+        ".adoc",
+        ".astro",
+        ".bash",
+        ".c",
+        ".cc",
+        ".cfg",
+        ".conf",
+        ".cpp",
+        ".cs",
+        ".css",
+        ".cts",
+        ".csv",
+        ".cxx",
+        ".dart",
+        ".fish",
+        ".go",
+        ".graphql",
+        ".h",
+        ".hh",
+        ".hpp",
+        ".htm",
+        ".html",
+        ".hxx",
+        ".ini",
+        ".java",
+        ".js",
+        ".json",
+        ".jsx",
+        ".kt",
+        ".kts",
+        ".less",
+        ".lock",
+        ".md",
+        ".mdx",
+        ".mjs",
+        ".mod",
+        ".mts",
+        ".php",
+        ".proto",
+        ".ps1",
+        ".py",
+        ".pyi",
+        ".rb",
+        ".rs",
+        ".rst",
+        ".sass",
+        ".scala",
+        ".scss",
+        ".sh",
+        ".sql",
+        ".svelte",
+        ".swift",
+        ".toml",
+        ".ts",
+        ".tsv",
+        ".tsx",
+        ".txt",
+        ".vue",
+        ".xml",
+        ".yaml",
+        ".yml",
+        ".zsh",
+    }
 )
 
 _HARD_RULE_RE = re.compile(
@@ -83,6 +163,41 @@ MAX_SYMBOL_NAME_LENGTH = 256
 MAX_SYMBOL_PATH_LENGTH = 512
 MAX_SYMBOL_PATH_SEGMENTS = 24
 MAX_SYMBOL_PATH_SEGMENT_LENGTH = 255
+
+
+_CURRENT_DIR_PREFIX_RE = re.compile(r"^(?:\./)+")
+_WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
+
+
+def _normalize_relative_path(value: str) -> str:
+    """Normalize a repository-relative path without corrupting dotted names.
+
+    ``str.lstrip("./")`` removes *every* leading ``.`` and ``/`` character, so
+    ``.gitignore`` collapses to ``gitignore`` and
+    ``.github/workflows/ci.yml`` loses the dot that names the directory.  A
+    planned diff against those files is then rejected as unplanned.  Only
+    repeated literal ``./`` prefixes are stripped here; a leading dot that
+    belongs to the path is preserved verbatim.
+    """
+    return _CURRENT_DIR_PREFIX_RE.sub("", value.replace("\\", "/").strip())
+
+
+def _is_unsafe_relative(path: str) -> bool:
+    """Refuse anything that does not name a path inside this repository.
+
+    Absolute, home-expanded, and traversal forms are refused, and so are the
+    Windows forms that a POSIX check reads as harmless.  ``C:/repo/file.py``
+    carries no leading ``/``, so ``Path.is_absolute`` calls it relative on
+    every non-Windows host; ``\\\\server\\share\\file.py`` only grows its
+    leading slashes once backslashes are normalized, and a raw backslash that
+    reached here at all means normalization was skipped.  All of them name a
+    location this repository does not own, so all of them fail closed.
+    """
+    if not path or path.startswith("/") or path.startswith("~"):
+        return True
+    if "\\" in path or _WINDOWS_DRIVE_RE.match(path):
+        return True
+    return any(segment == ".." for segment in path.split("/"))
 
 
 def _canonical_json(value: Any) -> str:
@@ -602,8 +717,12 @@ def _inline_contract(text: str) -> tuple[list[str], list[str], list[str]]:
         clean = value.strip()
         if _PROOF_RE.match(clean):
             proofs.append(clean)
-        elif "/" in clean or re.search(r"\.[A-Za-z0-9]{1,8}$", clean):
-            paths.append(clean.lstrip("./"))
+        elif (
+            "/" in clean
+            or Path(clean).name.casefold() in _PATHLIKE_BASENAMES
+            or Path(clean).suffix.casefold() in _PATHLIKE_SUFFIXES
+        ):
+            paths.append(_normalize_relative_path(clean))
         elif re.fullmatch(r"[A-Za-z_][\w.:-]*", clean):
             symbols.append(clean)
     return (
@@ -696,7 +815,9 @@ def _normalize_allowed_paths(targets: Iterable[str]) -> list[str]:
             if value == ".":
                 return ["**"]
             continue
-        normalized = value.replace("\\", "/").lstrip("./")
+        normalized = _normalize_relative_path(value)
+        if not normalized or normalized == "." or _is_unsafe_relative(normalized):
+            continue
         if ":" in normalized and "/" not in normalized:
             continue
         allowed.append(normalized.rstrip("/"))
@@ -725,16 +846,33 @@ def _planned_steps(requirement: dict, execution_plan: list[dict]) -> list[str]:
     return (apply_steps or [execution_plan[-1].get("id", "")])[:3]
 
 
+def _sanitize_amendment_requirements(value: Any) -> list[dict[str, Any]]:
+    """Normalize carried amendment requirements without importing at module load."""
+    if not value:
+        return []
+    from .task_amendment import sanitize_amendment_requirements
+
+    return sanitize_amendment_requirements(value)
+
+
 def build_intent_ledger(
     project: str | None,
     description: str,
     targets: list[str] | None,
     execution_plan: list[dict] | None,
+    amendment_requirements: list[dict] | None = None,
 ) -> dict[str, Any]:
-    """Map task intent and bounded Markdown requirements to plan steps."""
+    """Map task intent and bounded Markdown requirements to plan steps.
+
+    ``amendment_requirements`` carries the typed requirements a cumulative plan
+    amendment adds.  They are recorded inside the fingerprinted payload so the
+    ledger stays exactly recomputable, and omitted entirely when absent so a
+    plan without a parent keeps its previous fingerprint.
+    """
     root = resolve_project_root(project)
     target_inputs = list(dict.fromkeys(targets or ["."]))
     plan = execution_plan or []
+    amendments = _sanitize_amendment_requirements(amendment_requirements)
     if root is None:
         return {
             "version": CONTEXT_VERSION,
@@ -765,6 +903,10 @@ def build_intent_ledger(
         "proof_commands": [],
     }
     requirements.insert(0, task_requirement)
+    if amendments:
+        # Reserved capacity: cumulative scope requirements must never be the
+        # entries a spec-heavy repository truncates away.
+        requirements[1:1] = amendments
     for requirement in requirements:
         requirement["planned_steps"] = _planned_steps(requirement, plan)
     orphan_ids = [
@@ -787,6 +929,8 @@ def build_intent_ledger(
         "requirements": requirements,
         "allowed_paths": _normalize_allowed_paths(target_inputs),
     }
+    if amendments:
+        payload["amendment_requirements"] = amendments
     return {
         "version": CONTEXT_VERSION,
         "status": "blocked" if orphan_ids else "ready",
@@ -807,6 +951,7 @@ def attach_task_context(
     project: str | None,
     description: str,
     targets: list[str] | None,
+    amendment_requirements: list[dict] | None = None,
 ) -> dict:
     """Attach both lean context contracts to an existing task plan."""
     if not isinstance(task_contract, dict) or task_contract.get("error"):
@@ -831,6 +976,7 @@ def attach_task_context(
         description,
         targets,
         execution_plan,
+        amendment_requirements=amendment_requirements,
     )
     task_contract["instruction_context"] = instruction_context
     task_contract["intent_ledger"] = ledger
@@ -841,11 +987,15 @@ def attach_task_context(
 
 
 def _match_allowed(path: str, allowed: list[str]) -> bool:
-    normalized = path.replace("\\", "/").lstrip("./")
+    normalized = _normalize_relative_path(path)
+    if _is_unsafe_relative(normalized):
+        return False
     for pattern in allowed:
-        clean = pattern.replace("\\", "/").lstrip("./")
+        clean = _normalize_relative_path(pattern)
         if clean == "**":
             return True
+        if _is_unsafe_relative(clean):
+            continue
         if normalized == clean or normalized.startswith(f"{clean.rstrip('/')}/"):
             return True
         if fnmatch.fnmatchcase(normalized, clean):
@@ -862,6 +1012,94 @@ def _change_set(
     from .grill_conformance import collect_change_set
 
     return collect_change_set(project, None)
+
+
+def _instruction_files_by_path(context: dict | None) -> dict[str, dict]:
+    files: dict[str, dict] = {}
+    for item in (context or {}).get("files") or []:
+        path = item.get("path") if isinstance(item, dict) else None
+        if isinstance(path, str) and path:
+            files[_normalize_relative_path(path)] = item
+    return files
+
+
+def _content_only_drift(expected: dict, current: dict) -> bool:
+    """True when only the recorded digest changed, not the file's scope."""
+    if expected.get("sha256") == current.get("sha256"):
+        return False
+    return all(
+        expected.get(key) == current.get(key)
+        for key in set(expected) | set(current)
+        if key != "sha256"
+    )
+
+
+def _planned_instruction_edits(
+    task_contract: dict,
+    changed_paths: Iterable[str] | None,
+) -> set[str]:
+    """Instruction paths this task pinned as in scope and actually changed.
+
+    A path qualifies only when the diff names it *and* the pinned intent
+    ledger allows it through an explicit pattern.  The whole-repository
+    ``**`` scope is never explicit enough to license editing the very
+    instructions that govern the job.
+    """
+    if not changed_paths:
+        return set()
+    ledger = task_contract.get("intent_ledger") or {}
+    allowed = [
+        pattern
+        for pattern in ledger.get("allowed_paths") or []
+        if pattern != "**"
+    ]
+    if not allowed:
+        return set()
+    return {
+        _normalize_relative_path(path)
+        for path in changed_paths
+        if isinstance(path, str) and _match_allowed(path, allowed)
+    }
+
+
+def _instruction_drift_violation(
+    task_contract: dict,
+    expected: dict,
+    current: dict,
+    changed_paths: Iterable[str] | None,
+) -> dict[str, Any] | None:
+    """Classify instruction-context drift, permitting only planned edits.
+
+    A job that is explicitly scoped to edit ``AGENTS.md`` stays governed by
+    the pre-change context it pinned at plan time, so a digest change on
+    exactly those files is not staleness.  Everything else — an added or
+    removed instruction scope, a metadata change, drift on a file the plan
+    never claimed, or drift with no planned instruction edit to explain it —
+    still fails closed.
+    """
+    expected_files = _instruction_files_by_path(expected)
+    current_files = _instruction_files_by_path(current)
+    added = set(current_files) - set(expected_files)
+    removed = set(expected_files) - set(current_files)
+    drifted = {
+        path
+        for path, entry in current_files.items()
+        if path in expected_files and entry != expected_files[path]
+    }
+    planned = _planned_instruction_edits(task_contract, changed_paths)
+    planned_drift = {
+        path
+        for path in drifted
+        if path in planned
+        and _content_only_drift(expected_files[path], current_files[path])
+    }
+    stale_files = sorted(added | removed | (drifted - planned_drift))
+    if not stale_files and planned_drift and current.get("fingerprint") is not None:
+        return None
+    violation: dict[str, Any] = {"type": "instruction_context_stale"}
+    if stale_files:
+        violation["instruction_files"] = stale_files
+    return violation
 
 
 def validate_instruction_context(
@@ -888,7 +1126,21 @@ def validate_instruction_context(
     )
     violations: list[dict[str, Any]] = []
     if current.get("fingerprint") != expected.get("fingerprint"):
-        violations.append({"type": "instruction_context_stale"})
+        # The gate also runs before a diff is supplied; only resolve the
+        # change set when drift actually has to be explained.
+        drift_paths = changed_paths
+        if drift_paths is None:
+            drift_paths = (
+                _change_set(contract_project, None).get("changed_paths") or []
+            )
+        drift = _instruction_drift_violation(
+            task_contract,
+            expected,
+            current,
+            drift_paths,
+        )
+        if drift:
+            violations.append(drift)
     for conflict in current.get("conflicts") or []:
         if conflict.get("status") == "unresolved":
             violations.append(
@@ -967,10 +1219,19 @@ def validate_intent_ledger(
         expected.get("description", ""),
         expected.get("targets") or ["."],
         expected.get("execution_plan") or [],
+        amendment_requirements=expected.get("amendment_requirements"),
     )
     violations: list[dict[str, Any]] = []
     if current.get("fingerprint") != expected.get("fingerprint"):
         violations.append({"type": "intent_ledger_stale"})
+    from .task_amendment import validate_amendment_state
+
+    violations.extend(
+        validate_amendment_state(
+            task_contract,
+            allowed_paths=expected.get("allowed_paths") or [],
+        )
+    )
     for requirement_id in expected.get("orphan_requirements") or []:
         violations.append(
             {"type": "orphan_requirement", "requirement_id": requirement_id}

@@ -435,6 +435,47 @@ class TestSmartTask:
             lint_paths=["deleted.py", "src/app.py", "tests/test_app.py"],
         )
 
+    def test_validate_scopes_diff_to_host_attributable_changed_paths(
+        self,
+        mock_validation,
+    ):
+        contract = {
+            "task_profile": {"project": "demo"},
+            "intent_ledger": {"allowed_paths": ["src/app.py"]},
+        }
+        context = MagicMock()
+        context.validate_intent_ledger.return_value = {
+            "pass": True,
+            "status": "pass",
+            "change_set": {
+                "status": "captured",
+                "changed_paths": ["src/app.py"],
+            },
+        }
+        context.validate_instruction_context.return_value = {
+            "pass": True,
+            "status": "not_required",
+        }
+
+        with patch("tools.smart._task_context_mod", return_value=context):
+            smart_task(
+                action="validate",
+                project="demo",
+                task_contract=contract,
+                run_tests=False,
+                current_state={"changed_paths": ["src/app.py"]},
+            )
+
+        context.validate_intent_ledger.assert_called_once_with(
+            contract,
+            project="demo",
+            validation=mock_validation.validate_changes.return_value,
+            change_set={
+                "status": "captured",
+                "changed_paths": ["src/app.py"],
+            },
+        )
+
     def test_validate_can_require_external_proof(self, mock_validation):
         with (
             patch("tools.smart._proof_receipts_mod") as proof_mod,

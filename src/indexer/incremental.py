@@ -323,6 +323,36 @@ DEFAULT_IGNORE_PATTERNS = [
 ]
 
 
+# PEP 405 puts a regular `pyvenv.cfg` at the root of every Python virtual
+# environment. Names cannot carry that fact: a strict scan of flyto-core
+# walked `.venv-sec/`, pulling 3,952 site-packages files into the symbol and
+# documentation denominators, and no name list can keep up with the next
+# spelling an operator invents. The marker identifies an environment by
+# structure, so any name is pruned while a source directory that merely
+# spells venv/build/dist inside a longer name keeps every file it owns.
+VIRTUALENV_MARKER = "pyvenv.cfg"
+
+
+def is_virtualenv_root(directory) -> bool:
+    """True when *directory* itself is the root of a virtual environment.
+
+    Exactly one entry is probed - the marker directly inside *directory* -
+    with no recursion and no link resolution. A symlinked directory, or a
+    marker that is itself a symlink, reports False rather than being
+    followed, so this never stats a path outside the project tree.
+
+    `src/profile/filesystem.py` and `src/doc_scanner.py` carry byte-identical
+    copies: both are deliberately import-light (doc_scanner takes no
+    intra-project import at all), and this predicate has no configuration to
+    drift - it is the marker filename and two link checks.
+    """
+    path = os.fspath(directory)
+    if os.path.islink(path):
+        return False
+    marker = os.path.join(path, VIRTUALENV_MARKER)
+    return not os.path.islink(marker) and os.path.isfile(marker)
+
+
 def scan_directory_hashes(
     root: Path,
     extensions: list[str],
@@ -379,9 +409,13 @@ def scan_directory_hashes(
         # Multi-component patterns are pruned here too: `.claude/worktrees`
         # holds whole repository copies, and matching it only per-file meant
         # walking every one of them just to discard the result.
+        # Marked virtual environments are pruned by structure, next to the
+        # name-based patterns rather than inside them: a pattern list only
+        # ever knows the spellings someone already met.
         dirnames[:] = [
             d for d in dirnames
             if not is_ignored(rel_dir + (d,))
+            and not is_virtualenv_root(os.path.join(dirpath, d))
         ]
 
         for fname in filenames:

@@ -613,6 +613,55 @@ class TestQuerySafety:
 # 4. Symbol ID Safety
 # ===========================================================================
 
+
+def test_file_symbol_references_do_not_expand_common_stem_by_name():
+    from tools import references as references_mod
+
+    target = "proj:src/map.ts:file:map"
+    exact_caller = "proj:src/router.ts:function:openMap"
+    unrelated_caller = "other:src/math.ts:function:projectPoint"
+    mock_index = _make_mock_index(
+        symbols={
+            target: {
+                "path": "src/map.ts",
+                "name": "map",
+                "type": "file",
+                "start_line": 1,
+            },
+            exact_caller: {
+                "path": "src/router.ts",
+                "name": "openMap",
+                "type": "function",
+                "start_line": 1,
+            },
+            unrelated_caller: {
+                "path": "src/math.ts",
+                "name": "projectPoint",
+                "type": "function",
+                "start_line": 1,
+            },
+        },
+        reverse_index={
+            target: [exact_caller],
+            "map": [unrelated_caller],
+        },
+    )
+
+    with (
+        patch.object(references_mod, "load_index", return_value=mock_index),
+        patch.object(
+            references_mod,
+            "_enrich_with_scip",
+            return_value={"status": "unavailable", "references": []},
+        ),
+        patch.object(references_mod, "_enrich_with_lsp", return_value=[]),
+    ):
+        result = references_mod.find_references(target)
+
+    assert result["total"] == 1
+    assert [item["from_symbol"] for item in result["references"]] == [exact_caller]
+
+
 class TestSymbolIdSafety:
     """Test that malformed symbol IDs are handled gracefully."""
 

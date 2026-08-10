@@ -3,6 +3,15 @@
 ## Unreleased
 
 ### Fixed
+- Made the public-contract human-review gate conditional on an actual
+  `public_contract_change_detected` state. A high breaking-risk constraint no
+  longer invents external approval when the current change has no public
+  contract evidence; detected public contract changes remain fail-closed until
+  `human_review_completed` is supplied.
+- Stopped intent-ledger requirement parsing from treating arbitrary dotted
+  module and capability IDs such as `human.approval` as file paths. Real
+  relative files remain recognized through slash-bearing paths, supported file
+  suffixes, and conventional repository-root filenames.
 - Made the post-publication GitHub Release step repository-explicit so it works
   in the artifact-only job without requiring a repository checkout.
 - Made the task intent ledger accept repository-root file symbol IDs such as

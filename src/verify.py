@@ -53,6 +53,35 @@ _CI_CANDIDATES = (
     "cloudbuild.yml",
     "Makefile",
 )
+# A standard-library Python repository closes its CI loop with conventional
+# offline commands instead of third-party tools. These are matched only at
+# command position — the start of a line or of a shell segment, after YAML
+# `run:`/list decoration is removed — so a comment, a `name:` value, or any
+# other prose that merely mentions the command cannot satisfy the check.
+_CI_COMMENT_RE = re.compile(r"(?:^|\s)#.*$")
+_CI_COMMAND_PREFIX_RE = re.compile(
+    r"^(?:[-*]\s+)?"
+    r"(?:(?:run|cmd|command|entrypoint|script|shell)\s*:\s*)?"
+    r"(?:[|>][-+]?\s*)?",
+    re.IGNORECASE,
+)
+_CI_SEGMENT_SPLIT_RE = re.compile(r"&&|\|\||[;|]")
+_CI_STDLIB_COMMANDS = {
+    # `python -m unittest` covers the `discover` form; the bare `unittest
+    # discover` spelling is the other conventional offline invocation.
+    "tests": (
+        re.compile(r"^(?:python[0-9.]*|py)\s+-m\s+unittest\b", re.IGNORECASE),
+        re.compile(r"^unittest\s+discover\b", re.IGNORECASE),
+    ),
+    "build": (re.compile(r"^(?:python[0-9.]*|py)\s+-m\s+compileall\b", re.IGNORECASE),),
+    "lint": (re.compile(r"^git\s+diff\s+--check\b", re.IGNORECASE),),
+}
+# The trailing guard keeps a similarly named neighbour such as
+# `verify.sh.bak` from claiming the `verify.sh` this repository owns.
+_CI_VERIFY_SCRIPT_RE = re.compile(
+    r"^(?:(?:bash|sh|zsh)\s+)?(?:\./)?(?P<path>(?:[\w.-]+/)*verify\.sh)(?![\w.-])",
+    re.IGNORECASE,
+)
 _GENERATED_CHANGE_PATTERNS = (
     ".flyto-index/*",
     ".flyto/*",
@@ -1091,6 +1120,51 @@ def _check_package_integrity(root: Path, add_check) -> None:
     )
 
 
+def _ci_command_segments(text: str) -> list[str]:
+    """Split CI text into the commands it actually executes.
+
+    Comments are dropped and YAML list/`run:` decoration is removed so each
+    returned segment starts where a shell command starts. Prose that merely
+    mentions a command never reaches command position.
+    """
+    segments: list[str] = []
+    for raw in text.splitlines():
+        line = _CI_COMMENT_RE.sub("", raw).strip()
+        if not line or line.startswith("#"):
+            continue
+        line = _CI_COMMAND_PREFIX_RE.sub("", line, count=1).strip()
+        if not line:
+            continue
+        for part in _CI_SEGMENT_SPLIT_RE.split(line):
+            candidate = part.strip().strip("\"'").lstrip("@-").strip()
+            if candidate:
+                segments.append(candidate)
+    return segments
+
+
+def _ci_runs_command(segments: list[str], patterns: tuple[re.Pattern[str], ...]) -> bool:
+    return any(pattern.match(segment) for segment in segments for pattern in patterns)
+
+
+def _ci_invokes_verify_script(root: Path, segments: list[str]) -> bool:
+    """True when CI explicitly runs a verify script that exists in the repo.
+
+    The path must stay inside the repository: a segment that walks out with
+    ``..`` names a script this repository neither owns nor ships, so it
+    cannot close this repository's loop.
+    """
+    for segment in segments:
+        match = _CI_VERIFY_SCRIPT_RE.match(segment)
+        if not match:
+            continue
+        relative = match.group("path")
+        if ".." in relative.split("/"):
+            continue
+        if (root / relative).is_file():
+            return True
+    return False
+
+
 def _check_ci_closed_loop(root: Path, add_check) -> None:
     ci_files, ci_text = _read_ci_files(root)
     if not ci_files:
@@ -1098,25 +1172,27 @@ def _check_ci_closed_loop(root: Path, add_check) -> None:
         return
 
     lowered = ci_text.lower()
-    lowered_with_scripts = f"{ci_text}\n{_read_package_scripts(root)}".lower()
+    with_scripts = f"{ci_text}\n{_read_package_scripts(root)}"
+    lowered_with_scripts = with_scripts.lower()
+    commands = _ci_command_segments(with_scripts)
     project_name = _pyproject_name(root) or root.name
     required = {
         "verify": any(token in lowered for token in (
             "flyto-index verify", "verify-workspace", "npm run verify", "pnpm verify", "yarn verify",
-        )),
+        )) or _ci_invokes_verify_script(root, commands),
         "tests": any(token in lowered_with_scripts for token in (
             "pytest", "vitest", "npm test", "npm run test", "pnpm test", "yarn test", "go test",
             "flutter test", "dart test", "markdown-link-check", "test markdown links",
-        )),
+        )) or _ci_runs_command(commands, _CI_STDLIB_COMMANDS["tests"]),
         "lint": any(token in lowered_with_scripts for token in (
             "ruff", "mypy", "eslint", "npm run lint", "pnpm lint", "yarn lint", "golangci-lint",
             "flutter analyze", "dart analyze", "markdownlint", "lint markdown",
-        )),
+        )) or _ci_runs_command(commands, _CI_STDLIB_COMMANDS["lint"]),
         "build": any(token in lowered_with_scripts for token in (
             "python -m build", "npm run build", "pnpm build", "yarn build", "go build", "cargo build",
             "flutter build", "dart compile", "mkdocs build", "sphinx-build",
             "build documentation", "documentation bundle",
-        )),
+        )) or _ci_runs_command(commands, _CI_STDLIB_COMMANDS["build"]),
     }
     if project_name == "flyto-indexer":
         required.update({

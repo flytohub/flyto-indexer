@@ -224,6 +224,107 @@ def test_ci_closed_loop_accepts_documentation_commands(tmp_path):
     assert checks[0]["metrics"]["missing"] == []
 
 
+def _run_ci_closed_loop(root: Path, workflow: str) -> dict:
+    """Run the CI check over a single workflow file and return its metrics."""
+    path = root / ".github" / "workflows" / "ci.yml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(workflow, encoding="utf-8")
+    checks = []
+
+    def add_check(name, status, summary, metrics=None):
+        checks.append({"name": name, "status": status, "summary": summary, "metrics": metrics or {}})
+
+    _check_ci_closed_loop(root, add_check)
+    return checks[0]
+
+
+def test_ci_closed_loop_accepts_standard_library_commands(tmp_path):
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "verify.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+
+    check = _run_ci_closed_loop(
+        tmp_path,
+        "name: CI\n"
+        "jobs:\n"
+        "  offline:\n"
+        "    steps:\n"
+        "      - name: Unit tests\n"
+        "        run: python -m unittest discover -s tests\n"
+        "      - name: Byte compile\n"
+        "        run: python3 -m compileall -q src\n"
+        "      - name: Whitespace\n"
+        "        run: git diff --check\n"
+        "      - name: Closed loop\n"
+        "        run: bash scripts/verify.sh\n",
+    )
+
+    assert check["status"] == "pass"
+    assert check["metrics"]["missing"] == []
+    assert check["metrics"]["required"] == {
+        "verify": True,
+        "tests": True,
+        "lint": True,
+        "build": True,
+    }
+
+
+def test_ci_closed_loop_accepts_conventional_unittest_discover(tmp_path):
+    check = _run_ci_closed_loop(
+        tmp_path,
+        "name: CI\n"
+        "jobs:\n"
+        "  offline:\n"
+        "    steps:\n"
+        "      - run: |\n"
+        "          unittest discover -s tests -p 'test_*.py'\n",
+    )
+
+    assert check["metrics"]["required"]["tests"] is True
+
+
+def test_ci_closed_loop_rejects_commands_that_are_only_mentioned(tmp_path):
+    """Prose, comments, echo, and lookalike scripts never close the loop."""
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "preverify.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+
+    check = _run_ci_closed_loop(
+        tmp_path,
+        "name: CI\n"
+        "jobs:\n"
+        "  prose:\n"
+        "    steps:\n"
+        "      # python -m compileall src\n"
+        "      - name: python -m unittest discover\n"
+        "        description: unittest discover keeps the loop offline\n"
+        "        run: echo \"python -m unittest discover\"\n"
+        "      - run: echo git diff --check\n"
+        "      - run: bash scripts/preverify.sh\n"
+        # A verify script the repository does not actually ship.
+        "      - run: bash scripts/verify.sh\n",
+    )
+
+    assert check["status"] == "warn"
+    assert check["metrics"]["missing"] == ["build", "lint", "tests", "verify"]
+
+
+def test_ci_closed_loop_rejects_verify_script_outside_the_repository(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (tmp_path / "verify.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+
+    check = _run_ci_closed_loop(
+        root,
+        "name: CI\n"
+        "jobs:\n"
+        "  escape:\n"
+        "    steps:\n"
+        "      - run: bash ../verify.sh\n",
+    )
+
+    assert check["metrics"]["required"]["verify"] is False
+    assert "verify" in check["metrics"]["missing"]
+
+
 def _write_backend_index(root: Path, routes: list[tuple[str, str]]):
     root.mkdir(parents=True, exist_ok=True)
     (root / "go.mod").write_text("module backend\n", encoding="utf-8")

@@ -1,5 +1,28 @@
 # Decisions
 
+## 2026-08-10 - Public-contract review requires public-contract evidence
+
+Decision: apply the `human_review_completed` gate only when the task state
+contains `public_contract_change_detected`. Keep the review constraint as an
+opt-in policy and continue to fail closed when that evidence is present.
+
+Reason: the constraint is derived from high breaking risk and names a
+conditional review policy; treating the constraint itself as proof of a public
+contract change blocked private and behavior-preserving maintenance before an
+implementer could start.
+
+## 2026-08-09 - Inline requirement paths use bounded file evidence
+
+Decision: classify a slash-bearing code span, a conventional repository
+filename, or a filename with a supported source, documentation, configuration,
+or data suffix as a requirement path. Treat other identifier-shaped dotted
+spans as symbols.
+
+Reason: the former arbitrary-suffix heuristic treated module IDs such as
+`human.approval` as files. That invented an unrelated required diff path and
+made the mandatory post-work intent-ledger gate reject an otherwise correctly
+scoped change.
+
 ## 2026-08-02 - Project-filtered semantic search owns its index scope
 
 Decision: enter `project_index_scope` before loading both symbol and semantic

@@ -185,9 +185,13 @@ SMART_TOOLS: list = [
                 "task_contract": {
                     "type": "object",
                     "description": (
-                        "(gate/validate) The task contract from a previous plan action. "
-                        "Validate uses its frozen decision contract for the closed-loop "
-                        "freshness and diff-conformance gate."
+                        "(plan/gate/validate) The task contract from a previous plan "
+                        "action. Validate uses its frozen decision contract for the "
+                        "closed-loop freshness and diff-conformance gate. Plan treats "
+                        "it as the parent to amend: the root task id and original "
+                        "objective are preserved and scope becomes the deduplicated "
+                        "union of the original and newly declared targets. Omit it to "
+                        "start a new task."
                     ),
                 },
                 "next_phase": {
