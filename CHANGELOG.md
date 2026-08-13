@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-13
+
+- Fixed cumulative task amendments so the latest diff must cover only newly
+  added targets while retaining all prior path authority and fail-closed scope,
+  unplanned-diff, chain-integrity, and sanitization checks.
+
 ## Unreleased
 
 ### Fixed

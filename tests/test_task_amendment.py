@@ -187,35 +187,38 @@ def test_duplicate_targets_collapse_without_double_authority(repo: Path) -> None
 
 
 # ---------------------------------------------------------------------------
-# validate: prior plus new scope
+# validate: cumulative authority, current amendment coverage
 # ---------------------------------------------------------------------------
 
-def test_validate_accepts_exact_cumulative_changed_paths(repo: Path) -> None:
-    root = _plan(repo, "Refactor alpha", ["alpha.py"])
-    amended = _plan(repo, "Also touch beta", ["beta.py"], root)
-
-    gate = _validate(amended, ["alpha.py", "beta.py"], repo)
-
-    assert gate["pass"] is True, gate["violations"]
-
-
-def test_validate_rejects_omitted_earlier_path(repo: Path) -> None:
+def test_alpha_root_beta_only_amendment_passes_with_retained_authority(
+    repo: Path,
+) -> None:
     root = _plan(repo, "Refactor alpha", ["alpha.py"])
     amended = _plan(repo, "Also touch beta", ["beta.py"], root)
 
     gate = _validate(amended, ["beta.py"], repo)
 
+    assert gate["pass"] is True, gate["violations"]
+    assert amended["intent_ledger"]["allowed_paths"] == ["alpha.py", "beta.py"]
+
+
+def test_validate_rejects_dropped_alpha_authority(repo: Path) -> None:
+    root = _plan(repo, "Refactor alpha", ["alpha.py"])
+    amended = _plan(repo, "Also touch beta", ["beta.py"], root)
+    tampered = copy.deepcopy(amended)
+    tampered["intent_ledger"]["allowed_paths"] = ["beta.py"]
+
+    gate = _validate(tampered, ["beta.py"], repo)
+
     assert gate["pass"] is False
-    uncovered = [
-        item for item in gate["violations"]
-        if item["type"] == "requirement_path_uncovered"
-        and item["expected_paths"] == ["alpha.py"]
-    ]
-    assert uncovered
-    assert any(action.startswith("fix_intent_ledger:") for action in gate["required_actions"])
+    assert any(
+        item["type"] == "amendment_scope_shrunk"
+        and item["paths"] == ["alpha.py"]
+        for item in gate["violations"]
+    )
 
 
-def test_validate_rejects_omitted_new_path(repo: Path) -> None:
+def test_validate_rejects_missing_beta_from_current_amendment(repo: Path) -> None:
     root = _plan(repo, "Refactor alpha", ["alpha.py"])
     amended = _plan(repo, "Also touch beta", ["beta.py"], root)
 
@@ -229,7 +232,7 @@ def test_validate_rejects_omitted_new_path(repo: Path) -> None:
     )
 
 
-def test_validate_rejects_undeclared_path(repo: Path) -> None:
+def test_validate_rejects_unplanned_gamma(repo: Path) -> None:
     root = _plan(repo, "Refactor alpha", ["alpha.py"])
     amended = _plan(repo, "Also touch beta", ["beta.py"], root)
 
@@ -242,18 +245,21 @@ def test_validate_rejects_undeclared_path(repo: Path) -> None:
     )
 
 
-def test_validate_after_two_amendments_requires_all_three_paths(repo: Path) -> None:
+def test_second_amendment_gamma_only_passes_with_cumulative_authority(
+    repo: Path,
+) -> None:
     root = _plan(repo, "Refactor alpha", ["alpha.py"])
     first = _plan(repo, "Also touch beta", ["beta.py"], root)
     second = _plan(repo, "Also touch gamma", ["gamma.py"], first)
 
-    assert _validate(second, ["alpha.py", "beta.py", "gamma.py"], repo)["pass"] is True
-    for omitted in (
-        ["beta.py", "gamma.py"],
-        ["alpha.py", "gamma.py"],
-        ["alpha.py", "beta.py"],
-    ):
-        assert _validate(second, omitted, repo)["pass"] is False
+    gate = _validate(second, ["gamma.py"], repo)
+
+    assert gate["pass"] is True, gate["violations"]
+    assert second["intent_ledger"]["allowed_paths"] == [
+        "alpha.py",
+        "beta.py",
+        "gamma.py",
+    ]
 
 
 def test_validate_rejects_scope_erased_after_the_fact(repo: Path) -> None:
@@ -769,7 +775,7 @@ def test_amendment_requirements_are_typed_and_bounded(repo: Path) -> None:
         if item["source"] == "task.amendment"
     ]
     kinds = {item["kind"] for item in added}
-    assert kinds == {"amendment", "amendment_scope", "amendment_target"}
+    assert kinds == {"amendment", "amendment_target"}
     for item in added:
         assert item["id"].startswith("AMD-")
         assert len(item["text"]) <= 360
@@ -779,7 +785,7 @@ def test_amendment_requirements_are_typed_and_bounded(repo: Path) -> None:
         assert item["planned_steps"]
 
 
-def test_prior_amendment_requirements_are_preserved(repo: Path) -> None:
+def test_only_current_amendment_targets_are_coverage_requirements(repo: Path) -> None:
     root = _plan(repo, "Refactor alpha", ["alpha.py"])
     first = _plan(repo, "Also touch beta", ["beta.py"], root)
     second = _plan(repo, "Also touch gamma", ["gamma.py"], first)
@@ -789,7 +795,7 @@ def test_prior_amendment_requirements_are_preserved(repo: Path) -> None:
         for item in second["intent_ledger"]["requirements"]
         if item["kind"] in {"amendment_scope", "amendment_target"}
     }
-    assert scoped == {("alpha.py",), ("beta.py",), ("gamma.py",)}
+    assert scoped == {("gamma.py",)}
 
 
 def test_task_requirement_still_describes_the_original_objective(repo: Path) -> None:

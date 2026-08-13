@@ -7,6 +7,10 @@
   owned by private product repositories and are not shipped here.
 - CLI and MCP surfaces support indexing, context, impact, API/dependency
   closure, security checks, architecture rules, and repeatable verification.
+- Cumulative task amendments retain every prior authorized path while current
+  diff coverage applies only to targets newly added by the latest amendment.
+  Scope shrinkage, unplanned diffs, chain integrity, and bounded requirement
+  sanitization continue to fail closed independently.
 - The apply-change gate now requests `human_review_completed` only after
   `public_contract_change_detected` is present in current task state. High
   breaking-risk policy alone no longer fabricates external authority, while a

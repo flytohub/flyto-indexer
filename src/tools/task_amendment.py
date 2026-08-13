@@ -407,12 +407,22 @@ def _build_amendment_requirements(
     prior_paths: list[str],
     added_paths: list[str],
 ) -> list[dict[str, Any]]:
-    """One typed requirement per declared path, plus one for the amendment.
+    """Require current-diff coverage only for this amendment's new paths.
 
-    Coverage is asserted per requirement, so a diff that quietly drops an
-    earlier path fails instead of passing on the new paths alone.
+    ``prior_paths`` remains an explicit input so callers cannot accidentally
+    confuse cumulative authority with newly added targets.  Prior paths stay
+    in the cumulative allowed scope and are protected by amendment-state
+    validation, but they are not work requirements for the current diff.
     """
+    del prior_paths
     requirements: list[dict[str, Any]] = []
+    # Authority and coverage deliberately have separate representations:
+    # cumulative_paths / allowed_paths retain every authorized predecessor,
+    # while these requirements are consumed as current-diff obligations.
+    # Reintroducing prior paths here would make each otherwise independent
+    # amendment re-edit all earlier targets. Scope shrinkage remains guarded
+    # by validate_amendment_state, and extra paths remain unplanned diffs.
+
     if added_paths:
         requirements.append(
             _amendment_requirement(
@@ -425,16 +435,6 @@ def _build_amendment_requirements(
                     f"must not drop prior scope: {summary}"
                 ),
                 list(added_paths),
-            )
-        )
-    for path in prior_paths:
-        requirements.append(
-            _amendment_requirement(
-                root_task_id,
-                amendment_index,
-                "amendment_scope",
-                f"Cumulative scope must still change the prior declared target: {path}",
-                [path],
             )
         )
     for path in added_paths:

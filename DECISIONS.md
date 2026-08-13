@@ -1,5 +1,17 @@
 # Decisions
 
+## 2026-08-13 - Amendment authority is cumulative; diff coverage is incremental
+
+Decision: preserve the cumulative union of amendment `allowed_paths`, but
+require the current captured diff to cover only targets newly added by the
+current amendment. Continue to reject removed prior authority, unplanned diff
+paths, invalid chains, and malformed carried requirements independently.
+
+Reason: prior targets describe retained edit authority, not mandatory repeated
+work. Requiring every successor diff to re-edit all earlier targets made a
+valid beta-only amendment fail after an alpha root task and compounded with
+each later amendment.
+
 ## 2026-08-10 - Public-contract review requires public-contract evidence
 
 Decision: apply the `human_review_completed` gate only when the task state
