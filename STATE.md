@@ -130,6 +130,10 @@
   default install and scan path remain small. Missing or malformed policy
   parsing still fails verification closed, and wheel CI verifies the runtime
   dependency boundary in an isolated environment.
+- The scanner container pins Checkov 3.3.10 and aiohttp 3.14.3 together so the
+  image retains Checkov compatibility while closing CVE-2026-69244. The image
+  build asserts both resolved versions before Trivy enforces the remaining
+  HIGH/CRITICAL vulnerability boundary.
 - Durable user, operator, security, architecture, and whitepaper documentation
   links to a generated source reference covering 175 non-test Python modules,
   2,145 declarations, 36 CLI commands, 20 published MCP tools, 47 granular

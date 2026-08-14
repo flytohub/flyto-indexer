@@ -10,11 +10,14 @@ def test_scanner_dependency_overrides_stay_on_tested_secure_versions():
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
 
     assert '"semgrep==1.170.0"' in dockerfile
+    assert '"checkov==3.3.10"' in dockerfile
+    assert '"aiohttp==3.14.3"' in dockerfile
     assert '"mcp==1.29.0"' in dockerfile
     assert '"msgpack==1.2.1"' in dockerfile
     assert '"setuptools==83.0.0"' in dockerfile
     assert "from mcp.server.fastmcp import FastMCP" in dockerfile
     assert 'pip install --upgrade "mcp>=1.28.1"' not in dockerfile
+    assert '"checkov==3.3.8"' not in dockerfile
 
 
 def test_runtime_image_applies_fixable_os_security_updates():

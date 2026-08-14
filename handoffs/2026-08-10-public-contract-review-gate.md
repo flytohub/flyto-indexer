@@ -5,7 +5,7 @@ Branch: `main`
 
 ## Scope
 
-Repair the mandatory pre-implementation gate after real Flyto coding jobs
+Repair the mandatory pre-implementation gate after real Flyto2 coding jobs
 proved that a high breaking-risk constraint requested external human approval
 without any `public_contract_change_detected` evidence.
 

@@ -72,22 +72,25 @@ COPY --from=build /wheels/*.whl /tmp/
 # Pin semgrep + checkov versions explicitly so the image is reproducible across
 # CI rebuilds. Update the pins when W2-BE-ADAPTERS tests are rerun against new
 # releases. Semgrep 1.170 declares MCP 1.23.3, which is affected by
-# CVE-2026-59950. Checkov's resolved dependency set can also downgrade msgpack
-# and setuptools to vulnerable releases. Re-apply all tested security overrides
-# after the complete dependency solve; the import and CLI smoke checks below
-# guard the intentionally overridden Semgrep MCP dependency.
+# CVE-2026-59950. Checkov 3.3.10 is the first 3.3.x release compatible with the
+# aiohttp 3.14.3 fix for CVE-2026-69244. Checkov's resolved dependency set can
+# also downgrade msgpack and setuptools to vulnerable releases. Re-apply all
+# tested security overrides after the complete dependency solve; the import and
+# CLI smoke checks below guard the intentionally overridden Semgrep MCP
+# dependency.
 RUN pip install --upgrade pip \
     && pip install \
         /tmp/*.whl \
         "semgrep==1.170.0" \
-        "checkov==3.3.8" \
+        "checkov==3.3.10" \
+        "aiohttp==3.14.3" \
         "protobuf>=6.33.5,<7" \
     && pip install --upgrade \
         "mcp==1.29.0" \
         "msgpack==1.2.1" \
         "setuptools==83.0.0" \
     && rm -f /tmp/*.whl \
-    && python -c "from importlib.metadata import version; expected={'mcp': '1.29.0', 'msgpack': '1.2.1', 'setuptools': '83.0.0'}; actual={name: version(name) for name in expected}; assert actual == expected, actual" \
+    && python -c "from importlib.metadata import version; expected={'aiohttp': '3.14.3', 'checkov': '3.3.10', 'mcp': '1.29.0', 'msgpack': '1.2.1', 'setuptools': '83.0.0'}; actual={name: version(name) for name in expected}; assert actual == expected, actual" \
     && python -c "from mcp.server.fastmcp import FastMCP; assert FastMCP" \
     && semgrep --version \
     && checkov --version

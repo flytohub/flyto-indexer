@@ -41,6 +41,6 @@
   "scope": "src",
   "tools": {
     "mypy": "mypy 2.3.0 (compiled: yes)",
-    "ruff": "ruff 0.15.15"
+    "ruff": "ruff 0.16.2"
   }
 }

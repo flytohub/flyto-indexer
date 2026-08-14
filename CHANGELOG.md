@@ -13,6 +13,11 @@
 ## Unreleased
 
 ### Fixed
+- Updated the scanner image to the first Checkov 3.3.x dependency window that
+  accepts aiohttp 3.14.3, then pinned and asserted the fixed aiohttp version to
+  close CVE-2026-69244 without weakening the HIGH/CRITICAL Trivy gate.
+- Synchronized the reviewed quality-debt baseline with the repository's pinned
+  Ruff 0.16.2 toolchain and corrected one retired product name in a handoff.
 - Unified CLI, MCP/API, task planning, search, Grill, watcher, maintenance,
   and reference loading behind one immutable project/index identity. Explicit
   `FLYTO_INDEX_DIR` paths are authoritative before creation and invalid values
