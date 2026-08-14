@@ -13,6 +13,16 @@
 ## Unreleased
 
 ### Fixed
+- Added a task-plan-only, proof-bound generation-2 recovery contract. It binds
+  audited prior scope and explicit targets to the exact raw parent, derives
+  historical fuzzy-target normalization inside the Indexer, emits
+  domain-separated successor evidence, preserves ordinary amendment behavior,
+  confines every executable resolution path and symbol to its exact project
+  and plan coordinate, and rejects malformed, oversized, non-canonical,
+  ambiguous legacy ownership, or non-plan recovery input without falling back
+  to a fresh task. Audited prior scope is capped at 32 paths, and the closed
+  typed-path grammar retains absent `.7z` archive targets without accepting
+  arbitrary dotted identifiers.
 - Updated the scanner image to the first Checkov 3.3.x dependency window that
   accepts aiohttp 3.14.3, then pinned and asserted the fixed aiohttp version to
   close CVE-2026-69244 without weakening the HIGH/CRITICAL Trivy gate.

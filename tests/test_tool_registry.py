@@ -104,6 +104,34 @@ class TestMCPTools:
         assert "browser" in properties["required_proof_kinds"]["items"]["enum"]
         assert len(SMART_TOOLS) == 20
 
+    def test_task_recovery_context_schema_matches_runtime_bounds(self):
+        from tool_registry import SMART_TOOLS
+
+        task_tool = next(tool for tool in SMART_TOOLS if tool["name"] == "task")
+        recovery = task_tool["inputSchema"]["properties"]["recovery_context"]
+
+        assert recovery["type"] == "object"
+        assert recovery["additionalProperties"] is False
+        assert set(recovery["required"]) == {
+            "version",
+            "source_parent_contract_digest",
+            "prior_scope",
+            "requested_targets",
+        }
+        properties = recovery["properties"]
+        assert properties["version"]["const"] == (
+            "task-rework-recovery.request.v1"
+        )
+        assert properties["source_parent_contract_digest"]["pattern"] == (
+            "^[0-9a-f]{64}$"
+        )
+        assert properties["prior_scope"]["minItems"] == 1
+        assert properties["prior_scope"]["maxItems"] == 32
+        assert properties["prior_scope"]["uniqueItems"] is True
+        assert properties["requested_targets"]["minItems"] == 1
+        assert properties["requested_targets"]["maxItems"] == 32
+        assert properties["requested_targets"]["uniqueItems"] is True
+
     def test_impact_adds_move_preflight_without_another_tool(self):
         from tool_registry import SMART_TOOLS
 

@@ -61,6 +61,7 @@ _PATHLIKE_BASENAMES = frozenset(
 )
 _PATHLIKE_SUFFIXES = frozenset(
     {
+        ".7z",
         ".adoc",
         ".astro",
         ".bash",

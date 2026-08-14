@@ -756,7 +756,7 @@ def smart_audit(project: str = None, focus: str = None) -> dict:
 # ---------------------------------------------------------------------------
 
 def _task_plan(description, targets, intent, project, grill_session_id=None,
-               task_contract=None):
+               task_contract=None, recovery_context=None):
     """Build one risk, instruction, and intent contract.
 
     With no parent contract this is the legacy fresh plan, byte-for-byte. When
@@ -765,19 +765,35 @@ def _task_plan(description, targets, intent, project, grill_session_id=None,
     """
     amend = _task_amendment_mod()
     amendment = None
+    context_targets = targets or []
+    if recovery_context is not None and not amend.is_amendment_request(task_contract):
+        request = amend.build_amendment_request(
+            task_contract or {},
+            project=project,
+            description=description,
+            targets=targets or [],
+            recovery_context=recovery_context,
+        )
+        return amend.blocked_result(request)
     if amend.is_amendment_request(task_contract):
         request = amend.build_amendment_request(
             task_contract,
             project=project,
             description=description,
             targets=targets or [],
+            recovery_context=recovery_context,
         )
         if not request.get("pass"):
             return amend.blocked_result(request)
         amendment = request
         # The root objective and main axis are immutable; only scope grows.
         description = request["objective"]
-        targets = list(request["cumulative_targets"])
+        if request.get("recovery"):
+            targets = list(request["plan_targets"])
+            context_targets = list(request["cumulative_paths"])
+        else:
+            targets = list(request["cumulative_targets"])
+            context_targets = targets
         intent = request["intent"] or intent
     task = _task_mod()
     result = task.analyze_task(
@@ -809,7 +825,7 @@ def _task_plan(description, targets, intent, project, grill_session_id=None,
         result,
         project=project,
         description=description,
-        targets=targets or [],
+        targets=context_targets,
         amendment_requirements=(
             amendment["amendment_requirements"] if amendment else None
         ),
@@ -1143,6 +1159,29 @@ def _task_feedback(
     }
 
 
+def _task_route_action(action: str, recovery_context: dict | None) -> str:
+    if recovery_context is not None and action != "plan":
+        return "__invalid_recovery__"
+    return action
+
+
+def _unknown_task_action(action: str, routed_action: str) -> dict:
+    if routed_action == "__invalid_recovery__":
+        return {
+            "pass": False,
+            "decision": "blocked",
+            "error": "recovery_context is valid only for task plan",
+            "reason_codes": ["AMENDMENT_RECOVERY_CONTEXT_INVALID"],
+            "required_actions": ["use_recovery_context_only_with_task_plan"],
+        }
+    return {
+        "error": (
+            f"Unknown action: {action}. Use 'grill', 'plan', 'gate', 'validate', "
+            "or 'feedback'."
+        )
+    }
+
+
 def smart_task(action: str, description: str = "", targets: list = None,
                intent: str = "refactor", task_contract: dict = None,
                next_phase: str = None, current_state: dict = None,
@@ -1160,7 +1199,8 @@ def smart_task(action: str, description: str = "", targets: list = None,
                framework: str = "", duration_ms: float = None,
                expected: str = "", actual: str = "", feedback_id: str = "",
                resolution: str = "", resolved_by: str = "",
-               since_days: int = 90, limit: int = 10) -> dict:
+               since_days: int = 90, limit: int = 10,
+               recovery_context: dict = None) -> dict:
     """Route one task action to its atomic workflow branch."""
     try:
         from .. import index_store as identity_store
@@ -1179,8 +1219,10 @@ def smart_task(action: str, description: str = "", targets: list = None,
                 feedback_summary, feedback_severity, feedback_tool, finding_id,
                 rule_id, framework, duration_ms, expected, actual, feedback_id,
                 resolution, resolved_by, since_days, limit,
+                recovery_context,
             )
-    if action == "grill":
+    routed_action = _task_route_action(action, recovery_context)
+    if routed_action == "grill":
         return _task_grill(
             grill_action=grill_action,
             description=description,
@@ -1196,9 +1238,15 @@ def smart_task(action: str, description: str = "", targets: list = None,
             accept_recommendation=accept_recommendation,
             request_id=request_id,
         )
-    if action == "plan":
+    if routed_action == "plan":
         result = _task_plan(
-            description, targets, intent, project, grill_session_id, task_contract
+            description,
+            targets,
+            intent,
+            project,
+            grill_session_id,
+            task_contract,
+            recovery_context,
         )
         # An amendment continues the root task, so continuity keeps recording
         # the original objective instead of superseding it with the amendment.
@@ -1213,7 +1261,7 @@ def smart_task(action: str, description: str = "", targets: list = None,
             project=project,
             description=objective,
         )
-    if action == "gate":
+    if routed_action == "gate":
         result = _task_gate(task_contract, next_phase, current_state, project)
         return _observe_task_continuity(
             action,
@@ -1222,7 +1270,7 @@ def smart_task(action: str, description: str = "", targets: list = None,
             task_contract=task_contract,
             current_state=current_state,
         )
-    if action == "validate":
+    if routed_action == "validate":
         result = _task_validate(
             project,
             run_tests,
@@ -1238,7 +1286,7 @@ def smart_task(action: str, description: str = "", targets: list = None,
             project=project,
             task_contract=task_contract,
         )
-    if action == "feedback":
+    if routed_action == "feedback":
         return _task_feedback(
             feedback_action=feedback_action,
             project=project,
@@ -1259,12 +1307,7 @@ def smart_task(action: str, description: str = "", targets: list = None,
             limit=limit,
             request_id=request_id,
         )
-    return {
-        "error": (
-            f"Unknown action: {action}. Use 'grill', 'plan', 'gate', 'validate', "
-            "or 'feedback'."
-        )
-    }
+    return _unknown_task_action(action, routed_action)
 
 
 def _observe_task_continuity(

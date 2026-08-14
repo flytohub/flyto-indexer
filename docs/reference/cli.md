@@ -2,7 +2,7 @@
 
 # CLI Command Reference
 
-The `flyto-index` argparse surface contains **39 subcommands** and **186 command arguments**.
+The `flyto-index` argparse surface contains **39 subcommands** and **187 command arguments**.
 
 ## `flyto-index init`
 
@@ -461,82 +461,83 @@ Handler: `inline dispatch`. Source: [`src/task_cli.py:18`](https://github.com/fl
 | `--intent` | no | `refactor` | `refactor, bugfix, feature, cleanup, migration` | Plan intent | [`src/task_cli.py:41`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L41) |
 | `--project` | no | `` | `` | Project name for scoped analysis | [`src/task_cli.py:47`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L47) |
 | `--task-contract` | no | `` | `` | Gate/validate contract JSON object or path to a JSON file | [`src/task_cli.py:48`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L48) |
-| `--current-state` | no | `` | `` | Gate current-state JSON object or path to a JSON file | [`src/task_cli.py:52`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L52) |
-| `--next-phase` | no | `` | `` | Gate phase to enter, e.g. inspect, assess, implement, verify | [`src/task_cli.py:56`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L56) |
-| `--test-path` | no | `` | `` | Test file or directory for validate | [`src/task_cli.py:60`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L60) |
-| `--no-tests` | no | `` | `` | Skip pytest during validate | [`src/task_cli.py:61`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L61) |
-| `--grill-action` | no | `start` | `start, answer, status, freeze, discard` | Grill session operation (default: start) | [`src/task_cli.py:62`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L62) |
-| `--grill-session-id` | no | `` | `` | Grill session to resume or attach to plan | [`src/task_cli.py:68`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L68) |
-| `--decisions` | no | `` | `` | Decision array as inline JSON or a JSON file | [`src/task_cli.py:69`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L69) |
-| `--decision-id` | no | `` | `` | Decision to answer | [`src/task_cli.py:70`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L70) |
-| `--answer` | no | `` | `` | Decision answer in any language | [`src/task_cli.py:71`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L71) |
-| `--selected-option` | no | `` | `` | Stable selected option ID | [`src/task_cli.py:72`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L72) |
-| `--accept-recommendation` | no | `` | `` | Use the recommended answer | [`src/task_cli.py:73`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L73) |
-| `--mode` | no | `interactive` | `interactive, batch` | Grill question mode | [`src/task_cli.py:78`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L78) |
-| `--locale` | no | `und` | `` | BCP-47 language metadata (default: und) | [`src/task_cli.py:84`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L84) |
-| `--max-questions` | no | `8` | `` | Batch/frontier limit (1-20) | [`src/task_cli.py:85`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L85) |
-| `--request-id` | no | `` | `` | Idempotency key for a state-changing action | [`src/task_cli.py:91`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L91) |
-| `--proof-receipts` | no | `` | `` | External proof receipt array as inline JSON or a JSON file | [`src/task_cli.py:92`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L92) |
-| `--require-proof` | no | `&#91;&#93;` | `` | Required external proof kind. Repeatable | [`src/task_cli.py:96`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L96) |
-| `--feedback-action` | no | `record` | `record, summary, resolve` | Feedback lifecycle operation | [`src/task_cli.py:102`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L102) |
-| `--feedback-category` | no | `other` | `` |  | [`src/task_cli.py:108`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L108) |
-| `--feedback-summary` | no | `` | `` |  | [`src/task_cli.py:109`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L109) |
-| `--feedback-severity` | no | `medium` | `low, medium, high, critical` |  | [`src/task_cli.py:110`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L110) |
-| `--feedback-tool` | no | `` | `` |  | [`src/task_cli.py:115`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L115) |
-| `--finding-id` | no | `` | `` |  | [`src/task_cli.py:116`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L116) |
-| `--rule-id` | no | `` | `` |  | [`src/task_cli.py:117`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L117) |
-| `--framework` | no | `` | `` |  | [`src/task_cli.py:118`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L118) |
-| `--duration-ms` | no | `` | `` |  | [`src/task_cli.py:119`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L119) |
-| `--expected` | no | `` | `` |  | [`src/task_cli.py:120`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L120) |
-| `--actual` | no | `` | `` |  | [`src/task_cli.py:121`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L121) |
-| `--feedback-id` | no | `` | `` |  | [`src/task_cli.py:122`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L122) |
-| `--resolution` | no | `` | `` |  | [`src/task_cli.py:123`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L123) |
-| `--resolved-by` | no | `` | `` |  | [`src/task_cli.py:124`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L124) |
-| `--since-days` | no | `90` | `` |  | [`src/task_cli.py:125`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L125) |
-| `--limit` | no | `10` | `` |  | [`src/task_cli.py:126`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L126) |
+| `--recovery-context` | no | `` | `` | Content-bound task-rework-recovery request JSON object or path | [`src/task_cli.py:52`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L52) |
+| `--current-state` | no | `` | `` | Gate current-state JSON object or path to a JSON file | [`src/task_cli.py:56`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L56) |
+| `--next-phase` | no | `` | `` | Gate phase to enter, e.g. inspect, assess, implement, verify | [`src/task_cli.py:60`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L60) |
+| `--test-path` | no | `` | `` | Test file or directory for validate | [`src/task_cli.py:64`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L64) |
+| `--no-tests` | no | `` | `` | Skip pytest during validate | [`src/task_cli.py:65`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L65) |
+| `--grill-action` | no | `start` | `start, answer, status, freeze, discard` | Grill session operation (default: start) | [`src/task_cli.py:66`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L66) |
+| `--grill-session-id` | no | `` | `` | Grill session to resume or attach to plan | [`src/task_cli.py:72`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L72) |
+| `--decisions` | no | `` | `` | Decision array as inline JSON or a JSON file | [`src/task_cli.py:73`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L73) |
+| `--decision-id` | no | `` | `` | Decision to answer | [`src/task_cli.py:74`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L74) |
+| `--answer` | no | `` | `` | Decision answer in any language | [`src/task_cli.py:75`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L75) |
+| `--selected-option` | no | `` | `` | Stable selected option ID | [`src/task_cli.py:76`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L76) |
+| `--accept-recommendation` | no | `` | `` | Use the recommended answer | [`src/task_cli.py:77`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L77) |
+| `--mode` | no | `interactive` | `interactive, batch` | Grill question mode | [`src/task_cli.py:82`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L82) |
+| `--locale` | no | `und` | `` | BCP-47 language metadata (default: und) | [`src/task_cli.py:88`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L88) |
+| `--max-questions` | no | `8` | `` | Batch/frontier limit (1-20) | [`src/task_cli.py:89`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L89) |
+| `--request-id` | no | `` | `` | Idempotency key for a state-changing action | [`src/task_cli.py:95`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L95) |
+| `--proof-receipts` | no | `` | `` | External proof receipt array as inline JSON or a JSON file | [`src/task_cli.py:96`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L96) |
+| `--require-proof` | no | `&#91;&#93;` | `` | Required external proof kind. Repeatable | [`src/task_cli.py:100`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L100) |
+| `--feedback-action` | no | `record` | `record, summary, resolve` | Feedback lifecycle operation | [`src/task_cli.py:106`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L106) |
+| `--feedback-category` | no | `other` | `` |  | [`src/task_cli.py:112`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L112) |
+| `--feedback-summary` | no | `` | `` |  | [`src/task_cli.py:113`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L113) |
+| `--feedback-severity` | no | `medium` | `low, medium, high, critical` |  | [`src/task_cli.py:114`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L114) |
+| `--feedback-tool` | no | `` | `` |  | [`src/task_cli.py:119`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L119) |
+| `--finding-id` | no | `` | `` |  | [`src/task_cli.py:120`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L120) |
+| `--rule-id` | no | `` | `` |  | [`src/task_cli.py:121`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L121) |
+| `--framework` | no | `` | `` |  | [`src/task_cli.py:122`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L122) |
+| `--duration-ms` | no | `` | `` |  | [`src/task_cli.py:123`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L123) |
+| `--expected` | no | `` | `` |  | [`src/task_cli.py:124`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L124) |
+| `--actual` | no | `` | `` |  | [`src/task_cli.py:125`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L125) |
+| `--feedback-id` | no | `` | `` |  | [`src/task_cli.py:126`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L126) |
+| `--resolution` | no | `` | `` |  | [`src/task_cli.py:127`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L127) |
+| `--resolved-by` | no | `` | `` |  | [`src/task_cli.py:128`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L128) |
+| `--since-days` | no | `90` | `` |  | [`src/task_cli.py:129`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L129) |
+| `--limit` | no | `10` | `` |  | [`src/task_cli.py:130`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L130) |
 
 ## `flyto-index task-status`
 
 Show resumable task state and an actionable handoff reminder
 
-Handler: `inline dispatch`. Source: [`src/task_cli.py:131`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L131).
+Handler: `inline dispatch`. Source: [`src/task_cli.py:135`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L135).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path | [`src/task_cli.py:135`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L135) |
-| `--task` | no | `` | `` | Specific task or run ID | [`src/task_cli.py:136`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L136) |
-| `--all` | no | `` | `` | Include recent task runs | [`src/task_cli.py:137`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L137) |
-| `--json` | no | `` | `` |  | [`src/task_cli.py:138`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L138) |
+| `path` | no | `.` | `` | Project root path | [`src/task_cli.py:139`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L139) |
+| `--task` | no | `` | `` | Specific task or run ID | [`src/task_cli.py:140`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L140) |
+| `--all` | no | `` | `` | Include recent task runs | [`src/task_cli.py:141`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L141) |
+| `--json` | no | `` | `` |  | [`src/task_cli.py:142`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L142) |
 
 ## `flyto-index usage-record`
 
 Record provider-reported or count-estimated task usage
 
-Handler: `inline dispatch`. Source: [`src/task_cli.py:140`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L140).
+Handler: `inline dispatch`. Source: [`src/task_cli.py:144`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L144).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `task_id` | no | `required` | `` | Task or run ID created by task plan | [`src/task_cli.py:144`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L144) |
-| `path` | no | `.` | `` | Project root path | [`src/task_cli.py:145`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L145) |
-| `--provider` | yes | `` | `` | Usage metadata provider | [`src/task_cli.py:146`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L146) |
-| `--model` | yes | `` | `` | Model identity | [`src/task_cli.py:147`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L147) |
-| `--estimated-output-chars` | no | `0` | `` |  | [`src/task_cli.py:155`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L155) |
-| `--event-id` | no | `` | `` | Optional idempotency key | [`src/task_cli.py:156`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L156) |
-| `--tool-calls` | no | `0` | `` |  | [`src/task_cli.py:157`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L157) |
-| `--duration-ms` | no | `0` | `` |  | [`src/task_cli.py:158`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L158) |
-| `--comparison-context` | no | `` | `` | Paired experiment identity as a JSON object or file | [`src/task_cli.py:159`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L159) |
-| `--variant` | no | `` | `` | Experiment variant name | [`src/task_cli.py:163`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L163) |
+| `task_id` | no | `required` | `` | Task or run ID created by task plan | [`src/task_cli.py:148`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L148) |
+| `path` | no | `.` | `` | Project root path | [`src/task_cli.py:149`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L149) |
+| `--provider` | yes | `` | `` | Usage metadata provider | [`src/task_cli.py:150`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L150) |
+| `--model` | yes | `` | `` | Model identity | [`src/task_cli.py:151`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L151) |
+| `--estimated-output-chars` | no | `0` | `` |  | [`src/task_cli.py:159`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L159) |
+| `--event-id` | no | `` | `` | Optional idempotency key | [`src/task_cli.py:160`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L160) |
+| `--tool-calls` | no | `0` | `` |  | [`src/task_cli.py:161`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L161) |
+| `--duration-ms` | no | `0` | `` |  | [`src/task_cli.py:162`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L162) |
+| `--comparison-context` | no | `` | `` | Paired experiment identity as a JSON object or file | [`src/task_cli.py:163`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L163) |
+| `--variant` | no | `` | `` | Experiment variant name | [`src/task_cli.py:167`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L167) |
 
 ## `flyto-index usage-report`
 
 Report verified task efficiency without claiming unpaired savings
 
-Handler: `inline dispatch`. Source: [`src/task_cli.py:165`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L165).
+Handler: `inline dispatch`. Source: [`src/task_cli.py:169`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L169).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path | [`src/task_cli.py:169`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L169) |
-| `--task` | no | `` | `` | Task or run ID; defaults to the latest | [`src/task_cli.py:170`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L170) |
-| `--compare` | no | `` | `` | Baseline task or run ID | [`src/task_cli.py:171`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L171) |
-| `--format` | no | `table` | `table, json, csv, html` |  | [`src/task_cli.py:172`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L172) |
-| `--output` | no | `` | `` | Write the rendered report to a file | [`src/task_cli.py:177`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L177) |
+| `path` | no | `.` | `` | Project root path | [`src/task_cli.py:173`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L173) |
+| `--task` | no | `` | `` | Task or run ID; defaults to the latest | [`src/task_cli.py:174`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L174) |
+| `--compare` | no | `` | `` | Baseline task or run ID | [`src/task_cli.py:175`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L175) |
+| `--format` | no | `table` | `table, json, csv, html` |  | [`src/task_cli.py:176`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L176) |
+| `--output` | no | `` | `` | Write the rendered report to a file | [`src/task_cli.py:181`](https://github.com/flytohub/flyto-indexer/blob/main/src/task_cli.py#L181) |

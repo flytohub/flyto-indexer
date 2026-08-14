@@ -36,7 +36,8 @@ def repo(tmp_path: Path) -> Path:
 
 
 def _plan(repo: Path, description: str, targets: list[str],
-          parent: dict | None = None) -> dict:
+          parent: dict | None = None,
+          recovery_context: dict | None = None) -> dict:
     return smart._task_plan(
         description,
         targets,
@@ -44,6 +45,7 @@ def _plan(repo: Path, description: str, targets: list[str],
         str(repo),
         None,
         parent,
+        recovery_context,
     )
 
 
@@ -88,6 +90,25 @@ def test_plan_without_parent_is_fingerprint_stable(repo: Path) -> None:
         == second["intent_ledger"]["fingerprint"]
     )
     assert first["task_profile"]["task_id"] != second["task_profile"]["task_id"]
+
+
+def test_ordinary_amendment_keeps_raw_target_context_byte_compatibility(
+    repo: Path,
+) -> None:
+    symbol = f"{repo.name}:alpha.py:function:handler"
+    root = _plan(repo, "Refactor alpha", [symbol])
+
+    first = _plan(repo, "Also touch beta", ["beta.py"], root)
+    second = _plan(repo, "Also touch beta", ["beta.py"], root)
+
+    assert "recovery_evidence" not in first
+    assert first["task_profile"]["targets"] == [symbol, "beta.py"]
+    assert first["instruction_context"]["targets"] == [symbol, "beta.py"]
+    assert first["intent_ledger"]["targets"] == [symbol, "beta.py"]
+    for contract in (first, second):
+        contract.pop("continuity", None)
+        contract["task_profile"].pop("generated_at", None)
+    assert first == second
 
 
 def test_empty_parent_dict_is_treated_as_no_parent(repo: Path) -> None:

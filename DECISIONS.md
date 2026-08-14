@@ -1,5 +1,24 @@
 # Decisions
 
+## 2026-08-14 - Recovery authority is proof-bound and producer-derived
+
+Decision: expose recovery only on `task plan` as an exact content-bound
+request containing the raw parent digest, audited prior paths, and explicit
+targets. Derive normalization inside the Indexer, permit a historical fuzzy
+target to be dropped only from a root parent when current exact resolution,
+literal filesystem state, and one-to-one legacy resolution evidence all prove
+it is not authority. A dropped record must also own its symbol and path
+coordinates uniquely across the complete root or compound source matrix.
+Successor resolution rows may expose no path or symbol outside their exact
+project and canonical plan target. Bind the raw parent, normalized parent,
+executable successor, and evidence with domain-separated canonical digests.
+
+Reason: a terminal orchestration job may need one deterministic successor
+without creating a new session or trusting caller-selected drops. Keeping job,
+session, mission, and retry identities outside the public producer contract
+preserves ordinary amendment replay and idempotency while letting a private
+host bind its own recovery envelope to generic repository evidence.
+
 ## 2026-08-14 - Project and index identity has one immutable authority
 
 Decision: resolve project root, index directory, human label, and a structured

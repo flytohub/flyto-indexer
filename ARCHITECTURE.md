@@ -32,6 +32,16 @@ HTTP references.
    loads either the symbol or TF-IDF index, so stale sibling indexes cannot
    delay or contaminate an isolated MCP lane. Unfiltered searches retain the
    aggregate workspace behavior.
+   Task-plan recovery is a narrower producer boundary on top of this frozen
+   identity: a content-bound request carries audited paths and explicit
+   targets, while the indexer alone derives whether a historical root-parent
+   label has exact proof and globally unique source coordinates to be removed.
+   Audited and executable recovery scopes are bounded to 32 paths, and each
+   successor resolution row is confined to its exact project and plan input.
+   Strict canonical digests bind the raw parent, normalized authority,
+   executable successor, and emitted evidence.
+   Orchestration job, session, mission, and retry state remain outside the
+   public Indexer contract.
 4. Verify combines index integrity, context lookup, impact closure, secret
    checks, taint rules, documentation checks, rules/layers policy checks, and
    release hygiene checks.

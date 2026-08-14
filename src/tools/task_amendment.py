@@ -114,6 +114,15 @@ _REMEDIATION: dict[str, str] = {
     "AMENDMENT_TARGET_SYMLINK": "declare_bounded_relative_amendment_targets",
     "AMENDMENT_TARGET_UNBOUNDED": "declare_bounded_relative_amendment_targets",
     "AMENDMENT_TARGET_UNRESOLVED": "declare_resolvable_amendment_targets",
+    "AMENDMENT_RECOVERY_CONTEXT_INVALID": "supply_bound_recovery_context",
+    "AMENDMENT_RECOVERY_PARENT_MISMATCH": "refresh_recovery_parent_digest",
+    "AMENDMENT_RECOVERY_REQUEST_MISMATCH": "bind_recovery_to_requested_targets",
+    "AMENDMENT_RECOVERY_SOURCE_SCOPE_INVALID": "refresh_parent_task_contract",
+    "AMENDMENT_RECOVERY_SOURCE_CONTRACT_OVERSIZED": "reduce_parent_contract_size",
+    "AMENDMENT_RECOVERY_PRIOR_SCOPE_INVALID": "declare_resolvable_prior_scope",
+    "AMENDMENT_RECOVERY_NORMALIZATION_UNPROVEN": "refresh_parent_task_contract",
+    "AMENDMENT_RECOVERY_LEGACY_PARENT_REQUIRED": "recover_from_root_parent_contract",
+    "AMENDMENT_RECOVERY_SUCCESSOR_NONCANONICAL": "refresh_parent_task_contract",
     "AMENDMENT_CHAIN_MALFORMED": "rerun_task_plan_without_parent",
     "AMENDMENT_CHAIN_CYCLIC": "rerun_task_plan_without_parent",
     "AMENDMENT_CHAIN_OVERSIZED": "close_this_task_before_amending_again",
@@ -751,7 +760,7 @@ def _refuse(
     }
 
 
-def build_amendment_request(
+def _build_amendment_request(
     parent: dict[str, Any],
     *,
     project: str | None,
@@ -989,6 +998,44 @@ def build_amendment_request(
     }
 
 
+def build_amendment_request(
+    parent: dict[str, Any],
+    *,
+    project: str | None,
+    description: str,
+    targets: Any,
+    recovery_context: Any = None,
+) -> dict[str, Any]:
+    """Build an ordinary amendment or one proof-bound recovery successor."""
+    if recovery_context is None:
+        return _build_amendment_request(
+            parent,
+            project=project,
+            description=description,
+            targets=targets,
+        )
+    from . import task_parent_recovery
+
+    return task_parent_recovery.build_recovery_request(
+        parent=parent,
+        project=project,
+        description=description,
+        targets=targets,
+        recovery_context=recovery_context,
+        read_parent_state=_read_parent_state,
+        refuse=_refuse,
+        resolve_root=resolve_project_root,
+        validate_target=_validate_target,
+        validate_targets=_validated_targets,
+        sanitize_amendments=sanitize_amendment_requirements,
+        ordinary_builder=_build_amendment_request,
+        parent_digest=parent_contract_digest,
+        root_contract_id=_root_contract_id,
+        max_cumulative_targets=MAX_CUMULATIVE_TARGETS,
+        max_requested_targets=MAX_AMENDMENT_TARGETS,
+    )
+
+
 def finalize_amended_contract(
     contract: dict[str, Any],
     request: dict[str, Any],
@@ -1029,6 +1076,18 @@ def finalize_amended_contract(
             "chain_length": len(request["chain"]),
         },
     }
+    recovery = request.get("recovery")
+    if isinstance(recovery, dict):
+        from . import task_parent_recovery
+
+        evidence = task_parent_recovery.build_successor_recovery_evidence(
+            contract, request
+        )
+        if evidence is None:
+            return blocked_result(
+                _refuse(["AMENDMENT_RECOVERY_SUCCESSOR_NONCANONICAL"])
+            )
+        contract["recovery_evidence"] = evidence
     return contract
 
 

@@ -95,6 +95,17 @@ def test_dotted_spec_identifier_does_not_invent_a_required_diff_path(tmp_path):
     assert result["violations"] == []
 
 
+def test_intent_ledger_recognizes_only_declared_archive_suffix(tmp_path):
+    ledger = build_intent_ledger(
+        str(tmp_path),
+        "Refresh a packaged archive without widening dotted identifiers",
+        ["archive.7z", "human.approval"],
+        _plan(),
+    )
+
+    assert ledger["allowed_paths"] == ["archive.7z"]
+
+
 @pytest.mark.parametrize(
     "target,expected",
     [

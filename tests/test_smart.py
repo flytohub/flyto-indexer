@@ -396,6 +396,38 @@ class TestSmartTask:
         assert result["task_id"] == "t1"
         mock_task.analyze_task.assert_called_once()
 
+    def test_recovery_context_without_parent_never_falls_back_to_fresh_plan(
+        self,
+        mock_task,
+    ):
+        result = smart_task(
+            action="plan",
+            description="continue",
+            targets=["src/auth.py"],
+            recovery_context={
+                "version": "task-rework-recovery.request.v1",
+                "source_parent_contract_digest": "0" * 64,
+                "prior_scope": ["src/prior.py"],
+                "requested_targets": ["src/auth.py"],
+            },
+        )
+
+        assert result["pass"] is False
+        assert result["reason_codes"] == ["AMENDMENT_PARENT_NOT_A_CONTRACT"]
+        mock_task.analyze_task.assert_not_called()
+
+    def test_recovery_context_is_plan_only(self, mock_task):
+        result = smart_task(
+            action="gate",
+            task_contract={"id": "t1"},
+            next_phase="implement",
+            recovery_context={"hostile": [{}]},
+        )
+
+        assert result["pass"] is False
+        assert result["reason_codes"] == ["AMENDMENT_RECOVERY_CONTEXT_INVALID"]
+        mock_task.task_gate_check.assert_not_called()
+
     def test_gate_action(self, mock_task):
         result = smart_task(action="gate", task_contract={"id": "t1"}, next_phase="implement")
         assert result["pass"] is True

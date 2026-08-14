@@ -194,6 +194,46 @@ SMART_TOOLS: list = [
                         "start a new task."
                     ),
                 },
+                "recovery_context": {
+                    "type": "object",
+                    "required": [
+                        "version",
+                        "source_parent_contract_digest",
+                        "prior_scope",
+                        "requested_targets",
+                    ],
+                    "additionalProperties": False,
+                    "properties": {
+                        "version": {
+                            "type": "string",
+                            "const": "task-rework-recovery.request.v1",
+                        },
+                        "source_parent_contract_digest": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{64}$",
+                        },
+                        "prior_scope": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 32,
+                            "uniqueItems": True,
+                            "items": {"type": "string", "minLength": 1},
+                        },
+                        "requested_targets": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 32,
+                            "uniqueItems": True,
+                            "items": {"type": "string", "minLength": 1},
+                        },
+                    },
+                    "description": (
+                        "(plan) Content-bound task-rework-recovery.request.v1 "
+                        "for one proof-bound successor. It must bind the exact "
+                        "source parent digest, ordered audited prior_scope, and "
+                        "the same explicit requested_targets passed as targets."
+                    ),
+                },
                 "next_phase": {
                     "type": "string",
                     "description": "(gate) Phase to enter: inspect, assess, implement, verify",

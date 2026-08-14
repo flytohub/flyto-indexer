@@ -15,6 +15,7 @@ def build_task_arguments(args: dict[str, Any]) -> dict[str, Any]:
         "targets": args.get("targets"),
         "intent": args.get("intent", "refactor"),
         "task_contract": args.get("task_contract"),
+        "recovery_context": args.get("recovery_context"),
         "next_phase": args.get("next_phase"),
         "current_state": args.get("current_state"),
         "project": args.get("project"),

@@ -50,6 +50,10 @@ def configure_task_parser(subparsers) -> None:
         help="Gate/validate contract JSON object or path to a JSON file",
     )
     parser.add_argument(
+        "--recovery-context",
+        help="Content-bound task-rework-recovery request JSON object or path",
+    )
+    parser.add_argument(
         "--current-state",
         help="Gate current-state JSON object or path to a JSON file",
     )
@@ -401,6 +405,9 @@ def _validate_args(args, task_contract: dict | None, current_state: dict | None)
 def build_task_arguments(args) -> dict[str, Any]:
     """Translate argparse state to the single smart_task keyword contract."""
     task_contract = _load_json_arg(args.task_contract, "--task-contract", dict)
+    recovery_context = _load_json_arg(
+        getattr(args, "recovery_context", None), "--recovery-context", dict
+    )
     current_state = _load_json_arg(args.current_state, "--current-state", dict)
     decisions = _load_json_arg(args.decisions, "--decisions", list)
     proof_receipts = _load_json_arg(args.proof_receipts, "--proof-receipts", list)
@@ -411,6 +418,7 @@ def build_task_arguments(args) -> dict[str, Any]:
         "targets": _collect_targets(args.target, args.targets),
         "intent": args.intent,
         "task_contract": task_contract,
+        "recovery_context": recovery_context,
         "next_phase": args.next_phase,
         "current_state": current_state,
         "project": args.project,

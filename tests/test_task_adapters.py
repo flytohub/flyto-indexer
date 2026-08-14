@@ -56,6 +56,34 @@ def test_cli_adapter_preserves_inline_contract_and_all_task_fields(tmp_path):
     assert mapped["locale"] == "zh-TW"
 
 
+def test_cli_and_dispatch_preserve_exact_recovery_context():
+    recovery = {
+        "version": "task-rework-recovery.request.v1",
+        "source_parent_contract_digest": "a" * 64,
+        "prior_scope": [f"src/prior-{index:02d}.py" for index in range(32)],
+        "requested_targets": ["src/next.py"],
+    }
+    args = _parse(
+        "plan",
+        "--target",
+        "src/next.py",
+        "--recovery-context",
+        json.dumps(recovery),
+    )
+
+    cli = build_cli_arguments(args)
+    dispatch = build_dispatch_arguments(
+        {
+            "action": "plan",
+            "targets": ["src/next.py"],
+            "recovery_context": recovery,
+        }
+    )
+
+    assert cli["recovery_context"] == recovery
+    assert dispatch["recovery_context"] is recovery
+
+
 def test_cli_exit_policy_includes_closed_loop_validate_failure():
     args = _parse("validate")
 

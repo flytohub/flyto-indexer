@@ -8,12 +8,16 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import index_store as top_level_index_store
 from src import index_store as src_index_store
 from src.task_cli import configure_task_parser, execute_task_command
+from src.tool_registry.task_dispatch import dispatch_task
 from src.tools import smart as src_smart
+from src.tools.task_recovery_evidence import source_contract_digest
 from tools import smart as top_level_smart
 
 
@@ -133,6 +137,123 @@ def test_execute_task_plan_keeps_continuity_in_selected_index_for_top_level_impo
         index_store=top_level_index_store,
         smart=top_level_smart,
     )
+
+
+def _recovery_cli_args(
+    selected: Path,
+    parent: dict,
+    recovery_context: dict,
+) -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    configure_task_parser(parser.add_subparsers(dest="command"))
+    return parser.parse_args(
+        [
+            "task",
+            "plan",
+            "--description",
+            "Continue the audited work",
+            "--target",
+            "gamma.py",
+            "--project",
+            str(selected),
+            "--task-contract",
+            json.dumps(parent),
+            "--recovery-context",
+            json.dumps(recovery_context),
+        ]
+    )
+
+
+def test_cli_plan_loads_bound_recovery_json_and_preserves_identity_scope(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    selected = tmp_path / "selected"
+    selected.mkdir()
+    for relative in ("alpha.py", "beta.py", "gamma.py"):
+        (selected / relative).write_text("value = 1\n", encoding="utf-8")
+    _write_index(selected / ".flyto-index", str(selected), root_path=selected)
+    monkeypatch.setenv("FLYTO_INDEXER_TASK_DB", str(tmp_path / "tasks.sqlite"))
+    parent = src_smart.smart_task(
+        action="plan",
+        description="Refactor alpha",
+        targets=["alpha.py"],
+        project=str(selected),
+    )
+    recovery = {
+        "version": "task-rework-recovery.request.v1",
+        "source_parent_contract_digest": source_contract_digest(parent),
+        "prior_scope": ["beta.py"],
+        "requested_targets": ["gamma.py"],
+    }
+
+    result, should_fail = execute_task_command(
+        _recovery_cli_args(selected, parent, recovery),
+        smart_task=src_smart.smart_task,
+    )
+
+    assert should_fail is False
+    assert result["recovery_evidence"]["normalization_kind"] == "identity.v1"
+    assert result["recovery_evidence"]["request"]["plan_targets"] == [
+        "beta.py",
+        "gamma.py",
+    ]
+    assert result["intent_ledger"]["allowed_paths"] == [
+        "alpha.py",
+        "beta.py",
+        "gamma.py",
+    ]
+
+
+@pytest.mark.parametrize(
+    "prior_scope",
+    [[{}], [f"prior-{index:02d}.py" for index in range(33)]],
+)
+def test_cli_recovery_invalid_prior_scope_refuses_without_exception(
+    tmp_path: Path,
+    monkeypatch,
+    prior_scope,
+) -> None:
+    selected = tmp_path / "selected"
+    selected.mkdir()
+    for relative in ("alpha.py", "gamma.py"):
+        (selected / relative).write_text("value = 1\n", encoding="utf-8")
+    _write_index(selected / ".flyto-index", str(selected), root_path=selected)
+    monkeypatch.setenv("FLYTO_INDEXER_TASK_DB", str(tmp_path / "tasks.sqlite"))
+    parent = src_smart.smart_task(
+        action="plan",
+        description="Refactor alpha",
+        targets=["alpha.py"],
+        project=str(selected),
+    )
+    recovery = {
+        "version": "task-rework-recovery.request.v1",
+        "source_parent_contract_digest": source_contract_digest(parent),
+        "prior_scope": prior_scope,
+        "requested_targets": ["gamma.py"],
+    }
+
+    result, should_fail = execute_task_command(
+        _recovery_cli_args(selected, parent, recovery),
+        smart_task=src_smart.smart_task,
+    )
+    mcp_result = dispatch_task(
+        {
+            "action": "plan",
+            "description": "Continue the audited work",
+            "targets": ["gamma.py"],
+            "project": str(selected),
+            "task_contract": parent,
+            "recovery_context": recovery,
+        }
+    )
+
+    assert should_fail is True
+    assert result["reason_codes"] == ["AMENDMENT_RECOVERY_PRIOR_SCOPE_INVALID"]
+    assert mcp_result["pass"] is False
+    assert mcp_result["reason_codes"] == [
+        "AMENDMENT_RECOVERY_PRIOR_SCOPE_INVALID"
+    ]
 
 
 def _assert_public_nonplan_action_stays_in_selected_index(

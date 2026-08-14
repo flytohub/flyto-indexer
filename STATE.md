@@ -16,6 +16,16 @@
   diff coverage applies only to targets newly added by the latest amendment.
   Scope shrinkage, unplanned diffs, chain integrity, and bounded requirement
   sanitization continue to fail closed independently.
+- A task-plan-only recovery request can bind one exact parent contract to an
+  audited prior implementation scope and explicit successor targets. The
+  producer derives normalization itself, drops a historical fuzzy label only
+  from a root parent with current resolver, filesystem, and one-to-one legacy
+  proof whose symbol and path coordinates are globally unique in the source
+  matrix, and emits content-bound generation-2 evidence. Audited prior scope
+  and the resulting executable plan are each bounded to 32 canonical paths;
+  every nonempty successor path and symbol stays bound to its exact project and
+  plan input. Ordinary amendments remain byte-compatible and no job, session,
+  or retry identity enters this public contract.
 - Task planning grants edit authority only to exact symbol identities or
   bounded paths. BM25-only labels remain unresolved, hostile filesystem probes
   fail closed, and execution-plan file order is stable across hash seeds.
@@ -41,7 +51,9 @@
 - Inline requirement parsing now distinguishes supported file suffixes and
   conventional repository filenames from dotted module or capability IDs.
   Identifiers such as `human.approval` remain symbols and no longer fabricate
-  an impossible required diff path during `task(validate)`.
+  an impossible required diff path during `task(validate)`. The closed typed
+  suffix set includes `.7z`, so absent archive outputs remain explicit path
+  authority instead of being mistaken for legacy labels.
 - Existing task plan, gate, validate, and project-profile surfaces share one
   bounded, gitignored SQLite continuity record. It carries resumable task facts
   across AI clients without adding an MCP tool or committed handoff file.
@@ -166,13 +178,12 @@
   artifacts. Its GitHub Release contains the verified CI build artifacts; the
   future release step now identifies the repository explicitly and does not
   depend on a checkout in its artifact-only job.
-- Latest task-local verification: `2081 passed, 1 skipped`; Ruff passed across
-  the full repository; the quality-debt ratchet passed at Ruff 1,141 and mypy
-  732; generated references, language evidence, and project-memory lint passed.
-  Rebuilding the exact flyto-core requirement ledger now records
-  `human.approval` only as a symbol and validates the script-only change with
-  zero violations. Strict full-scan self-verify passed 20/20 with 310 files,
-  4,985 indexed symbols, health 91/A, and zero warnings or failures.
+- Latest task-local verification: `2362 passed, 1 skipped`; Ruff and mypy passed
+  across the full repository; the pinned quality-debt ratchet passed at Ruff
+  1,140 and mypy 729; generated references, language evidence, version parity,
+  and project-memory lint passed. Strict isolated full-scan self-verify passed
+  20/20 with 316 files, health 91/A, documentation at
+  its 25/25 policy ceiling, and zero warnings or failures.
 - Latest release verification: `1972 passed, 1 skipped`; Ruff passed across the
   full repository; mypy found no issues in 153 source files; the offline corpus
   passed 13/13 with 1.0 precision, 1.0 recall, zero false positives, p95 case
