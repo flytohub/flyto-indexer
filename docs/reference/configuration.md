@@ -35,7 +35,7 @@
 | `FLYTO_INDEXER_TASK_DB` | `src/task_runs.py` |
 | `FLYTO_INDEXER_TASK_TRACKING` | `src/task_runs.py` |
 | `FLYTO_INDEXER_TOOL_TIMEOUT_SECONDS` | `src/mcp_server.py` |
-| `FLYTO_INDEX_DIR` | `src/index_store.py`, `src/tools/references.py` |
+| `FLYTO_INDEX_DIR` | `src/index_store.py` |
 | `FLYTO_LSP_ENABLED` | `src/lsp/manager.py` |
 | `FLYTO_LSP_TIMEOUT` | `src/lsp/manager.py` |
 | `FLYTO_PROJECT_ROOT` | `src/tools/references.py` |

@@ -1,5 +1,18 @@
 # Decisions
 
+## 2026-08-14 - Project and index identity has one immutable authority
+
+Decision: resolve project root, index directory, human label, and a structured
+SHA-256 cache key at an operation boundary, then pass that frozen identity
+through task planning and tool scopes. A present `FLYTO_INDEX_DIR` is
+authoritative even before creation; malformed or empty explicit values fail
+closed rather than falling back to the current directory.
+
+Reason: imported directory constants, later cwd/environment reads, and
+label-only cache keys could make one request read or refresh another project's
+index. One immutable identity preserves lazy loading and atomic reindexing
+while removing ambient and mutable-global authority.
+
 ## 2026-08-13 - Amendment authority is cumulative; diff coverage is incremental
 
 Decision: preserve the cumulative union of amendment `allowed_paths`, but

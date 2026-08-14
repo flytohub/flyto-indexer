@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
 from src.cli import (
+    _invoke_with_project_scope,
     cmd_install_hook,
     cmd_demo,
     cmd_check,
@@ -22,6 +23,11 @@ from src.cli import (
     HOOK_MARKER_BEGIN,
     HOOK_MARKER_END,
     main,
+)
+from src.index_store import (
+    current_project_identity,
+    project_identity_scope,
+    resolve_project_identity,
 )
 
 
@@ -64,6 +70,42 @@ def write_python_files(tmp_path: Path):
         '    routes = get_routes()\n'
         '    print(routes)\n'
     )
+
+
+def test_project_scope_kwargs_dispatch_restores_identity_after_success(tmp_path):
+    outer_root = tmp_path / "outer"
+    inner_root = tmp_path / "inner"
+    outer_root.mkdir()
+    inner_root.mkdir()
+    outer = resolve_project_identity(project_root=outer_root)
+    args = make_args(project=str(inner_root))
+
+    def handler(*, args):
+        active = current_project_identity()
+        assert active.project_root == inner_root.resolve()
+        return args.project
+
+    with project_identity_scope(outer):
+        assert _invoke_with_project_scope(handler, args=args) == str(inner_root)
+        assert current_project_identity() == outer
+
+
+def test_project_scope_dispatch_restores_identity_after_exception(tmp_path):
+    outer_root = tmp_path / "outer"
+    inner_root = tmp_path / "inner"
+    outer_root.mkdir()
+    inner_root.mkdir()
+    outer = resolve_project_identity(project_root=outer_root)
+    args = make_args(project=str(inner_root))
+
+    def handler(*, args):
+        assert current_project_identity().project_root == inner_root.resolve()
+        raise RuntimeError(args.project)
+
+    with project_identity_scope(outer):
+        with pytest.raises(RuntimeError, match=str(inner_root)):
+            _invoke_with_project_scope(handler, args=args)
+        assert current_project_identity() == outer
 
 
 # ===========================================================================

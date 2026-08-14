@@ -1162,6 +1162,24 @@ def smart_task(action: str, description: str = "", targets: list = None,
                resolution: str = "", resolved_by: str = "",
                since_days: int = 90, limit: int = 10) -> dict:
     """Route one task action to its atomic workflow branch."""
+    try:
+        from .. import index_store as identity_store
+    except ImportError:
+        import index_store as identity_store
+    if identity_store._current_project_scope() is None:
+        identity = identity_store.resolve_project_identity(project)
+        with identity_store.project_identity_scope(identity):
+            return smart_task(
+                action, description, targets, intent, task_contract, next_phase,
+                current_state, project or identity.project_label, run_tests, test_path,
+                grill_action, grill_session_id, decisions, decision_id, answer,
+                selected_option, accept_recommendation, mode, locale,
+                max_questions, request_id, proof_receipts,
+                required_proof_kinds, feedback_action, feedback_category,
+                feedback_summary, feedback_severity, feedback_tool, finding_id,
+                rule_id, framework, duration_ms, expected, actual, feedback_id,
+                resolution, resolved_by, since_days, limit,
+            )
     if action == "grill":
         return _task_grill(
             grill_action=grill_action,

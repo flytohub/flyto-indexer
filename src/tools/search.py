@@ -58,6 +58,17 @@ def _project_index_scope(project: str):
     return import_module(module_name).project_index_scope(project)
 
 
+def _current_project_scope():
+    """Look up the active scope without capturing mutable module state."""
+    package = __package__ or ""
+    module_name = (
+        f"{package.split('.', 1)[0]}.index_store"
+        if "." in package
+        else "index_store"
+    )
+    return import_module(module_name)._current_project_scope()
+
+
 def _tokens(text: str) -> set[str]:
     return set(tokenize(text or ""))
 
@@ -407,6 +418,11 @@ def search_by_keyword(
         - Has exports: +3
         - Session boost: +8
     """
+    if project and _current_project_scope() != project:
+        with _project_index_scope(project):
+            return search_by_keyword(
+                query, max_results, symbol_type, project, include_content, session_id
+            )
     index = load_index()
     query_lower = query.lower()
 
@@ -491,6 +507,9 @@ def fulltext_search(
 
     Searches in comments, strings, TODOs, and general content.
     """
+    if project and _current_project_scope() != project:
+        with _project_index_scope(project):
+            return fulltext_search(query, search_type, project, max_results)
     index = load_index()
     symbols = index.get("symbols", {})
     results = []

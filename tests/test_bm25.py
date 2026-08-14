@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -359,17 +360,9 @@ def list_products():
             engine = IndexEngine("flyto-engine", root, index_dir=idx_dir)
             engine.scan(incremental=False)
 
-            old_index_dir = store.INDEX_DIR
-            old_explicit = store._EXPLICIT_INDEX_DIR
-            store.INDEX_DIR = idx_dir
-            store._EXPLICIT_INDEX_DIR = str(idx_dir)
-            store.invalidate_caches()
-
-            try:
+            with patch.dict(os.environ, {"FLYTO_INDEX_DIR": str(idx_dir)}):
+                store.invalidate_caches()
                 result = search_by_keyword("worker ce server", project="flyto-engine")
-            finally:
-                store.INDEX_DIR = old_index_dir
-                store._EXPLICIT_INDEX_DIR = old_explicit
                 store.invalidate_caches()
 
             result_ids = [r["symbol_id"] for r in result["results"]]
@@ -411,20 +404,12 @@ def list_products():
             engine = IndexEngine("flyto-engine", root, index_dir=idx_dir)
             engine.scan(incremental=False)
 
-            old_index_dir = store.INDEX_DIR
-            old_explicit = store._EXPLICIT_INDEX_DIR
-            store.INDEX_DIR = idx_dir
-            store._EXPLICIT_INDEX_DIR = str(idx_dir)
-            store.invalidate_caches()
-
-            try:
+            with patch.dict(os.environ, {"FLYTO_INDEX_DIR": str(idx_dir)}):
+                store.invalidate_caches()
                 result = search_by_keyword(
                     "ce worker source runtime newHandler",
                     project="flyto-engine",
                 )
-            finally:
-                store.INDEX_DIR = old_index_dir
-                store._EXPLICIT_INDEX_DIR = old_explicit
                 store.invalidate_caches()
 
             result_ids = [r["symbol_id"] for r in result["results"]]

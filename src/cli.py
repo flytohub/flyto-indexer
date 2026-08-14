@@ -534,6 +534,21 @@ def _emit_command_result(args, result) -> None:
         sys.exit(2)
 
 
+def _invoke_with_project_scope(handler, *args, **kwargs):
+    """Invoke a CLI handler under one safely restored project identity."""
+    from .index_store import project_identity_scope, resolve_project_identity
+
+    namespace = args[0] if args else kwargs.get("args")
+    project = getattr(namespace, "project", None) if namespace is not None else None
+    project_path = Path(project).expanduser() if project else None
+    if project_path is not None and project_path.is_dir():
+        identity = resolve_project_identity(project_root=project_path)
+    else:
+        identity = resolve_project_identity(project)
+    with project_identity_scope(identity):
+        return handler(*args, **kwargs)
+
+
 def main():
     """Parse, dispatch, and render one CLI command."""
     parser = build_parser()
@@ -548,7 +563,7 @@ def main():
         if handler is None:
             parser.print_help()
             return
-        _emit_command_result(args, handler(args))
+        _emit_command_result(args, _invoke_with_project_scope(handler, args))
 
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)

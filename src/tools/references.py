@@ -2,6 +2,7 @@
 
 import logging
 import re
+from importlib import import_module
 from pathlib import Path
 
 try:
@@ -466,15 +467,18 @@ def _enrich_with_lsp(resolved_id: str, target_symbol: dict, index: dict) -> list
             return []
 
         # Determine project root from index metadata
-        project_root = index.get("project_root", "")
+        project_root = index.get("project_root", "") or index.get(
+            "root_path", ""
+        )
         if not project_root:
-            # Fallback: try to infer from index dir
-            import os
-            project_root = os.environ.get("FLYTO_INDEX_DIR", "")
-            if project_root:
-                project_root = str(os.path.dirname(project_root))
-            else:
-                project_root = os.getcwd()
+            package = __package__ or ""
+            module_name = (
+                f"{package.split('.', 1)[0]}.index_store"
+                if "." in package
+                else "index_store"
+            )
+            identity = import_module(module_name).current_project_identity()
+            project_root = str(identity.project_root)
 
         client = manager.get_client(language, project_root)
         if client is None:

@@ -9,6 +9,11 @@
 ## Unreleased
 
 ### Fixed
+- Unified CLI, MCP/API, task planning, search, Grill, watcher, maintenance,
+  and reference loading behind one immutable project/index identity. Explicit
+  `FLYTO_INDEX_DIR` paths are authoritative before creation and invalid values
+  fail closed; identity-scoped caches no longer mix projects or reload a task
+  plan's full index through a second authority.
 - Made the public-contract human-review gate conditional on an actual
   `public_contract_change_detected` state. A high breaking-risk constraint no
   longer invents external approval when the current change has no public

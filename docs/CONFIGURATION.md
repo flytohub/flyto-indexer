@@ -52,8 +52,12 @@ security, secret, license, Docker, IaC, scoring, and ignore rules.
 
 The default `.flyto-index/` directory contains generated indexes and must stay
 out of source control. `FLYTO_INDEX_DIR` can point readers and writers to a
-different local directory. `FLYTO_AUTO_REINDEX` controls automatic refresh
-behavior where supported.
+different local directory. When present, its resolved path is the sole index
+authority even if the directory does not exist yet; an empty or invalid value
+fails closed and never falls back to the current directory. Each CLI, MCP/API,
+task, search, Grill, watcher, and maintenance operation freezes the resolved
+project root, index path, project label, and cache identity for its lifetime.
+`FLYTO_AUTO_REINDEX` controls automatic refresh behavior where supported.
 
 ## LSP Enrichment
 

@@ -166,7 +166,8 @@ class TestSearchByKeyword:
         )
         mcp_server._index_cache = mock_index
 
-        result = search_by_keyword("login", project="alpha")
+        with patch("tools.search.load_index", return_value=mock_index):
+            result = search_by_keyword("login", project="alpha")
         assert result["total"] >= 1
         for item in result["results"]:
             assert item["project"] == "alpha"
@@ -475,8 +476,7 @@ class TestLoadIndex:
         mcp_server._index_cache = None
         index_store._cache_generation = 0.0  # allow reload
         with tempfile.TemporaryDirectory() as tmpdir, \
-             patch.object(index_store, "INDEX_DIR", Path(tmpdir)), \
-             patch.object(index_store, "_discover_index_dirs", return_value=[Path(tmpdir)]):
+             patch.dict(os.environ, {"FLYTO_INDEX_DIR": tmpdir}):
             # No index.json or index.json.gz in tmpdir
             result = load_index()
             assert result == {}
@@ -497,8 +497,7 @@ class TestLoadIndex:
             index_data = {"symbols": {"test:a.py:function:foo": {"name": "foo"}}}
             Path(tmpdir, "index.json").write_text(json.dumps(index_data))
 
-            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)), \
-                 patch.object(index_store, "_discover_index_dirs", return_value=[Path(tmpdir)]):
+            with patch.dict(os.environ, {"FLYTO_INDEX_DIR": tmpdir}):
                 result = load_index()
                 assert "symbols" in result
                 assert "test:a.py:function:foo" in result["symbols"]
@@ -517,8 +516,7 @@ class TestLoadIndex:
 
             Path(tmpdir, "index.json").write_text(json.dumps(plain_data))
 
-            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)), \
-                 patch.object(index_store, "_discover_index_dirs", return_value=[Path(tmpdir)]):
+            with patch.dict(os.environ, {"FLYTO_INDEX_DIR": tmpdir}):
                 result = load_index()
                 assert result.get("source") == "gzip"
 
@@ -533,7 +531,7 @@ class TestLoadProjectMap:
     def test_missing_file_returns_empty_dict(self):
         """When no PROJECT_MAP file exists, should return {}."""
         with tempfile.TemporaryDirectory() as tmpdir, \
-             patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
+             patch.dict(os.environ, {"FLYTO_INDEX_DIR": tmpdir}):
             result = load_project_map()
             assert result == {}
 
@@ -543,7 +541,7 @@ class TestLoadProjectMap:
             map_data = {"files": {"src/a.py": {"purpose": "test"}}}
             Path(tmpdir, "PROJECT_MAP.json").write_text(json.dumps(map_data))
 
-            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
+            with patch.dict(os.environ, {"FLYTO_INDEX_DIR": tmpdir}):
                 result = load_project_map()
                 assert "files" in result
                 assert "src/a.py" in result["files"]
@@ -559,7 +557,7 @@ class TestLoadProjectMap:
             plain_data = {"files": {}, "source": "plain"}
             Path(tmpdir, "PROJECT_MAP.json").write_text(json.dumps(plain_data))
 
-            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
+            with patch.dict(os.environ, {"FLYTO_INDEX_DIR": tmpdir}):
                 result = load_project_map()
                 assert result.get("source") == "gzip"
 
@@ -576,7 +574,7 @@ class TestLoadContentFile:
         mcp_server._content_cache = {}
         mcp_server._content_loaded = False
         with tempfile.TemporaryDirectory() as tmpdir, \
-             patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
+             patch.dict(os.environ, {"FLYTO_INDEX_DIR": tmpdir}):
             result = load_content_file()
             assert result == {}
 
@@ -591,7 +589,7 @@ class TestLoadContentFile:
             ]
             Path(tmpdir, "content.jsonl").write_text("\n".join(lines) + "\n")
 
-            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
+            with patch.dict(os.environ, {"FLYTO_INDEX_DIR": tmpdir}):
                 result = load_content_file()
                 assert "proj:a.py:function:foo" in result
                 assert result["proj:a.py:function:foo"] == "def foo(): pass"
@@ -617,7 +615,7 @@ class TestLoadContentFile:
             )
             Path(tmpdir, "content.jsonl").write_text(content)
 
-            with patch.object(index_store, "INDEX_DIR", Path(tmpdir)):
+            with patch.dict(os.environ, {"FLYTO_INDEX_DIR": tmpdir}):
                 # The function catches all exceptions, so malformed lines
                 # will cause the entire load to fail silently (due to the
                 # broad except). After the bad line, the loop may stop.

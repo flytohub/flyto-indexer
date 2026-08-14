@@ -44,9 +44,6 @@ _ALLOWED_ORIGINS: set[str] = set(
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Index directory
-INDEX_DIR = Path(__file__).parent.parent / ".flyto-index"
-
 # OpenAPI spec
 OPENAPI_SPEC = {
     "openapi": "3.1.0",
@@ -193,17 +190,21 @@ OPENAPI_SPEC = {
 
 
 def load_project_map() -> dict:
-    path = INDEX_DIR / "PROJECT_MAP.json"
-    if path.exists():
-        return json.loads(path.read_text())
-    return {}
+    """Load the map through the shared frozen project identity."""
+    try:
+        from . import index_store as shared_store
+    except ImportError:
+        import index_store as shared_store
+    return shared_store.load_project_map()
 
 
 def load_index() -> dict:
-    path = INDEX_DIR / "index.json"
-    if path.exists():
-        return json.loads(path.read_text())
-    return {}
+    """Load the index through the shared identity-scoped cache."""
+    try:
+        from . import index_store as shared_store
+    except ImportError:
+        import index_store as shared_store
+    return shared_store.load_index()
 
 
 def search_by_keyword(query: str, max_results: int = 10) -> dict:

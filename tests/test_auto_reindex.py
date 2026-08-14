@@ -77,12 +77,8 @@ def test_workspace_reindex_writes_each_project_to_its_own_index(
     sibling_root.mkdir()
     roots = {"active": active_root, "sibling": sibling_root}
 
-    monkeypatch.setattr(maintenance, "_EXPLICIT_INDEX_DIR", None)
-    monkeypatch.setattr(
-        maintenance,
-        "INDEX_DIR",
-        active_root / ".flyto-index",
-    )
+    monkeypatch.delenv("FLYTO_INDEX_DIR", raising=False)
+    monkeypatch.chdir(active_root)
 
     captured = _run_reindex(monkeypatch, roots)
 
@@ -100,12 +96,7 @@ def test_explicit_index_dir_remains_authoritative(monkeypatch, tmp_path):
     roots = {"first": first_root, "second": second_root}
     explicit_index_dir = tmp_path / "shared-index"
 
-    monkeypatch.setattr(
-        maintenance,
-        "_EXPLICIT_INDEX_DIR",
-        str(explicit_index_dir),
-    )
-    monkeypatch.setattr(maintenance, "INDEX_DIR", explicit_index_dir)
+    monkeypatch.setenv("FLYTO_INDEX_DIR", str(explicit_index_dir))
 
     captured = _run_reindex(monkeypatch, roots)
 
@@ -178,3 +169,50 @@ def test_project_auto_reindex_filters_sibling_changes(monkeypatch):
 
     assert detected_projects == ["alpha"]
     assert reindexed_projects == ["alpha"]
+
+
+def test_auto_reindex_keeps_frozen_identity_after_ambient_mutation(
+    monkeypatch,
+    tmp_path,
+):
+    frozen_root = tmp_path / "frozen"
+    frozen_root.mkdir()
+    frozen_index = tmp_path / "frozen-index"
+    ambient_root = tmp_path / "ambient"
+    ambient_root.mkdir()
+    identity = index_store.resolve_project_identity(
+        "alpha",
+        project_root=frozen_root,
+        index_dir=frozen_index,
+    )
+    observed = []
+
+    class FakeWatcher:
+        def __init__(self, index):
+            active = index_store.current_project_identity()
+            observed.append((active.project_root, active.index_dir, active.cache_key))
+
+        def detect_changes(self, project=None):
+            assert project == "alpha"
+            return []
+
+    monkeypatch.setattr(index_store, "_AUTO_REINDEX_ENABLED", True)
+    monkeypatch.setattr(index_store, "_project_reindex_checks", {})
+    monkeypatch.setattr(index_store, "_project_full_checks", {})
+    monkeypatch.setattr(index_store, "_reindex_lock", threading.Lock())
+    monkeypatch.setattr(index_store._time, "monotonic", lambda: 1.0)
+    monkeypatch.setattr(index_store, "load_index", lambda: {"project": "alpha"})
+    monkeypatch.setattr(watcher, "FileWatcher", FakeWatcher)
+
+    with index_store.project_identity_scope(identity):
+        monkeypatch.chdir(ambient_root)
+        monkeypatch.setenv("FLYTO_INDEX_DIR", str(ambient_root / "elsewhere"))
+        index_store._maybe_auto_reindex(project="alpha")
+
+        assert index_store.current_project_identity() == identity
+
+    assert observed == [
+        (identity.project_root, identity.index_dir, identity.cache_key),
+    ]
+    assert set(index_store._project_reindex_checks) == {identity.cache_key}
+    assert set(index_store._project_full_checks) == {identity.cache_key}

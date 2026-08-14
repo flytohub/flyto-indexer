@@ -6,6 +6,7 @@ import hashlib
 import json
 import subprocess
 from datetime import datetime, timezone
+from importlib import import_module
 from pathlib import Path
 from typing import Any, Callable
 
@@ -39,14 +40,22 @@ def resolve_project_root(
         relative = (Path.cwd() / direct).resolve()
         if relative.is_dir():
             return relative
+    store = None
     if index_loader is None:
         try:
-            from ..index_store import load_index
+            store = import_module("..index_store", package=__package__)
         except ImportError:  # pragma: no cover - direct module execution
-            from index_store import load_index
-        index_loader = load_index
+            store = import_module("index_store")
+        identity = store.current_project_identity()
+        if not project or project.strip() == identity.project_label:
+            return identity.project_root
     try:
-        roots = (index_loader() or {}).get("project_roots", {})
+        if store is not None:
+            with store.project_index_scope(project):
+                index = store.load_index()
+        else:
+            index = index_loader()
+        roots = (index or {}).get("project_roots", {})
     except Exception:
         return None
     root = roots.get(project) if project else None

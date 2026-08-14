@@ -15,6 +15,8 @@ import sys
 import threading
 import time as _time
 from contextlib import contextmanager
+from dataclasses import dataclass, replace
+from hashlib import sha256
 from pathlib import Path
 
 logger = logging.getLogger("flyto-indexer.store")
@@ -23,9 +25,113 @@ logger = logging.getLogger("flyto-indexer.store")
 # Index directory (configurable via env var)
 # ---------------------------------------------------------------------------
 
-_EXPLICIT_INDEX_DIR = os.environ.get("FLYTO_INDEX_DIR")
-INDEX_DIR = Path(_EXPLICIT_INDEX_DIR) if _EXPLICIT_INDEX_DIR else Path.cwd() / ".flyto-index"
 _PROJECT_SCOPE = threading.local()
+INDEX_HEADER_BYTES = 8 * 1024
+
+
+@dataclass(frozen=True)
+class ProjectIdentity:
+    """Immutable authority for one project and its generated index."""
+
+    project_root: Path
+    index_dir: Path
+    project_label: str
+    cache_key: str
+    explicit_index: bool = False
+
+
+def _identity_cache_key(root: Path, index_dir: Path, label: str) -> str:
+    payload = json.dumps(
+        [str(root), str(index_dir), label],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return sha256(payload).hexdigest()
+
+
+def _resolved_path(value: str | os.PathLike[str], *, setting: str) -> Path:
+    try:
+        raw = os.fspath(value)
+        if not raw or not raw.strip():
+            raise ValueError(f"{setting} must not be empty")
+        return Path(raw).expanduser().resolve(strict=False)
+    except (OSError, TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid {setting}: {value!r}") from exc
+
+
+def resolve_project_identity(
+    project: str | None = None,
+    *,
+    project_root: str | os.PathLike[str] | None = None,
+    index_dir: str | os.PathLike[str] | None = None,
+) -> ProjectIdentity:
+    """Resolve the public project/index boundary once, failing closed.
+
+    An explicit ``index_dir`` or present ``FLYTO_INDEX_DIR`` is authoritative
+    even when it has not been created yet.  Callers may then freeze the result
+    with :func:`project_identity_scope`.
+    """
+    env_is_set = "FLYTO_INDEX_DIR" in os.environ
+    explicit_value = index_dir if index_dir is not None else os.environ.get("FLYTO_INDEX_DIR")
+    explicit = index_dir is not None or env_is_set
+    if explicit:
+        if explicit_value is None:
+            raise ValueError("FLYTO_INDEX_DIR must not be empty")
+        resolved_index = _resolved_path(explicit_value, setting="FLYTO_INDEX_DIR")
+    else:
+        base_root = _resolved_path(project_root or Path.cwd(), setting="project root")
+        resolved_index = base_root / ".flyto-index"
+
+    if project_root is not None:
+        resolved_root = _resolved_path(project_root, setting="project root")
+    elif resolved_index.name == ".flyto-index":
+        resolved_root = resolved_index.parent
+    else:
+        indexed_root = ""
+        if resolved_index.exists():
+            indexed_root = _peek_index_root(resolved_index)
+        resolved_root = (
+            _resolved_path(indexed_root, setting="indexed project root")
+            if indexed_root
+            else resolved_index.parent
+        )
+
+    requested_label = str(project).strip() if project is not None else ""
+    if project is not None and not requested_label:
+        raise ValueError("project label must not be empty")
+    label = requested_label
+    if not label and project_root is not None:
+        label = resolved_root.name
+    if not label:
+        label = _peek_index_project(resolved_index) or resolved_root.name
+    if not label:
+        label = resolved_index.name
+    return ProjectIdentity(
+        project_root=resolved_root,
+        index_dir=resolved_index,
+        project_label=label,
+        cache_key=_identity_cache_key(resolved_root, resolved_index, label),
+        explicit_index=explicit,
+    )
+
+
+def current_project_identity() -> ProjectIdentity:
+    """Return the frozen thread identity, or resolve the live public boundary."""
+    identity = getattr(_PROJECT_SCOPE, "identity", None)
+    return identity if identity is not None else resolve_project_identity()
+
+
+@contextmanager
+def project_identity_scope(identity: ProjectIdentity):
+    """Install an immutable identity for one operation and restore it safely."""
+    if not isinstance(identity, ProjectIdentity):
+        raise TypeError("identity must be a ProjectIdentity")
+    previous = getattr(_PROJECT_SCOPE, "identity", None)
+    _PROJECT_SCOPE.identity = identity
+    try:
+        yield identity
+    finally:
+        _PROJECT_SCOPE.identity = previous
 
 
 def _discover_index_dirs() -> list:
@@ -38,8 +144,9 @@ def _discover_index_dirs() -> list:
     3. Parent directory (running from a sub-project)
     """
     # Explicit env var = no auto-discovery
-    if _EXPLICIT_INDEX_DIR:
-        return [INDEX_DIR] if INDEX_DIR.exists() else []
+    identity = current_project_identity()
+    if identity.explicit_index:
+        return [identity.index_dir]
 
     seen = set()
     dirs = []
@@ -66,16 +173,23 @@ def _discover_index_dirs() -> list:
             return
 
     # 1. CWD/.flyto-index
-    _add(INDEX_DIR)
+    _add(identity.index_dir)
 
     # 2. Scan child directories for .flyto-index/
-    base = INDEX_DIR.parent  # CWD
+    base = identity.project_root
     _scan_children(base)
 
-    # 3. Also scan parent dir (sub-project → monorepo root pattern)
-    parent = base.parent
-    _add(parent / ".flyto-index")
-    _scan_children(parent)
+    # 3. A non-repository subdirectory may belong to a monorepo rooted above
+    # it.  A Git root/worktree is already an explicit repository boundary:
+    # crossing it would merge unrelated sibling checkouts into one index.
+    try:
+        repository_boundary = (base / ".git").exists()
+    except OSError:
+        repository_boundary = True
+    if not repository_boundary:
+        parent = base.parent
+        _add(parent / ".flyto-index")
+        _scan_children(parent)
 
     return dirs
 
@@ -98,16 +212,44 @@ def _peek_index_project(index_dir: Path) -> str:
         try:
             if compressed:
                 with gzip.open(path, "rt", encoding="utf-8") as handle:
-                    prefix = handle.read(4096)
+                    prefix = handle.read(INDEX_HEADER_BYTES)
             else:
                 with path.open("r", encoding="utf-8") as handle:
-                    prefix = handle.read(4096)
+                    prefix = handle.read(INDEX_HEADER_BYTES)
         except (OSError, UnicodeError):
             continue
         match = re.search(r'"project"\s*:\s*"([^"]+)"', prefix)
         if match:
             return match.group(1)
     return ""
+
+
+def _peek_index_root(index_dir: Path) -> str:
+    """Read the indexed root without treating index contents as authority."""
+    for path, compressed in (
+        (index_dir / "index.json", False),
+        (index_dir / "index.json.gz", True),
+    ):
+        if not path.exists():
+            continue
+        try:
+            opener = gzip.open if compressed else open
+            with opener(path, "rt", encoding="utf-8") as handle:
+                prefix = handle.read(INDEX_HEADER_BYTES)
+        except (OSError, UnicodeError):
+            continue
+        match = re.search(r'"root_path"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"', prefix)
+        if match:
+            try:
+                return json.loads(f'"{match.group(1)}"')
+            except json.JSONDecodeError:
+                return ""
+    return ""
+
+
+# Compatibility views for external importers. Runtime code uses the resolver.
+INDEX_DIR = resolve_project_identity().index_dir
+_EXPLICIT_INDEX_DIR = os.environ.get("FLYTO_INDEX_DIR")
 
 
 def _active_index_dirs(project: str | None = None) -> list[Path]:
@@ -137,17 +279,27 @@ def _active_index_dirs(project: str | None = None) -> list[Path]:
 def project_index_scope(project: str | None):
     """Limit index loading to one project for the duration of a tool call."""
     normalized = str(project).strip() if project else None
-    previous = _current_project_scope()
-    _PROJECT_SCOPE.project = normalized or None
-    try:
-        yield
-    finally:
-        _PROJECT_SCOPE.project = previous
+    base = current_project_identity()
+    identity = base
+    if normalized and normalized != base.project_label:
+        identity = replace(
+            base,
+            project_label=normalized,
+            cache_key=_identity_cache_key(base.project_root, base.index_dir, normalized),
+        )
+    with project_identity_scope(identity):
+        yield identity
 
 
 def _current_project_scope() -> str | None:
     """Return the current thread's project scope, if one is active."""
-    return getattr(_PROJECT_SCOPE, "project", None)
+    identity = getattr(_PROJECT_SCOPE, "identity", None)
+    return identity.project_label if identity is not None else None
+
+
+def _current_cache_key() -> str:
+    """Return the collision-safe key for the active immutable identity."""
+    return current_project_identity().cache_key
 
 # ---------------------------------------------------------------------------
 # Caches
@@ -221,7 +373,9 @@ def _maybe_auto_reindex(project: str | None = None):
     if not _AUTO_REINDEX_ENABLED:
         return
     now = _time.monotonic()
-    scope_key = _normalize_project_name(project)
+    project_key = _normalize_project_name(project)
+    with project_index_scope(project) as identity:
+        scope_key = identity.cache_key
 
     # Tier 1: fast generation check (every 10s)
     if scope_key:
@@ -273,7 +427,7 @@ def _maybe_auto_reindex(project: str | None = None):
                 changed_projects = {
                     changed_project
                     for changed_project in changed_projects
-                    if _normalize_project_name(changed_project) == scope_key
+                    if _normalize_project_name(changed_project) == project_key
                 }
             if not changed_projects:
                 return
@@ -445,7 +599,7 @@ def load_index() -> dict:
     multiple threads see a stale generation simultaneously.
     """
     global _index_cache
-    scope_key = _normalize_project_name(_current_project_scope())
+    scope_key = _current_cache_key() if _current_project_scope() else ""
 
     if scope_key:
         dirs = _active_index_dirs()
@@ -519,7 +673,7 @@ def load_project_map() -> dict:
 def load_content_file() -> dict:
     """Lazily load content.jsonl from all discovered index dirs."""
     global _content_cache, _content_loaded
-    scope_key = _normalize_project_name(_current_project_scope())
+    scope_key = _current_cache_key() if _current_project_scope() else ""
     if scope_key:
         if scope_key in _scoped_content_caches:
             return _scoped_content_caches[scope_key]
@@ -564,7 +718,7 @@ def get_symbol_content_text(symbol_id: str, symbol_data: dict) -> str:
 def _load_bm25():
     """Load or return the cached BM25 index."""
     global _bm25_cache
-    scope_key = _normalize_project_name(_current_project_scope())
+    scope_key = _current_cache_key() if _current_project_scope() else ""
     if scope_key and scope_key in _scoped_bm25_caches:
         return _scoped_bm25_caches[scope_key]
     if _bm25_cache is not None:
@@ -578,7 +732,7 @@ def _load_bm25():
     bm25_path = (
         dirs[0] / "bm25.json"
         if scope_key and dirs
-        else INDEX_DIR / "bm25.json"
+        else current_project_identity().index_dir / "bm25.json"
     )
     bm25 = BM25Index.load(bm25_path)
     if scope_key:
@@ -635,7 +789,7 @@ def _load_semantic():
     from current index data before loading.
     """
     global _semantic_cache
-    scope_key = _normalize_project_name(_current_project_scope())
+    scope_key = _current_cache_key() if _current_project_scope() else ""
     if scope_key and scope_key in _scoped_semantic_caches:
         return _scoped_semantic_caches[scope_key]
     if _semantic_cache is not None:
@@ -670,7 +824,7 @@ def _load_semantic():
     semantic_path = (
         dirs[0] / "semantic.json"
         if scope_key and dirs
-        else INDEX_DIR / "semantic.json"
+        else current_project_identity().index_dir / "semantic.json"
     )
     semantic = SemanticIndex.load(semantic_path)
     if scope_key:

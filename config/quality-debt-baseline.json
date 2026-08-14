@@ -9,13 +9,13 @@
       "assignment": 42,
       "attr-defined": 87,
       "index": 21,
-      "no-redef": 363,
+      "no-redef": 360,
       "operator": 11,
       "return-value": 7,
       "union-attr": 43,
       "var-annotated": 117
     },
-    "total": 732
+    "total": 729
   },
   "policy": "exact baseline; every decrease requires a baseline update",
   "ruff": {
@@ -31,11 +31,11 @@
       "SIM102": 30,
       "SIM103": 13,
       "SIM105": 19,
-      "SIM108": 7,
+      "SIM108": 6,
       "SIM110": 2,
       "SIM114": 11
     },
-    "total": 1141
+    "total": 1140
   },
   "schema_version": 1,
   "scope": "src",

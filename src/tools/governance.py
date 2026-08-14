@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 from datetime import date
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 
@@ -40,17 +41,23 @@ _DOC_PATHS = {
 }
 
 
+def _index_store_module():
+    try:
+        return import_module("..index_store", package=__package__)
+    except ImportError:
+        return import_module("index_store")
+
+
 def _project_root(project: str | None) -> Path:
     if project:
         candidate = Path(project).expanduser()
         if candidate.is_dir():
             return candidate.resolve()
-    try:
-        from ..index_store import load_index
-    except ImportError:
-        from index_store import load_index
-
-    index = load_index()
+    store = _index_store_module()
+    identity = store.current_project_identity()
+    if project is None or project.strip() == identity.project_label:
+        return identity.project_root
+    index = store.load_index()
     root = (index.get("project_roots") or {}).get(project or "")
     if root and Path(root).is_dir():
         return Path(root).resolve()
@@ -202,12 +209,10 @@ def _dependency_groups(
         path: _responsibility(path) for path in target_paths
     }
     if len(parents) > 1 and target_paths:
-        try:
-            from ..index_store import load_index
-        except ImportError:
-            from index_store import load_index
-
-        index = load_index()
+        store = _index_store_module()
+        identity = store.current_project_identity()
+        with store.project_index_scope(identity.project_label):
+            index = store.load_index()
         symbols = index.get("symbols") or {}
         for dependency in (index.get("dependencies") or {}).values():
             source_path = (symbols.get(dependency.get("source")) or {}).get("path")

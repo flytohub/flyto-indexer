@@ -1010,7 +1010,7 @@ def _build_analyze_task_directive(result: dict) -> str:
 try:
     from . import index_store as _index_store_mod
     from .index_store import (
-        INDEX_DIR, load_index, load_project_map, load_content_file,
+        load_index, load_project_map, load_content_file,
         get_symbol_content_text, TYPE_WEIGHTS, LOW_PRIORITY_PATHS,
         _load_bm25, _load_semantic, _get_test_mapper, _get_session_store,
     )
@@ -1039,7 +1039,7 @@ try:
 except ImportError:
     import index_store as _index_store_mod
     from index_store import (
-        INDEX_DIR, load_index, load_project_map, load_content_file,
+        load_index, load_project_map, load_content_file,
         get_symbol_content_text, TYPE_WEIGHTS, LOW_PRIORITY_PATHS,
         _load_bm25, _load_semantic, _get_test_mapper, _get_session_store,
     )

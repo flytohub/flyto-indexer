@@ -5,6 +5,7 @@ import os
 import re
 from collections import namedtuple
 from datetime import datetime
+from importlib import import_module
 from pathlib import Path
 
 ReferenceContext = namedtuple(
@@ -16,14 +17,14 @@ _MARKDOWN_COMPONENT_TAG_RE = re.compile(r"<([A-Z][A-Za-z0-9]*)\b")
 
 try:
     from ..index_store import (
-        INDEX_DIR, _EXPLICIT_INDEX_DIR, load_index, load_project_map,
+        load_index, load_project_map,
         get_symbol_content_text,
         invalidate_caches, _invalidate_caches_unlocked, _get_session_store,
         _discover_index_dirs, _load_single_index,
     )
 except ImportError:
     from index_store import (
-        INDEX_DIR, _EXPLICIT_INDEX_DIR, load_index, load_project_map,
+        load_index, load_project_map,
         get_symbol_content_text,
         invalidate_caches, _invalidate_caches_unlocked, _get_session_store,
         _discover_index_dirs, _load_single_index,
@@ -33,6 +34,16 @@ try:
     from .search import _TODO_PATTERNS
 except ImportError:
     from tools.search import _TODO_PATTERNS
+
+
+def _current_identity():
+    package = __package__ or ""
+    module_name = (
+        f"{package.split('.', 1)[0]}.index_store"
+        if "." in package
+        else "index_store"
+    )
+    return import_module(module_name).current_project_identity()
 
 
 def _build_reference_sets(dependencies):
@@ -638,7 +649,7 @@ def check_index_status():
     load_project_map()
 
     # Get index metadata
-    index_file = INDEX_DIR / "index.json"
+    index_file = _current_identity().index_dir / "index.json"
     if not index_file.exists():
         return {
             "status": "missing",
@@ -774,9 +785,10 @@ def _perform_live_reindex_unlocked(project=None):
             continue
         try:
             project_root = Path(root)
+            identity = _current_identity()
             index_dir = (
-                INDEX_DIR
-                if _EXPLICIT_INDEX_DIR
+                identity.index_dir
+                if identity.explicit_index
                 else project_root / ".flyto-index"
             )
             engine = IndexEngine(proj, project_root, index_dir=index_dir)

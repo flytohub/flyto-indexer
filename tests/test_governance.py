@@ -5,6 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+import index_store
+import tools.governance as governance
 from tools.governance import (
     evaluate_task_governance,
     load_governance_policy,
@@ -20,6 +22,63 @@ def _contract(mode="advisory", waivers=None):
         "mode": mode,
         "waivers": waivers or {"valid": [], "invalid": []},
     }
+
+
+def test_current_project_policy_uses_frozen_identity_without_loading_index(
+    monkeypatch,
+    tmp_path,
+):
+    frozen_root = tmp_path / "frozen"
+    frozen_root.mkdir()
+    (frozen_root / ".flyto-rules.yaml").write_text(
+        "governance:\n  mode: strict\n",
+        encoding="utf-8",
+    )
+    ambient_root = tmp_path / "ambient"
+    ambient_root.mkdir()
+    identity = index_store.resolve_project_identity(project_root=frozen_root)
+
+    def fail_load_index():
+        raise AssertionError("current project must not load ambient indexes")
+
+    monkeypatch.setattr(index_store, "load_index", fail_load_index)
+    with index_store.project_identity_scope(identity):
+        monkeypatch.chdir(ambient_root)
+        monkeypatch.setenv("FLYTO_INDEX_DIR", str(ambient_root / "elsewhere"))
+
+        assert load_governance_policy(None)["mode"] == "strict"
+        assert load_governance_policy(identity.project_label)["mode"] == "strict"
+        assert governance._project_root(None) == frozen_root.resolve()
+
+
+def test_dependency_analysis_loads_under_the_frozen_project_scope(
+    monkeypatch,
+    tmp_path,
+):
+    frozen_root = tmp_path / "frozen"
+    frozen_root.mkdir()
+    identity = index_store.resolve_project_identity(project_root=frozen_root)
+    observed = []
+
+    def scoped_load_index():
+        observed.append(index_store.current_project_identity())
+        return {}
+
+    monkeypatch.setattr(index_store, "load_index", scoped_load_index)
+    with index_store.project_identity_scope(identity):
+        result = evaluate_task_governance(
+            description="Change task analysis and runtime rule loading",
+            targets=["src/tools/task_analysis.py", "src/rule_loader.py"],
+            resolved_targets=[
+                {"path": "src/tools/task_analysis.py"},
+                {"path": "src/rule_loader.py"},
+            ],
+            project=None,
+            options={"governance": {"mode": "advisory"}},
+        )
+
+    assert result["atomicity"]["recommend_split"] is True
+    assert observed == [identity]
 
 
 def test_internal_fix_needs_no_docs_or_forced_split():

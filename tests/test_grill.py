@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from src import index_store
 from src.tools.grill import (
     CONTRACT_VERSION,
     GrillSessionStore,
@@ -12,6 +13,7 @@ from src.tools.grill import (
     run_grill,
     validate_decision_contract,
 )
+from src.tools import grill_evidence
 
 
 @pytest.fixture
@@ -63,6 +65,30 @@ def _answer(store, session, decision_id, answer="approved", **kwargs):
         store=store,
         **kwargs,
     )
+
+
+def test_project_root_resolution_never_merges_ambient_indexes(
+    monkeypatch,
+    tmp_path,
+):
+    frozen_root = tmp_path / "frozen"
+    frozen_root.mkdir()
+    identity = index_store.resolve_project_identity(project_root=frozen_root)
+    observed = []
+
+    def scoped_load_index():
+        observed.append(index_store.current_project_identity())
+        return {"project_roots": {}}
+
+    monkeypatch.setattr(index_store, "load_index", scoped_load_index)
+    with index_store.project_identity_scope(identity):
+        assert grill_evidence.resolve_project_root(None) == frozen_root.resolve()
+        assert grill_evidence.resolve_project_root("missing-project") is None
+
+    assert len(observed) == 1
+    assert observed[0].project_label == "missing-project"
+    assert observed[0].project_root == identity.project_root
+    assert observed[0].index_dir == identity.index_dir
 
 
 class TestDecisionTree:

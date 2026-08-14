@@ -6,6 +6,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -444,11 +445,8 @@ class TestSemanticStaleMarker:
             # Now _load_semantic should rebuild
             # We need to set the INDEX_DIR and clear caches
             import src.index_store as store
-            old_index_dir = store.INDEX_DIR
-            store.INDEX_DIR = idx_dir
-            store.invalidate_caches()
-
-            try:
+            with patch.dict(os.environ, {"FLYTO_INDEX_DIR": str(idx_dir)}):
+                store.invalidate_caches()
                 result = store._load_semantic()
                 # After rebuild, semantic.json should exist again
                 assert semantic_path.exists(), "semantic.json should be rebuilt"
@@ -457,8 +455,6 @@ class TestSemanticStaleMarker:
                 # Result should be a valid semantic index
                 if result is not None:
                     assert result.N > 0
-            finally:
-                store.INDEX_DIR = old_index_dir
                 store.invalidate_caches()
 
     def test_semantic_stale_rebuild_indexes_symbol_path_terms(self):
@@ -490,17 +486,9 @@ class TestSemanticStaleMarker:
             stale_marker.write_text("1", encoding="utf-8")
 
             import src.index_store as store
-            old_index_dir = store.INDEX_DIR
-            old_explicit = store._EXPLICIT_INDEX_DIR
-            store.INDEX_DIR = idx_dir
-            store._EXPLICIT_INDEX_DIR = str(idx_dir)
-            store.invalidate_caches()
-
-            try:
+            with patch.dict(os.environ, {"FLYTO_INDEX_DIR": str(idx_dir)}):
+                store.invalidate_caches()
                 semantic = store._load_semantic()
-            finally:
-                store.INDEX_DIR = old_index_dir
-                store._EXPLICIT_INDEX_DIR = old_explicit
                 store.invalidate_caches()
 
             result_ids = [sid for sid, _score in semantic.search("worker ce server")]

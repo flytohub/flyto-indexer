@@ -24,6 +24,10 @@ HTTP references.
    dependencies, docs, and security signals.
 2. Index data is stored locally under generated index directories.
 3. Query and impact tools read that local index plus current filesystem state.
+   Entry adapters resolve and freeze one immutable project identity containing
+   the root, index directory, human label, and collision-safe cache key. All
+   lazy index variants, task helpers, watcher and maintenance work share it;
+   imported constants and later cwd/environment changes are not authorities.
    A project-filtered semantic search enters the same project scope before it
    loads either the symbol or TF-IDF index, so stale sibling indexes cannot
    delay or contaminate an isolated MCP lane. Unfiltered searches retain the

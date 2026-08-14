@@ -7,6 +7,11 @@
   owned by private product repositories and are not shipped here.
 - CLI and MCP surfaces support indexing, context, impact, API/dependency
   closure, security checks, architecture rules, and repeatable verification.
+- Project root, index directory, project label, and cache identity now resolve
+  through one immutable operation scope shared by CLI, MCP/API, task planning,
+  search, Grill, watcher, maintenance, and references. Explicit
+  `FLYTO_INDEX_DIR` remains authoritative before creation and invalid explicit
+  values fail closed without cwd fallback.
 - Cumulative task amendments retain every prior authorized path while current
   diff coverage applies only to targets newly added by the latest amendment.
   Scope shrinkage, unplanned diffs, chain integrity, and bounded requirement

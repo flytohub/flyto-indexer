@@ -158,11 +158,12 @@ class FileWatcher:
         """Get the index file modification time."""
         try:
             try:
-                from .index_store import INDEX_DIR
+                from . import index_store as store
             except ImportError:
-                from index_store import INDEX_DIR
+                import index_store as store
+            index_dir = store.current_project_identity().index_dir
             for name in ("index.json.gz", "index.json"):
-                p = INDEX_DIR / name
+                p = index_dir / name
                 if p.exists():
                     return p.stat().st_mtime
         except (ImportError, Exception):

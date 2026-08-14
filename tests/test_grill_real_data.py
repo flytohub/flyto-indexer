@@ -21,8 +21,7 @@ def indexed_robotics(tmp_path, monkeypatch):
     engine = IndexEngine("grill-robotics", FIXTURE_ROOT, index_dir)
     scan = engine.scan(incremental=False)
 
-    monkeypatch.setattr(index_store, "_EXPLICIT_INDEX_DIR", str(index_dir))
-    monkeypatch.setattr(index_store, "INDEX_DIR", index_dir)
+    monkeypatch.setenv("FLYTO_INDEX_DIR", str(index_dir))
     monkeypatch.setenv("FLYTO_INDEXER_GRILL_DIR", str(tmp_path / "grill-state"))
     index_store.invalidate_caches()
     try:
