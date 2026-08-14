@@ -1,5 +1,8 @@
 """Tests for task analysis tools: analyze_task and task_gate_check."""
 
+import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import call, patch
@@ -315,6 +318,135 @@ class TestTaskTargetResolution:
         search.assert_not_called()
         assert resolved[0]["symbol_id"] is None
         assert resolved[0]["type"] == "unknown"
+
+    def test_bm25_only_match_does_not_become_task_target_authority(self):
+        from tools.task_analysis import _resolve_targets
+
+        unrelated = {
+            "results": [
+                {
+                    "symbol_id": (
+                        "proj-a:src/components/OnboardingView.tsx:component:GitLabLogo"
+                    ),
+                    "name": "GitLabLogo",
+                    "type": "component",
+                    "path": "src/components/OnboardingView.tsx",
+                    "score": 42.5,
+                    "match": "bm25",
+                }
+            ]
+        }
+        with (
+            patch("tools.task_analysis.load_index", return_value=MOCK_INDEX),
+            patch(
+                "tools.task_analysis.search_by_keyword",
+                return_value=unrelated,
+            ),
+        ):
+            resolved = _resolve_targets(["M1.1"], project="proj-a")
+
+        assert resolved == [
+            {
+                "input": "M1.1",
+                "symbol_id": None,
+                "name": "M1.1",
+                "type": "unknown",
+                "path": "",
+            }
+        ]
+
+    def test_exact_name_match_still_becomes_task_target_authority(self):
+        from tools.task_analysis import _resolve_targets
+
+        results = {
+            "results": [
+                {
+                    "symbol_id": "proj-a:src/logos.py:component:GitLabLogo",
+                    "name": "GitLabLogo",
+                    "type": "component",
+                    "path": "src/logos.py",
+                },
+                {
+                    "symbol_id": "proj-a:src/auth.py:function:login",
+                    "name": "login",
+                    "type": "function",
+                    "path": "src/auth.py",
+                },
+            ]
+        }
+        with (
+            patch("tools.task_analysis.load_index", return_value=MOCK_INDEX),
+            patch(
+                "tools.task_analysis.search_by_keyword",
+                return_value=results,
+            ),
+        ):
+            resolved = _resolve_targets(["LOGIN"], project="proj-a")
+
+        assert resolved[0]["symbol_id"] == "proj-a:src/auth.py:function:login"
+        assert resolved[0]["path"] == "src/auth.py"
+
+
+def test_execution_plan_preserves_target_order_across_hash_seeds():
+    script = """
+import json
+from tools.task_analysis import _build_execution_plan
+
+paths = [
+    "runner/handlers_security_campaign.py",
+    "internal/scanregistry/scanners/retention_worker.go",
+    "internal/freshness/recorder.go",
+    "release/open_core_release_audit.py",
+    "cmd/worker/learner_loop.go",
+    "internal/autofix/rules/outdated_lockfile.go",
+]
+resolved = [
+    {"input": path, "symbol_id": None, "path": path}
+    for path in paths
+]
+dimensions = {
+    "blast_radius": {"level": "low"},
+    "breaking_risk": {"level": "low"},
+    "cross_coupling": {"level": "low"},
+    "test_risk": {"level": "medium"},
+    "complexity": {"level": "high"},
+}
+print(json.dumps(_build_execution_plan(resolved, dimensions, "feature", {})))
+"""
+    root = Path(__file__).parent.parent
+    outputs = []
+    for seed in ("0", "3"):
+        env = os.environ.copy()
+        env["PYTHONHASHSEED"] = seed
+        env["PYTHONPATH"] = str(root / "src")
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=True,
+        )
+        outputs.append(completed.stdout)
+
+    assert outputs[0] == outputs[1]
+    plan = json.loads(outputs[0])
+    queries = [
+        step["args"]["query"]
+        for step in plan
+        if step["tool"] == "search"
+    ]
+    assert queries == [
+        "tests covering runner/handlers_security_campaign.py",
+        "tests covering internal/scanregistry/scanners/retention_worker.go",
+        "tests covering internal/freshness/recorder.go",
+        "tests covering release/open_core_release_audit.py",
+        "tests covering cmd/worker/learner_loop.go",
+        "tests covering internal/autofix/rules/outdated_lockfile.go",
+    ]
+    structure = next(step for step in plan if step["tool"] == "structure")
+    assert structure["args"]["path"] == "runner/handlers_security_campaign.py"
 
 
 # =========================================================================

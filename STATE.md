@@ -16,6 +16,9 @@
   diff coverage applies only to targets newly added by the latest amendment.
   Scope shrinkage, unplanned diffs, chain integrity, and bounded requirement
   sanitization continue to fail closed independently.
+- Task planning grants edit authority only to exact symbol identities or
+  bounded paths. BM25-only labels remain unresolved, hostile filesystem probes
+  fail closed, and execution-plan file order is stable across hash seeds.
 - The apply-change gate now requests `human_review_completed` only after
   `public_contract_change_detected` is present in current task state. High
   breaking-risk policy alone no longer fabricates external authority, while a

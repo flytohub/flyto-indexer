@@ -38,7 +38,11 @@ flyto-index check . --max-affected 20
 ```
 
 `task plan` adds target-scoped JIT Rules and an Intent Ledger without extra
-flags. `task grill` optionally freezes unresolved human decisions with evidence
+flags. Complete plan, gate, and validate actions are confined to `--project`,
+including when the command runs outside MCP, so nearby worktree indexes do not
+enter analysis, context checks, or continuity. Fuzzy search results never grant
+task edit authority without an exact symbol identity match. `task grill`
+optionally freezes unresolved human decisions with evidence
 and ADR artifacts. Pass the plan through `--task-contract` during validation to
 require rule/spec freshness, requirement and diff coverage, Ruff, pytest, and
 allowlisted proof results. Unsupported proof commands are never executed.

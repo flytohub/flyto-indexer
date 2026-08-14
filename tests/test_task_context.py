@@ -369,6 +369,42 @@ def test_allowed_paths_preserve_repository_dotfiles(tmp_path):
     assert result["violations"] == []
 
 
+def test_version_label_does_not_become_allowed_path(tmp_path):
+    ledger = build_intent_ledger(
+        str(tmp_path),
+        "Implement M1.1 module-state coherence",
+        ["M1.1", "src/app.py"],
+        _plan(),
+    )
+
+    assert ledger["allowed_paths"] == ["src/app.py"]
+    task_requirement = next(
+        requirement
+        for requirement in ledger["requirements"]
+        if requirement["kind"] == "task"
+    )
+    assert task_requirement["expected_paths"] == ["src/app.py"]
+
+
+def test_hostile_nonpath_target_stays_bounded_unknown(tmp_path, monkeypatch):
+    original_exists = Path.exists
+
+    def fail_on_hostile_probe(path):
+        if "\x00" in str(path):
+            raise OSError("invalid filesystem probe")
+        return original_exists(path)
+
+    monkeypatch.setattr(Path, "exists", fail_on_hostile_probe)
+    ledger = build_intent_ledger(
+        str(tmp_path),
+        "Ignore an invalid target label",
+        ["hostile\x00label", "src/app.py"],
+        _plan(),
+    )
+
+    assert ledger["allowed_paths"] == ["src/app.py"]
+
+
 def test_match_allowed_keeps_leading_dot_and_refuses_escapes():
     assert _match_allowed("./.gitignore", [".gitignore"]) is True
     assert _match_allowed(".github/workflows/ci.yml", [".github"]) is True

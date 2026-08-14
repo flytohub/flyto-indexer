@@ -13,6 +13,19 @@ label-only cache keys could make one request read or refresh another project's
 index. One immutable identity preserves lazy loading and atomic reindexing
 while removing ambient and mutable-global authority.
 
+## 2026-08-13 - Task edit authority requires exact identity
+
+Decision: general search remains fuzzy, but task planning accepts a search hit
+as edit authority only when its symbol identity exactly matches the requested
+target. Raw targets become Intent Ledger paths only when they have bounded path
+shape. Preserve first-seen resolved-target order when compiling execution
+plans.
+
+Reason: a milestone label such as `M1.1` previously selected an unrelated logo
+component through BM25 and was also recorded as an allowed path. Set-based path
+deduplication separately changed step order and the dependency-map target across
+Python hash seeds. Both behaviors violate reproducible, fail-closed planning.
+
 ## 2026-08-13 - Amendment authority is cumulative; diff coverage is incremental
 
 Decision: preserve the cumulative union of amendment `allowed_paths`, but

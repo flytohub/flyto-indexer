@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **180 Python modules**, **74,173 lines**, and **2,282 class/function/method declarations**.
+Generated inventory: **180 Python modules**, **74,226 lines**, and **2,285 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -166,7 +166,7 @@ Generated inventory: **180 Python modules**, **74,173 lines**, and **2,282 class
 | [`src/tools/governance.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/governance.py#L1) | 515 | 20 | `__future__, analyzer, datetime, finding_identity, fnmatch, importlib, pathlib, typing` | Lightweight, opt-in task governance for atomic changes and documentation. |
 | [`src/tools/grill.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill.py#L1) | 1018 | 39 | `__future__, contextlib, copy, datetime, fcntl, grill_evidence, grill_intelligence, grill_outcomes, hashlib, json, os, pathlib` | Evidence-backed decision interrogation for the task workflow. |
 | [`src/tools/grill_conformance.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill_conformance.py#L1) | 293 | 7 | `__future__, fnmatch, grill_evidence, pathlib, re, shlex, subprocess, typing` | Decision-to-diff conformance for frozen Grill contracts. |
-| [`src/tools/grill_evidence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill_evidence.py#L1) | 342 | 13 | `__future__, datetime, hashlib, importlib, json, pathlib, subprocess, typing` | Repository evidence snapshots, freshness checks, and Grill artifacts. |
+| [`src/tools/grill_evidence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill_evidence.py#L1) | 343 | 13 | `__future__, datetime, hashlib, importlib, json, pathlib, subprocess, typing` | Repository evidence snapshots, freshness checks, and Grill artifacts. |
 | [`src/tools/grill_intelligence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill_intelligence.py#L1) | 236 | 8 | `__future__, copy, typing` | Pure decision-intelligence helpers for the Grill workflow. |
 | [`src/tools/grill_outcomes.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill_outcomes.py#L1) | 198 | 11 | `__future__, datetime, fcntl, hashlib, json, os, pathlib, threading, typing` | Privacy-preserving local outcome learning for Grill decisions. |
 | [`src/tools/maintenance.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L1) | 875 | 25 | `ast, collections, datetime, engine, importlib, index_store, os, pathlib, re, search, tools, watcher` | Maintenance tools — dead code, TODOs, index status, reindex, sessions. |
@@ -177,8 +177,8 @@ Generated inventory: **180 Python modules**, **74,173 lines**, and **2,282 class
 | [`src/tools/smart.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L1) | 1502 | 64 | `analyzer, change_patterns, code_info, context_budget, conventions, coverage_intel, data_flow, dependency_scanner, diff_impact, git_intel, grill, index_store` | Smart tools — 5 consolidated entry points with association-based triggering. |
 | [`src/tools/staleness.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/staleness.py#L1) | 215 | 4 | `datetime, git_intel, index_store, logging, os, subprocess, tools, typing` | Staleness detection — identify stale but heavily-referenced symbols via git. |
 | [`src/tools/task_amendment.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_amendment.py#L1) | 1096 | 24 | `__future__, grill_evidence, hashlib, pathlib, typing` | Cumulative plan amendments on one immutable root task identity. |
-| [`src/tools/task_analysis.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_analysis.py#L1) | 1997 | 33 | `code_info, datetime, governance, hashlib, index_store, pathlib, quality, references, search, time, tools, typing` | Task Analysis — multi-dimensional task contract generation. |
-| [`src/tools/task_context.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_context.py#L1) | 1329 | 41 | `__future__, fnmatch, governance, grill_conformance, grill_evidence, hashlib, json, pathlib, re, task_amendment, typing` | Lean task context: scoped instructions and requirement traceability. |
+| [`src/tools/task_analysis.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_analysis.py#L1) | 2023 | 35 | `code_info, datetime, governance, hashlib, index_store, pathlib, quality, references, search, time, tools, typing` | Task Analysis — multi-dimensional task contract generation. |
+| [`src/tools/task_context.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_context.py#L1) | 1355 | 42 | `__future__, fnmatch, governance, grill_conformance, grill_evidence, hashlib, json, pathlib, re, task_amendment, typing` | Lean task context: scoped instructions and requirement traceability. |
 | [`src/tools/trace.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/trace.py#L1) | 233 | 7 | `collections, index_store, logging, typing` | Call path tracing — find execution paths through the call graph. |
 | [`src/tools/type_contracts.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/type_contracts.py#L1) | 1099 | 26 | `ast, index_store, re, typing` | Cross-repo Type Contract checking for flyto-indexer MCP server. |
 | [`src/tools/validation.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L1) | 288 | 5 | `index_store, os, pathlib, re, shlex, subprocess, sys` | Post-change validation — run ruff (lint) and pytest on a project. |

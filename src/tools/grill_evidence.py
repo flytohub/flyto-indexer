@@ -54,6 +54,7 @@ def resolve_project_root(
             with store.project_index_scope(project):
                 index = store.load_index()
         else:
+            assert index_loader is not None
             index = index_loader()
         roots = (index or {}).get("project_roots", {})
     except Exception:

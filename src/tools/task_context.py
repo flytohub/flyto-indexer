@@ -807,13 +807,39 @@ def _parse_requirements(path: Path, root: Path) -> tuple[list[dict[str, Any]], d
     }
 
 
-def _normalize_allowed_paths(targets: Iterable[str]) -> list[str]:
+def _looks_like_task_path(value: str, root: Path | None = None) -> bool:
+    """Return whether a raw task target is credible repository path authority."""
+    portable = value.replace("\\", "/")
+    path = Path(portable)
+    if (
+        "/" in portable
+        or path.name.startswith(".")
+        or path.name.casefold() in _PATHLIKE_BASENAMES
+        or path.suffix.casefold() in _PATHLIKE_SUFFIXES
+    ):
+        return True
+    if root is None:
+        return False
+    try:
+        return (root / path).exists()
+    except (OSError, ValueError):
+        return False
+
+
+def _normalize_allowed_paths(
+    targets: Iterable[str],
+    *,
+    root: Path | None = None,
+) -> list[str]:
     allowed = []
     for target in targets:
-        value = _symbol_path(target) or target
+        symbol_path = _symbol_path(target)
+        value = symbol_path or target
         if not value or value == "." or Path(value).is_absolute():
             if value == ".":
                 return ["**"]
+            continue
+        if symbol_path is None and not _looks_like_task_path(value, root):
             continue
         normalized = _normalize_relative_path(value)
         if not normalized or normalized == "." or _is_unsafe_relative(normalized):
@@ -898,7 +924,7 @@ def build_intent_ledger(
         "text": description[:500],
         "source": "task.description",
         "line": 1,
-        "expected_paths": _normalize_allowed_paths(target_inputs),
+        "expected_paths": _normalize_allowed_paths(target_inputs, root=root),
         "expected_symbols": [],
         "proof_commands": [],
     }
@@ -927,7 +953,7 @@ def build_intent_ledger(
         ],
         "sources": sources,
         "requirements": requirements,
-        "allowed_paths": _normalize_allowed_paths(target_inputs),
+        "allowed_paths": _normalize_allowed_paths(target_inputs, root=root),
     }
     if amendments:
         payload["amendment_requirements"] = amendments

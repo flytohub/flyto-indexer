@@ -373,6 +373,42 @@ def _append_resolved_target(
     return True
 
 
+def _is_exact_task_target_match(target: str, item: dict) -> bool:
+    """Require exact identity before a search hit can grant edit authority."""
+    requested = target.strip().casefold()
+    if not requested:
+        return False
+    symbol_id = str(item.get("symbol_id") or "")
+    identities = {
+        str(item.get("name") or "").strip().casefold(),
+        symbol_id.rsplit(":", 1)[-1].strip().casefold(),
+    }
+    identities.discard("")
+    return requested in identities
+
+
+def _resolve_exact_search_target(
+    target: str,
+    project: str | None,
+    seen_ids: set[str],
+) -> dict | None:
+    """Return the first exact-identity search hit not already resolved."""
+    results = search_by_keyword(target, max_results=5, project=project)
+    for item in results.get("results", []):
+        if not _is_exact_task_target_match(target, item):
+            continue
+        symbol_id = item.get("symbol_id", "")
+        if symbol_id and symbol_id not in seen_ids:
+            return {
+                "input": target,
+                "symbol_id": symbol_id,
+                "name": item.get("name", ""),
+                "type": item.get("type", ""),
+                "path": item.get("path", ""),
+            }
+    return None
+
+
 def _resolve_targets(targets: List[str], project: str = None) -> List[dict]:
     """Resolve target names to symbol IDs.
 
@@ -396,9 +432,9 @@ def _resolve_targets(targets: List[str], project: str = None) -> List[dict]:
         is_path = _looks_like_path(target)
         if is_path:
             candidates = []
-            project_names = [project] if project else list(project_roots.keys())
-            if not project_names:
-                project_names = [None]
+            project_names = (
+                [project] if project else list(project_roots.keys())
+            ) or [None]
 
             for sid, sym in sorted(symbols.items(), key=_symbol_sort_key):
                 if project and not sid.lower().startswith(project.lower() + ":"):
@@ -424,23 +460,8 @@ def _resolve_targets(targets: List[str], project: str = None) -> List[dict]:
             continue
 
         # Search by keyword (with project filter)
-        results = search_by_keyword(target, max_results=5, project=project)
-        matched = False
-        for item in results.get("results", []):
-            sid = item.get("symbol_id", "")
-            if sid and sid not in seen_ids:
-                resolved.append({
-                    "input": target,
-                    "symbol_id": sid,
-                    "name": item.get("name", ""),
-                    "type": item.get("type", ""),
-                    "path": item.get("path", ""),
-                })
-                seen_ids.add(sid)
-                matched = True
-                break
-
-        if not matched:
+        matched = _resolve_exact_search_target(target, project, seen_ids)
+        if matched is None:
             resolved.append({
                 "input": target,
                 "symbol_id": None,
@@ -448,6 +469,9 @@ def _resolve_targets(targets: List[str], project: str = None) -> List[dict]:
                 "type": "unknown",
                 "path": "",
             })
+        else:
+            resolved.append(matched)
+            seen_ids.add(matched["symbol_id"])
 
     return resolved
 
@@ -1421,7 +1445,9 @@ def _build_execution_plan(
 
     # Extract target data for pre-filling args
     symbol_ids = [t["symbol_id"] for t in resolved if t.get("symbol_id")]
-    file_paths = list({t["path"] for t in resolved if t.get("path")})
+    file_paths = list(dict.fromkeys(
+        t["path"] for t in resolved if t.get("path")
+    ))
     first_sid = symbol_ids[0] if symbol_ids else None
     first_path = file_paths[0] if file_paths else None
 

@@ -2,6 +2,10 @@
 
 ## 2026-08-13
 
+- Made task edit authority exact and deterministic: BM25-only labels such as
+  `M1.1` remain unresolved and cannot become allowed paths, hostile filesystem
+  probes stay bounded, and execution plans preserve resolved-target order
+  across Python hash seeds.
 - Fixed cumulative task amendments so the latest diff must cover only newly
   added targets while retaining all prior path authority and fail-closed scope,
   unplanned-diff, chain-integrity, and sanitization checks.
