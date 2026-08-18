@@ -273,6 +273,26 @@ def _configure_scanner_commands(subparsers) -> None:
     taint_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON instead of human-readable text")
     taint_parser.add_argument("--max-results", type=int, default=50, dest="max_results", help="Max flows to show (default 50)")
 
+    # research-priority
+    research_parser = subparsers.add_parser(
+        "research-priority",
+        help="Rank the code paths most worth a security researcher's next hour",
+        description=(
+            "Answer 'what should I read first?' instead of 'here are 200 findings'. "
+            "Fuses taint reachability, sink severity, entry-point exposure, function "
+            "complexity, git churn, test gaps, and swallowed error handling into one "
+            "ranked short list, one candidate per function, with the reasons attached. "
+            "Signals that could not be measured are reported as unavailable rather than "
+            "scored as zero, and a truncated taint scan says so."
+        ),
+    )
+    research_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
+    research_parser.add_argument("--top", type=int, default=20, dest="top_n", help="Candidates to show (default 20)")
+    research_parser.add_argument("--since-days", type=int, default=180, dest="since_days", help="Churn window in days (default 180)")
+    research_parser.add_argument("--no-sanitized", action="store_true", dest="no_sanitized", help="Drop flows a sanitizer claims to neutralize")
+    research_parser.add_argument("--proven-only", action="store_true", dest="proven_only", help="Only candidates with a proven source-to-sink flow (drops the unproven tiers)")
+    research_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON instead of human-readable text")
+
     # agent-audit
     agent_audit_parser = subparsers.add_parser(
         "agent-audit",
@@ -499,6 +519,7 @@ def _command_handlers():
         "license": cmd_license,
         "docs": cmd_docs,
         "taint": cmd_taint,
+        "research-priority": cmd_research_priority,
         "agent-audit": cmd_agent_audit,
         "call-sites": cmd_call_sites,
         "check": cmd_check,
@@ -2374,6 +2395,75 @@ def cmd_taint(args):
             if flow.recommendation:
                 print(f"      fix: {flow.recommendation}")
             print()
+
+    return None
+
+
+def cmd_research_priority(args):
+    """Rank the code paths most worth a security researcher's next hour."""
+    from .analyzer.research_priority import rank_research_priority
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    # An index is optional. Without it the test-gap and entry-point signals
+    # are reported as unavailable instead of guessed.
+    index = {}
+    index_path = project_path / ".flyto-index" / "index.json"
+    if index_path.exists():
+        try:
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    report = rank_research_priority(
+        project_path,
+        index=index or None,
+        project=index.get("project") if index else None,
+        top_n=getattr(args, "top_n", 20),
+        since_days=getattr(args, "since_days", 180),
+        include_sanitized=not getattr(args, "no_sanitized", False),
+        include_unproven=not getattr(args, "proven_only", False),
+    )
+
+    if getattr(args, "as_json", False):
+        return report.to_dict()
+
+    coverage = report.coverage
+    print(f"Security Research Priority: {project_path.name}")
+    print(f"  Ranked in {report.elapsed_seconds:.1f}s")
+    print(f"  Flows considered: {report.total_flows}")
+    print(f"  Candidate paths:  {report.total_candidates}"
+          f" (showing {len(report.candidates)})")
+    print()
+
+    if coverage.get("truncated"):
+        print(f"  ! {coverage.get('truncation_note', 'scan was truncated')}")
+        print()
+
+    for rank, candidate in enumerate(report.candidates, 1):
+        where = f"{candidate.file}:{candidate.line}"
+        if candidate.function:
+            where += f" ({candidate.function})"
+        print(f"  #{rank:<3} {where:<58} {candidate.score:5.1f}")
+        for reason in candidate.reasons:
+            print(f"       - {reason}")
+        print()
+
+    if not report.candidates:
+        print("  No reachable source-to-sink paths found.")
+        print("  This is an honest empty result, not a clean bill of health —")
+        print("  see the unavailable signals below for what was not measured.")
+        print()
+
+    unavailable = coverage.get("signals_unavailable") or []
+    if unavailable:
+        print("  Signals not measured (excluded from scoring, not scored as zero):")
+        for note in unavailable:
+            print(f"    - {note}")
+        print()
 
     return None
 

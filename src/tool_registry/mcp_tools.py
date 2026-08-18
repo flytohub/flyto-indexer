@@ -319,6 +319,35 @@ MCP_TOOLS: list = [
         },
     },
     {
+        "name": "research_priority",
+        "title": "Security Research Priority",
+        "annotations": {"readOnlyHint": True, "openWorldHint": True},
+        "description": (
+            "Rank the code paths most worth a human security researcher's next hour. "
+            "Fuses signals this index already has — taint reachability (cross-function flows rank "
+            "above in-function ones), sink severity, entry-point exposure, function complexity, "
+            "git churn, test gaps, and swallowed error handling — into one ordered short list "
+            "instead of hundreds of undifferentiated findings. "
+            "One candidate per function: ten flows in one function is one lead, not ten. "
+            "Every candidate carries `signals` and plain-language `reasons`, so the ranking can be "
+            "argued with rather than trusted. "
+            "Signals that could not be measured (no git repo, no index, non-Python file) are null and "
+            "listed in coverage.signals_unavailable — never silently scored as zero — and "
+            "coverage.truncated reports when the underlying taint scan hit its cap. "
+            "This orders leads for human review; it does not confirm vulnerabilities."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Filter to a specific project"},
+                "top_n": {"type": "integer", "default": 20, "description": "Candidates to return (default 20, max 200)"},
+                "since_days": {"type": "integer", "default": 180, "description": "Churn window in days (default 180)"},
+                "include_sanitized": {"type": "boolean", "default": True, "description": "Keep flows a sanitizer claims to neutralize. They rank low but stay visible, because a wrong sanitizer is itself a finding."},
+                "include_unproven": {"type": "boolean", "default": True, "description": "Keep the weaker evidence tiers (sink plus nearby input, unproven link). Set false for proven source-to-sink flows only — on projects where the name-based cross-function pass completes no flow, that returns an empty list."},
+            },
+        },
+    },
+    {
         "name": "find_stale_files",
         "title": "Find Stale Files",
         "annotations": {"readOnlyHint": True, "openWorldHint": True},

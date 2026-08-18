@@ -246,10 +246,31 @@ flyto-index context --path . --query "auth routes query keys"
 flyto-index task plan --description "Refactor auth" --target src/auth.py
 flyto-index verify . --strict
 flyto-index verify-workspace . --changed-only --base origin/main
+flyto-index research-priority . --top 20
 ```
 
 The same guarded `task` workflow is available through the CLI when an MCP
 client has a stale long-running process.
+
+### Research priority
+
+`research-priority` answers a different question from the rest of the audit:
+not "is this codebase healthy" but "which code paths are worth a security
+researcher's next hour". It ranks functions by fusing taint reachability, sink
+severity, entry-point exposure, complexity, git churn, test gaps, and swallowed
+error handling, returns one candidate per function, and prints why each one
+placed where it did.
+
+It is a triage aid, not a verdict. Three properties keep it honest:
+
+- **Evidence tiers are labelled.** A proven source-to-sink flow outranks an
+  unproven lead, and the tier is printed with every candidate. Use
+  `--proven-only` to drop the unproven tiers entirely.
+- **Unmeasurable signals are reported, not zeroed.** No git repository, no
+  index, or a non-Python file makes a signal `null`; scoring renormalizes over
+  what was actually measured, so a repository without history is not penalized.
+- **Truncation is visible.** When a scan hits its caps, the output says so —
+  "found nothing" and "stopped looking" must not look alike.
 
 ## CI
 

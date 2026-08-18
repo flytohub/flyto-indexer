@@ -174,6 +174,14 @@ def _layers_mod():
     return layers
 
 
+def _research_priority():
+    try:
+        from ..tools import research_priority
+    except ImportError:
+        from tools import research_priority
+    return research_priority
+
+
 def _taint_dsl_mod():
     try:
         from ..analyzer import taint_dsl

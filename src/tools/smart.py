@@ -152,6 +152,14 @@ def _evidence_mod():
     return m
 
 
+def _research_priority_mod():
+    try:
+        from . import research_priority as m
+    except ImportError:
+        import tools.research_priority as m  # type: ignore
+    return m
+
+
 def _coverage_mod():
     try:
         from . import coverage_intel as m
@@ -683,6 +691,17 @@ def _expand_audit_dimensions(result, score_data, should_expand, focus, project):
         r = _enrich("coverage_gaps", _coverage_mod().coverage_gaps, project=project, max_results=10)
         if r is not None:
             result["coverage_gaps"] = r
+
+    # --- Security research priority (opt-in: runs a full taint scan) ---
+    if focus in ("research_priority", "all"):
+        r = _enrich(
+            "research_priority",
+            _research_priority_mod().research_priority,
+            project=project,
+            top_n=20,
+        )
+        if r is not None:
+            result["research_priority"] = r
 
 
 def _audit_supplementary(result, score_data, project):

@@ -12,6 +12,24 @@
 
 ## Unreleased
 
+### Added
+- Added `research-priority`: a ranking that answers "which code paths are worth
+  a security researcher's next hour" instead of emitting an undifferentiated
+  finding list. It fuses signals the repository already produces — taint
+  reachability, sink severity, entry-point exposure, function complexity, git
+  churn, test gaps, and swallowed error handling — into one ordered short list,
+  one candidate per function, with the evidence tier and plain-language reasons
+  attached. Available as `flyto-index research-priority`, as the
+  `research_priority` tool, and through `audit(focus='research_priority')`
+  without expanding the 20-tool MCP surface. Signals that cannot be measured
+  (no git repository, no index, non-Python file) are reported as unavailable
+  and excluded from the weighted mean rather than scored as zero, and scan caps
+  are reported so "found nothing" and "stopped looking" stay distinguishable.
+  Candidates seeded by the weaker unproven tiers are labelled as such, because
+  the cross-function taint pass is name-based and completes no flow at all on
+  many real projects; parameterized/ORM SQL is suppressed so those endpoints do
+  not crowd out real leads.
+
 ### Fixed
 - Added a task-plan-only, proof-bound generation-2 recovery contract. It binds
   audited prior scope and explicit targets to the exact raw parent, derives

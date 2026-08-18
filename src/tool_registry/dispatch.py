@@ -12,7 +12,7 @@ from .lazy_imports import (
     _validation, _git_intel, _coverage_intel, _type_contracts,
     _dep_scanner, _profile, _secret_scanner, _license_scanner,
     _doc_scanner, _verify, _pr_analyzer, _framework_detector, _smart,
-    _layers_mod, _taint_dsl_mod,
+    _layers_mod, _taint_dsl_mod, _research_priority,
 )
 from .task_dispatch import dispatch_task
 
@@ -64,7 +64,7 @@ _TOOL_NAMES = frozenset({
     "find_dead_code", "find_todos", "check_index_status",
     "check_and_reindex", "session_track", "session_get",
     "find_complex_functions", "find_duplicates", "security_scan",
-    "analyze_data_flow", "find_stale_files", "code_health_score",
+    "analyze_data_flow", "research_priority", "find_stale_files", "code_health_score",
     "suggest_refactoring", "impact_from_diff",
     "analyze_task", "task_gate_check", "validate_changes",
     "git_hotspots", "git_cochange", "git_churn", "git_risk_commits",
@@ -215,6 +215,13 @@ def _legacy_dispatchers() -> Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]
             project=args.get("project"),
             severity=args.get("severity"),
             max_results=args.get("max_results", 50),
+        ),
+        "research_priority": lambda args: _research_priority().research_priority(
+            project=args.get("project"),
+            top_n=args.get("top_n", 20),
+            since_days=args.get("since_days", 180),
+            include_sanitized=args.get("include_sanitized", True),
+            include_unproven=args.get("include_unproven", True),
         ),
         "find_stale_files": lambda args: _quality().find_stale_files(
             project=args.get("project"),
