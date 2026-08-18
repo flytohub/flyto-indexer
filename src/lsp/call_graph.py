@@ -89,6 +89,46 @@ def _item_to_edge_tuple(item: dict) -> Tuple[str, int, str]:
     return uri_to_path(uri), line, item.get("name", "")
 
 
+def resolve_definition(
+    project_root: Path,
+    source_file: Path,
+    line_0based: int,
+    col_0based: int,
+) -> Optional[Tuple[str, int, str]]:
+    """Resolve what the symbol at (line, col) binds to: (file, line, name).
+
+    A call site resolves to the definition it actually calls, which is what
+    separates `db.execute` from a local helper that happens to share the name.
+    Returns None when no server can answer — callers must treat that as
+    "unknown", never as "no".
+    """
+    manager = LSPManager.get_instance()
+    if not manager._enabled:
+        return None
+
+    cache = get_cache()
+    uri = path_to_uri(str(source_file))
+    cache_key = CacheKey(
+        method="callHierarchy/prepare", uri=uri,
+        line=line_0based, character=col_0based,
+        extra="definition",
+    )
+    # The cache stores an empty tuple for "asked, nothing resolved" so a
+    # negative answer is not re-asked on every call site in a hot file.
+    hit = cache.get(cache_key)
+    if isinstance(hit, tuple):
+        return hit if len(hit) == 3 else None
+
+    prepared = _prepare_item(manager, project_root, source_file, line_0based, col_0based)
+    if prepared is None:
+        cache.set(cache_key, ())
+        return None
+    _client, item = prepared
+    resolved = _item_to_edge_tuple(item)
+    cache.set(cache_key, resolved)
+    return resolved
+
+
 def incoming_calls(
     project_root: Path,
     source_file: Path,

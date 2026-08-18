@@ -12,7 +12,36 @@
 
 ## Unreleased
 
+### Fixed
+- Restored cross-project taint recall. The engine reported zero source-to-sink
+  flows on every real project in the workspace while still reporting large
+  source and sink counts. Four causes: the 1000-function cap counted across the
+  whole scan rather than per file and returned out of the scan silently
+  (flyto-core saw 21% of its functions); hidden directories such as agent
+  worktrees consumed the budget with duplicate copies; framework-injected
+  handler parameters (`limit: str = Query(...)`) were treated as
+  caller-dependent and deleted, so a route handler's own input could never
+  produce a finding; and `await`ed calls were skipped entirely by the statement
+  visitor, which covers most sink calls in async code. Caps that are hit are
+  now reported in the result instead of resembling a clean scan.
+- Stopped reporting parameterized ORM queries as SQL injection. A SQL sink now
+  requires an argument assembled as a string at runtime; SQLAlchemy expression
+  objects reaching `db.execute` are tracked and excluded, while an unknown
+  variable still counts as dynamic so real flows are not dropped.
+- Tightened cross-function callee matching: an exact final-segment match
+  replaces a substring test that attributed `run(...)` flows to any call whose
+  name contained it, and the dangerous function's defining file is now carried
+  through both trace strategies so same-named functions in different modules
+  are no longer merged.
+
 ### Added
+- Added type-aware callee verification for the cross-function taint pass. When
+  a language server is available, a call site is resolved to the definition it
+  actually binds to and compared with the dangerous function's own definition;
+  mismatches are dropped as name collisions. Verification is three-state — the
+  "no server / no answer" case returns unknown and leaves the name-based result
+  standing, so it upgrades the regex floor rather than replacing it. The result
+  reports how callees were resolved and how many attributions were rejected.
 - Added `research-priority`: a ranking that answers "which code paths are worth
   a security researcher's next hour" instead of emitting an undifferentiated
   finding list. It fuses signals the repository already produces — taint

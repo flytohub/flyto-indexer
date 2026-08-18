@@ -2,6 +2,7 @@
 
 | Date | Topic | File | Status |
 | --- | --- | --- | --- |
+| 2026-08-19 | Taint recall and callee resolution | `2026-08-19-taint-recall-and-callee-resolution.md` | Local gates passed; LSP branch unexercised |
 | 2026-08-19 | Security research priority ranking | `2026-08-19-research-priority.md` | Local gates passed; not pushed |
 | 2026-08-14 | Proof-bound task-parent recovery | `2026-08-14-task-parent-recovery.md` | All local gates passed; audit pending |
 | 2026-08-13 | Direct task workflow project scope | `2026-08-13-task-plan-project-scope.md` | Full host gate passed; audit pending |
