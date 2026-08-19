@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **186 Python modules**, **78,361 lines**, and **2,408 class/function/method declarations**.
+Generated inventory: **186 Python modules**, **78,501 lines**, and **2,409 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -52,7 +52,7 @@ Generated inventory: **186 Python modules**, **78,361 lines**, and **2,408 class
 | [`src/analyzer/lens.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/lens.py#L1) | 268 | 8 | `collections, dataclasses, pathlib, typing` | Lens engine — per-perspective ranked findings with cross-signal hotspots. |
 | [`src/analyzer/perf_patterns.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/perf_patterns.py#L1) | 250 | 14 | `ast, dataclasses, pathlib, re` | Performance Anti-pattern detector — find common performance issues in code. |
 | [`src/analyzer/pyramid.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/pyramid.py#L1) | 232 | 8 | `dataclasses, typing` | Pyramid aggregation engine — multi-perspective composite scoring. |
-| [`src/analyzer/research_priority.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/research_priority.py#L1) | 1226 | 38 | `__future__, analyzer, ast, complexity, dataclasses, error_handling, git_history, math, pathlib, profile, re, taint` | Security Research Priority ranking. |
+| [`src/analyzer/research_priority.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/research_priority.py#L1) | 1346 | 39 | `__future__, analyzer, ast, complexity, contextlib, dataclasses, error_handling, git_history, json, math, pathlib, profile` | Security Research Priority ranking. |
 | [`src/analyzer/rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/rules.py#L1) | 485 | 16 | `dataclasses, datetime, fnmatch, layers, logging, pathlib, re, yaml` | Project rules engine — loads .flyto-rules.yaml and checks compliance. |
 | [`src/analyzer/security.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/security.py#L1) | 580 | 20 | `ast, dataclasses, pathlib, re, rule_loader` | Security scanning - detect potential security issues |
 | [`src/analyzer/stale_files.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/stale_files.py#L1) | 216 | 11 | `collections, dataclasses, datetime, pathlib, subprocess` | Stale file detection - use git history to find files untouched for a long time |
@@ -68,7 +68,7 @@ Generated inventory: **186 Python modules**, **78,361 lines**, and **2,408 class
 | [`src/auditor/llm_auditor.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/auditor/llm_auditor.py#L1) | 348 | 11 | `json, logging, openai, os, pathlib, requests, tqdm, typing` | LLM Auditor - Use LLM to understand code purpose |
 | [`src/auditor/workflow.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/auditor/workflow.py#L1) | 352 | 9 | `dataclasses, json, pathlib` | AI Workflow - High-level -> Mid-level -> Detail -> Impact Analysis |
 | [`src/bm25.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/bm25.py#L1) | 246 | 8 | `json, math, pathlib, re, safe_io, typing` | Pure-Python BM25 (Okapi BM25) index for code search. |
-| [`src/cli.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1) | 2624 | 57 | `analyzer, argparse, contextlib, dataclasses, datetime, dependency_scanner, doc_scanner, engine, flyto_output, fnmatch, framework_detector, hashlib` | Command-line interface for Flyto2 Indexer. |
+| [`src/cli.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1) | 2631 | 57 | `analyzer, argparse, contextlib, dataclasses, datetime, dependency_scanner, doc_scanner, engine, flyto_output, fnmatch, framework_detector, hashlib` | Command-line interface for Flyto2 Indexer. |
 | [`src/context/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/context/__init__.py#L1) | 5 | 0 | `loader` | Context loading module. |
 | [`src/context/loader.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/context/loader.py#L1) | 410 | 17 | `dataclasses, models, pathlib, re, typing` | Progressive Context Loading |
 | [`src/dependency_resolver.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_resolver.py#L1) | 510 | 18 | `logging, models` | Dependency resolution mixin for IndexEngine. |
@@ -150,9 +150,9 @@ Generated inventory: **186 Python modules**, **78,361 lines**, and **2,408 class
 | [`src/test_evidence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/test_evidence.py#L1) | 564 | 16 | `__future__, collections, hashlib, json, os, pathlib, safe_xml, sqlite3, time, typing, xml` | Coverage-context and JUnit evidence for changed-symbol test impact. |
 | [`src/test_mapper.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/test_mapper.py#L1) | 221 | 12 | `re, threading, typing` | Test File Mapper — source ↔ test file bidirectional mapping. |
 | [`src/tool_registry/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/__init__.py#L1) | 26 | 0 | `dispatch, mcp_tools, smart_tools, vscode_tools` | tool_registry — tool definitions, schemas, and dispatch subpackage. |
-| [`src/tool_registry/dispatch.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/dispatch.py#L1) | 518 | 8 | `functools, lazy_imports, lsp, os, pathlib, task_dispatch, typing` | Unified tool dispatch — single entry point for all tool execution. |
+| [`src/tool_registry/dispatch.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/dispatch.py#L1) | 519 | 8 | `functools, lazy_imports, lsp, os, pathlib, task_dispatch, typing` | Unified tool dispatch — single entry point for all tool execution. |
 | [`src/tool_registry/lazy_imports.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/lazy_imports.py#L1) | 190 | 23 | `analyzer, dependency_scanner, diff_impact, doc_scanner, framework_detector, license_scanner, pr_analyzer, project_profile, quality, secret_scanner, tools, verify` | Lazy import helpers for tool dispatch. |
-| [`src/tool_registry/mcp_tools.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L1) | 1010 | 0 | `typing` | MCP Tool Definitions (canonical source). |
+| [`src/tool_registry/mcp_tools.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L1) | 1020 | 0 | `typing` | MCP Tool Definitions (canonical source). |
 | [`src/tool_registry/smart_tools.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L1) | 1004 | 0 | `typing` | Smart Tools — consolidated entry points exposed to MCP. |
 | [`src/tool_registry/task_dispatch.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/task_dispatch.py#L1) | 58 | 2 | `__future__, lazy_imports, typing` | Argument adapter for the consolidated task MCP dispatch entry. |
 | [`src/tool_registry/vscode_tools.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/vscode_tools.py#L1) | 138 | 2 | `mcp_tools, typing` | VSCode tool schemas (OpenAI function-calling format). |
@@ -175,7 +175,7 @@ Generated inventory: **186 Python modules**, **78,361 lines**, and **2,408 class
 | [`src/tools/maintenance.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L1) | 875 | 25 | `ast, collections, datetime, engine, importlib, index_store, os, pathlib, re, search, tools, watcher` | Maintenance tools — dead code, TODOs, index status, reindex, sessions. |
 | [`src/tools/proof_receipts.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/proof_receipts.py#L1) | 230 | 6 | `__future__, datetime, hashlib, hmac, json, os, typing` | Validation for content-addressed and optionally attested external proof receipts. |
 | [`src/tools/references.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/references.py#L1) | 1319 | 31 | `importlib, index_store, logging, lsp, os, pathlib, re, resolver, scip_adapter` | Reference and impact analysis tools for flyto-indexer MCP server. |
-| [`src/tools/research_priority.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/research_priority.py#L1) | 136 | 1 | `__future__, analyzer, index_store, pathlib, typing` | Research-priority tool adapter. |
+| [`src/tools/research_priority.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/research_priority.py#L1) | 138 | 1 | `__future__, analyzer, index_store, pathlib, typing` | Research-priority tool adapter. |
 | [`src/tools/resolver.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/resolver.py#L1) | 79 | 2 | `none` | Shared symbol resolution — single implementation used by all reference/impact tools. |
 | [`src/tools/search.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L1) | 712 | 18 | `bm25, importlib, index_store, re, synonyms` | Search tools for flyto-indexer MCP server. |
 | [`src/tools/smart.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L1) | 1564 | 67 | `analyzer, change_patterns, code_info, context_budget, conventions, coverage_intel, data_flow, dependency_scanner, diff_impact, git_intel, grill, index_store` | Smart tools — 5 consolidated entry points with association-based triggering. |

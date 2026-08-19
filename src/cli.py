@@ -304,6 +304,12 @@ def _configure_scanner_commands(subparsers) -> None:
         help="Drop flows a sanitizer claims to neutralize",
     )
     research_parser.add_argument(
+        "--sarif", dest="sarif_path",
+        help="Rank findings from a SARIF file (CodeQL, Semgrep, Trivy) with the "
+             "same project signals — churn, test gaps, entry exposure, "
+             "function size — that a SARIF result does not carry",
+    )
+    research_parser.add_argument(
         "--proven-only", action="store_true", dest="proven_only",
         help="Only candidates with a proven source-to-sink flow",
     )
@@ -2443,6 +2449,7 @@ def cmd_research_priority(args):
         since_days=getattr(args, "since_days", 180),
         include_sanitized=not getattr(args, "no_sanitized", False),
         include_unproven=not getattr(args, "proven_only", False),
+        sarif_path=getattr(args, "sarif_path", None),
     )
 
     if getattr(args, "as_json", False):

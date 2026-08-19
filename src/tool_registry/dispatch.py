@@ -222,6 +222,7 @@ def _legacy_dispatchers() -> Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]
             since_days=args.get("since_days", 180),
             include_sanitized=args.get("include_sanitized", True),
             include_unproven=args.get("include_unproven", True),
+            sarif_path=args.get("sarif_path"),
         ),
         "find_stale_files": lambda args: _quality().find_stale_files(
             project=args.get("project"),

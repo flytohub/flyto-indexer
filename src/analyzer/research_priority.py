@@ -48,6 +48,8 @@ few seconds instead of re-deriving it.
 from __future__ import annotations
 
 import ast
+import contextlib
+import json
 import math
 import re
 import time
@@ -133,6 +135,10 @@ EVIDENCE_REACHABILITY = {
     "sanitized_flow": 0.3,
     "sink_only_entry_point": 0.2,
     "operator_input_and_sink": 0.15,
+    # An external scanner (CodeQL, Semgrep, Trivy...) asserted this location.
+    # Its rule engine is the evidence; this ranking adds the project context
+    # that a SARIF result does not carry.
+    "external_scanner_finding": 0.75,
 }
 
 _EVIDENCE_REASON = {
@@ -156,6 +162,7 @@ _EVIDENCE_REASON = {
         "sink fed by operator input (argv / prompt), not a remote request — "
         "only interesting under a local threat model"
     ),
+    "external_scanner_finding": "reported by {scanner} ({rule})",
     "sanitized_flow": "sanitizer claimed on this flow — verify it covers this sink",
 }
 
@@ -565,9 +572,12 @@ def _build_reasons(candidate: ResearchCandidate, churn_commits: int | None) -> l
     sig = candidate.signals
 
     template = _EVIDENCE_REASON.get(candidate.evidence, candidate.evidence)
-    reasons.append(template.format(
-        hops=len(candidate.flow_path), distance=candidate.source_distance,
-    ))
+    with contextlib.suppress(KeyError):
+        # External-scanner reasons are pre-formatted with scanner/rule, so the
+        # shared template keys are absent for them.
+        reasons.append(template.format(
+            hops=len(candidate.flow_path), distance=candidate.source_distance,
+        ))
 
     if candidate.severity in ("critical", "high"):
         reasons.append(f"{candidate.category} sink ({candidate.severity})")
@@ -948,6 +958,80 @@ def _unproven_seeds(
 # ── Entry point ─────────────────────────────────────────────────────────────
 
 
+# ── External scanner findings (SARIF) ───────────────────────────────────────
+
+
+_SARIF_LEVEL_SEVERITY = {
+    "error": "high", "warning": "medium", "note": "low", "none": "low",
+}
+
+
+def load_sarif_findings(sarif_path: str | Path) -> list[dict]:
+    """Read a SARIF file into {file, line, rule, scanner, severity, message}.
+
+    CodeQL and friends have rule breadth this engine deliberately does not
+    chase — Actions permissions, insecure temp files, stack-trace exposure. But
+    a SARIF result carries no project context: no churn, no test gap, no entry
+    exposure, no function size. Feeding those results through this ranking adds
+    exactly what they are missing, which is why the two are complementary
+    rather than competing.
+    """
+    path = Path(sarif_path)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"cannot read SARIF at {path}: {exc}") from exc
+
+    out: list[dict] = []
+    for run in data.get("runs") or []:
+        driver = ((run.get("tool") or {}).get("driver") or {})
+        scanner = driver.get("name") or "external"
+        rules = {}
+        for idx, rule in enumerate(driver.get("rules") or []):
+            rid = rule.get("id") or str(idx)
+            props = rule.get("properties") or {}
+            rules[rid] = props.get("security-severity")
+            rules[str(idx)] = props.get("security-severity")
+
+        for result in run.get("results") or []:
+            if result.get("suppressions"):
+                continue
+            rule_id = result.get("ruleId") or ""
+            if not rule_id and result.get("ruleIndex") is not None:
+                rule_id = str(result["ruleIndex"])
+            severity = _SARIF_LEVEL_SEVERITY.get(
+                (result.get("level") or "warning").lower(), "medium",
+            )
+            score = rules.get(rule_id)
+            if score:
+                try:
+                    value = float(score)
+                    severity = (
+                        "critical" if value >= 9.0
+                        else "high" if value >= 7.0
+                        else "medium" if value >= 4.0
+                        else "low"
+                    )
+                except (TypeError, ValueError):
+                    pass
+
+            for loc in result.get("locations") or []:
+                phys = (loc.get("physicalLocation") or {})
+                uri = ((phys.get("artifactLocation") or {}).get("uri") or "")
+                region = phys.get("region") or {}
+                if not uri:
+                    continue
+                out.append({
+                    "file": _normalize(uri),
+                    "line": int(region.get("startLine") or 0),
+                    "rule": rule_id,
+                    "scanner": scanner,
+                    "severity": severity,
+                    "message": ((result.get("message") or {}).get("text") or "")[:200],
+                })
+    return out
+
+
 def rank_research_priority(
     project_root: str | Path,
     *,
@@ -958,6 +1042,7 @@ def rank_research_priority(
     weights: dict[str, float] | None = None,
     include_sanitized: bool = True,
     include_unproven: bool = True,
+    sarif_path: str | Path | None = None,
 ) -> ResearchPriorityReport:
     """Rank the code paths most worth a security researcher's next hour.
 
@@ -1130,6 +1215,40 @@ def rank_research_priority(
                 )
             by_key[(seed["file"], seed["function"])] = candidate
 
+    # ── Tier 3: findings asserted by an external scanner (SARIF) ──
+    external_count = 0
+    if sarif_path:
+        for hit in load_sarif_findings(sarif_path):
+            rel = hit["file"]
+            func_name, complexity = facts.enclosing(rel, hit["line"] or 1)
+            key = (rel, func_name or f"line:{hit['line']}")
+            if key in by_key:
+                # Our own analysis already flagged this function. An external
+                # scanner agreeing is corroboration, not a second lead.
+                by_key[key].categories.append(f"{hit['scanner']}:{hit['rule']}")
+                continue
+            reach = EVIDENCE_REACHABILITY["external_scanner_finding"]
+            candidate = ResearchCandidate(
+                file=rel,
+                function=func_name,
+                line=hit["line"],
+                category=hit["rule"] or "external",
+                severity=hit["severity"],
+                source_expr=f"{hit['scanner']} rule",
+                sink_expr=hit["message"],
+                evidence="external_scanner_finding",
+                proven=False,
+                categories=[f"{hit['scanner']}:{hit['rule']}"],
+                signals=build_signals(rel, func_name, reach, hit["severity"]),
+            )
+            candidate.reasons.append(
+                _EVIDENCE_REASON["external_scanner_finding"].format(
+                    scanner=hit["scanner"], rule=hit["rule"] or "?",
+                )
+            )
+            by_key[key] = candidate
+            external_count += 1
+
     candidates = list(by_key.values())
     for candidate in candidates:
         candidate.score = _score_candidate(candidate, effective_weights)
@@ -1183,6 +1302,7 @@ def rank_research_priority(
         "taint_sinks_seen": result.total_sinks,
         "proven_flows": len(flows),
         "by_evidence": tier_counts,
+        "external_findings_ranked": external_count,
         "parameterized_sql_suppressed": orm_suppressed,
         "truncated": truncated_findings or unproven_truncated,
         "limits": {

@@ -34,6 +34,7 @@ def research_priority(
     since_days: int = 180,
     include_sanitized: bool = True,
     include_unproven: bool = True,
+    sarif_path: Optional[str] = None,
 ) -> dict:
     """Rank the code paths most worth a security researcher's next hour.
 
@@ -92,6 +93,7 @@ def research_priority(
                 since_days=since_days,
                 include_sanitized=include_sanitized,
                 include_unproven=include_unproven,
+                sarif_path=sarif_path,
             )
         except Exception as exc:  # pragma: no cover - defensive
             per_project.append({

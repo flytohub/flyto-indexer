@@ -93,6 +93,17 @@
   `--ignore-unfixed` now exits 0 against the built image.
 
 ### Added
+- `research_priority` can now rank findings from an external scanner's SARIF
+  (`--sarif`, or `sarif_path`). CodeQL and friends have rule breadth this engine
+  deliberately does not chase — clear-text logging, insecure temporary files,
+  Actions permissions — but a SARIF result carries no project context: no churn,
+  no test gap, no entry exposure, no function size. Their findings now flow
+  through the same ranking and get exactly that. A proven flow still outranks an
+  external finding, and when both point at the same function the external rule
+  is recorded as corroboration rather than counted as a second lead. This makes
+  the two complementary: breadth from CodeQL, prioritization here.
+
+### Added
 - Taint propagators and multi-hop return summaries (Semgrep- and Pysa-style),
   from diagnosing why mlflow's request handlers produced no flows. Taint now
   spreads through in-place mutation — `list.append(taint)`, `d[k] = taint`,

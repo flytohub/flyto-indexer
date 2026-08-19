@@ -356,6 +356,16 @@ MCP_TOOLS: list = [
                         "stay visible, because a wrong sanitizer is itself a finding."
                     ),
                 },
+                "sarif_path": {
+                    "type": "string",
+                    "description": (
+                        "Optional SARIF file (CodeQL, Semgrep, Trivy). Its findings are "
+                        "ranked with the same project signals — churn, test gaps, entry "
+                        "exposure, function size — that a SARIF result does not carry. "
+                        "A finding already flagged by this engine is treated as "
+                        "corroboration, not a second lead."
+                    ),
+                },
                 "include_unproven": {
                     "type": "boolean", "default": True,
                     "description": (

@@ -1,5 +1,6 @@
 """Tests for the security research priority ranking."""
 
+import json
 import subprocess
 import textwrap
 from pathlib import Path
@@ -648,3 +649,119 @@ class TestBareNameSinkIsAFreeCall:
         report = rank_research_priority(project)
 
         assert not [c for c in report.candidates if c.category == "path_traversal"]
+
+
+class TestExternalScannerFindings:
+    """Rank SARIF findings (CodeQL, Semgrep, Trivy) with project signals.
+
+    CodeQL has rule breadth this engine deliberately does not chase — clear-text
+    logging, insecure temp files, Actions permissions. A SARIF result carries no
+    project context though: no churn, no test gap, no entry exposure, no
+    function size. Feeding it through this ranking supplies exactly that, which
+    makes the two complementary rather than competing.
+    """
+
+    def _sarif(self, project, entries):
+        results = []
+        rules = []
+        for rule_id, line, sev in entries:
+            rules.append({"id": rule_id, "properties": {"security-severity": sev}})
+            results.append({
+                "ruleId": rule_id,
+                "level": "error",
+                "message": {"text": f"{rule_id} here"},
+                "locations": [{"physicalLocation": {
+                    "artifactLocation": {"uri": "app.py"},
+                    "region": {"startLine": line},
+                }}],
+            })
+        path = project / "scan.sarif"
+        path.write_text(json.dumps({
+            "version": "2.1.0",
+            "runs": [{"tool": {"driver": {"name": "CodeQL", "rules": rules}},
+                      "results": results}],
+        }))
+        return path
+
+    def test_codeql_finding_this_engine_misses_is_ranked(self, project):
+        _write(project, "app.py", """\
+            import logging
+            log = logging.getLogger(__name__)
+
+            def leak_token(token):
+                log.info("auth token: %s", token)
+        """)
+        sarif = self._sarif(project, [
+            ("py/clear-text-logging-sensitive-data", 5, "7.5"),
+        ])
+
+        without = rank_research_priority(project)
+        with_sarif = rank_research_priority(project, sarif_path=sarif)
+
+        assert without.candidates == []
+        assert len(with_sarif.candidates) == 1
+        lead = with_sarif.candidates[0]
+        assert lead.evidence == "external_scanner_finding"
+        assert lead.function == "leak_token"
+        assert any("CodeQL" in r for r in lead.reasons)
+
+    def test_a_proven_flow_outranks_an_external_finding(self, project):
+        _write(project, "app.py", """\
+            from flask import request
+            import os
+            import logging
+
+            log = logging.getLogger(__name__)
+
+            def handler():
+                c = request.args.get("c")
+                os.system(c)
+
+            def leak(token):
+                log.info("token %s", token)
+        """)
+        sarif = self._sarif(project, [
+            ("py/clear-text-logging-sensitive-data", 12, "7.5"),
+        ])
+        report = rank_research_priority(project, sarif_path=sarif)
+        by_function = {c.function: c for c in report.candidates}
+
+        assert by_function["handler"].proven is True
+        assert by_function["handler"].score > by_function["leak"].score
+
+    def test_overlap_is_corroboration_not_a_second_lead(self, project):
+        _write(project, "app.py", """\
+            from flask import request
+            import os
+
+            def handler():
+                c = request.args.get("c")
+                os.system(c)
+        """)
+        # CodeQL reports the same function this engine already proved.
+        sarif = self._sarif(project, [("py/command-line-injection", 6, "9.8")])
+        report = rank_research_priority(project, sarif_path=sarif)
+
+        assert len(report.candidates) == 1
+        lead = report.candidates[0]
+        assert lead.proven is True
+        assert any("py/command-line-injection" in c for c in lead.categories)
+        assert report.coverage["external_findings_ranked"] == 0
+
+    def test_suppressed_sarif_results_are_skipped(self, project):
+        _write(project, "app.py", "x = 1\n")
+        path = project / "s.sarif"
+        path.write_text(json.dumps({
+            "version": "2.1.0",
+            "runs": [{"tool": {"driver": {"name": "CodeQL"}}, "results": [{
+                "ruleId": "py/x", "level": "error",
+                "suppressions": [{"kind": "inSource"}],
+                "message": {"text": "x"},
+                "locations": [{"physicalLocation": {
+                    "artifactLocation": {"uri": "app.py"},
+                    "region": {"startLine": 1}}}],
+            }]}],
+        }))
+        report = rank_research_priority(project, sarif_path=path)
+
+        assert report.candidates == []
