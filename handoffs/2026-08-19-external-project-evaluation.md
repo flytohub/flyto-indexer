@@ -76,27 +76,21 @@ The eight: the upload path (`route_utils.upload_fn`), three `vibe-edit` route
 handlers, two OpenAPI endpoint builders that construct request URLs from a
 user-supplied spec, and the two upload `_process_single_file` type gates.
 
-## The finding — for coordinated disclosure, not for a public report
+## The finding — details withheld pending disclosure
 
-`gradio/routes.py` `undo_vibe_edit` (ranked #12):
+One of the eight is a real defect: a route handler joins a request-supplied
+value into a filesystem path without the `safe_join` helper the same file uses
+everywhere else, and that inconsistency is what makes it credible rather than
+theoretical. Its impact is bounded by a development-mode flag.
 
-    async def undo_vibe_edit(hash: str = Body(..., embed=True)):
-        snapshot_file = vibe_edit_history_dir / f"{hash}.py"
-        ...
-        with open(snapshot_file) as f: saved_content = f.read()
-        with open(GRADIO_WATCH_DEMO_PATH, "w") as f: f.write(saved_content)
+**This document previously named the file, function and code.** That was wrong:
+this repository is public, and the maintainers had not been contacted. The
+details now live only in a local draft advisory and go to the project through
+its security policy first. Note that the earlier revision remains in this
+repository's git history — redaction limits further spread, it does not undo
+publication.
 
-`hash` comes straight from the request body and is joined into a path with no
-validation, while the same file uses `routes_safe_join` / `utils.safe_join`
-for exactly this elsewhere — that inconsistency is what makes it credible
-rather than theoretical. Effect: read any `.py` file the process can reach and
-write its contents into the watched demo file, which gradio reloads.
-
-Constraints that likely cap severity: the route 403s unless the app was
-launched with `--vibe` (a development mode), and the target must exist and end
-in `.py`. **Not exploited, not reported anywhere yet.** It should go through
-gradio's security policy / GitHub private advisory, with the maintainers
-deciding severity, not through a public issue.
+Nothing was exploited, and no report has been filed anywhere yet.
 
 ## Honest reading of the result
 
