@@ -7,6 +7,16 @@
   owned by private product repositories and are not shipped here.
 - CLI and MCP surfaces support indexing, context, impact, API/dependency
   closure, security checks, architecture rules, and repeatable verification.
+- Security-research triage is a first-class use: `research_priority` ranks the
+  code paths worth a human's time (fusing taint reachability, sink severity,
+  entry exposure, complexity, churn, test gaps), the taint engine is
+  field-sensitive (self attributes, context-manager sinks) with YAML-
+  configurable sources/sinks/sanitizers/propagators, and the
+  `security-triage` skill orchestrates a budget-aware funnel. Honest bound:
+  cross-function taint is name-based, so raw recall is mid — the output is a
+  ranked reading list with labelled evidence tiers, not a verdict, and it
+  reports what it did not check. Deep type-resolved dataflow is deliberately
+  out of scope to keep the 20-tool, zero-dependency surface.
 - Project root, index directory, project label, and cache identity now resolve
   through one immutable operation scope shared by CLI, MCP/API, task planning,
   search, Grill, watcher, maintenance, and references. Explicit

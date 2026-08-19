@@ -12,6 +12,10 @@
   and adoption mature.
 - Keep cross-AI continuity compact and local; expand it only from a reproduced
   handoff failure, not by adding session documents or dashboard features.
+- Keep security-research triage strong within the lean lane: extend built-in
+  and YAML taint rules and triage precision from reproduced cases, and use
+  selective LSP on the shortlist. Do not add whole-program type-resolved
+  dataflow here — it belongs above the MCP, not inside it.
 
 ## Next
 
@@ -30,3 +34,14 @@
   not want shared HMAC trust keys.
 - Add deeper language server call hierarchy coverage where local LSPs are
   available.
+
+## Out of scope for this repository
+
+- Whole-program, type-resolved taint dataflow (the CodeQL / Pysa class of
+  recall). It would break the zero-dependency, 20-tool surface. Type resolution
+  belongs in a layer above the MCP (a service or the consuming product), invoked
+  selectively, not baked into the engine.
+- Any autonomous "find → fix → submit" loop. Downstream products
+  (`flyto-code` / `flyto-engine`) own disclosure, and every step stays
+  human-gated — see the security-triage handoff. The indexer only ever produces
+  ranked leads.

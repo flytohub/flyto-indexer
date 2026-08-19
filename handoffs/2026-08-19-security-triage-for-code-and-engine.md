@@ -118,3 +118,44 @@ the disclosure path before anything is written down publicly.)
 - If the triage funnel proves useful repeatedly, capture it as a
   `flyto-blueprint` procedure so `flyto-ai` can replay it deterministically —
   the productionization path, without bloating `flyto-indexer`.
+
+## Future feature spec — human-gated disclosure export (flyto-code)
+
+Not urgent; the owners are on bug-fixing. Captured so it can be built without
+re-deriving. This is the **human-driven** product the owner intends — a force
+multiplier for manual scanning, never an autonomous bot. Every step passes
+through a person.
+
+**The loop (each arrow is a human action or a human-gated one):**
+
+1. Human picks and clones a target repo (deliberate, one at a time — not mass
+   auto-clone).
+2. `flyto-index scan` + the `security-triage` skill produce the ranked reading
+   list.
+3. Human researches the top candidates as they normally would; confirms or
+   drops each. Only a **human-confirmed, reproduced** finding proceeds.
+4. AI summarizes the confirmed finding into a disclosure-shaped draft — this
+   session already did it by hand: it read the target's `SECURITY.md`, filled
+   the required template (summary / affected version / component / class /
+   vector / **PoC** / impact / suggested fix), and produced a GHSA-ready
+   advisory. Make that a repeatable **export**.
+5. Human reviews the draft and **clicks to file** (or not). The tool never
+   sends; it prepares. Route is the project's private channel (GitHub private
+   advisory / security email), never a public PR or issue first.
+
+**Where it lives:** `flyto-code` (it already owns reporting + evidence). The
+export reads the confirmed finding + the target's SECURITY.md template and
+emits the advisory; `flyto-engine` stores it as evidence state with a
+`disclosed?` flag. `flyto-indexer` is untouched — it stays the triage tool.
+
+**Hard rules baked into the export (these are what keep it reputation-positive):**
+
+- The draft is built only from real evidence and a real PoC. No fabricated
+  proof, no inflated impact. If there is no PoC, it is not exportable as a
+  report — it stays a lead.
+- "File" is a deliberate human click, defaulting to off. The system prepares;
+  the person discloses.
+- Coordinated/private first. A public PR only after the maintainer agrees.
+- Reference template: this session's `undo_vibe_edit` advisory (verified PoC on
+  gradio 6.24.0, followed gradio's required structure). That is the shape the
+  export should reproduce.
