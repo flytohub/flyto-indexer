@@ -23,6 +23,18 @@
   `undo_vibe_edit` path traversal, with demo and operator-fed flows demoted.
 
 ### Fixed
+- Stopped the non-Python regex taint pass from mining generated and vendored
+  bundles. gogs's only two findings were `jquery.min.js` and `mermaid.min.js`:
+  one line of a minified bundle is tens of thousands of characters, so a
+  line-oriented regex matches something in nearly all of them. The path
+  classifier already knew `.min.js` was generated; the scan now asks it, and
+  skips `vendor/` trees too.
+- Required a word boundary before the bare `query(` / `execute(` keywords in
+  the JavaScript rules. `validateRegistrationInfoQuery(ctx.request.query)` — a
+  validator, not SQL — was strapi's only finding. This is the same
+  token-boundary class fixed earlier for Python sinks, which the regex rules
+  had never received. gogs 2 → 0 findings, strapi 1 → 0, with a synthetic
+  JS/Go suite still catching 6 of 6 real shapes.
 - Required a bare-name sink such as `open(` to be a free call. It was matching
   method calls and definitions, so `jupyter_server`'s `async def open(self,
   kernel_id)` WebSocket handlers — and their `super().open()` calls — each

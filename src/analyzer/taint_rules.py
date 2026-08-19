@@ -446,9 +446,9 @@ SANITIZERS = [
 # Regex patterns for JS/TS/Go taint flows (fallback for non-Python)
 JS_TAINT_PATTERNS = [
     # req.body/query/params → SQL query (either order on the line)
-    (r'(?:req|request)\.(?:body|query|params)\b.*?(?:query|execute)\s*\(',
+    (r'(?:req|request)\.(?:body|query|params)\b.*?\b(?:query|execute)\s*\(',
      "sql_injection", "high", "Use parameterized queries"),
-    (r'(?:query|execute)\s*\(.*?(?:req|request)\.(?:body|query|params)\b',
+    (r'\b(?:query|execute)\s*\(.*?(?:req|request)\.(?:body|query|params)\b',
      "sql_injection", "high", "Use parameterized queries"),
     # location/document → innerHTML / document.write
     (r'(?:document\.location|window\.location|location\.(?:hash|search)).*?innerHTML',
@@ -462,7 +462,7 @@ JS_TAINT_PATTERNS = [
     (r'(?:req|request)\.(?:body|query|params)\b.*?\bexec(?:Sync)?\s*\(',
      "rce", "critical", "Never pass user input to child_process.exec"),
     # req.cookies → response (session fixation)
-    (r'(?:req|request)\.cookies\b.*?(?:query|execute)\s*\(',
+    (r'(?:req|request)\.cookies\b.*?\b(?:query|execute)\s*\(',
      "sql_injection", "high", "Never use raw cookie values in SQL"),
     # --- batch 1: bidirectional — JS regularly writes `sink(req.body)`
     # (sink-first) AND `const u = req.query.u; sink(u)` (source-first).

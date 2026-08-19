@@ -3,7 +3,7 @@
 - Date: 2026-08-19
 - Owner: claude
 - Branch: main
-- Status: five projects measured, six precision fixes shipped, one finding pending disclosure
+- Status: seven projects measured across four languages, eight precision fixes shipped, one finding pending disclosure
 
 ## What was run
 
@@ -161,6 +161,38 @@ aiohttp is the interesting negative: as a *library*, it has almost no untrusted
 entry points of its own, and its remaining leads are ReDoS patterns in
 `re.compile` sites. Zero proven flows there is the honest answer, not a miss.
 
+## Round 4 — non-Python (gogs / Go, strapi / TypeScript)
+
+JS/TS and Go are scanned by line-oriented regex, not an AST. Round 4 measured
+what that bound actually costs, using **gogs** (Go, 491 files) and **strapi**
+(TypeScript, 4,105 files). Clones deleted after measurement.
+
+**The regex pass is better than expected on shape.** A synthetic suite covering
+same-line and across-line SQL injection and command injection in both languages
+scored 6/6 — the scanner also checks consecutive line pairs, so the common
+"read into a local on one line, use it on the next" shape is caught.
+
+**Both real projects were pure false positives, in two distinct classes:**
+
+1. **Minified and vendored bundles (gogs, 2 of 2).** `jquery-3.7.1.min.js` and
+   `mermaid.min.js`. One line of a minified bundle is tens of thousands of
+   characters, so a line-oriented regex matches something in nearly all of
+   them. The `profile.filesystem` classifier already knew `.min.js` was
+   generated — the regex scan simply never asked it. Now skipped, along with
+   `vendor/` trees.
+2. **Bare keyword matching an identifier tail (strapi, 1 of 1).**
+   `validateRegistrationInfoQuery(ctx.request.query)` is a validator, not SQL,
+   but the pattern `(?:query|execute)\s*\(` matched the end of the identifier.
+   This is the same token-boundary class fixed earlier for Python sinks; the
+   regex rules had never received it. Now requires a word boundary.
+
+After both fixes: gogs 2 → 0, strapi 1 → 0, synthetic still 6/6.
+
+**Zero findings on both is the honest result, not a failure.** gogs and strapi
+are mature projects whose obvious injection shapes are already parameterized —
+and the regex pass only claims same-line and adjacent-line reach. What matters
+is that the noise is gone, so a zero now means something.
+
 ## Honest reading of the result
 
 - The ranking's ceiling is still taint recall, not ranking quality: 117k lines
@@ -177,6 +209,9 @@ entry points of its own, and its remaining leads are ReDoS patterns in
   django-cms 5, aiohttp 0, jupyter_server 0. A framework with explicit request
   objects flowing into redirects (Django) proves more than a library whose
   entry points belong to its callers (aiohttp).
+- Non-Python taint is bounded by design: same-line and adjacent-line regex, no
+  AST, no cross-function reach. It is honest for the shapes it claims and
+  should never be presented as equivalent to the Python pass.
 - Every round so far has found a distinct, mechanical false-positive class by
   running on one more real project. That loop — measure, find the class, fix it,
   re-measure — has been worth more than any speculative engine work.

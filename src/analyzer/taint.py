@@ -73,6 +73,26 @@ SKIP_DIR_PATTERNS = re.compile(
     r"(?:^|/)[^/]*(?:_test\.go|_test\.py|\.test\.[jt]sx?|\.spec\.[jt]sx?)$"
 )
 
+def _is_generated_asset(rel_path: str) -> bool:
+    """True for vendored or generated bundles, which are not project code.
+
+    Reuses the profile classifier (which already knows `.min.js`, lockfiles and
+    generated directories) and adds the vendor/third-party trees a regex scan
+    would otherwise mine for noise.
+    """
+    parts = [part.lower() for part in rel_path.split("/")]
+    if {"vendor", "vendors", "third_party", "thirdparty", "bundle", "bundles"} & set(parts[:-1]):
+        return True
+    try:
+        try:
+            from ..profile.filesystem import classify_path
+        except ImportError:  # pragma: no cover - flat-layout fallback
+            from profile.filesystem import classify_path  # type: ignore
+        return classify_path(rel_path) == "generated"
+    except Exception:  # pragma: no cover - defensive
+        return False
+
+
 def _in_hidden_dir(rel_path: str) -> bool:
     """True when any *directory* in the path is hidden.
 
@@ -2096,8 +2116,15 @@ class TaintAnalyzer:
             for fpath in sorted(self.project_root.rglob(f"*{ext}")):
                 if len(self.findings) >= MAX_FINDINGS:
                     return
-                rel = str(fpath.relative_to(self.project_root))
-                if SKIP_DIR_PATTERNS.search(rel):
+                rel = str(fpath.relative_to(self.project_root)).replace("\\", "/")
+                if SKIP_DIR_PATTERNS.search(rel) or _in_hidden_dir(rel):
+                    continue
+                # Minified and vendored bundles are not this project's code.
+                # gogs ships jquery.min.js and mermaid.min.js; a single line of
+                # a minified bundle is tens of thousands of characters, so a
+                # line-oriented regex matches something in nearly all of them.
+                # Both of gogs's only two "findings" were exactly this.
+                if _is_generated_asset(rel):
                     continue
 
                 try:
