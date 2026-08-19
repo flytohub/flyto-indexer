@@ -23,10 +23,15 @@ def test_scanner_dependency_overrides_stay_on_tested_secure_versions():
 def test_runtime_image_applies_fixable_os_security_updates():
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
 
-    assert "apt-get upgrade -y" in dockerfile
+    # dist-upgrade, not upgrade: plain upgrade refuses any change that pulls in
+    # or removes a package, so the util-linux security revision was held back
+    # and CVE-2026-53615 shipped in an image whose build looked clean.
+    assert "apt-get dist-upgrade -y" in dockerfile
     assert "dpkg --compare-versions" in dockerfile
     assert '"$(dpkg-query -W -f=\'${Version}\' libexpat1)"' in dockerfile
     assert 'ge "2.8.2-1~deb13u1"' in dockerfile
+    assert '"$(dpkg-query -W -f=\'${Version}\' util-linux)"' in dockerfile
+    assert 'ge "2.41.5-0+deb13u1"' in dockerfile
 
 
 def test_trivy_skips_only_pip_vendor_sbom_without_weakening_gate():

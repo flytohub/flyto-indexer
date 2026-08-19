@@ -14,6 +14,15 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+#: Python string literals, written so the two branches are disjoint: a
+#: character that is neither the quote nor a backslash, or a backslash and
+#: whatever it escapes. The previous `(?:\\.|(?!\1).)*` form let both
+#: branches match a backslash, which backtracks exponentially on an
+#: unterminated literal full of `\a` (CodeQL py/redos).
+_STRING_LITERAL_RE = re.compile(
+    r"""(?s)[rubfRUBF]*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')""",
+)
+
 
 @dataclass
 class SecurityIssue:
@@ -371,11 +380,7 @@ class SecurityScanner:
     def _is_yaml_rule_false_positive(line: str, rule: dict) -> bool:
         """Allow broken hashes only when the line clearly describes non-security identity."""
         if rule.get("id") == "LOG_SENSITIVE":
-            without_literals = re.sub(
-                r"""(?s)(?:[rubfRUBF]*)(["'])(?:\\.|(?!\1).)*\1""",
-                "",
-                line,
-            )
+            without_literals = _STRING_LITERAL_RE.sub("", line)
             interpolation = re.search(
                 r"\{[^}]*(?:password|secret|token|credential)[^}]*\}",
                 line,

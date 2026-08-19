@@ -9,6 +9,7 @@ import pytest
 from src.analyzer.research_priority import (
     DEFAULT_WEIGHTS,
     EVIDENCE_REACHABILITY,
+    PROXIMITY_LINES,
     ResearchCandidate,
     _has_dynamic_sql,
     _is_attack_surface,
@@ -86,7 +87,7 @@ class TestProvenFlows:
 
 
 class TestUnprovenTiers:
-    def test_sink_with_file_source_is_returned_but_marked_unproven(self, project):
+    def test_sink_near_the_source_is_returned_but_marked_unproven(self, project):
         _write(project, "app.py", """\
             from flask import request
             import subprocess
@@ -101,8 +102,36 @@ class TestUnprovenTiers:
         lead = next(c for c in report.candidates if c.function == "ping")
 
         assert lead.proven is False
-        assert lead.evidence == "sink_with_file_source"
+        assert lead.evidence == "sink_with_nearby_source"
         assert any("NOT proven" in reason for reason in lead.reasons)
+
+    def test_a_distant_source_in_a_big_file_ranks_below_a_near_one(self, project):
+        """One request read at the top of a 1000-line file must not make every
+        call in it a lead of equal weight."""
+        head = (
+            "from flask import request\n"
+            "import subprocess\n"
+            "\n"
+            "def read_input():\n"
+            "    return request.args.get('host')\n"
+        )
+        sink = (
+            "def ping(target):\n"
+            "    subprocess.run('ping ' + target, shell=True)\n"
+        )
+        (project / "near.py").write_text(head + "\n" + sink)
+        padding = "".join(f"# padding {i}\n" for i in range(400))
+        (project / "far.py").write_text(
+            head + padding + sink.replace("def ping(", "def ping_far(")
+        )
+
+        report = rank_research_priority(project)
+        by_function = {c.function: c for c in report.candidates}
+
+        assert by_function["ping"].evidence == "sink_with_nearby_source"
+        assert by_function["ping_far"].evidence == "sink_with_file_source"
+        assert by_function["ping_far"].source_distance > PROXIMITY_LINES
+        assert by_function["ping"].score > by_function["ping_far"].score
 
     def test_include_unproven_false_returns_only_proven(self, project):
         _write(project, "app.py", """\

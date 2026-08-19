@@ -24,6 +24,22 @@
   so analyzers can share it without importing the tool surface. `git_intel`
   keeps its private names and public behavior.
 
+### Security
+- Fixed the three code-scanning findings in first-party code: the security
+  scanner's string-literal regex could backtrack exponentially on an
+  unterminated literal (CodeQL py/redos — the scanner reads repositories it did
+  not write, so that is a denial of service); the .vue script-block parser
+  missed sloppy closing tags such as `</script bar>`; and the public-site
+  evidence script now pins TLS 1.2 as its floor instead of accepting whatever
+  `create_default_context()` permits.
+- Closed the container image's CVE-2026-53615 (util-linux). The runtime stage
+  ran `apt-get upgrade`, which refuses any change that pulls in or removes a
+  package, so the security revision — which drags mount, login and libblkid1
+  with it — was held back and the vulnerable version shipped while the build
+  looked clean. It now runs `dist-upgrade` and asserts the fixed version, the
+  same way libexpat1 is asserted. Verified locally: Trivy HIGH,CRITICAL with
+  `--ignore-unfixed` now exits 0 against the built image.
+
 ### Fixed
 - Required sink patterns to match on a token boundary at both ends. The
   right-hand guard alone let `exec(` match `create_subprocess_exec(` and

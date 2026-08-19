@@ -127,7 +127,9 @@ EVIDENCE_REACHABILITY = {
     "proven_flow_cross_function": 1.0,
     "proven_flow_in_function": 0.8,
     "source_and_sink_same_function": 0.5,
-    "sink_with_file_source": 0.35,
+    "sink_with_class_source": 0.4,
+    "sink_with_nearby_source": 0.32,
+    "sink_with_file_source": 0.18,
     "sanitized_flow": 0.3,
     "sink_only_entry_point": 0.2,
     "operator_input_and_sink": 0.15,
@@ -139,8 +141,15 @@ _EVIDENCE_REASON = {
     "source_and_sink_same_function": (
         "input and a dangerous sink share this function — link NOT proven, read it"
     ),
+    "sink_with_class_source": (
+        "dangerous sink here, untrusted input enters the same class — link NOT proven"
+    ),
+    "sink_with_nearby_source": (
+        "dangerous sink here, untrusted input enters {distance} lines away — link NOT proven"
+    ),
     "sink_with_file_source": (
-        "dangerous sink here, untrusted input enters elsewhere in this file — link NOT proven"
+        "dangerous sink here, untrusted input enters this file {distance} lines away — "
+        "weak link, large-file coincidence is likely"
     ),
     "sink_only_entry_point": "dangerous sink in an indexed entry-point file — no input traced",
     "operator_input_and_sink": (
@@ -163,6 +172,12 @@ _JS_ONLY_SINKS = frozenset({
 #: They are real sources for a CLI threat model and stay in the list, but a
 #: lead built on them must not outrank one built on a request.
 _OPERATOR_SOURCES = ("input(", "sys.argv", "argparse", "click.prompt(")
+
+#: A source this many lines from the sink still reads as "the same piece of
+#: code". Beyond it, sharing a file means little: gradio_client/client.py is
+#: 1,400 lines, and one `request.headers` read at line 773 made every `httpx`
+#: call in the file a lead.
+PROXIMITY_LINES = 80
 
 #: Files parsed by the unproven pass before it stops. The pass is a second
 #: read of the tree; this keeps it proportional to the taint scan itself.
@@ -198,6 +213,9 @@ class ResearchCandidate:
     sanitized: bool = False
     evidence: str = "proven_flow_in_function"
     proven: bool = True
+    #: Lines between this function and the nearest untrusted input, for the
+    #: tiers where the link is proximity rather than proof.
+    source_distance: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -524,7 +542,9 @@ def _build_reasons(candidate: ResearchCandidate, churn_commits: int | None) -> l
     sig = candidate.signals
 
     template = _EVIDENCE_REASON.get(candidate.evidence, candidate.evidence)
-    reasons.append(template.format(hops=len(candidate.flow_path)))
+    reasons.append(template.format(
+        hops=len(candidate.flow_path), distance=candidate.source_distance,
+    ))
 
     if candidate.severity in ("critical", "high"):
         reasons.append(f"{candidate.category} sink ({candidate.severity})")
@@ -553,6 +573,47 @@ def _build_reasons(candidate: ResearchCandidate, churn_commits: int | None) -> l
 
 
 # ── Unproven-evidence pass ──────────────────────────────────────────────────
+
+
+def _source_line_index(
+    file_lines: list[str], source_patterns: list[str],
+) -> list[tuple[int, str]]:
+    """1-based line numbers where an untrusted-input pattern appears."""
+    hits: list[tuple[int, str]] = []
+    for number, line in enumerate(file_lines, start=1):
+        for pattern in source_patterns:
+            if pattern in line:
+                hits.append((number, pattern))
+                break
+    return hits
+
+
+def _nearest_source(
+    source_lines: list[tuple[int, str]],
+    func_start: int,
+    func_end: int,
+    class_spans: list[tuple[int, int]],
+) -> tuple[int, str, bool]:
+    """Closest input to this function: (line distance, pattern, same class)."""
+    best_distance = None
+    best_pattern = ""
+    for line, pattern in source_lines:
+        if line < func_start:
+            distance = func_start - line
+        elif line > func_end:
+            distance = line - func_end
+        else:  # pragma: no cover - in-function sources are handled earlier
+            distance = 0
+        if best_distance is None or distance < best_distance:
+            best_distance = distance
+            best_pattern = pattern
+
+    in_class = any(
+        start <= func_start and func_end <= end
+        and any(start <= line <= end for line, _ in source_lines)
+        for start, end in class_spans
+    )
+    return best_distance or 0, best_pattern, in_class
 
 
 def _is_attack_surface(rel_path: str) -> bool:
@@ -759,13 +820,18 @@ def _unproven_seeds(
 
         if not _worst_sink(content, flat_sinks):
             continue
-        file_source = _first_present(content, source_patterns)
         try:
             tree = ast.parse(content)
         except (SyntaxError, ValueError):
             continue
 
         file_lines = content.split("\n")
+        source_lines = _source_line_index(file_lines, source_patterns)
+        class_spans = [
+            (node.lineno, getattr(node, "end_lineno", node.lineno) or node.lineno)
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ClassDef)
+        ]
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
@@ -786,6 +852,7 @@ def _unproven_seeds(
                 orm_suppressed += 1
                 continue
 
+            distance = 0
             func_source = _first_present(body, source_patterns)
             if func_source:
                 evidence = (
@@ -794,13 +861,19 @@ def _unproven_seeds(
                     else "source_and_sink_same_function"
                 )
                 source_expr = func_source
-            elif file_source:
-                evidence = (
-                    "operator_input_and_sink"
-                    if _is_operator_source(file_source)
-                    else "sink_with_file_source"
+            elif source_lines:
+                nearest = _nearest_source(
+                    source_lines, node.lineno, end, class_spans,
                 )
-                source_expr = file_source
+                distance, source_expr, in_class = nearest
+                if _is_operator_source(source_expr):
+                    evidence = "operator_input_and_sink"
+                elif in_class:
+                    evidence = "sink_with_class_source"
+                elif distance <= PROXIMITY_LINES:
+                    evidence = "sink_with_nearby_source"
+                else:
+                    evidence = "sink_with_file_source"
             elif rel in entry_files:
                 evidence = "sink_only_entry_point"
                 source_expr = ""
@@ -811,6 +884,7 @@ def _unproven_seeds(
 
             sanitizer = _first_present(body, sanitizer_patterns)
             seeds.append({
+                "distance": distance,
                 "file": rel,
                 "function": node.name,
                 "line": node.lineno,
@@ -1008,6 +1082,7 @@ def rank_research_priority(
                 source_expr=seed["source"],
                 sink_expr=seed["sink"],
                 evidence=seed["evidence"],
+                source_distance=seed.get("distance", 0),
                 proven=False,
                 categories=[seed["category"]],
                 signals=build_signals(

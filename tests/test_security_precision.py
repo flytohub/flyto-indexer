@@ -93,3 +93,39 @@ def test_logging_sensitive_identifier_remains_a_finding(tmp_path):
     issues = _scan(tmp_path, "print(password)\n")
 
     assert any(issue.category == "info_leaks" for issue in issues)
+
+
+def test_string_literal_stripping_is_linear():
+    """The literal-stripping regex used to backtrack exponentially.
+
+    CodeQL py/redos flagged `(?:\\.|(?!\1).)*`: both branches could match a
+    backslash, so an unterminated literal full of `\a` blew up. This scanner
+    runs over repositories it did not write, so that is a denial of service,
+    not a style point.
+    """
+    import time
+
+    from src.analyzer.security import _STRING_LITERAL_RE
+
+    hostile = '"' + "\\a" * 5000
+    start = time.monotonic()
+    _STRING_LITERAL_RE.sub("", hostile)
+
+    assert time.monotonic() - start < 1.0
+
+
+def test_string_literals_are_still_stripped():
+    from src.analyzer.security import _STRING_LITERAL_RE
+
+    assert _STRING_LITERAL_RE.sub("", 'x = "password" + token') == "x =  + token"
+    assert _STRING_LITERAL_RE.sub("", "y = 'secret'") == "y = "
+    assert _STRING_LITERAL_RE.sub("", 'a = "esc\\"aped" + secret') == "a =  + secret"
+
+
+def test_vue_script_block_matches_sloppy_closing_tags():
+    """CodeQL py/bad-tag-filter: `</script bar>` must not slip past."""
+    from src.analyzer.layers import _VUE_SCRIPT_BLOCK
+
+    assert _VUE_SCRIPT_BLOCK.search("<script>import a from 'b'</script >")
+    assert _VUE_SCRIPT_BLOCK.search("<script setup>x</script\tfoo>")
+    assert _VUE_SCRIPT_BLOCK.search("<script>x</ script>")

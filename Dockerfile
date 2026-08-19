@@ -51,8 +51,14 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 # Apply all currently available Debian fixes before adding the minimal runtime
 # dependencies. The upstream slim image can lag a fixable package revision even
 # when its tag digest is current; Trivy remains the final HIGH/CRITICAL gate.
+#
+# `dist-upgrade`, not `upgrade`: plain upgrade refuses any change that pulls in
+# or removes a package, so the util-linux security revision (which drags mount,
+# login and libblkid1 with it) was held back and CVE-2026-53615 stayed in the
+# image while the build looked clean. The version assertions below fail the
+# build loudly if either fix ever regresses.
 RUN apt-get update \
-    && apt-get upgrade -y \
+    && apt-get dist-upgrade -y \
     && apt-get install -y --no-install-recommends \
         git \
         ca-certificates \
@@ -60,6 +66,9 @@ RUN apt-get update \
     && dpkg --compare-versions \
         "$(dpkg-query -W -f='${Version}' libexpat1)" \
         ge "2.8.2-1~deb13u1" \
+    && dpkg --compare-versions \
+        "$(dpkg-query -W -f='${Version}' util-linux)" \
+        ge "2.41.5-0+deb13u1" \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

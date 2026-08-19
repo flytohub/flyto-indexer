@@ -97,6 +97,9 @@ def probe_dns(host: str, family: socket.AddressFamily, timeout: float) -> dict[s
 def probe_tls(host: str, timeout: float) -> dict[str, Any]:
     try:
         context = ssl.create_default_context()
+        # create_default_context() still permits TLS 1.0/1.1 on older runtimes;
+        # this evidence script must not report a handshake it would refuse.
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
         with socket.create_connection((host, 443), timeout=timeout) as sock, context.wrap_socket(
             sock,
             server_hostname=host,

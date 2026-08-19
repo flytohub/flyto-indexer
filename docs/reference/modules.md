@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **186 Python modules**, **77,695 lines**, and **2,395 class/function/method declarations**.
+Generated inventory: **186 Python modules**, **77,784 lines**, and **2,397 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -31,7 +31,7 @@ Generated inventory: **186 Python modules**, **77,695 lines**, and **2,395 class
 | [`scripts/generate-reference.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/generate-reference.py#L1) | 449 | 23 | `__future__, argparse, ast, collections, json, pathlib, re, sys, typing, yaml` | Generate exhaustive Flyto2 Indexer references from implementation sources. |
 | [`scripts/reproduce_impact_case.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/reproduce_impact_case.py#L1) | 251 | 9 | `__future__, argparse, hashlib, json, os, pathlib, subprocess, sys, tempfile, typing` | Reproduce the pinned public impact-analysis case study. |
 | [`scripts/sync-version.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/sync-version.py#L1) | 54 | 3 | `__future__, argparse, json, pathlib, sys, tomllib` | Synchronize static package manifests with the pyproject version. |
-| [`scripts/write_public_site_verification_evidence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/write_public_site_verification_evidence.py#L1) | 360 | 13 | `__future__, argparse, datetime, json, pathlib, socket, ssl, sys, typing, urllib` | Write Flyto2 public-site verification evidence. |
+| [`scripts/write_public_site_verification_evidence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/write_public_site_verification_evidence.py#L1) | 363 | 13 | `__future__, argparse, datetime, json, pathlib, socket, ssl, sys, typing, urllib` | Write Flyto2 public-site verification evidence. |
 | [`src/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/__init__.py#L1) | 31 | 0 | `engine, models, version` | Flyto2 Indexer - Code audit and smart indexing system. |
 | [`src/analyzer/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/__init__.py#L1) | 46 | 0 | `api_consistency, complexity, coverage, dead_code, duplicates, layers, rules, security, stale_files, taint, taint_dsl` | Code analyzers |
 | [`src/analyzer/agent_policy.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L1) | 561 | 28 | `__future__, ast, dataclasses, pathlib, re` | AI-agent security-policy analyzer. |
@@ -48,13 +48,13 @@ Generated inventory: **186 Python modules**, **77,695 lines**, and **2,395 class
 | [`src/analyzer/error_handling.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/error_handling.py#L1) | 224 | 11 | `ast, dataclasses, pathlib, re` | Error Handling coverage analyzer — detect functions without error handling, bare except, empty except, swallowed errors, and unhandled async patterns. |
 | [`src/analyzer/framework_relationships.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/framework_relationships.py#L1) | 220 | 6 | `__future__, hashlib, index_store, pathlib, re, typing` | On-demand framework relationship hints for dynamic application wiring. |
 | [`src/analyzer/import_health.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/import_health.py#L1) | 298 | 8 | `collections, dataclasses, pathlib, re` | Import Graph Health metrics — compute coupling, cohesion, and stability metrics from the existing dependency graph. |
-| [`src/analyzer/layers.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/layers.py#L1) | 602 | 23 | `dataclasses, json, logging, lsp, pathlib, re, rules, yaml` | Architecture Layer Rules — declarative layer membership and import constraints. |
+| [`src/analyzer/layers.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/layers.py#L1) | 608 | 23 | `dataclasses, json, logging, lsp, pathlib, re, rules, yaml` | Architecture Layer Rules — declarative layer membership and import constraints. |
 | [`src/analyzer/lens.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/lens.py#L1) | 268 | 8 | `collections, dataclasses, pathlib, typing` | Lens engine — per-perspective ranked findings with cross-signal hotspots. |
 | [`src/analyzer/perf_patterns.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/perf_patterns.py#L1) | 250 | 14 | `ast, dataclasses, pathlib, re` | Performance Anti-pattern detector — find common performance issues in code. |
 | [`src/analyzer/pyramid.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/pyramid.py#L1) | 232 | 8 | `dataclasses, typing` | Pyramid aggregation engine — multi-perspective composite scoring. |
-| [`src/analyzer/research_priority.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/research_priority.py#L1) | 1082 | 36 | `__future__, analyzer, ast, complexity, dataclasses, error_handling, git_history, math, pathlib, profile, re, taint` | Security Research Priority ranking. |
+| [`src/analyzer/research_priority.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/research_priority.py#L1) | 1157 | 38 | `__future__, analyzer, ast, complexity, dataclasses, error_handling, git_history, math, pathlib, profile, re, taint` | Security Research Priority ranking. |
 | [`src/analyzer/rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/rules.py#L1) | 485 | 16 | `dataclasses, datetime, fnmatch, layers, logging, pathlib, re, yaml` | Project rules engine — loads .flyto-rules.yaml and checks compliance. |
-| [`src/analyzer/security.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/security.py#L1) | 575 | 20 | `ast, dataclasses, pathlib, re, rule_loader` | Security scanning - detect potential security issues |
+| [`src/analyzer/security.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/security.py#L1) | 580 | 20 | `ast, dataclasses, pathlib, re, rule_loader` | Security scanning - detect potential security issues |
 | [`src/analyzer/stale_files.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/stale_files.py#L1) | 216 | 11 | `collections, dataclasses, datetime, pathlib, subprocess` | Stale file detection - use git history to find files untouched for a long time |
 | [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 1709 | 46 | `analyzer, ast, collections, dataclasses, finding_identity, logging, pathlib, re, taint_lsp, taint_rules, type_filter, typing` | AST-based taint analysis engine. |
 | [`src/analyzer/taint_dsl.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L1) | 210 | 9 | `logging, pathlib, yaml` | Taint DSL — read/write helpers for the `taint:` block in .flyto-rules.yaml. |
