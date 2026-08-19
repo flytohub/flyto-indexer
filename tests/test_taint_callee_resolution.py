@@ -9,6 +9,7 @@ verification must return None and leave the name-based result standing.
 """
 
 import ast
+import shutil
 import textwrap
 from pathlib import Path
 
@@ -253,3 +254,82 @@ class TestResolutionIsReported:
 
         assert result.callee_resolution["rejected"] >= 1
         assert not [f for f in result.taint_flows if f.file_path == "app.py"]
+
+
+# ── Live language-server integration ────────────────────────────────────────
+
+_PYRIGHT = shutil.which("pyright-langserver")
+
+
+@pytest.mark.skipif(_PYRIGHT is None, reason="pyright-langserver not installed")
+class TestAgainstRealLanguageServer:
+    """Exercises the True/False branches against a live server.
+
+    Stubbed verdicts cannot show that the LSP round trip resolves anything, so
+    this builds the collision the whole feature exists for: two functions named
+    `execute` in different modules, one dangerous, both called from the same
+    handler. Name matching reports both; the server separates them.
+    """
+
+    @pytest.fixture
+    def collision_project(self, tmp_path):
+        (tmp_path / "db.py").write_text(textwrap.dedent("""\
+            import sqlite3
+
+            _conn = sqlite3.connect("app.db")
+
+
+            def execute(query):
+                cursor = _conn.cursor()
+                cursor.execute(query)
+                return cursor.fetchall()
+        """))
+        (tmp_path / "audit_log.py").write_text(textwrap.dedent("""\
+            def execute(message):
+                with open("/tmp/audit.log", "a") as fh:
+                    fh.write(message + "\\n")
+        """))
+        (tmp_path / "app.py").write_text(textwrap.dedent("""\
+            from flask import request
+
+            import audit_log
+            import db
+
+
+            def handler():
+                q = request.args.get("q")
+                audit_log.execute(q)
+                db.execute(q)
+                return "ok"
+        """))
+        index = _index_for(tmp_path, [
+            ("app.py", "handler", "audit_log.execute", 9),
+            ("app.py", "handler", "db.execute", 10),
+        ])
+        return tmp_path, index
+
+    def test_namesake_call_is_rejected_and_real_call_kept(self, collision_project):
+        tmp_path, index = collision_project
+
+        result = TaintAnalyzer(tmp_path, index=index).analyze_full()
+        resolution = result.callee_resolution
+
+        assert resolution["mode"] == "lsp_verified"
+        assert resolution["verified"] >= 1, "the real db.execute call must verify"
+        assert resolution["rejected"] >= 1, "the audit_log namesake must be rejected"
+
+        lines = {f.line for f in result.taint_flows}
+        assert 9 not in lines, "audit_log.execute is not a SQL sink"
+        assert 10 in lines, "db.execute is"
+
+    def test_name_only_mode_keeps_the_false_attribution(
+        self, collision_project, monkeypatch,
+    ):
+        """The A/B half: without the server, line 9 is reported."""
+        tmp_path, index = collision_project
+        monkeypatch.setenv("FLYTO_TAINT_LSP", "0")
+
+        result = TaintAnalyzer(tmp_path, index=index).analyze_full()
+
+        assert result.callee_resolution["mode"] == "name_only"
+        assert 9 in {f.line for f in result.taint_flows}

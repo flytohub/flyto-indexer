@@ -42,6 +42,9 @@
   "no server / no answer" case returns unknown and leaves the name-based result
   standing, so it upgrades the regex floor rather than replacing it. The result
   reports how callees were resolved and how many attributions were rejected.
+  Verified against pyright: on an 8,933-function project, 71 of 109 checked
+  cross-function attributions resolved somewhere other than the dangerous
+  definition, at a cost of 15.4s to 18.5s for the whole scan.
 - Added `research-priority`: a ranking that answers "which code paths are worth
   a security researcher's next hour" instead of emitting an undifferentiated
   finding list. It fuses signals the repository already produces — taint

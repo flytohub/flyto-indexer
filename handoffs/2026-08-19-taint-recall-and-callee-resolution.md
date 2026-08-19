@@ -92,13 +92,35 @@ Two name-matching bugs were fixed regardless of LSP availability:
   is consistent with their code (a browser-automation library and an agent
   runtime, neither taking untrusted web input into string sinks).
 
-## NOT verified — read before trusting the LSP path
+## Verified against a live language server
 
-**No language server is installed here, so the `True`/`False` branches were
-never exercised against a live server.** They are covered only by tests with a
-stubbed resolver. Before relying on LSP verification, install pyright and
-re-run against a project with same-named functions across modules. Everything
-else in this handoff was verified against real repositories.
+pyright 1.1.411 was installed (throwaway venv, not added to the repo or to any
+project dependency) and both verdict branches were exercised for real:
+
+A three-module fixture — `db.execute` (parameter reaches a SQL sink),
+`audit_log.execute` (harmless namesake), both called from one handler:
+
+| mode | flows | line 9 (`audit_log.execute`) | resolution |
+| --- | --- | --- | --- |
+| name-only | 3 | reported — false attribution | `name_only` |
+| pyright | 2 | gone | `checks 2, verified 1, rejected 1` |
+
+On flyto-cloud (8,933 functions): `checks 109, verified 5, rejected 71,
+unknown 33`. Seventy-one of the cross-function attributions name matching would
+have accepted resolve somewhere other than the dangerous definition. Cost is
+15.4s → 18.5s for the whole scan; the per-position cache absorbs the rest.
+
+`tests/test_taint_callee_resolution.py::TestAgainstRealLanguageServer` pins
+both halves of that A/B and skips when `pyright-langserver` is not on PATH, so
+CI keeps the coverage the day a server is added to the image. Full suite with
+pyright present: 2408 passed, 1 skipped.
+
+## Still not verified
+
+- Only pyright/Python. tsserver, gopls and rust-analyzer paths are unexercised.
+- The `unknown` branch (33 of 109 on flyto-cloud) means the server declined to
+  resolve those positions; no one has looked at why. Those keep the name-based
+  result, so they are a recall question, not a correctness one.
 
 Known remaining false-positive class, left in deliberately: a constrained
 FastAPI parameter (`Query(default="directory", pattern="^(file|directory)$")`)
