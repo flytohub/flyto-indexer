@@ -105,7 +105,13 @@ SMART_TOOLS: list = [
             "Always includes git hotspots (high-churn + complex files) and stale symbols "
             "(heavily referenced but not modified in 180+ days), plus a bounded, "
             "noise-filtered local Git evidence portfolio and evidence-linked verdict.\n"
-            "Use 'focus' to force expansion of a specific dimension regardless of score.\nfocus='research_priority' answers a different question from the rest of the audit: not 'is this codebase healthy' but 'which code paths are worth a security researcher's next hour'. It runs a full taint scan and returns one ranked short list with the reasons attached, so it is opt-in rather than automatic."
+            "Use 'focus' to force expansion of a specific dimension regardless of "
+            "score.\n"
+            "focus='research_priority' answers a different question from the rest of "
+            "the audit: not 'is this codebase healthy' but 'which code paths are worth "
+            "a security researcher's next hour'. It runs a full taint scan and returns "
+            "one ranked short list with the reasons attached, so it is opt-in rather "
+            "than automatic."
         ),
         "inputSchema": {
             "type": "object",
@@ -116,7 +122,10 @@ SMART_TOOLS: list = [
                 },
                 "focus": {
                     "type": "string",
-                    "enum": ["security", "complexity", "dead_code", "coverage", "research_priority", "all"],
+                    "enum": [
+                        "security", "complexity", "dead_code", "coverage",
+                        "research_priority", "all",
+                    ],
                     "description": "Force expansion of a specific dimension (optional). 'all' expands everything.",
                 },
             },

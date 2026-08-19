@@ -16,6 +16,7 @@ Usage:
 """
 
 import argparse
+import contextlib
 import json
 import os
 import subprocess
@@ -286,12 +287,30 @@ def _configure_scanner_commands(subparsers) -> None:
             "scored as zero, and a truncated taint scan says so."
         ),
     )
-    research_parser.add_argument("path", nargs="?", default=".", help="Project root path (default: current directory)")
-    research_parser.add_argument("--top", type=int, default=20, dest="top_n", help="Candidates to show (default 20)")
-    research_parser.add_argument("--since-days", type=int, default=180, dest="since_days", help="Churn window in days (default 180)")
-    research_parser.add_argument("--no-sanitized", action="store_true", dest="no_sanitized", help="Drop flows a sanitizer claims to neutralize")
-    research_parser.add_argument("--proven-only", action="store_true", dest="proven_only", help="Only candidates with a proven source-to-sink flow (drops the unproven tiers)")
-    research_parser.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON instead of human-readable text")
+    research_parser.add_argument(
+        "path", nargs="?", default=".",
+        help="Project root path (default: current directory)",
+    )
+    research_parser.add_argument(
+        "--top", type=int, default=20, dest="top_n",
+        help="Candidates to show (default 20)",
+    )
+    research_parser.add_argument(
+        "--since-days", type=int, default=180, dest="since_days",
+        help="Churn window in days (default 180)",
+    )
+    research_parser.add_argument(
+        "--no-sanitized", action="store_true", dest="no_sanitized",
+        help="Drop flows a sanitizer claims to neutralize",
+    )
+    research_parser.add_argument(
+        "--proven-only", action="store_true", dest="proven_only",
+        help="Only candidates with a proven source-to-sink flow",
+    )
+    research_parser.add_argument(
+        "--json", action="store_true", dest="as_json",
+        help="Output as JSON instead of human-readable text",
+    )
 
     # agent-audit
     agent_audit_parser = subparsers.add_parser(
@@ -2413,10 +2432,8 @@ def cmd_research_priority(args):
     index = {}
     index_path = project_path / ".flyto-index" / "index.json"
     if index_path.exists():
-        try:
+        with contextlib.suppress(Exception):
             index = json.loads(index_path.read_text(encoding="utf-8"))
-        except Exception:
-            pass
 
     report = rank_research_priority(
         project_path,

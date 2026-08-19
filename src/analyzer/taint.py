@@ -23,6 +23,7 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 try:
     from ..finding_identity import finding_evidence, suppression_provenance
@@ -38,6 +39,9 @@ from .taint_rules import (
     SINKS,
     SOURCES,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .taint_lsp import CalleeVerifier
 
 logger = logging.getLogger(__name__)
 
@@ -207,7 +211,7 @@ def _safe_unparse(node: ast.AST) -> str:
         return ""
 
 
-def _unwrap_await(node: ast.AST) -> ast.AST:
+def _unwrap_await(node: ast.expr) -> ast.expr:
     """Strip `await` so an awaited call is the same call.
 
     Without this, every `await db.execute(...)` / `await run(cmd)` was invisible
@@ -234,7 +238,8 @@ def _is_orm_expression(node: ast.AST) -> bool:
 
 def _builds_sql_string(node: ast.AST) -> bool:
     """True when the expression assembles a string at runtime."""
-    node = _unwrap_await(node)
+    if isinstance(node, ast.expr):
+        node = _unwrap_await(node)
     if isinstance(node, ast.JoinedStr):
         return True
     if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Mod)):
@@ -353,7 +358,7 @@ class TaintAnalyzer:
     def __init__(self, project_root: Path, index: dict | None = None):
         self.project_root = project_root
         self.index = index or {}
-        self._verifier = None
+        self._verifier: "CalleeVerifier | None" = None
         #: Variables in the current function that hold an ORM expression object
         #: (`select(...).where(...)`) rather than a SQL string.
         self._orm_expressions: set[str] = set()
@@ -618,12 +623,10 @@ class TaintAnalyzer:
         if isinstance(stmt, (ast.Assign, ast.AnnAssign)):
             self._handle_assign(stmt, taint_state, file_path, func_name)
 
-        elif isinstance(stmt, ast.Expr) and isinstance(
-            _unwrap_await(stmt.value), ast.Call
-        ):
-            self._handle_call_stmt(
-                _unwrap_await(stmt.value), taint_state, file_path, func_name,
-            )
+        elif isinstance(stmt, ast.Expr):
+            called = _unwrap_await(stmt.value)
+            if isinstance(called, ast.Call):
+                self._handle_call_stmt(called, taint_state, file_path, func_name)
 
         elif isinstance(stmt, ast.Return):
             if stmt.value:
@@ -970,7 +973,8 @@ class TaintAnalyzer:
 
         Returns (is_tainted, source_expr, flow_chain).
         """
-        node = _unwrap_await(node)
+        if isinstance(node, ast.expr):
+            node = _unwrap_await(node)
 
         if isinstance(node, ast.Name):
             if node.id in taint_state:
@@ -1428,7 +1432,10 @@ class TaintAnalyzer:
                                 if caller_param_idx is not None and depth < MAX_CROSS_DEPTH:
                                     self._dangerous_functions.setdefault(
                                         (caller_file, caller_func), []
-                                    ).append((caller_param_idx, caller_param, vuln_type, severity, rec))
+                                    ).append((
+                                        caller_param_idx, caller_param,
+                                        vuln_type, severity, rec,
+                                    ))
                             else:
                                 # Direct source in caller — this is a real finding
                                 self.findings.append(TaintFlow(

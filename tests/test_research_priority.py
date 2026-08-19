@@ -1,7 +1,6 @@
 """Tests for the security research priority ranking."""
 
 import subprocess
-import tempfile
 import textwrap
 from pathlib import Path
 

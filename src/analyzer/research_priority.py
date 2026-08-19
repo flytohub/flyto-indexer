@@ -55,36 +55,36 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 try:  # package-relative first, matching the rest of src/analyzer
+    from .complexity import _is_test_file, measure_indexed_function
+    from .error_handling import analyze_error_handling
     from .taint import (
+        CATEGORY_SEVERITY,
+        FLAT_SINKS,
         MAX_FINDINGS,
         MAX_FUNCTIONS,
         SKIP_DIR_PATTERNS,
-        CATEGORY_SEVERITY,
-        FLAT_SINKS,
         TaintAnalyzer,
         _apply_yaml_rules,
         _load_yaml_rules,
     )
     from .taint_rules import SANITIZERS, SOURCES
-    from .complexity import _is_test_file, measure_indexed_function
-    from .error_handling import analyze_error_handling
 except ImportError:  # pragma: no cover - flat-layout fallback used by the CLI
-    from analyzer.taint import (  # type: ignore
-        MAX_FINDINGS,
-        MAX_FUNCTIONS,
-        SKIP_DIR_PATTERNS,
-        CATEGORY_SEVERITY,
-        FLAT_SINKS,
-        TaintAnalyzer,
-        _apply_yaml_rules,
-        _load_yaml_rules,
-    )
-    from analyzer.taint_rules import SANITIZERS, SOURCES  # type: ignore
     from analyzer.complexity import (  # type: ignore
         _is_test_file,
         measure_indexed_function,
     )
     from analyzer.error_handling import analyze_error_handling  # type: ignore
+    from analyzer.taint import (  # type: ignore
+        CATEGORY_SEVERITY,
+        FLAT_SINKS,
+        MAX_FINDINGS,
+        MAX_FUNCTIONS,
+        SKIP_DIR_PATTERNS,
+        TaintAnalyzer,
+        _apply_yaml_rules,
+        _load_yaml_rules,
+    )
+    from analyzer.taint_rules import SANITIZERS, SOURCES  # type: ignore
 
 
 # ── Tunables ────────────────────────────────────────────────────────────────
@@ -359,9 +359,10 @@ class _EnclosingFunction(ast.NodeVisitor):
     def _consider(self, node) -> None:
         start = getattr(node, "lineno", 0)
         end = getattr(node, "end_lineno", start)
-        if start <= self.line <= end:
-            if self.best is None or start >= self.best.lineno:
-                self.best = node
+        if start <= self.line <= end and (
+            self.best is None or start >= self.best.lineno
+        ):
+            self.best = node
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         self._consider(node)
@@ -417,9 +418,11 @@ class _FileFacts:
             return func_name, None
         content, tree = loaded
         for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if node.name == func_name:
-                    return func_name, self._measure(rel_path, content, node)
+            if (
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name == func_name
+            ):
+                return func_name, self._measure(rel_path, content, node)
         return func_name, None
 
     def enclosing(self, rel_path: str, line: int) -> tuple[str, float | None]:
@@ -609,17 +612,23 @@ def _has_dynamic_sql(node) -> bool:
         # "SELECT ..." + x   /   "SELECT ... %s" % x
         elif isinstance(child, ast.BinOp) and isinstance(child.op, (ast.Add, ast.Mod)):
             for side in (child.left, child.right):
-                if isinstance(side, ast.Constant) and isinstance(side.value, str):
-                    if _looks_like_sql(side.value):
-                        return True
+                if (
+                    isinstance(side, ast.Constant)
+                    and isinstance(side.value, str)
+                    and _looks_like_sql(side.value)
+                ):
+                    return True
         elif isinstance(child, ast.Call):
             func = child.func
             # "SELECT ... {}".format(x)
             if isinstance(func, ast.Attribute) and func.attr == "format":
                 target = func.value
-                if isinstance(target, ast.Constant) and isinstance(target.value, str):
-                    if _looks_like_sql(target.value):
-                        return True
+                if (
+                    isinstance(target, ast.Constant)
+                    and isinstance(target.value, str)
+                    and _looks_like_sql(target.value)
+                ):
+                    return True
             # sqlalchemy.text("...") — the documented raw-SQL escape hatch
             name = getattr(func, "id", None) or getattr(func, "attr", None)
             if name == "text" and child.args:

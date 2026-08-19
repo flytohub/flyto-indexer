@@ -329,9 +329,10 @@ MCP_TOOLS: list = [
             "git churn, test gaps, and swallowed error handling — into one ordered short list "
             "instead of hundreds of undifferentiated findings. "
             "One candidate per function: ten flows in one function is one lead, not ten. "
-            "Every candidate carries `signals` and plain-language `reasons`, so the ranking can be "
-            "argued with rather than trusted. "
-            "Signals that could not be measured (no git repo, no index, non-Python file) are null and "
+            "Every candidate carries `signals` and plain-language `reasons`, so the "
+            "ranking can be argued with rather than trusted. "
+            "Signals that could not be measured (no git repo, no index, non-Python "
+            "file) are null and "
             "listed in coverage.signals_unavailable — never silently scored as zero — and "
             "coverage.truncated reports when the underlying taint scan hit its cap. "
             "This orders leads for human review; it does not confirm vulnerabilities."
@@ -340,10 +341,30 @@ MCP_TOOLS: list = [
             "type": "object",
             "properties": {
                 "project": {"type": "string", "description": "Filter to a specific project"},
-                "top_n": {"type": "integer", "default": 20, "description": "Candidates to return (default 20, max 200)"},
-                "since_days": {"type": "integer", "default": 180, "description": "Churn window in days (default 180)"},
-                "include_sanitized": {"type": "boolean", "default": True, "description": "Keep flows a sanitizer claims to neutralize. They rank low but stay visible, because a wrong sanitizer is itself a finding."},
-                "include_unproven": {"type": "boolean", "default": True, "description": "Keep the weaker evidence tiers (sink plus nearby input, unproven link). Set false for proven source-to-sink flows only — on projects where the name-based cross-function pass completes no flow, that returns an empty list."},
+                "top_n": {
+                    "type": "integer", "default": 20,
+                    "description": "Candidates to return (default 20, max 200)",
+                },
+                "since_days": {
+                    "type": "integer", "default": 180,
+                    "description": "Churn window in days (default 180)",
+                },
+                "include_sanitized": {
+                    "type": "boolean", "default": True,
+                    "description": (
+                        "Keep flows a sanitizer claims to neutralize. They rank low but "
+                        "stay visible, because a wrong sanitizer is itself a finding."
+                    ),
+                },
+                "include_unproven": {
+                    "type": "boolean", "default": True,
+                    "description": (
+                        "Keep the weaker evidence tiers (sink plus nearby input, "
+                        "unproven link). Set false for proven source-to-sink flows "
+                        "only — on projects where the name-based cross-function pass "
+                        "completes no flow, that returns an empty list."
+                    ),
+                },
             },
         },
     },

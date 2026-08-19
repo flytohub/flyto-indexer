@@ -5,10 +5,13 @@ Uses git log/numstat output to surface files and commits that warrant attention.
 All git operations have a 30-second timeout. Gracefully handles missing git repos.
 """
 
+# Dict/List below are referenced from `# type:` comments, which ruff does not
+# parse but mypy does. Moving the log helpers to git_history left them with no
+# annotation use that ruff can see, hence the noqa.
 import os
 import re
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple  # noqa: F401
 
 try:
     from ..index_store import load_index, get_symbol_content_text

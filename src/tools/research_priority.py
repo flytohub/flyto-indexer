@@ -11,21 +11,21 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    from ..index_store import load_index
     from ..analyzer.research_priority import (
         DEFAULT_TOP_N,
         DEFAULT_WEIGHTS,
         MAX_TOP_N,
         rank_research_priority,
     )
+    from ..index_store import load_index
 except ImportError:  # pragma: no cover - flat-layout fallback
-    from index_store import load_index  # type: ignore
     from analyzer.research_priority import (  # type: ignore
         DEFAULT_TOP_N,
         DEFAULT_WEIGHTS,
         MAX_TOP_N,
         rank_research_priority,
     )
+    from index_store import load_index  # type: ignore
 
 
 def research_priority(
