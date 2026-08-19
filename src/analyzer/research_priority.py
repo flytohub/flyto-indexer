@@ -641,7 +641,7 @@ def _unproven_seeds(
     *,
     limit_files: int = MAX_UNPROVEN_FILES,
     limit_candidates: int = MAX_UNPROVEN_CANDIDATES,
-) -> tuple[list[dict], bool]:
+) -> tuple[list[dict], bool, int]:
     """Find functions worth reading that no complete flow reached.
 
     A second, deliberately weaker pass: it proves nothing, so every seed it

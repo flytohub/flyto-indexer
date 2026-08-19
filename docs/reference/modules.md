@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **186 Python modules**, **77,526 lines**, and **2,392 class/function/method declarations**.
+Generated inventory: **186 Python modules**, **77,536 lines**, and **2,392 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -58,7 +58,7 @@ Generated inventory: **186 Python modules**, **77,526 lines**, and **2,392 class
 | [`src/analyzer/stale_files.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/stale_files.py#L1) | 216 | 11 | `collections, dataclasses, datetime, pathlib, subprocess` | Stale file detection - use git history to find files untouched for a long time |
 | [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 1695 | 46 | `analyzer, ast, collections, dataclasses, finding_identity, logging, pathlib, re, taint_lsp, taint_rules, type_filter, yaml` | AST-based taint analysis engine. |
 | [`src/analyzer/taint_dsl.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L1) | 210 | 9 | `logging, pathlib, yaml` | Taint DSL — read/write helpers for the `taint:` block in .flyto-rules.yaml. |
-| [`src/analyzer/taint_lsp.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_lsp.py#L1) | 193 | 7 | `__future__, ast, logging, lsp, os, pathlib` | Type-aware callee verification for the cross-function taint pass. |
+| [`src/analyzer/taint_lsp.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_lsp.py#L1) | 203 | 7 | `__future__, ast, logging, lsp, os, pathlib, typing` | Type-aware callee verification for the cross-function taint pass. |
 | [`src/analyzer/taint_rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_rules.py#L1) | 551 | 0 | `none` | Default taint analysis rules — sources, sinks, and sanitizers by language. |
 | [`src/analyzer/tech_debt.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/tech_debt.py#L1) | 142 | 4 | `dataclasses, pathlib, re` | Tech Debt tracker — scan source files for TODO/FIXME/HACK/XXX markers. |
 | [`src/analyzer/type_filter.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/type_filter.py#L1) | 208 | 5 | `logging, lsp, pathlib, re, typing` | Type-aware filter for taint analysis. |

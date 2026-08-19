@@ -27,6 +27,7 @@ import ast
 import logging
 import os
 from pathlib import Path
+from typing import Callable, Optional, Tuple
 
 logger = logging.getLogger("flyto-indexer.analyzer.taint_lsp")
 
@@ -68,7 +69,12 @@ class CalleeVerifier:
         self.verified = 0
         self.rejected = 0
         self.unknown = 0
-        self._resolve = None
+        #: Set to `lsp.call_graph.resolve_definition` once a server is found;
+        #: None means every verdict is "unknown" and the name-based result
+        #: stands.
+        self._resolve: Optional[
+            Callable[[Path, Path, int, int], Optional[Tuple[str, int, str]]]
+        ] = None
         self._probed = False
 
     # ── availability ────────────────────────────────────────────────────────
@@ -135,9 +141,13 @@ class CalleeVerifier:
             self.unknown += 1
             return None
 
+        resolve = self._resolve
+        if resolve is None:  # pragma: no cover - guarded by `available`
+            return None
+
         self.checks += 1
         try:
-            resolved = self._resolve(
+            resolved = resolve(
                 self.project_root, source_path, position[0], position[1],
             )
         except Exception as exc:  # pragma: no cover - server-dependent
