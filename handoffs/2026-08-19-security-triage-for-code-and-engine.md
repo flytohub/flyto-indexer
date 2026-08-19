@@ -42,6 +42,14 @@ Pieces (all shipped to `flyto-indexer` main this session, CI green):
   scan results for upload. The ranking output (candidates + evidence tiers +
   coverage) maps cleanly onto engine's evidence-backed state model: each
   candidate is a finding with a **confidence tier**, not a verdict.
+- **The two sides compose.** `flyto-engine` already parses SARIF
+  (`internal/findings/import/sarif.go`), and its `ImportedFinding` carries
+  RuleID, severity, file, line, CVE and fingerprint — but no churn, no test gap,
+  no entry exposure, no function size. `research_priority(sarif_path=...)`
+  supplies exactly those. Breadth from CodeQL, prioritization here: on
+  flyto-core, rule scanning emits 1,699 findings while the triage returns 11
+  candidates and 3 proven flows in 22 seconds. Wire the engine's imported
+  findings through this ranking rather than presenting them unordered.
 - `flyto-code` renders the reading list. The important UI contract: show the
   **evidence tier** (`proven_flow_*` vs the unproven tiers) and the
   `coverage.signals_unavailable` block. The product's honesty is the
@@ -93,10 +101,10 @@ the disclosure path before anything is written down publicly.)
 
 ## Verified
 
-- `flyto-indexer` main, CI green through `6f6e303`.
+- `flyto-indexer` main, CI green through `4522b64`.
 - End-to-end on gradio (117k lines): funnel surfaces 4 proven flows including
   the `undo_vibe_edit` path traversal; demo/operator flows demoted.
-- Full suite 2451 passed / 3 skipped; ruff, mypy, quality-debt ratchet,
+- Full suite 2472 passed / 3 skipped; ruff, mypy, quality-debt ratchet,
   generated reference, Docker image (Trivy HIGH/CRITICAL) all green.
 
 ## Not verified

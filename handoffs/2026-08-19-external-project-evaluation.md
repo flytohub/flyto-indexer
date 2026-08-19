@@ -3,7 +3,7 @@
 - Date: 2026-08-19
 - Owner: claude
 - Branch: main
-- Status: seven projects measured across four languages, eight precision fixes shipped, one finding pending disclosure
+- Status: eight projects measured across four languages, nine precision fixes shipped, external-scanner ranking added, one finding pending disclosure
 
 ## What was run
 
@@ -192,6 +192,66 @@ After both fixes: gogs 2 → 0, strapi 1 → 0, synthetic still 6/6.
 are mature projects whose obvious injection shapes are already parameterized —
 and the regex pass only claims same-line and adjacent-line reach. What matters
 is that the noise is gone, so a zero now means something.
+
+## Round 5 — the owner's own project, and what it settled
+
+Ran the triage against **flyto-core** (9,990 Python files), the one codebase
+whose real security history is knowable here: GitHub code scanning shows
+**0 open, 40 fixed, 1 dismissed**, and Security CI green.
+
+Comparing those 40 historically-real alerts against what this engine can find:
+
+| class | count | this engine |
+| --- | --- | --- |
+| `py/path-injection` | 7 | **covered** — the taint engine's core competence |
+| `py/clear-text-logging-sensitive-data` | 10 | partial (a pattern rule, not taint) |
+| `py/incomplete-url-substring-sanitization` | 7 | partial |
+| `actions/missing-workflow-permissions` | 10 | **no** — workflow YAML is out of scope |
+| `py/insecure-temporary-file` | 3 | **no** |
+| `py/stack-trace-exposure`, `py/bind-socket-all-interfaces` | 2 | **no** |
+
+Roughly 7–14 of 40. The gap is **rule breadth**, not taint depth, and chasing
+it here would be the wrong move — `flyto-engine` already ingests SARIF
+(`internal/findings/import/sarif.go`) and CodeQL is being strengthened there.
+
+The same run showed the gap running the other way, and this is the important
+part. On flyto-core:
+
+    agent-audit (rule scanning)   1,699 findings
+    research-priority (triage)    11 candidates, 3 proven, 22 seconds
+
+**Breadth without prioritization is noise.** And `ImportedFinding` in
+flyto-engine carries RuleID, severity, file, line, CVE and fingerprint — no
+churn, no test gap, no entry exposure, no function size. Each side is missing
+exactly what the other has.
+
+The ranking did land well where it does apply: `zip_extract.py:157` pointed at
+the Zip Slip check, which already carries a correct `realpath` + `os.sep`
+boundary guard and a comment explaining why a lexical `startswith` is not
+enough. Same pattern as mlflow and django-cms — it finds the places the authors
+themselves decided needed a guard.
+
+## Round 6 — ranking external scanner findings
+
+Acting on that, `research_priority` now accepts a SARIF file (`--sarif` /
+`sarif_path`) and ranks CodeQL/Semgrep/Trivy findings with the same project
+signals. Verified on a fixture carrying the two classes this engine misses:
+
+    without SARIF   1 candidate  (own proven flow)
+    with CodeQL     3 candidates — proven flow #1 (70.5), then
+                    clear-text-logging (61.3), insecure-temp-file (50.8)
+
+Three rules are pinned by tests: a proven flow always outranks an external
+finding; when both point at the same function the external rule is attached as
+**corroboration, not a second lead**; suppressed SARIF results are skipped.
+
+The pipeline this completes:
+
+    flyto-engine   CodeQL / SARIF breadth
+          |
+    flyto-indexer  project ranking signals SARIF does not carry
+          |
+          v        one ordered reading list
 
 ## Honest reading of the result
 

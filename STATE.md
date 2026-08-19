@@ -17,6 +17,12 @@
   ranked reading list with labelled evidence tiers, not a verdict, and it
   reports what it did not check. Deep type-resolved dataflow is deliberately
   out of scope to keep the 20-tool, zero-dependency surface.
+- The ranking also accepts an external scanner's SARIF, so CodeQL-class rule
+  breadth (which this repository does not chase) and project ranking signals
+  (which a SARIF result does not carry) compose into one ordered list. A proven
+  flow outranks an external finding; an overlap is corroboration, not a second
+  lead. Measured on eight projects across four languages; the honest bound is
+  that raw cross-function recall stays name-based.
 - Project root, index directory, project label, and cache identity now resolve
   through one immutable operation scope shared by CLI, MCP/API, task planning,
   search, Grill, watcher, maintenance, and references. Explicit
