@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **186 Python modules**, **78,324 lines**, and **2,407 class/function/method declarations**.
+Generated inventory: **186 Python modules**, **78,334 lines**, and **2,407 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -52,7 +52,7 @@ Generated inventory: **186 Python modules**, **78,324 lines**, and **2,407 class
 | [`src/analyzer/lens.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/lens.py#L1) | 268 | 8 | `collections, dataclasses, pathlib, typing` | Lens engine — per-perspective ranked findings with cross-signal hotspots. |
 | [`src/analyzer/perf_patterns.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/perf_patterns.py#L1) | 250 | 14 | `ast, dataclasses, pathlib, re` | Performance Anti-pattern detector — find common performance issues in code. |
 | [`src/analyzer/pyramid.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/pyramid.py#L1) | 232 | 8 | `dataclasses, typing` | Pyramid aggregation engine — multi-perspective composite scoring. |
-| [`src/analyzer/research_priority.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/research_priority.py#L1) | 1216 | 38 | `__future__, analyzer, ast, complexity, dataclasses, error_handling, git_history, math, pathlib, profile, re, taint` | Security Research Priority ranking. |
+| [`src/analyzer/research_priority.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/research_priority.py#L1) | 1226 | 38 | `__future__, analyzer, ast, complexity, dataclasses, error_handling, git_history, math, pathlib, profile, re, taint` | Security Research Priority ranking. |
 | [`src/analyzer/rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/rules.py#L1) | 485 | 16 | `dataclasses, datetime, fnmatch, layers, logging, pathlib, re, yaml` | Project rules engine — loads .flyto-rules.yaml and checks compliance. |
 | [`src/analyzer/security.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/security.py#L1) | 580 | 20 | `ast, dataclasses, pathlib, re, rule_loader` | Security scanning - detect potential security issues |
 | [`src/analyzer/stale_files.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/stale_files.py#L1) | 216 | 11 | `collections, dataclasses, datetime, pathlib, subprocess` | Stale file detection - use git history to find files untouched for a long time |

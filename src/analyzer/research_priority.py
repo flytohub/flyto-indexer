@@ -701,6 +701,16 @@ def _sink_present(text: str, pattern: str) -> bool:
             prev = text[idx - 1]
             if prev.isalnum() or prev == "_":
                 continue
+            # A bare-name sink like `open(` must be a free call, not a method
+            # call or a definition. jupyter_server has `async def open(self,
+            # kernel_id)` websocket handlers calling `super().open()`; matching
+            # those made every WebSocket handler a path-traversal lead.
+            if prev == ".":
+                continue
+        if not pattern.startswith("."):
+            before = text[max(0, idx - 4):idx]
+            if before.endswith("def "):
+                continue
         # `.raw` must not match `.rawtext`; a pattern ending in `(` is already
         # delimited and is followed by its arguments.
         end = idx + len(pattern)

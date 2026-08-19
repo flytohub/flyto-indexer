@@ -612,3 +612,39 @@ class TestGiantFunctionDamping:
 
         assert lead.proven is True
         assert not any("not a lead" in r for r in lead.reasons)
+
+
+class TestBareNameSinkIsAFreeCall:
+    """`open(` must be a free call, not a method call or a definition.
+
+    jupyter_server defines `async def open(self, kernel_id)` WebSocket handlers
+    that call `super().open()`. Matching those made every WebSocket handler a
+    path-traversal lead — 13 candidates dropped to 4 once this was fixed.
+    """
+
+    @pytest.mark.parametrize("text,expected", [
+        ("open('/etc/passwd')", True),
+        ("f = open(path)", True),
+        ("super().open()", False),
+        ("self.open(kernel_id)", False),
+        ("async def open(self, kernel_id):", False),
+        ("def open(self):", False),
+        ("obj.open(x)", False),
+    ])
+    def test_free_call_only(self, text, expected):
+        assert _sink_present(text, "open(") is expected
+
+    def test_websocket_handler_is_not_a_path_traversal_lead(self, project):
+        _write(project, "ws.py", """\
+            from flask import request
+
+            class KernelWebsocket:
+                def read_input(self):
+                    return request.args.get("k")
+
+                async def open(self, kernel_id):
+                    super().open()
+        """)
+        report = rank_research_priority(project)
+
+        assert not [c for c in report.candidates if c.category == "path_traversal"]

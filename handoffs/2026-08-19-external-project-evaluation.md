@@ -3,7 +3,7 @@
 - Date: 2026-08-19
 - Owner: claude
 - Branch: main
-- Status: two projects measured, four precision fixes shipped, one finding pending disclosure
+- Status: five projects measured, six precision fixes shipped, one finding pending disclosure
 
 ## What was run
 
@@ -129,6 +129,38 @@ runs: sources are now located by line, and a lead is tiered by distance
 the last dropping to 0.18 reachability). On mlflow that split 70 file-level
 leads into 4 class-level, 25 nearby and 41 distant.
 
+## Round 3 — three more frameworks (django-cms, aiohttp, jupyter_server)
+
+Three projects chosen for framework diversity rather than size, to see whether
+the fixes were shaped to FastAPI/Flask: **django-cms** (Django, 81k lines),
+**aiohttp** (the server library itself, 98k), **jupyter_server** (Tornado, 35k).
+Clones were deleted after measurement.
+
+The run exposed one new false-positive class, and it was the dominant one on
+two of the three: **a bare-name sink was matching method calls and definitions**.
+`jupyter_server` defines `async def open(self, kernel_id)` WebSocket handlers
+that call `super().open()`, and every one of them became a path-traversal lead.
+Fixed by requiring a bare-name sink such as `open(` to be a *free call* — not
+preceded by `.` and not part of a `def`. Effect:
+
+| project | candidates before | after |
+| --- | --- | --- |
+| jupyter_server | 13 | **4** |
+| aiohttp | 9 | **5** |
+| django-cms | 31 | 31 (unaffected — its sinks are dotted calls) |
+
+What survived is markedly better. jupyter_server's four are all in `auth/` and
+`nbconvert/` path handling. django-cms produced **5 proven flows — the most of
+any project measured** — and the top ones are exactly where a researcher would
+look: `request.GET.urlencode()` concatenated into `HttpResponseRedirect`, and
+`login()` taking `request.GET.get(REDIRECT_FIELD_NAME)` through a
+`_get_login_redirect_url` helper. As with mlflow, the ranking landed on the
+place the project's own authors wrote a guard for.
+
+aiohttp is the interesting negative: as a *library*, it has almost no untrusted
+entry points of its own, and its remaining leads are ReDoS patterns in
+`re.compile` sites. Zero proven flows there is the honest answer, not a miss.
+
 ## Honest reading of the result
 
 - The ranking's ceiling is still taint recall, not ranking quality: 117k lines
@@ -141,5 +173,10 @@ leads into 4 class-level, 25 nearby and 41 distant.
 - Two projects, one human, one afternoon. Every "worth reading" verdict is this
   reviewer's judgment, not a working researcher's — which is exactly the
   judgment the tool cannot supply and a collaborator could.
-- Both projects produced exactly **one** proven flow each, at 117k and 785k
-  lines. Recall, not ranking, is what caps this.
+- Proven-flow yield is codebase-shaped, not size-shaped: gradio 4, mlflow 1,
+  django-cms 5, aiohttp 0, jupyter_server 0. A framework with explicit request
+  objects flowing into redirects (Django) proves more than a library whose
+  entry points belong to its callers (aiohttp).
+- Every round so far has found a distinct, mechanical false-positive class by
+  running on one more real project. That loop — measure, find the class, fix it,
+  re-measure — has been worth more than any speculative engine work.

@@ -22,6 +22,16 @@
   gradio: the funnel surfaces the four proven flows including the
   `undo_vibe_edit` path traversal, with demo and operator-fed flows demoted.
 
+### Fixed
+- Required a bare-name sink such as `open(` to be a free call. It was matching
+  method calls and definitions, so `jupyter_server`'s `async def open(self,
+  kernel_id)` WebSocket handlers — and their `super().open()` calls — each
+  became a path-traversal lead. Found by running the triage on three more
+  frameworks (django-cms, aiohttp, jupyter_server); it was the dominant
+  false-positive class on two of them. Candidates dropped 13 → 4 on
+  jupyter_server and 9 → 5 on aiohttp, and what survives is genuinely in the
+  auth and path-handling code.
+
 ### Changed
 - Damped unproven leads inside very large functions. gradio's `create_app`
   spans 2,080 lines, so "the source and the sink share this function" was true
