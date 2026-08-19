@@ -237,8 +237,35 @@ _POSITIONAL_PROPAGATORS = {
     "Merge": (0, 1),
 }
 
-#: All propagator short names, for the registry pre-pass to filter on cheaply.
-_PROPAGATOR_NAMES = _RECEIVER_PROPAGATORS | set(_POSITIONAL_PROPAGATORS)
+#: These two tables are the built-in DEFAULTS. A project extends them through
+#: the `taint.propagators` block in .flyto-rules.yaml — the same file that
+#: already configures sources, sinks and sanitizers — so a custom mutation
+#: helper is declarable without editing the engine.
+
+
+def _yaml_propagators(yaml_cfg: dict) -> tuple[set[str], dict[str, tuple[int, int]]]:
+    """Parse `taint.propagators` from .flyto-rules.yaml.
+
+    Two shapes, matched by the callee's short name:
+      - receiver: `{name: my_add, receiver: true}` — a tainted argument taints
+        the receiver (`recv.my_add(taint)`).
+      - positional: `{name: my_populate, from: 0, to: 1}` — a tainted `from`
+        argument taints the `to` argument (`my_populate(src, dst)`).
+    """
+    extra_receiver: set[str] = set()
+    extra_positional: dict[str, tuple[int, int]] = {}
+    for entry in yaml_cfg.get("propagators", []) or []:
+        name = entry.get("name") or entry.get("pattern") or ""
+        if not name:
+            continue
+        if entry.get("to") is not None and entry.get("from") is not None:
+            try:
+                extra_positional[name] = (int(entry["from"]), int(entry["to"]))
+            except (TypeError, ValueError):
+                continue
+        elif entry.get("receiver"):
+            extra_receiver.add(name)
+    return extra_receiver, extra_positional
 
 
 def _call_short_name(call: ast.Call) -> str:
@@ -412,12 +439,19 @@ class TaintAnalyzer:
         self._flat_sinks = list(FLAT_SINKS)
         self._sanitizers = list(SANITIZERS)
 
+        # Propagator working copies (built-in defaults, extended by YAML).
+        self._receiver_propagators = set(_RECEIVER_PROPAGATORS)
+        self._positional_propagators = dict(_POSITIONAL_PROPAGATORS)
+
         # Load optional YAML overrides
         yaml_cfg = _load_yaml_rules(project_root)
         if yaml_cfg:
             self._sources, self._flat_sinks, self._sanitizers = _apply_yaml_rules(
                 yaml_cfg, self._sources, self._flat_sinks, self._sanitizers,
             )
+            extra_recv, extra_pos = _yaml_propagators(yaml_cfg)
+            self._receiver_propagators |= extra_recv
+            self._positional_propagators.update(extra_pos)
 
         # Cross-function: functions whose param reaches a sink
         # Maps (file, func_name) -> list of (param_index, param_name, vuln_type, severity, rec)
@@ -643,9 +677,8 @@ class TaintAnalyzer:
         returns: list[ast.expr] = []
         prop_calls: list[ast.Call] = []
         for node in ast.walk(func_node):
-            if (
-                isinstance(node, ast.Call)
-                and _call_short_name(node) in _PROPAGATOR_NAMES
+            if isinstance(node, ast.Call) and _call_short_name(node) in (
+                self._receiver_propagators | set(self._positional_propagators)
             ):
                 prop_calls.append(node)
             if isinstance(node, (ast.Assign, ast.AnnAssign)):
@@ -711,14 +744,14 @@ class TaintAnalyzer:
         """
         short = _call_short_name(call)
         if (
-            short in _RECEIVER_PROPAGATORS
+            short in self._receiver_propagators
             and isinstance(call.func, ast.Attribute)
             and any(self._reads_raw_source(a, local_tainted) for a in call.args)
         ):
             recv = call.func.value
             if isinstance(recv, ast.Name):
                 return recv.id
-        spec = _POSITIONAL_PROPAGATORS.get(short)
+        spec = self._positional_propagators.get(short)
         if spec is not None:
             src_idx, dst_idx = spec
             if (
@@ -1130,7 +1163,9 @@ class TaintAnalyzer:
         if not short:
             return
 
-        if short in _RECEIVER_PROPAGATORS and isinstance(call.func, ast.Attribute):
+        if short in self._receiver_propagators and isinstance(
+            call.func, ast.Attribute
+        ):
             for arg in call.args:
                 tainted, src, chain = self._expr_is_tainted(arg, taint_state)
                 if tainted:
@@ -1139,7 +1174,7 @@ class TaintAnalyzer:
                     )
                     break
 
-        spec = _POSITIONAL_PROPAGATORS.get(short)
+        spec = self._positional_propagators.get(short)
         if spec is not None:
             src_idx, dst_idx = spec
             if src_idx < len(call.args) and dst_idx < len(call.args):

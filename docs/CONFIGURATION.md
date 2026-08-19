@@ -42,7 +42,22 @@ taint:
     - pattern: "cursor.execute("
       vuln_type: sql_injection
       severity: high
+  sanitizers:
+    - pattern: "escape_sql("
+      cleanses: ["sql_injection"]
+  propagators:
+    # Spread taint through in-place mutation. Two shapes, matched by callee name.
+    - name: "my_populate"   # positional: my_populate(src, dst) taints dst
+      from: 0
+      to: 1
+    - name: "stash"         # receiver: container.stash(taint) taints container
+      receiver: true
 ```
+
+Sources, sinks, sanitizers and propagators share one file. Sources, sinks and
+sanitizers also have `add_taint_*` MCP tools; propagators are YAML-only (no
+`add_*` tool, to keep the MCP surface at its fixed tool count) and are listed
+back by `list_taint_rules`.
 
 Policy files are YAML parsed with `safe_load`; malformed content fails closed.
 The built-in corpus under `config/rules/` supplies default complexity,

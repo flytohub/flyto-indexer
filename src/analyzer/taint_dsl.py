@@ -206,5 +206,6 @@ def list_taint_rules(project_root: Path) -> dict:
         "sources": list(block.get("sources") or []),
         "sinks": list(block.get("sinks") or []),
         "sanitizers": list(block.get("sanitizers") or []),
+        "propagators": list(block.get("propagators") or []),
         "overrides": dict(block.get("overrides") or {}),
     }

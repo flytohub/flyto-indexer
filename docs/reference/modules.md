@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **186 Python modules**, **78,250 lines**, and **2,406 class/function/method declarations**.
+Generated inventory: **186 Python modules**, **78,291 lines**, and **2,407 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -56,8 +56,8 @@ Generated inventory: **186 Python modules**, **78,250 lines**, and **2,406 class
 | [`src/analyzer/rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/rules.py#L1) | 485 | 16 | `dataclasses, datetime, fnmatch, layers, logging, pathlib, re, yaml` | Project rules engine — loads .flyto-rules.yaml and checks compliance. |
 | [`src/analyzer/security.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/security.py#L1) | 580 | 20 | `ast, dataclasses, pathlib, re, rule_loader` | Security scanning - detect potential security issues |
 | [`src/analyzer/stale_files.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/stale_files.py#L1) | 216 | 11 | `collections, dataclasses, datetime, pathlib, subprocess` | Stale file detection - use git history to find files untouched for a long time |
-| [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 2142 | 55 | `analyzer, ast, collections, dataclasses, finding_identity, logging, pathlib, re, taint_lsp, taint_rules, type_filter, typing` | AST-based taint analysis engine. |
-| [`src/analyzer/taint_dsl.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L1) | 210 | 9 | `logging, pathlib, yaml` | Taint DSL — read/write helpers for the `taint:` block in .flyto-rules.yaml. |
+| [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 2177 | 56 | `analyzer, ast, collections, dataclasses, finding_identity, logging, pathlib, re, taint_lsp, taint_rules, type_filter, typing` | AST-based taint analysis engine. |
+| [`src/analyzer/taint_dsl.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L1) | 211 | 9 | `logging, pathlib, yaml` | Taint DSL — read/write helpers for the `taint:` block in .flyto-rules.yaml. |
 | [`src/analyzer/taint_lsp.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_lsp.py#L1) | 203 | 7 | `__future__, ast, logging, lsp, os, pathlib, typing` | Type-aware callee verification for the cross-function taint pass. |
 | [`src/analyzer/taint_rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_rules.py#L1) | 558 | 0 | `none` | Default taint analysis rules — sources, sinks, and sanitizers by language. |
 | [`src/analyzer/tech_debt.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/tech_debt.py#L1) | 142 | 4 | `dataclasses, pathlib, re` | Tech Debt tracker — scan source files for TODO/FIXME/HACK/XXX markers. |
@@ -153,7 +153,7 @@ Generated inventory: **186 Python modules**, **78,250 lines**, and **2,406 class
 | [`src/tool_registry/dispatch.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/dispatch.py#L1) | 518 | 8 | `functools, lazy_imports, lsp, os, pathlib, task_dispatch, typing` | Unified tool dispatch — single entry point for all tool execution. |
 | [`src/tool_registry/lazy_imports.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/lazy_imports.py#L1) | 190 | 23 | `analyzer, dependency_scanner, diff_impact, doc_scanner, framework_detector, license_scanner, pr_analyzer, project_profile, quality, secret_scanner, tools, verify` | Lazy import helpers for tool dispatch. |
 | [`src/tool_registry/mcp_tools.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L1) | 1010 | 0 | `typing` | MCP Tool Definitions (canonical source). |
-| [`src/tool_registry/smart_tools.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L1) | 999 | 0 | `typing` | Smart Tools — consolidated entry points exposed to MCP. |
+| [`src/tool_registry/smart_tools.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L1) | 1004 | 0 | `typing` | Smart Tools — consolidated entry points exposed to MCP. |
 | [`src/tool_registry/task_dispatch.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/task_dispatch.py#L1) | 58 | 2 | `__future__, lazy_imports, typing` | Argument adapter for the consolidated task MCP dispatch entry. |
 | [`src/tool_registry/vscode_tools.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/vscode_tools.py#L1) | 138 | 2 | `mcp_tools, typing` | VSCode tool schemas (OpenAI function-calling format). |
 | [`src/tools/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/__init__.py#L1) | 1 | 0 | `none` | Tool implementations for flyto-indexer MCP server. |

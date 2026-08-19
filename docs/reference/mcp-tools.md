@@ -276,7 +276,7 @@ Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_r
 
 ### `list_taint_rules`
 
-Show every source / sink / sanitizer declared in .flyto-rules.yaml (taint:). Built-in defaults are NOT included — this is the delta the project has added. Use before editing taint rules to see what's already in place, or to audit which custom sources/sinks the project has accumulated over time.
+Show every source / sink / sanitizer / propagator declared in .flyto-rules.yaml (taint:). Built-in defaults are NOT included — this is the delta the project has added. Propagators spread taint through in-place mutation (e.g. `my_populate(src, dst)` taints dst, `container.my_add(taint)` taints the container). They are YAML-only: declare them under taint.propagators as `{name, from, to}` (positional) or `{name, receiver: true}`. Unlike sources/sinks/sanitizers there is no add_* tool for them — ...
 
 Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:940`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L940).
 
@@ -288,7 +288,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Write a new layer definition into .flyto-rules.yaml. Use this to persist an architectural constraint the user just corrected — for example, when the user says 'ui must not import db directly', encode it here so every future agent and CI run enforces it automatically. Prefer either can_import (whitelist of allowed peer layers) or cannot_import (blacklist). Paths are glob patterns; first-matching layer wins for each file.
 
-Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:958`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L958).
+Annotations: `readOnlyHint=false, openWorldHint=false`. Definition: [`src/tool_registry/smart_tools.py:963`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/smart_tools.py#L963).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|

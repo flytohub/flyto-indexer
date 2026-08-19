@@ -325,3 +325,59 @@ class TestMethodFormSources:
                 os.system(data["cmd"])
         """)
         assert any(f.category == "rce" for f in flows)
+
+
+class TestYamlConfigurablePropagators:
+    """Propagators are declared in .flyto-rules.yaml like sources/sinks/
+    sanitizers — not hardcoded in the engine. A project's own mutation helper
+    is addable without touching the source."""
+
+    def test_positional_propagator_from_yaml(self, tmp_path):
+        (tmp_path / ".flyto-rules.yaml").write_text(textwrap.dedent("""\
+            taint:
+              propagators:
+                - name: my_populate
+                  from: 0
+                  to: 1
+        """))
+        flows = _analyze(tmp_path, """\
+            from flask import request
+            import os
+
+            def handler():
+                dst = {}
+                my_populate(request.args.get("a"), dst)
+                os.system(dst["cmd"])
+        """)
+        assert any(f.category == "rce" for f in flows)
+
+    def test_receiver_propagator_from_yaml(self, tmp_path):
+        (tmp_path / ".flyto-rules.yaml").write_text(textwrap.dedent("""\
+            taint:
+              propagators:
+                - name: stash
+                  receiver: true
+        """))
+        flows = _analyze(tmp_path, """\
+            from flask import request
+            import os
+
+            def handler():
+                box = []
+                box.stash(request.args.get("b"))
+                os.system(box[0])
+        """)
+        assert any(f.category == "rce" for f in flows)
+
+    def test_unknown_method_is_not_a_propagator_without_yaml(self, tmp_path):
+        # `stash` is not a built-in propagator; without YAML it must not fire.
+        flows = _analyze(tmp_path, """\
+            from flask import request
+            import os
+
+            def handler():
+                box = []
+                box.stash(request.args.get("b"))
+                os.system(box[0])
+        """)
+        assert flows == []

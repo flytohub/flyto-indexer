@@ -23,6 +23,13 @@
   `undo_vibe_edit` path traversal, with demo and operator-fed flows demoted.
 
 ### Changed
+- Made taint propagators configurable through `.flyto-rules.yaml` instead of
+  hardcoding them in the engine, matching how sources, sinks and sanitizers
+  already work. A project declares `taint.propagators` as `{name, from, to}`
+  (positional, `f(src, dst)` taints dst) or `{name, receiver: true}`
+  (`recv.m(taint)` taints recv); the built-in tables become defaults the YAML
+  extends. `list_taint_rules` now reports propagators too. No new MCP tool —
+  propagators are YAML-only, keeping the surface at its fixed tool count.
 - Demoted (not dropped) proven flows outside the product attack surface and
   proven flows fed by operator input, so a `with open(...)` sink newly found in
   a demo app or a CLI tool's `argv`-fed write no longer outranks a real library

@@ -942,10 +942,15 @@ SMART_TOOLS.append({
     "title": "List Project Taint Rules",
     "annotations": {"readOnlyHint": True, "openWorldHint": False},
     "description": (
-        "Show every source / sink / sanitizer declared in .flyto-rules.yaml (taint:). "
+        "Show every source / sink / sanitizer / propagator declared in .flyto-rules.yaml (taint:). "
         "Built-in defaults are NOT included — this is the delta the project has added.\n\n"
+        "Propagators spread taint through in-place mutation (e.g. `my_populate(src, dst)` taints "
+        "dst, `container.my_add(taint)` taints the container). They are YAML-only: declare them "
+        "under taint.propagators as `{name, from, to}` (positional) or `{name, receiver: true}`. "
+        "Unlike sources/sinks/sanitizers there is no add_* tool for them — edit the file directly, "
+        "which keeps the MCP surface at its fixed tool count.\n\n"
         "Use before editing taint rules to see what's already in place, or to audit which custom "
-        "sources/sinks the project has accumulated over time."
+        "sources/sinks/propagators the project has accumulated over time."
     ),
     "inputSchema": {
         "type": "object",
