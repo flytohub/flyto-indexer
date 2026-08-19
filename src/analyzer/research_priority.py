@@ -179,6 +179,15 @@ _OPERATOR_SOURCES = ("input(", "sys.argv", "argparse", "click.prompt(")
 #: call in the file a lead.
 PROXIMITY_LINES = 80
 
+#: A proven flow outside the product attack surface (demo, example, script,
+#: docs) keeps this fraction of its score — visible, but below library leads.
+NON_SURFACE_SCORE_FACTOR = 0.4
+
+#: A proven flow fed by operator input (argv/prompt) keeps this fraction — it
+#: is a real flow but not a remote-attacker path, matching the unproven
+#: operator tier's demotion.
+OPERATOR_SOURCE_SCORE_FACTOR = 0.5
+
 #: Files parsed by the unproven pass before it stops. The pass is a second
 #: read of the tree; this keeps it proportional to the taint scan itself.
 MAX_UNPROVEN_FILES = 3000
@@ -1098,6 +1107,23 @@ def rank_research_priority(
     candidates = list(by_key.values())
     for candidate in candidates:
         candidate.score = _score_candidate(candidate, effective_weights)
+        # A proven flow in demo / example / script code is real but is not the
+        # product's attack surface. It stays visible — dropping a proven flow
+        # would be dishonest — but it must not outrank a lead in library code.
+        # (Unproven seeds are already filtered out of those trees entirely.)
+        if not _is_attack_surface(candidate.file):
+            candidate.score *= NON_SURFACE_SCORE_FACTOR
+            candidate.reasons.insert(
+                0, "in demo/example/script code — not the product attack surface"
+            )
+        # A proven flow fed by operator input (argv, prompt) is real but not a
+        # remote-attacker path; demote it the way an unproven operator seed is
+        # already demoted, so a CLI tool's argv->open does not top the list.
+        if candidate.proven and _is_operator_source(candidate.source_expr):
+            candidate.score *= OPERATOR_SOURCE_SCORE_FACTOR
+            candidate.reasons.insert(
+                0, "fed by operator input (argv/prompt), not a remote request"
+            )
         key = (candidate.file, candidate.function or f"line:{candidate.line}")
         extra = candidate.reasons
         candidate.reasons = _build_reasons(

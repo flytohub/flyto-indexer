@@ -13,6 +13,11 @@
 ## Unreleased
 
 ### Changed
+- Demoted (not dropped) proven flows outside the product attack surface and
+  proven flows fed by operator input, so a `with open(...)` sink newly found in
+  a demo app or a CLI tool's `argv`-fed write no longer outranks a real library
+  lead. On gradio the top of the list is now all library code with the
+  `undo_vibe_edit` path traversal in it.
 - Scoped research-priority ranking to the attack surface after a run against a
   real 117k-line project (gradio) put nine demo apps, CLI helpers and dev
   scripts in its top twenty. Demo, example, script, docs and generated trees no

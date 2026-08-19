@@ -515,3 +515,48 @@ class TestJavaScriptSinksInPython:
         report = rank_research_priority(project)
 
         assert not [c for c in report.candidates if c.category == "xss"]
+
+
+class TestProvenFlowDemotion:
+    def test_proven_flow_in_demo_code_is_demoted_not_dropped(self, project):
+        lead = """\
+            from flask import request
+            import os
+
+            def h():
+                c = request.args.get("c")
+                os.system(c)
+        """
+        _write(project, "app/svc.py", lead)
+        _write(project, "demo/run.py", lead)
+        report = rank_research_priority(project)
+        by_file = {c.file: c for c in report.candidates}
+
+        # both proven and present...
+        assert "app/svc.py" in by_file
+        assert "demo/run.py" in by_file
+        # ...but library code outranks the demo copy
+        assert by_file["app/svc.py"].score > by_file["demo/run.py"].score
+        assert any("demo/example" in r for r in by_file["demo/run.py"].reasons)
+
+    def test_operator_sourced_proven_flow_ranks_below_remote(self, project):
+        _write(project, "web.py", """\
+            from flask import request
+            import os
+
+            def h():
+                c = request.args.get("c")
+                os.system(c)
+        """)
+        _write(project, "tool.py", """\
+            import os
+            import sys
+
+            def main():
+                os.system("run " + sys.argv[1])
+        """)
+        report = rank_research_priority(project)
+        by_file = {c.file: c for c in report.candidates}
+
+        assert by_file["web.py"].score > by_file["tool.py"].score
+        assert any("operator input" in r for r in by_file["tool.py"].reasons)
