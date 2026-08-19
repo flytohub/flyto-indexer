@@ -2,6 +2,7 @@
 
 | Date | Topic | File | Status |
 | --- | --- | --- | --- |
+| 2026-08-19 | Security triage handoff for code & engine | `2026-08-19-security-triage-for-code-and-engine.md` | Capability + disclosure discipline handed off |
 | 2026-08-19 | External project evaluation (gradio) | `2026-08-19-external-project-evaluation.md` | Measured; 3 precision fixes shipped; 1 finding pending disclosure |
 | 2026-08-19 | Taint recall and callee resolution | `2026-08-19-taint-recall-and-callee-resolution.md` | Local gates passed; LSP branch unexercised |
 | 2026-08-19 | Security research priority ranking | `2026-08-19-research-priority.md` | Local gates passed; not pushed |
