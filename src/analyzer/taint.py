@@ -55,6 +55,13 @@ MAX_FUNCTIONS = 1000
 #: cap, hitting this is reported in the result instead of looking like a clean
 #: scan.
 MAX_TOTAL_FUNCTIONS = 20000
+#: Functions whose return signature is extracted for the return-taint registry.
+#: Broader than the finding scan: a caller in scope may call a helper that is
+#: not itself in scope, and we still need that helper's return taint.
+MAX_RETURN_SOURCE_FUNCS = 60000
+#: Fixpoint rounds for "a function returning a call to a tainting function is
+#: itself tainting". Real return chains are shallow; this only bounds pathology.
+MAX_RETURN_TAINT_ROUNDS = 8
 MAX_FINDINGS = 200
 MAX_CALLERS = 2000
 MAX_CROSS_DEPTH = 6
@@ -209,6 +216,16 @@ def _safe_unparse(node: ast.AST) -> str:
         return ast.unparse(node)
     except Exception:
         return ""
+
+
+def _call_short_name(call: ast.Call) -> str:
+    """Final identifier of a call target: `a.b.execute(x)` -> `execute`."""
+    func = call.func
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    if isinstance(func, ast.Name):
+        return func.id
+    return ""
 
 
 def _unwrap_await(node: ast.expr) -> ast.expr:
@@ -420,10 +437,12 @@ class TaintAnalyzer:
         """Run full taint analysis. Returns list of TaintFlow findings."""
         self._truncation = set()
         self._functions_analyzed = 0
+        self._return_source_funcs: set[str] = set()
         self.findings = []
         self._sanitized_findings = []
         self._source_count = 0
         self._sink_count = 0
+        self._build_return_source_registry()
         self._scan_python_files()
         self._scan_cross_function_via_index()
         self._scan_regex_languages()
@@ -450,6 +469,206 @@ class TaintAnalyzer:
             truncation=sorted(self._truncation),
         )
 
+    # ── Phase 0: return-taint registry ──────────────────────────────────────
+
+    def _build_return_source_registry(self) -> None:
+        """Find functions whose return value carries untrusted input.
+
+        The intra-procedural pass only taints a call result when one of the
+        call's own arguments is tainted. A function that reads a source itself
+        and hands it back — `def read_body(): return request.get_json()` — has
+        no tainted argument, so `body = read_body()` used to stay clean and
+        every sink it reached was missed. This pass closes that: it records
+        which functions return untrusted data (directly, or by returning a call
+        to another such function), and `_is_source` then treats a call to one
+        as a source at the call site.
+
+        Name-based, like the rest of the cross-function engine: two functions
+        that share a short name share a verdict. That over-approximates for
+        recall; the ranking layer and (when available) LSP verification carry
+        the precision.
+        """
+        direct: set[str] = set()
+        # function short name -> short names of callees whose return it forwards
+        forwards: dict[str, set[str]] = defaultdict(set)
+        # how many functions define each short name — a name defined more than
+        # once cannot be attributed by name at a call site, so it is dropped.
+        def_counts: dict[str, int] = defaultdict(int)
+        seen_funcs = 0
+
+        for py_path in sorted(self.project_root.rglob("*.py")):
+            if seen_funcs >= MAX_RETURN_SOURCE_FUNCS:
+                self._truncation.add("return_registry_cap")
+                break
+            rel = str(py_path.relative_to(self.project_root)).replace("\\", "/")
+            if SKIP_DIR_PATTERNS.search(rel):
+                continue
+            tree = self._ast_cache.get(rel)
+            if tree is None:
+                try:
+                    content = py_path.read_text(encoding="utf-8", errors="ignore")
+                    tree = ast.parse(content, filename=rel)
+                except (OSError, SyntaxError, ValueError):
+                    continue
+                self._ast_cache[rel] = tree
+                self._content_cache[rel] = content
+
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if seen_funcs >= MAX_RETURN_SOURCE_FUNCS:
+                    break
+                seen_funcs += 1
+                def_counts[node.name] += 1
+                is_direct, callees = self._extract_return_signature(node)
+                if is_direct:
+                    direct.add(node.name)
+                if callees:
+                    forwards[node.name] |= callees
+
+        # Fixpoint: a function forwarding a call to a tainting function is
+        # itself tainting. Real chains are 1-2 deep; the cap only stops cycles.
+        tainting = set(direct)
+        for _ in range(MAX_RETURN_TAINT_ROUNDS):
+            grew = False
+            for name, callees in forwards.items():
+                if name not in tainting and (callees & tainting):
+                    tainting.add(name)
+                    grew = True
+            if not grew:
+                break
+
+        # Precision gate. A short name that maps to more than one definition, a
+        # dunder, or a throwaway `_` cannot be safely attributed to a call site
+        # by name — that is exactly what turned an unrelated `predict(...)` call
+        # in a demo into a false positive. Keep only unambiguous names. LSP
+        # resolution could recover the dropped ones; name matching cannot.
+        self._return_source_funcs = {
+            name for name in tainting
+            if def_counts.get(name, 0) == 1
+            and not (name.startswith("__") and name.endswith("__"))
+            and name not in {"_", ""}
+        }
+
+    def _extract_return_signature(
+        self, func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> tuple[bool, set[str]]:
+        """Return (returns_untrusted_directly, forwarded_callee_short_names).
+
+        Deliberately does not consider parameters: a return that depends on a
+        parameter is already covered by the existing "a tainted argument taints
+        the call result" rule. This pass only adds the case that rule misses —
+        a source the function reaches on its own.
+        """
+        local_tainted: set[str] = set()
+        # var name -> short callee name, for `x = g(...)` then `return x`
+        var_from_call: dict[str, str] = {}
+
+        assigns: list[tuple[list[str], ast.expr]] = []
+        returns: list[ast.expr] = []
+        for node in ast.walk(func_node):
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                value = node.value
+                if value is None:
+                    continue
+                value = _unwrap_await(value)
+                targets = (
+                    node.targets if isinstance(node, ast.Assign)
+                    else ([node.target] if node.target else [])
+                )
+                names = [
+                    name for t in targets if (name := self._target_name(t))
+                ]
+                assigns.append((names, value))
+                if isinstance(value, ast.Call):
+                    callee = _call_short_name(value)
+                    if callee:
+                        for n in names:
+                            var_from_call[n] = callee
+            elif isinstance(node, (ast.Return, ast.Yield)):
+                if node.value is not None:
+                    returns.append(_unwrap_await(node.value))
+
+        # Bounded local fixpoint so `a = source; b = a; return b` is caught.
+        for _ in range(3):
+            grew = False
+            for names, value in assigns:
+                if any(n in local_tainted for n in names):
+                    continue
+                if self._reads_raw_source(value, local_tainted):
+                    for n in names:
+                        local_tainted.add(n)
+                        grew = True
+            if not grew:
+                break
+
+        direct = False
+        callees: set[str] = set()
+        for value in returns:
+            if self._reads_raw_source(value, local_tainted):
+                direct = True
+            if isinstance(value, ast.Name) and value.id in var_from_call:
+                callees.add(var_from_call[value.id])
+            if isinstance(value, ast.Call):
+                callee = _call_short_name(value)
+                if callee:
+                    callees.add(callee)
+        return direct, callees
+
+    def _reads_raw_source(self, node: ast.expr, local_tainted: set[str]) -> bool:
+        """True if the expression reads a source pattern or a known-tainted local.
+
+        Registry-free and param-free by design — it must run before the registry
+        exists, and it is the raw "reaches untrusted input" signal.
+        """
+        node = _unwrap_await(node)
+
+        if isinstance(node, ast.Name):
+            return node.id in local_tainted
+        if isinstance(node, ast.Constant):
+            return False
+
+        text = _safe_unparse(node)
+        if text:
+            if any(marker in text for marker in NON_UNTRUSTED_SOURCE_MARKERS):
+                # An env/interpreter marker anywhere kills the raw signal, same
+                # conservative rule _is_source applies.
+                return False
+            for source in self._sources.get("python", []):
+                if source in text:
+                    return True
+
+        if isinstance(node, ast.Attribute):
+            return self._reads_raw_source(node.value, local_tainted)
+        if isinstance(node, ast.Subscript):
+            return self._reads_raw_source(node.value, local_tainted)
+        if isinstance(node, ast.BinOp):
+            return (
+                self._reads_raw_source(node.left, local_tainted)
+                or self._reads_raw_source(node.right, local_tainted)
+            )
+        if isinstance(node, ast.BoolOp):
+            return any(self._reads_raw_source(v, local_tainted) for v in node.values)
+        if isinstance(node, ast.IfExp):
+            return (
+                self._reads_raw_source(node.body, local_tainted)
+                or self._reads_raw_source(node.orelse, local_tainted)
+            )
+        if isinstance(node, ast.JoinedStr):
+            return any(
+                isinstance(v, ast.FormattedValue)
+                and self._reads_raw_source(v.value, local_tainted)
+                for v in node.values
+            )
+        if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+            return any(self._reads_raw_source(e, local_tainted) for e in node.elts)
+        if isinstance(node, ast.Call):
+            if any(self._reads_raw_source(a, local_tainted) for a in node.args):
+                return True
+            if isinstance(node.func, ast.Attribute):
+                return self._reads_raw_source(node.func.value, local_tainted)
+        return False
+
     # ── Phase 1: Python AST analysis ────────────────────────────────────────
 
     def _scan_python_files(self):
@@ -469,13 +688,13 @@ class TaintAnalyzer:
             except OSError:
                 continue
 
-            try:
-                tree = ast.parse(content, filename=rel)
-            except SyntaxError:
-                continue
-
-            # Cache for cross-function use
-            self._ast_cache[rel] = tree
+            tree = self._ast_cache.get(rel)
+            if tree is None:
+                try:
+                    tree = ast.parse(content, filename=rel)
+                except SyntaxError:
+                    continue
+                self._ast_cache[rel] = tree
             self._content_cache[rel] = content
             self._current_file = rel
 
@@ -1080,6 +1299,14 @@ class TaintAnalyzer:
         for marker in NON_UNTRUSTED_SOURCE_MARKERS:
             if marker in text:
                 return None
+
+        # A call to a function that returns untrusted input is a source at the
+        # call site, even with no tainted arguments. This is the return-value
+        # taint the intra-procedural pass cannot see on its own.
+        if isinstance(node, ast.Call) and self._return_source_funcs:
+            callee = _call_short_name(node)
+            if callee and callee in self._return_source_funcs:
+                return f"{callee}(...) [returns untrusted input]"
 
         matched = None
         for source in self._sources.get("python", []):

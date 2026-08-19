@@ -40,6 +40,20 @@
   same way libexpat1 is asserted. Verified locally: Trivy HIGH,CRITICAL with
   `--ignore-unfixed` now exits 0 against the built image.
 
+### Added
+- Return-value taint propagation. A function that reads untrusted input and
+  returns it — `def read_body(): return request.get_json()`, the most common
+  input-helper shape — now taints its callers: `body = read_body()` makes
+  `body` tainted and any sink it reaches is reported. Previously the engine only
+  tainted a call result when one of the call's own arguments was tainted, so
+  every zero-argument input helper was invisible. A bounded fixpoint follows
+  return chains (`a` returns `b()` which returns a source). Precision-gated to
+  short names with exactly one definition in the project: an ambiguous name like
+  `predict`, defined in many modules, is dropped rather than attributed to an
+  unrelated same-named call. Measured yield is codebase-shaped — zero new
+  findings on gradio and mlflow, which inject via framework parameters (already
+  handled), and real on codebases that wrap input in single-definition helpers.
+
 ### Fixed
 - Required sink patterns to match on a token boundary at both ends. The
   right-hand guard alone let `exec(` match `create_subprocess_exec(` and
