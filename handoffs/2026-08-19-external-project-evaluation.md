@@ -1,9 +1,9 @@
-# Handoff: First evaluation against an external project
+# Handoff: Evaluation against external projects
 
 - Date: 2026-08-19
 - Owner: claude
 - Branch: main
-- Status: measured, three precision fixes shipped, one finding to disclose
+- Status: two projects measured, four precision fixes shipped, one finding pending disclosure
 
 ## What was run
 
@@ -92,15 +92,54 @@ publication.
 
 Nothing was exploited, and no report has been filed anywhere yet.
 
+## Second project — mlflow
+
+Target: **mlflow** (`mlflow/mlflow`, 2,652 Python files / ~785k lines) — Flask
+rather than FastAPI, and eight times gradio's size, to see whether the fixes
+generalize or were shaped to one codebase.
+
+    flyto-index scan <repo>                 5m 26s
+    flyto-index research-priority --top 20    31s
+
+133 candidates, 1 proven flow, no truncation. Reading the top twenty:
+
+| verdict | count |
+| --- | --- |
+| worth a researcher's 30 minutes | 8 |
+| confirmed security weakness | 0 |
+
+What is interesting is *where* the eight landed. The proven flow is
+`server/handlers.py` `gateway_proxy_handler`, which concatenates a
+request-supplied `gateway_path` into a proxied URL — and the two ranks below it
+point at `_invoke_scorer_handler` (request JSON carrying a serialized scorer)
+and the `exec()` sites in `genai/scorers/base.py` that deserialize it. Both
+places already carry deliberate controls: `_validate_gateway_path` pins the GET
+path to one exact string, and the `exec()` path is gated behind a Databricks
+tracking URI with a comment saying why. The ranking did not find bugs there; it
+found the two places mlflow's own authors decided needed a guard, which is the
+behaviour you want from a triage tool.
+
+Six of the twenty were correctly demoted to `operator_input_and_sink` —
+`save_model(path=...)` style library APIs where the path is the caller's. That
+tier did its job: they are visible and last, instead of first.
+
+The `sink_with_file_source` weakness called out below was fixed between the two
+runs: sources are now located by line, and a lead is tiered by distance
+(`sink_with_class_source` > `sink_with_nearby_source` > `sink_with_file_source`,
+the last dropping to 0.18 reachability). On mlflow that split 70 file-level
+leads into 4 class-level, 25 nearby and 41 distant.
+
 ## Honest reading of the result
 
 - The ranking's ceiling is still taint recall, not ranking quality: 117k lines
   produced **one** proven flow. Everything else in the top twenty is
   pattern-adjacency wearing an honest label.
-- `sink_with_file_source` is too coarse in large files. `gradio_client/client.py`
-  is 1,400 lines: one `request.headers` read at line 773 made every `httpx`
-  call in the file a lead. Proximity (same class, or a line-distance decay)
-  is the obvious next fix and is not done.
-- One human, one project, one afternoon. 8/20 and 1/20 are this reviewer's
-  judgment, not an external researcher's, and a second project may behave
-  differently.
+- `sink_with_file_source` was too coarse in large files: in a 1,400-line
+  client, one `request.headers` read at line 773 made every `httpx` call in the
+  file a lead. Now tiered by distance — but distance is a proxy for reachability,
+  not reachability. It is still the weakest evidence tier by design.
+- Two projects, one human, one afternoon. Every "worth reading" verdict is this
+  reviewer's judgment, not a working researcher's — which is exactly the
+  judgment the tool cannot supply and a collaborator could.
+- Both projects produced exactly **one** proven flow each, at 117k and 785k
+  lines. Recall, not ranking, is what caps this.
