@@ -131,7 +131,11 @@ the disclosure path before anything is written down publicly.)
   modules in the `flyto-blueprint -> flyto-core` execution chain. Those three
   already exist as flyto-indexer MCP tools; only the step-module binding is
   missing, and that binding is the flyto-ai / flyto-core control-plane layer —
-  the other agent's (Codex's) delegated lane. Wire the modules there, then the
+  the other agent's (Codex's) delegated lane. `skills/security-triage/WIRING.md`
+  is the binding spec for that owner: verified parameter schemas for all three
+  tools, why the executable-module set is a trust boundary rather than a
+  feature flag, the non-negotiable budget/read-only properties, an order of
+  work, and how to verify once wired. Wire the modules there, then the
   draft drops into `flyto-blueprint/blueprints/` unchanged.
 
 ## Future feature spec — human-gated disclosure export (flyto-code)

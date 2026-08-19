@@ -13,7 +13,8 @@
 # model re-deriving it each run. The human-readable source of truth stays
 # skills/security-triage/SKILL.md; this is its executable form.
 #
-# Step modules that must exist first (Codex / control-plane lane):
+# Step modules that must exist first (Codex / control-plane lane).
+# Precise binding spec, with verified parameter schemas: see WIRING.md.
 #   indexer.scan               -> `flyto-index scan <path>`
 #   indexer.research_priority  -> `research_priority(project, top_n,
 #                                   include_unproven, include_sanitized)`
