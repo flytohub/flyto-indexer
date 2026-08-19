@@ -179,6 +179,16 @@ _OPERATOR_SOURCES = ("input(", "sys.argv", "argparse", "click.prompt(")
 #: call in the file a lead.
 PROXIMITY_LINES = 80
 
+#: Above this many lines, "the source and the sink are in the same function"
+#: stops being evidence. gradio's `create_app` spans 2,080 lines: of course it
+#: contains both, and "read this function" means "read the file". Such a lead
+#: is kept but scored on distance like any other, and its score is damped —
+#: a 47-line handler with the same tier is the more useful instruction.
+GIANT_FUNCTION_LINES = 200
+
+#: Score kept by a same-function lead in a giant function.
+GIANT_FUNCTION_SCORE_FACTOR = 0.45
+
 #: A proven flow outside the product attack surface (demo, example, script,
 #: docs) keeps this fraction of its score — visible, but below library leads.
 NON_SURFACE_SCORE_FACTOR = 0.4
@@ -225,6 +235,9 @@ class ResearchCandidate:
     #: Lines between this function and the nearest untrusted input, for the
     #: tiers where the link is proximity rather than proof.
     source_distance: int = 0
+    #: Length of the enclosing function. A lead in a 2,000-line function is a
+    #: worse reading instruction than the same lead in a 40-line one.
+    function_lines: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -242,6 +255,7 @@ class ResearchCandidate:
             "source": self.source_expr,
             "sink": self.sink_expr,
             "flow_path": self.flow_path,
+            "function_lines": self.function_lines,
             "signals": {
                 name: (None if value is None else round(value, 3))
                 for name, value in self.signals.items()
@@ -893,6 +907,7 @@ def _unproven_seeds(
 
             sanitizer = _first_present(body, sanitizer_patterns)
             seeds.append({
+                "function_lines": max(end - node.lineno, 0),
                 "distance": distance,
                 "file": rel,
                 "function": node.name,
@@ -1092,6 +1107,7 @@ def rank_research_priority(
                 sink_expr=seed["sink"],
                 evidence=seed["evidence"],
                 source_distance=seed.get("distance", 0),
+                function_lines=seed.get("function_lines", 0),
                 proven=False,
                 categories=[seed["category"]],
                 signals=build_signals(
@@ -1116,6 +1132,23 @@ def rank_research_priority(
             candidate.reasons.insert(
                 0, "in demo/example/script code — not the product attack surface"
             )
+        # "Source and sink share this function" carries no information when the
+        # function is enormous — a 2,000-line app factory contains everything.
+        # Damp it so a short, actually-readable handler outranks it.
+        # Applies to every unproven tier: the problem is the reading
+        # instruction, not which tier produced it. A proven flow keeps its
+        # score — it names an actual path, however long the function is.
+        if (
+            not candidate.proven
+            and candidate.function_lines > GIANT_FUNCTION_LINES
+        ):
+            candidate.score *= GIANT_FUNCTION_SCORE_FACTOR
+            candidate.reasons.insert(
+                0,
+                f"{candidate.function_lines}-line function — an unproven lead "
+                "here means 'read the file', which is not a lead",
+            )
+
         # A proven flow fed by operator input (argv, prompt) is real but not a
         # remote-attacker path; demote it the way an unproven operator seed is
         # already demoted, so a CLI tool's argv->open does not top the list.

@@ -9,6 +9,7 @@ import pytest
 from src.analyzer.research_priority import (
     DEFAULT_WEIGHTS,
     EVIDENCE_REACHABILITY,
+    GIANT_FUNCTION_LINES,
     PROXIMITY_LINES,
     ResearchCandidate,
     _has_dynamic_sql,
@@ -560,3 +561,54 @@ class TestProvenFlowDemotion:
 
         assert by_file["web.py"].score > by_file["tool.py"].score
         assert any("operator input" in r for r in by_file["tool.py"].reasons)
+
+
+class TestGiantFunctionDamping:
+    """An unproven lead inside a huge function is a bad reading instruction.
+
+    gradio's `create_app` spans 2,080 lines: 'the source and the sink share
+    this function' is true and useless there. It ranked #1 and pushed a real
+    47-line vulnerable handler to #5.
+    """
+
+    def _unproven(self, name: str, pad: int) -> str:
+        # source and sink both present, but no dataflow between them — this is
+        # the `source_and_sink_same_function` tier, not a proven flow.
+        filler = "\n".join(f"    x{i} = {i}" for i in range(pad))
+        return (
+            "from flask import request\n"
+            "\n"
+            f"def {name}():\n"
+            "    cfg = request.args.get('c')\n"
+            f"{filler}\n"
+            "    open('/etc/hostname')\n"
+            "    return cfg\n"
+        )
+
+    def test_giant_unproven_lead_ranks_below_a_small_one(self, project):
+        (project / "giant.py").write_text(self._unproven("create_app", 300))
+        (project / "small.py").write_text(self._unproven("handler", 2))
+        report = rank_research_priority(project)
+        by_file = {c.file: c for c in report.candidates}
+
+        assert by_file["giant.py"].function_lines > GIANT_FUNCTION_LINES
+        assert by_file["small.py"].score > by_file["giant.py"].score
+        assert any("not a lead" in r for r in by_file["giant.py"].reasons)
+
+    def test_proven_flow_is_not_damped_by_function_size(self, project):
+        # A proven flow names an actual path; length does not weaken it.
+        filler = "\n".join(f"    x{i} = {i}" for i in range(300))
+        (project / "giant.py").write_text(
+            "from flask import request\n"
+            "import os\n"
+            "\n"
+            "def create_app():\n"
+            "    cfg = request.args.get('c')\n"
+            f"{filler}\n"
+            "    os.system(cfg)\n"
+        )
+        report = rank_research_priority(project)
+        lead = next(c for c in report.candidates if c.file == "giant.py")
+
+        assert lead.proven is True
+        assert not any("not a lead" in r for r in lead.reasons)

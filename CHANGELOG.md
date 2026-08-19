@@ -23,6 +23,14 @@
   `undo_vibe_edit` path traversal, with demo and operator-fed flows demoted.
 
 ### Changed
+- Damped unproven leads inside very large functions. gradio's `create_app`
+  spans 2,080 lines, so "the source and the sink share this function" was true
+  and useless there — yet it ranked #1 and pushed a genuinely readable
+  47-line vulnerable handler to #5. An unproven lead in a function over 200
+  lines now keeps 45% of its score and says why; a proven flow is never damped,
+  because it names an actual path regardless of function size. On gradio the
+  top two are now both proven flows, and every giant-function lead (2,080, 722
+  and 216 lines) drops out of the top six.
 - Made taint propagators configurable through `.flyto-rules.yaml` instead of
   hardcoding them in the engine, matching how sources, sinks and sanitizers
   already work. A project declares `taint.propagators` as `{name, from, to}`
