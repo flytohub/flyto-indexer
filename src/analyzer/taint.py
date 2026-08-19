@@ -218,6 +218,29 @@ def _safe_unparse(node: ast.AST) -> str:
         return ""
 
 
+#: Methods that mutate their receiver with argument data: `dst.append(taint)`,
+#: `proto.MergeFrom(taint)`, `d.update(taint)`. A tainted argument taints the
+#: receiver. This is Semgrep's propagator concept — taint spreading through
+#: in-place mutation, which value-flow taint cannot see on its own.
+_RECEIVER_PROPAGATORS = frozenset({
+    "append", "extend", "add", "insert", "update", "setdefault",
+    "MergeFrom", "CopyFrom", "MergeFromString", "ParseFromString",
+})
+
+#: Free functions that populate a destination argument from a source argument:
+#: short name -> (source arg index, destination arg index). `parse_dict(json,
+#: proto)` is mlflow's request path — it taints `proto` in place from `json`.
+_POSITIONAL_PROPAGATORS = {
+    "parse_dict": (0, 1),
+    "ParseDict": (0, 1),
+    "Parse": (0, 1),
+    "Merge": (0, 1),
+}
+
+#: All propagator short names, for the registry pre-pass to filter on cheaply.
+_PROPAGATOR_NAMES = _RECEIVER_PROPAGATORS | set(_POSITIONAL_PROPAGATORS)
+
+
 def _call_short_name(call: ast.Call) -> str:
     """Final identifier of a call target: `a.b.execute(x)` -> `execute`."""
     func = call.func
@@ -491,14 +514,13 @@ class TaintAnalyzer:
         recall; the ranking layer and (when available) LSP verification carry
         the precision.
         """
-        direct: set[str] = set()
-        # function short name -> short names of callees whose return it forwards
-        forwards: dict[str, set[str]] = defaultdict(set)
-        # how many functions define each short name — a name defined more than
-        # once cannot be attributed by name at a call site, so it is dropped.
+        # Collect every function node once, plus a per-short-name definition
+        # count (a name with more than one definition cannot be attributed to a
+        # call site — that is what turned an unrelated `predict(...)` in a demo
+        # into a false positive).
+        func_nodes: list[tuple[str, ast.FunctionDef | ast.AsyncFunctionDef]] = []
         def_counts: dict[str, int] = defaultdict(int)
         seen_funcs = 0
-
         for py_path in sorted(self.project_root.rglob("*.py")):
             if seen_funcs >= MAX_RETURN_SOURCE_FUNCS:
                 self._truncation.add("return_registry_cap")
@@ -524,35 +546,46 @@ class TaintAnalyzer:
                     break
                 seen_funcs += 1
                 def_counts[node.name] += 1
+                func_nodes.append((node.name, node))
+
+        def _gate(names: set[str]) -> set[str]:
+            return {
+                name for name in names
+                if def_counts.get(name, 0) == 1
+                and not (name.startswith("__") and name.endswith("__"))
+                and name not in {"_", ""}
+            }
+
+        # Global fixpoint (Pysa-style): re-extract every function's return
+        # signature using the return-source set found so far, until it stops
+        # growing. Each round lets taint cross one more hop, so a chain like
+        # read() -> _get_normalized_request_json() ->
+        # parse_dict(json, proto); return proto converges in a few rounds.
+        self._return_source_funcs = set()
+        for _ in range(MAX_RETURN_TAINT_ROUNDS):
+            direct: set[str] = set()
+            forwards: dict[str, set[str]] = defaultdict(set)
+            for name, node in func_nodes:
                 is_direct, callees = self._extract_return_signature(node)
                 if is_direct:
-                    direct.add(node.name)
+                    direct.add(name)
                 if callees:
-                    forwards[node.name] |= callees
+                    forwards[name] |= callees
 
-        # Fixpoint: a function forwarding a call to a tainting function is
-        # itself tainting. Real chains are 1-2 deep; the cap only stops cycles.
-        tainting = set(direct)
-        for _ in range(MAX_RETURN_TAINT_ROUNDS):
-            grew = False
-            for name, callees in forwards.items():
-                if name not in tainting and (callees & tainting):
-                    tainting.add(name)
-                    grew = True
-            if not grew:
+            tainting = set(direct)
+            for _ in range(MAX_RETURN_TAINT_ROUNDS):
+                grew = False
+                for name, callees in forwards.items():
+                    if name not in tainting and (callees & tainting):
+                        tainting.add(name)
+                        grew = True
+                if not grew:
+                    break
+
+            gated = _gate(tainting)
+            if gated == self._return_source_funcs:
                 break
-
-        # Precision gate. A short name that maps to more than one definition, a
-        # dunder, or a throwaway `_` cannot be safely attributed to a call site
-        # by name — that is exactly what turned an unrelated `predict(...)` call
-        # in a demo into a false positive. Keep only unambiguous names. LSP
-        # resolution could recover the dropped ones; name matching cannot.
-        self._return_source_funcs = {
-            name for name in tainting
-            if def_counts.get(name, 0) == 1
-            and not (name.startswith("__") and name.endswith("__"))
-            and name not in {"_", ""}
-        }
+            self._return_source_funcs = gated
 
     def _collect_tainted_self_attrs(self, rel: str, tree: ast.Module) -> None:
         """Record instance attributes a class assigns untrusted input to.
@@ -608,7 +641,13 @@ class TaintAnalyzer:
 
         assigns: list[tuple[list[str], ast.expr]] = []
         returns: list[ast.expr] = []
+        prop_calls: list[ast.Call] = []
         for node in ast.walk(func_node):
+            if (
+                isinstance(node, ast.Call)
+                and _call_short_name(node) in _PROPAGATOR_NAMES
+            ):
+                prop_calls.append(node)
             if isinstance(node, (ast.Assign, ast.AnnAssign)):
                 value = node.value
                 if value is None:
@@ -631,8 +670,10 @@ class TaintAnalyzer:
                 if node.value is not None:
                     returns.append(_unwrap_await(node.value))
 
-        # Bounded local fixpoint so `a = source; b = a; return b` is caught.
-        for _ in range(3):
+        # Bounded local fixpoint so `a = source; b = a; return b`, and
+        # `parse_dict(source, out); return out` (mlflow's request path), are
+        # both caught.
+        for _ in range(4):
             grew = False
             for names, value in assigns:
                 if any(n in local_tainted for n in names):
@@ -641,6 +682,11 @@ class TaintAnalyzer:
                     for n in names:
                         local_tainted.add(n)
                         grew = True
+            for call in prop_calls:
+                dst = self._propagator_dest_name(call, local_tainted)
+                if dst and dst not in local_tainted:
+                    local_tainted.add(dst)
+                    grew = True
             if not grew:
                 break
 
@@ -656,6 +702,33 @@ class TaintAnalyzer:
                 if callee:
                     callees.add(callee)
         return direct, callees
+
+    def _propagator_dest_name(
+        self, call: ast.Call, local_tainted: set[str],
+    ) -> str:
+        """Destination variable name of a propagator call whose source reads
+        untrusted input, for the return-source registry. Empty if not tainted.
+        """
+        short = _call_short_name(call)
+        if (
+            short in _RECEIVER_PROPAGATORS
+            and isinstance(call.func, ast.Attribute)
+            and any(self._reads_raw_source(a, local_tainted) for a in call.args)
+        ):
+            recv = call.func.value
+            if isinstance(recv, ast.Name):
+                return recv.id
+        spec = _POSITIONAL_PROPAGATORS.get(short)
+        if spec is not None:
+            src_idx, dst_idx = spec
+            if (
+                src_idx < len(call.args) and dst_idx < len(call.args)
+                and self._reads_raw_source(call.args[src_idx], local_tainted)
+            ):
+                dst = call.args[dst_idx]
+                if isinstance(dst, ast.Name):
+                    return dst.id
+        return ""
 
     def _reads_raw_source(self, node: ast.expr, local_tainted: set[str]) -> bool:
         """True if the expression reads a source pattern or a known-tainted local.
@@ -705,6 +778,11 @@ class TaintAnalyzer:
         if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
             return any(self._reads_raw_source(e, local_tainted) for e in node.elts)
         if isinstance(node, ast.Call):
+            # A call to a function already known to return untrusted input is a
+            # source here too — this is what lets the registry converge over
+            # multi-hop return chains across the global fixpoint below.
+            if _call_short_name(node) in self._return_source_funcs:
+                return True
             if any(self._reads_raw_source(a, local_tainted) for a in node.args):
                 return True
             if isinstance(node.func, ast.Attribute):
@@ -983,6 +1061,10 @@ class TaintAnalyzer:
                 name = self._target_name(target)
                 if name:
                     taint_state[name] = (source, [source, name])
+                else:
+                    # `d[k] = request...` / `obj.attr = request...` taints the
+                    # container or object, so a later read of it is tainted.
+                    self._taint_expr_target(target, source, [source], taint_state)
             return
 
         # Check if RHS is a sink call with tainted args
@@ -996,6 +1078,8 @@ class TaintAnalyzer:
                 name = self._target_name(target)
                 if name:
                     taint_state[name] = (src, chain + [name])
+                else:
+                    self._taint_expr_target(target, src, chain, taint_state)
 
     def _sql_arg_is_dynamic(self, call: ast.Call) -> bool:
         """True when some argument is a SQL string built at runtime."""
@@ -1016,6 +1100,57 @@ class TaintAnalyzer:
                 continue
         return False
 
+    def _taint_expr_target(
+        self, expr: ast.expr, src: str, chain: list[str], taint_state: dict,
+    ) -> None:
+        """Mark the variable an expression denotes as tainted.
+
+        Handles a plain name, a subscript base (`d[k]` taints `d`), and an
+        attribute (`obj.attr`, keyed by its dotted text so a later read of the
+        same dotted name resolves).
+        """
+        if isinstance(expr, ast.Name):
+            taint_state[expr.id] = (src, chain + [expr.id])
+        elif isinstance(expr, ast.Subscript):
+            self._taint_expr_target(expr.value, src, chain, taint_state)
+        elif isinstance(expr, ast.Attribute):
+            dotted = _safe_unparse(expr)
+            if dotted:
+                taint_state[dotted] = (src, chain + [dotted])
+
+    def _apply_propagators(self, call: ast.Call, taint_state: dict) -> None:
+        """Spread taint through in-place mutation (Semgrep-style propagators).
+
+        `dst.append(taint)` / `proto.MergeFrom(taint)` taints the receiver;
+        `parse_dict(json, proto)` taints the destination argument. Value-flow
+        taint cannot see these because the tainted data never appears on the
+        left of an assignment.
+        """
+        short = _call_short_name(call)
+        if not short:
+            return
+
+        if short in _RECEIVER_PROPAGATORS and isinstance(call.func, ast.Attribute):
+            for arg in call.args:
+                tainted, src, chain = self._expr_is_tainted(arg, taint_state)
+                if tainted:
+                    self._taint_expr_target(
+                        call.func.value, src, chain, taint_state,
+                    )
+                    break
+
+        spec = _POSITIONAL_PROPAGATORS.get(short)
+        if spec is not None:
+            src_idx, dst_idx = spec
+            if src_idx < len(call.args) and dst_idx < len(call.args):
+                tainted, src, chain = self._expr_is_tainted(
+                    call.args[src_idx], taint_state,
+                )
+                if tainted:
+                    self._taint_expr_target(
+                        call.args[dst_idx], src, chain, taint_state,
+                    )
+
     def _handle_call_stmt(
         self,
         call: ast.Call,
@@ -1024,6 +1159,7 @@ class TaintAnalyzer:
         func_name: str,
     ):
         """Handle a call expression as a statement — check if it's a sink."""
+        self._apply_propagators(call, taint_state)
         call_str = _safe_unparse(call.func)
 
         if self._is_subprocess_sink(call_str):

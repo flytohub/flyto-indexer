@@ -9,6 +9,13 @@ SOURCES = {
         "request.args",
         "request.form",
         "request.json",
+        # Method forms of the JSON/body accessors — the modern Flask idiom and
+        # what mlflow's handlers use (`flask_request.get_json(force=True)`).
+        # The property form `request.json` above only covers attribute access.
+        # `request.get_json(` is also a substring of `flask_request.get_json(`,
+        # which is how request objects threaded through a parameter are read.
+        "request.get_json(",
+        "request.get_data(",
         "request.data",
         "request.cookies",
         "request.headers",

@@ -246,3 +246,82 @@ class TestSelfAttributeTaint:
                     os.system(self.cmd)
         """)
         assert flows == []
+
+
+class TestPropagators:
+    """Taint through in-place mutation — Semgrep's propagator concept. The
+    tainted data never appears on the left of an assignment, so value-flow
+    taint cannot see it."""
+
+    def test_list_append_taints_the_container(self, tmp_path):
+        flows = _analyze(tmp_path, """\
+            from flask import request
+            import os
+
+            def handler():
+                items = []
+                items.append(request.args.get("x"))
+                for it in items:
+                    os.system(it)
+        """)
+        assert any(f.category == "rce" for f in flows)
+
+    def test_dict_subscript_assignment_taints_the_dict(self, tmp_path):
+        flows = _analyze(tmp_path, """\
+            from flask import request
+            import os
+
+            def handler():
+                d = {}
+                d["k"] = request.args.get("y")
+                os.system(d["k"])
+        """)
+        assert any(f.category == "rce" for f in flows)
+
+    def test_parse_dict_taints_the_destination(self, tmp_path):
+        flows = _analyze(tmp_path, """\
+            from flask import request
+            import os
+            from google.protobuf.json_format import parse_dict
+
+            def handler():
+                proto = Msg()
+                parse_dict(request.get_json(), proto)
+                os.system(proto.cmd)
+        """)
+        assert any(f.category == "rce" for f in flows)
+
+    def test_multi_hop_return_source_via_parse_dict(self, tmp_path):
+        # read() -> normalize() -> parse_dict(json, proto); return proto,
+        # then message.field -> sink. The global fixpoint must converge.
+        flows = _analyze(tmp_path, """\
+            from flask import request
+            import os
+            from google.protobuf.json_format import parse_dict
+
+            def _normalize(flask_request=request):
+                return flask_request.get_json(force=True)
+
+            def _get_message(msg, flask_request=request):
+                body = _normalize(flask_request)
+                parse_dict(body, msg)
+                return msg
+
+            def handler():
+                message = _get_message(Msg())
+                os.system("run " + message.cmd)
+        """)
+        assert any(f.category == "rce" for f in flows)
+
+
+class TestMethodFormSources:
+    def test_get_json_method_form(self, tmp_path):
+        flows = _analyze(tmp_path, """\
+            from flask import request
+            import os
+
+            def handler():
+                data = request.get_json()
+                os.system(data["cmd"])
+        """)
+        assert any(f.category == "rce" for f in flows)

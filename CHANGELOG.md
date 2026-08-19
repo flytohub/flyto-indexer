@@ -46,6 +46,18 @@
   `--ignore-unfixed` now exits 0 against the built image.
 
 ### Added
+- Taint propagators and multi-hop return summaries (Semgrep- and Pysa-style),
+  from diagnosing why mlflow's request handlers produced no flows. Taint now
+  spreads through in-place mutation — `list.append(taint)`, `d[k] = taint`,
+  `d.update(taint)`, `proto.MergeFrom(taint)`, and `parse_dict(json, proto)`
+  (which taints the destination argument) — none of which put the tainted data
+  on the left of an assignment, so value-flow taint could not see them. Method
+  forms of the Flask body accessors (`request.get_json(`, `request.get_data(`)
+  are now sources, matching how request objects threaded through a parameter
+  are read. And the return-source registry is now a global fixpoint that
+  re-derives function summaries until they stop growing, so a multi-hop chain
+  (`read()` → `normalize()` → `parse_dict(json, proto); return proto`) converges
+  instead of breaking at the first hop.
 - Field sensitivity for instance attributes, and taint through context
   managers — the two recall gaps a diagnostic pass found after studying how
   Pysa, Semgrep and CodeQL model dataflow. Untrusted input stored on `self` in
