@@ -1,0 +1,112 @@
+# DRAFT blueprint — security-triage funnel as a flyto-blueprint procedure.
+#
+# This is a PROPOSAL, not a runnable blueprint yet. It is deliberately NOT
+# placed in flyto-blueprint/blueprints/ because it cannot run until the
+# `indexer.*` step modules below are registered in the blueprint -> flyto-core
+# execution chain (or as flyto-ai tool adapters). That wiring is the flyto-ai /
+# flyto-core control-plane layer, which is the other agent's (Codex's)
+# delegated lane per durable project memory and the cross-agent handoff rules —
+# so this file only specifies the procedure; it does not touch that layer.
+#
+# When the modules are wired, this drops into flyto-blueprint/blueprints/ as-is
+# and flyto-ai can replay the triage funnel deterministically instead of the
+# model re-deriving it each run. The human-readable source of truth stays
+# skills/security-triage/SKILL.md; this is its executable form.
+#
+# Step modules that must exist first (Codex / control-plane lane):
+#   indexer.scan               -> `flyto-index scan <path>`
+#   indexer.research_priority  -> `research_priority(project, top_n,
+#                                   include_unproven, include_sanitized)`
+#   indexer.call_hierarchy     -> `call_hierarchy(path, line, direction)`  [LSP]
+# All three already exist as flyto-indexer MCP tools; only their binding as
+# blueprint step modules is missing.
+
+id: security_triage
+name: "Security research triage"
+description: >-
+  Narrow a repository to a ranked reading list of security-relevant code paths:
+  proven flows first, ranked leads, selective LSP verification on the shortlist
+  only, then a human reading list. Output is leads for review, never a verdict.
+tags: [security, taint, triage, research, prioritization]
+
+args:
+  project:
+    type: string
+    required: true
+    description: "Indexed project name or repo path to triage."
+  top_n:
+    type: integer
+    required: false
+    description: "Candidates to return (default 20)."
+  lsp_budget:
+    type: integer
+    required: false
+    description: "Max call_hierarchy calls (hard cap, default 8). Never LSP the whole graph."
+
+steps:
+  # Stage 0 — ensure an index exists (skipped by the module if already scanned).
+  - id: scan
+    module: indexer.scan
+    label: "Scan if no index"
+    params:
+      path: "{{project}}"
+
+  # Stage 1 — proven flows first: near-certain, cheap. If enough, stop here.
+  - id: proven
+    module: indexer.research_priority
+    label: "Proven source-to-sink flows"
+    params:
+      project: "{{project}}"
+      top_n: "{{top_n}}"
+      include_unproven: false
+    assert:
+      # A proven flow is a lead worth a human's time; this is not a bug verdict.
+      output_is: "reading_list"
+
+  # Stage 2 — ranked leads (the fused score already carries churn/complexity/
+  # test-gap; do not re-run those per candidate).
+  - id: ranked
+    module: indexer.research_priority
+    label: "Ranked leads (all tiers)"
+    params:
+      project: "{{project}}"
+      top_n: "{{top_n}}"
+      include_unproven: true
+
+  # Stage 3 — selective LSP verification, SHORTLIST ONLY, hard-capped.
+  # Expressed as a bounded fan-out over the top of `ranked`; the module drops a
+  # candidate whose call resolves to a safe/validated path.
+  - id: verify
+    module: indexer.call_hierarchy
+    label: "Type-resolve the shortlist"
+    for_each: "{{ranked.top}}"
+    max_iterations: "{{lsp_budget}}"      # default 8 — the lean-invariant cap
+    params:
+      path: "{{item.file}}"
+      line: "{{item.sink_line}}"
+      direction: "incoming"
+
+  # Stage 4 — the evidence package handed to a human.
+  - id: package
+    module: indexer.research_priority   # or a dedicated formatter module
+    label: "Assemble reading list"
+    params:
+      project: "{{project}}"
+      top_n: "{{top_n}}"
+
+assertions:
+  # These encode the skill's stop/budget rules as machine-checkable guarantees.
+  - name: lsp_budget_capped
+    detail: "call_hierarchy invocations never exceed lsp_budget (default 8)."
+  - name: output_is_reading_list
+    detail: "The result is ranked candidates with evidence tiers, never a
+      vulnerability verdict."
+  - name: coverage_reported
+    detail: "coverage.signals_unavailable and any truncation are surfaced —
+      'found nothing' and 'stopped looking' must not look alike."
+
+# Not encoded here (they live outside the triage funnel, in flyto-code):
+#   - human confirmation of a candidate before it becomes a finding
+#   - PoC reproduction
+#   - the human-gated GHSA/advisory export
+# See handoffs/2026-08-19-security-triage-for-code-and-engine.md.

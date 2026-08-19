@@ -115,9 +115,16 @@ the disclosure path before anything is written down publicly.)
 - Close 4 residual code-scanning alerts in the GitHub UI (3 deliberate JS test
   fixtures → "used in tests"; 1 pypi-publish → false positive, the pinned SHA
   is v1.14.2, above the 1.13.0 that patched the advisory).
-- If the triage funnel proves useful repeatedly, capture it as a
-  `flyto-blueprint` procedure so `flyto-ai` can replay it deterministically —
-  the productionization path, without bloating `flyto-indexer`.
+- Capture the triage funnel as a `flyto-blueprint` procedure so `flyto-ai` can
+  replay it deterministically. **The procedure is already drafted** at
+  `skills/security-triage/blueprint-draft.yaml` — drop-in-ready. It is a draft,
+  not a runnable blueprint, because it needs `indexer.scan` /
+  `indexer.research_priority` / `indexer.call_hierarchy` bound as blueprint step
+  modules in the `flyto-blueprint -> flyto-core` execution chain. Those three
+  already exist as flyto-indexer MCP tools; only the step-module binding is
+  missing, and that binding is the flyto-ai / flyto-core control-plane layer —
+  the other agent's (Codex's) delegated lane. Wire the modules there, then the
+  draft drops into `flyto-blueprint/blueprints/` unchanged.
 
 ## Future feature spec — human-gated disclosure export (flyto-code)
 
