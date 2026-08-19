@@ -41,6 +41,16 @@
   `--ignore-unfixed` now exits 0 against the built image.
 
 ### Added
+- Field sensitivity for instance attributes, and taint through context
+  managers — the two recall gaps a diagnostic pass found after studying how
+  Pysa, Semgrep and CodeQL model dataflow. Untrusted input stored on `self` in
+  one method and used in a sink in another is now tracked (class-scoped, so
+  attribute names do not collide across classes). And a sink inside a `with` or
+  `async with` — `with open(tainted) as f:` — is now analyzed: the context
+  expression was never inspected and `async with` was not matched at all,
+  dropping most file/db/subprocess sinks in async code. On gradio this took
+  proven source-to-sink flows from 1 to 4, and it now proves automatically the
+  path traversal in `undo_vibe_edit` that previously only static reading found.
 - Return-value taint propagation. A function that reads untrusted input and
   returns it — `def read_body(): return request.get_json()`, the most common
   input-helper shape — now taints its callers: `body = read_body()` makes

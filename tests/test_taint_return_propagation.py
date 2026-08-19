@@ -159,3 +159,90 @@ class TestRegistryShape:
         analyzer.analyze()
         assert "read_input" in analyzer._return_source_funcs
         assert "wrapper" in analyzer._return_source_funcs
+
+
+class TestContextManagerSinks:
+    """Sinks inside `with`/`async with` were dropped; the context expression is
+    exactly where file/db/subprocess sinks live (`with open(tainted) as f`)."""
+
+    def test_sync_with_open_sink(self, tmp_path):
+        flows = _analyze(tmp_path, """\
+            from flask import request
+
+            def handler():
+                name = request.args.get("f")
+                with open("/data/" + name) as fh:
+                    return fh.read()
+        """)
+        assert any(f.category == "path_traversal" for f in flows)
+
+    def test_async_with_open_sink(self, tmp_path):
+        # `async with` is a distinct AST node that was never matched.
+        flows = _analyze(tmp_path, """\
+            from fastapi import Body
+
+            async def handler(name: str = Body(...)):
+                async with open("/data/" + name) as fh:
+                    return await fh.read()
+        """)
+        assert any(f.category == "path_traversal" for f in flows)
+
+    def test_taint_binds_from_context_manager(self, tmp_path):
+        flows = _analyze(tmp_path, """\
+            from flask import request
+            import os
+
+            def read_source():
+                return request.args.get("cmd")
+
+            def handler():
+                with read_source() as cmd:
+                    os.system(cmd)
+        """)
+        assert any(f.category == "rce" for f in flows)
+
+
+class TestSelfAttributeTaint:
+    """Untrusted input stored on `self` in one method, used in a sink in
+    another — the field sensitivity every mature taint tool has."""
+
+    def test_self_attr_across_methods(self, tmp_path):
+        flows = _analyze(tmp_path, """\
+            from flask import request
+            import os
+
+            class Handler:
+                def load(self):
+                    self.cmd = request.args.get("cmd")
+                def run(self):
+                    os.system(self.cmd)
+        """)
+        assert any(f.category == "rce" and f.source_expr == "self.cmd" for f in flows)
+
+    def test_untainted_self_attr_is_not_a_source(self, tmp_path):
+        flows = _analyze(tmp_path, """\
+            import os
+
+            class Handler:
+                def load(self):
+                    self.name = "constant"
+                def run(self):
+                    os.system(self.name)
+        """)
+        assert flows == []
+
+    def test_self_attr_is_class_scoped(self, tmp_path):
+        # `cmd` tainted on class A must not taint `self.cmd` read in class B.
+        flows = _analyze(tmp_path, """\
+            from flask import request
+            import os
+
+            class A:
+                def load(self):
+                    self.cmd = request.args.get("cmd")
+
+            class B:
+                def run(self):
+                    os.system(self.cmd)
+        """)
+        assert flows == []

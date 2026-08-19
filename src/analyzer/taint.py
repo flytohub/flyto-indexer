@@ -438,6 +438,9 @@ class TaintAnalyzer:
         self._truncation = set()
         self._functions_analyzed = 0
         self._return_source_funcs: set[str] = set()
+        self._tainted_self_attrs: dict[tuple[str, str], set[str]] = {}
+        self._func_class: dict[tuple[str, int], str] = {}
+        self._current_class = ""
         self.findings = []
         self._sanitized_findings = []
         self._source_count = 0
@@ -513,6 +516,7 @@ class TaintAnalyzer:
                 self._ast_cache[rel] = tree
                 self._content_cache[rel] = content
 
+            self._collect_tainted_self_attrs(rel, tree)
             for node in ast.walk(tree):
                 if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     continue
@@ -549,6 +553,44 @@ class TaintAnalyzer:
             and not (name.startswith("__") and name.endswith("__"))
             and name not in {"_", ""}
         }
+
+    def _collect_tainted_self_attrs(self, rel: str, tree: ast.Module) -> None:
+        """Record instance attributes a class assigns untrusted input to.
+
+        Maps every method to its class (so the scan knows which attribute set
+        applies), then finds `self.<attr> = <reads a source>` in any method and
+        marks `<attr>` tainted for that (file, class). A later method reading
+        `self.<attr>` is then a source.
+        """
+        for cnode in ast.walk(tree):
+            if not isinstance(cnode, ast.ClassDef):
+                continue
+            attrs: set[str] = set()
+            for m in cnode.body:
+                if not isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                self._func_class[(rel, m.lineno)] = cnode.name
+                for stmt in ast.walk(m):
+                    if not isinstance(stmt, (ast.Assign, ast.AnnAssign)):
+                        continue
+                    value = stmt.value
+                    if value is None:
+                        continue
+                    value = _unwrap_await(value)
+                    targets = (
+                        stmt.targets if isinstance(stmt, ast.Assign)
+                        else ([stmt.target] if stmt.target else [])
+                    )
+                    for t in targets:
+                        if (
+                            isinstance(t, ast.Attribute)
+                            and isinstance(t.value, ast.Name)
+                            and t.value.id == "self"
+                            and self._reads_raw_source(value, set())
+                        ):
+                            attrs.add(t.attr)
+            if attrs:
+                self._tainted_self_attrs[(rel, cnode.name)] = attrs
 
     def _extract_return_signature(
         self, func_node: ast.FunctionDef | ast.AsyncFunctionDef,
@@ -715,6 +757,7 @@ class TaintAnalyzer:
                         return
                     file_funcs += 1
                     total_funcs += 1
+                    self._current_class = self._func_class.get((rel, node.lineno), "")
                     self._analyze_function_ast(node, rel, content)
             self._functions_analyzed = total_funcs
 
@@ -862,7 +905,7 @@ class TaintAnalyzer:
             self._visit_body(stmt.body, taint_state, file_path, func_name)
             self._visit_body(stmt.orelse, taint_state, file_path, func_name)
 
-        elif isinstance(stmt, ast.For):
+        elif isinstance(stmt, (ast.For, ast.AsyncFor)):
             # Check if the iterator is tainted
             tainted, src, chain = self._expr_is_tainted(stmt.iter, taint_state)
             if tainted and isinstance(stmt.target, ast.Name):
@@ -870,7 +913,20 @@ class TaintAnalyzer:
             self._visit_body(stmt.body, taint_state, file_path, func_name)
             self._visit_body(stmt.orelse, taint_state, file_path, func_name)
 
-        elif isinstance(stmt, ast.With):
+        elif isinstance(stmt, (ast.With, ast.AsyncWith)):
+            # The context expression is where the sink usually is —
+            # `with open(tainted) as f:`, `with db.cursor() as c:` — and it was
+            # never analyzed. AsyncWith was not matched at all, dropping every
+            # `async with` sink in FastAPI-style code.
+            for item in stmt.items:
+                ctx = _unwrap_await(item.context_expr)
+                if isinstance(ctx, ast.Call):
+                    self._handle_call_stmt(ctx, taint_state, file_path, func_name)
+                c_tainted, c_src, c_chain = self._expr_is_tainted(ctx, taint_state)
+                if c_tainted and isinstance(item.optional_vars, ast.Name):
+                    taint_state[item.optional_vars.id] = (
+                        c_src, c_chain + [item.optional_vars.id],
+                    )
             self._visit_body(stmt.body, taint_state, file_path, func_name)
 
         elif isinstance(stmt, ast.Try):
@@ -1209,6 +1265,20 @@ class TaintAnalyzer:
             return False, "", []
 
         if isinstance(node, ast.Attribute):
+            # Instance attribute holding untrusted input, assigned in another
+            # method of the same class (field sensitivity across methods).
+            if (
+                self._current_class
+                and self._current_file
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "self"
+            ):
+                attrs = self._tainted_self_attrs.get(
+                    (self._current_file, self._current_class)
+                )
+                if attrs and node.attr in attrs:
+                    tag = f"self.{node.attr}"
+                    return True, tag, [tag]
             # Check full dotted name (e.g., "user.email")
             full = _safe_unparse(node)
             # 1. Check if the full dotted name is in taint_state
