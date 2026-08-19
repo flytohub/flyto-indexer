@@ -13,6 +13,7 @@ the index format, parser stack, or every scanner before Flyto2 Indexer is useful
 | “The tests are green, but I still do not trust the change.” | Use the [verification guide](VERIFICATION.md). |
 | “Frontend calls and backend routes keep drifting.” | See [contract drift](FEATURES.md#the-frontend-and-backend-drifted-apart). |
 | “Security and quality reports are too noisy.” | See [evidence-first audits](FEATURES.md#the-audit-is-too-noisy-to-trust). |
+| “A big codebase — where should a security researcher look first?” | Run the [security-triage skill](../skills/security-triage/SKILL.md). |
 | “The AI keeps repeating the same mistake or scanner complaint.” | Use the [local feedback loop](FEEDBACK.md). |
 | “I switch AI tools and lose the current task state.” | Use [local task continuity](TASK_CONTINUITY.md), without committing handoff files. |
 | “Several repositories change together.” | See [multi-repository work](FEATURES.md#one-change-crosses-several-repositories). |

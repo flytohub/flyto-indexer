@@ -12,6 +12,16 @@
 
 ## Unreleased
 
+### Added
+- A `security-triage` skill (`skills/security-triage/SKILL.md`) — a budget-aware
+  orchestration policy that drives the existing MCP tools as a funnel: proven
+  flows first, ranked leads, selective LSP verification on the top ~8 only
+  (`call_hierarchy` capped at 8 per run, never the whole graph), then a human
+  reading list. It adds no tool and no dependency — the intelligence is in the
+  sequencing and the stop rules, not in the engine. Validated end-to-end on
+  gradio: the funnel surfaces the four proven flows including the
+  `undo_vibe_edit` path traversal, with demo and operator-fed flows demoted.
+
 ### Changed
 - Demoted (not dropped) proven flows outside the product attack surface and
   proven flows fed by operator input, so a `with open(...)` sink newly found in
