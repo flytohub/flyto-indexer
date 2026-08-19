@@ -115,6 +115,19 @@ both halves of that A/B and skips when `pyright-langserver` is not on PATH, so
 CI keeps the coverage the day a server is added to the image. Full suite with
 pyright present: 2408 passed, 1 skipped.
 
+## Layering
+
+The ranking needs the same churn numbers `git_churn` reports, but the analyzer
+layer may not import the tool surface (`.flyto-rules.yaml`). Rather than keep a
+second copy of the git-log parsing — two definitions of "churn" that drift —
+`find_git_root`, `run_git`, `parse_log_with_files`, `parse_log_with_numstat`
+and `get_cached_log` moved to `src/git_history.py` in `runtime_services`.
+`tools/git_intel.py` imports them under its old private names, so its public
+behavior is unchanged.
+
+CI caught this as `rules_policy: 1 violation`; `flyto-index verify . --strict`
+now reports 0 violations across 9 rules.
+
 ## Still not verified
 
 - Only pyright/Python. tsserver, gopls and rust-analyzer paths are unexercised.

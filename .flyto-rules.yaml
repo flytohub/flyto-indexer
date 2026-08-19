@@ -70,6 +70,7 @@ layers:
       - "src/diff_impact.py"
       - "src/engine.py"
       - "src/flyto_output.py"
+      - "src/git_history.py"
       - "src/index_store.py"
       - "src/indexer/**"
       - "src/lsp/**"

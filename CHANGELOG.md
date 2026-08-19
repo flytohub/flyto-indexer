@@ -12,6 +12,12 @@
 
 ## Unreleased
 
+### Changed
+- Moved git log plumbing (`find_git_root`, `run_git`, the two log parsers and
+  the TTL-cached log reader) from `tools/git_intel.py` to `src/git_history.py`
+  so analyzers can share it without importing the tool surface. `git_intel`
+  keeps its private names and public behavior.
+
 ### Fixed
 - Restored cross-project taint recall. The engine reported zero source-to-sink
   flows on every real project in the workspace while still reporting large

@@ -7,35 +7,32 @@ All git operations have a 30-second timeout. Gracefully handles missing git repo
 
 import os
 import re
-import subprocess
 import time
 from typing import Dict, List, Optional, Tuple
 
 try:
     from ..index_store import load_index, get_symbol_content_text
+    from ..git_history import (
+        find_git_root as _find_git_root,
+        get_cached_log as _get_cached_log,
+        parse_log_with_files as _parse_log_with_files,
+        parse_log_with_numstat as _parse_log_with_numstat,
+        run_git as _run_git,
+    )
 except ImportError:
     from index_store import load_index, get_symbol_content_text
+    from git_history import (  # type: ignore
+        find_git_root as _find_git_root,
+        get_cached_log as _get_cached_log,
+        parse_log_with_files as _parse_log_with_files,
+        parse_log_with_numstat as _parse_log_with_numstat,
+        run_git as _run_git,
+    )
 
 
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
-
-_log_cache = {}        # key: (git_root, args_tuple) -> parsed entries
-_log_cache_ts = 0.0    # monotonic timestamp of last cache fill
-_LOG_CACHE_TTL = 60.0  # seconds
-
-
-def _find_git_root(path: str) -> Optional[str]:
-    """Walk up from *path* looking for a `.git/` directory. Returns None if not found."""
-    current = os.path.abspath(path)
-    while True:
-        if os.path.isdir(os.path.join(current, ".git")):
-            return current
-        parent = os.path.dirname(current)
-        if parent == current:
-            return None
-        current = parent
 
 
 def _get_project_root(project: Optional[str] = None) -> Tuple[str, str]:
@@ -84,128 +81,6 @@ def _get_project_root(project: Optional[str] = None) -> Tuple[str, str]:
 
         raise ValueError(f"Project root not found on disk: {proj_name}")
     return proj_name, root
-
-
-def _run_git(args: List[str], cwd: str, timeout: int = 30) -> str:
-    """Run a git command and return stdout. Raises RuntimeError on failure."""
-    try:
-        result = subprocess.run(
-            ["git"] + args,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=cwd,
-        )
-    except FileNotFoundError:
-        raise RuntimeError("git is not installed or not on PATH")
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(f"git command timed out after {timeout}s: git {' '.join(args)}")
-
-    if result.returncode != 0:
-        stderr = (result.stderr or "").strip()
-        raise RuntimeError(f"git failed (rc={result.returncode}): {stderr}")
-    return result.stdout
-
-
-def _parse_log_with_files(log_text: str) -> List[dict]:
-    """Parse output of ``git log --format='COMMIT:%H|%at|%an|%s' --name-only``.
-
-    Returns a list of dicts:
-        {hash, timestamp, author, message, files: [str]}
-    """
-    entries = []  # type: List[dict]
-    current = None  # type: Optional[dict]
-
-    for line in log_text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        if line.startswith("COMMIT:"):
-            if current is not None:
-                entries.append(current)
-            parts = line[len("COMMIT:"):].split("|", 3)
-            if len(parts) < 4:
-                current = None
-                continue
-            current = {
-                "hash": parts[0],
-                "timestamp": int(parts[1]) if parts[1].isdigit() else 0,
-                "author": parts[2],
-                "message": parts[3],
-                "files": [],
-            }
-        elif current is not None:
-            current["files"].append(line)
-
-    if current is not None:
-        entries.append(current)
-
-    return entries
-
-
-def _parse_log_with_numstat(log_text: str) -> List[dict]:
-    """Parse output of ``git log --format='COMMIT:%H|%at|%an|%s' --numstat``.
-
-    Returns a list of dicts:
-        {hash, timestamp, author, message, files: [{path, insertions, deletions}]}
-    """
-    entries = []  # type: List[dict]
-    current = None  # type: Optional[dict]
-
-    for line in log_text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        if line.startswith("COMMIT:"):
-            if current is not None:
-                entries.append(current)
-            parts = line[len("COMMIT:"):].split("|", 3)
-            if len(parts) < 4:
-                current = None
-                continue
-            current = {
-                "hash": parts[0],
-                "timestamp": int(parts[1]) if parts[1].isdigit() else 0,
-                "author": parts[2],
-                "message": parts[3],
-                "files": [],
-            }
-        elif current is not None:
-            # numstat lines: "insertions\tdeletions\tpath"
-            numstat_match = re.match(r"^(\d+|-)\t(\d+|-)\t(.+)$", line)
-            if numstat_match:
-                ins = numstat_match.group(1)
-                dels = numstat_match.group(2)
-                current["files"].append({
-                    "path": numstat_match.group(3),
-                    "insertions": int(ins) if ins != "-" else 0,
-                    "deletions": int(dels) if dels != "-" else 0,
-                })
-
-    if current is not None:
-        entries.append(current)
-
-    return entries
-
-
-def _get_cached_log(git_root: str, extra_args: tuple) -> List[dict]:
-    """Return parsed log entries, using a module-level TTL cache."""
-    global _log_cache, _log_cache_ts
-
-    now = time.monotonic()
-    if now - _log_cache_ts > _LOG_CACHE_TTL:
-        _log_cache.clear()
-        _log_cache_ts = now
-
-    key = (git_root, extra_args)
-    if key in _log_cache:
-        return _log_cache[key]
-
-    args = ["log", '--format=COMMIT:%H|%at|%an|%s', "--name-only"] + list(extra_args)
-    raw = _run_git(args, cwd=git_root)
-    entries = _parse_log_with_files(raw)
-    _log_cache[key] = entries
-    return entries
 
 
 def _lazy_quality():

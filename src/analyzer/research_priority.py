@@ -252,23 +252,25 @@ def _is_hidden_path(rel: str) -> bool:
 def _churn_by_file(project_root: Path, since_days: int) -> tuple[dict[str, int], str]:
     """Commits per file over the window. Returns ({}, reason) when unavailable.
 
-    Reuses git_intel's cached log so a repeated scan in the same process does
-    not re-shell out, and so churn here means exactly what `git_churn` means.
+    Shares `git_history` with the `git_churn` tool, so a repeated scan in the
+    same process reuses one `git log` and churn here means exactly what
+    `git_churn` reports. The analyzer layer may not import the tool surface,
+    which is why that plumbing lives one layer down.
     """
     try:
         try:
-            from ..tools.git_intel import _find_git_root, _get_cached_log
+            from ..git_history import find_git_root, get_cached_log
         except ImportError:  # pragma: no cover - flat-layout fallback
-            from tools.git_intel import _find_git_root, _get_cached_log  # type: ignore
+            from git_history import find_git_root, get_cached_log  # type: ignore
     except Exception as exc:  # pragma: no cover - defensive
         return {}, f"git_churn: git intelligence unavailable ({exc})"
 
-    git_root = _find_git_root(str(project_root))
+    git_root = find_git_root(str(project_root))
     if not git_root:
         return {}, "git_churn: not inside a git repository"
 
     try:
-        entries = _get_cached_log(git_root, (f"--since={since_days} days ago",))
+        entries = get_cached_log(git_root, (f"--since={since_days} days ago",))
     except Exception as exc:
         return {}, f"git_churn: git log failed ({exc})"
 

@@ -2,7 +2,7 @@
 
 # MCP Tool Reference
 
-The stdio server publishes **20 smart tools**. The registry retains **47 granular compatibility definitions** for dispatch, integrations, and schema generation.
+The stdio server publishes **20 smart tools**. The registry retains **48 granular compatibility definitions** for dispatch, integrations, and schema generation.
 
 ## Published smart tools
 
@@ -40,7 +40,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
 | `project` | `string` | no | `` | Filter to specific project (optional) |
-| `focus` | `string` | no | `&#91;'security', 'complexity', 'dead_code', 'coverage', 'all'&#93;` | Force expansion of a specific dimension (optional). 'all' expands everything. |
+| `focus` | `string` | no | `&#91;'security', 'complexity', 'dead_code', 'coverage', 'research_priority', 'all'&#93;` | Force expansion of a specific dimension (optional). 'all' expands everything. |
 
 ### `task`
 
@@ -457,11 +457,25 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 | `severity` | `string` | no | `&#91;'critical', 'high', 'medium', 'low'&#93;` | Filter by severity level |
 | `max_results` | `integer` | no | `50` | Max flows to return (default 50) |
 
+### `research_priority`
+
+Rank the code paths most worth a human security researcher's next hour. Fuses signals this index already has — taint reachability (cross-function flows rank above in-function ones), sink severity, entry-point exposure, function complexity, git churn, test gaps, and swallowed error handling — into one ordered short list instead of hundreds of undifferentiated findings. One candidate per function: ten flows in one function is one lead, not ten. Every candidate carries `signals` and plain-langua...
+
+Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:321`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L321).
+
+| Input | Type | Required | Default / enum | Purpose |
+|---|---|---|---|---|
+| `project` | `string` | no | `` | Filter to a specific project |
+| `top_n` | `integer` | no | `20` | Candidates to return (default 20, max 200) |
+| `since_days` | `integer` | no | `180` | Churn window in days (default 180) |
+| `include_sanitized` | `boolean` | no | `True` | Keep flows a sanitizer claims to neutralize. They rank low but stay visible, because a wrong sanitizer is itself a finding. |
+| `include_unproven` | `boolean` | no | `True` | Keep the weaker evidence tiers (sink plus nearby input, unproven link). Set false for proven source-to-sink flows only — on projects where the name-based cross-function pass completes no flow, that returns an empty list. |
+
 ### `find_stale_files`
 
 Find source files untouched for a long time using git history. Returns: stale files sorted by age with last author and modification date.
 
-Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:321`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L321).
+Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:350`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L350).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -473,7 +487,7 @@ Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_reg
 
 Compute an aggregate code health score (0-100) with letter grade (A-F). Breakdown: complexity (25 pts), dead code (25 pts), documentation (25 pts), modularity (25 pts). Works entirely from the index — fast, no filesystem access.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:338`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L338).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:367`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L367).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -483,7 +497,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Get prioritized refactoring suggestions combining complexity analysis, dead code detection, and large file identification. Each suggestion includes type, priority, reason, and actionable fix.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:354`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L354).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:383`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L383).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -494,7 +508,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Search for functions, classes, components, and composables across all indexed projects. Use this as the FIRST step when you need to find code by name or keyword. Results are ranked by relevance (name match > summary match > content match) and grouped by project. Returns: symbol_id, path, line number, type, summary, score. Use the symbol_id in follow-up calls to get_symbol_content, find_references, or impact_analysis.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:371`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L371).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:400`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L400).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -509,7 +523,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Get the full source code of a specific symbol (function, class, component). Use this AFTER search_code to read the actual implementation. Supports fuzzy matching: you can pass a partial symbol_id and it will find the best match. Returns: full source code, file path, line range, summary.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:400`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L400).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:429`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L429).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -519,7 +533,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 List all symbols defined in a specific file. Use this to get an overview of what a file contains. Returns: symbol id, name, type, line number, and summary for each symbol.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:421`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L421).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:450`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L450).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -529,7 +543,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Get semantic metadata for a file: purpose, category, keywords, APIs used, and dependencies. Returns: purpose description, category, keywords, API endpoints, dependencies.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:438`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L438).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:467`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L467).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -539,7 +553,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Full-text search across all indexed source code. Searches inside comments, strings, and TODO/FIXME markers. Use search_type='todo' to find all TODO/FIXME items, 'comment' for comments only, 'string' for string literals. Returns: matching symbols with context snippets, grouped by project.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:454`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L454).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:483`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L483).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -552,7 +566,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Natural language → code search using TF-IDF cosine similarity with learned concept expansion. Unlike search_code (keyword/BM25), this learns concept relationships from the codebase itself: file co-location, import graph, and shared callers. No manual keyword maps. Example: 'handle payment failure' finds process_refund() because they co-occur in the same files and share callers — not because someone manually mapped 'payment' to 'refund'. Best for: exploratory queries, understanding unfamiliar ...
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:479`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L479).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:508`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L508).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -565,25 +579,25 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 List all code categories and how many files belong to each. Returns: category names sorted by file count.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:506`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L506).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:535`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L535).
 
 ### `list_apis`
 
 List all API endpoints found in indexed code, along with which files use them. Returns: API paths sorted by usage count.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:520`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L520).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:549`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L549).
 
 ### `check_index_status`
 
 Check if the code index is up-to-date or stale. Returns: status (fresh/slightly_stale/stale), changed files, and recommendation.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:534`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L534).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:563`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L563).
 
 ### `find_todos`
 
 Find all TODO, FIXME, HACK, and XXX markers across indexed code. Priority: FIXME/HACK = high, TODO/XXX = medium, NOTE = low. Returns: markers with text, file path, line number, grouped by priority and project.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:548`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L548).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:577`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L577).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -595,7 +609,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Get the semantic one-liner description for a file. Returns the latest summary, staleness status, and metadata.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:566`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L566).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:595`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L595).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -606,7 +620,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Write or update a semantic description for a file. Stored in .flyto/descriptions.jsonl with content hash for staleness tracking.
 
-Annotations: `readOnlyHint=false, destructiveHint=false, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:583`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L583).
+Annotations: `readOnlyHint=false, destructiveHint=false, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:612`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L612).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -618,7 +632,7 @@ Annotations: `readOnlyHint=false, destructiveHint=false, openWorldHint=false`. D
 
 Get a complete context package for a file in one call. Returns file info, symbols, imports, dependents, test file mapping, and related files. All data comes from cached index, zero I/O.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:601`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L601).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:630`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L630).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -629,7 +643,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Find the corresponding test file for a source file, or the source file for a test file. Uses naming conventions and import analysis as fallback.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:619`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L619).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:648`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L648).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -639,7 +653,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Track a workspace event for search boosting. Tracked files get +8 score boost in search_code results. Sessions expire after 24h.
 
-Annotations: `readOnlyHint=false, destructiveHint=false, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:635`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L635).
+Annotations: `readOnlyHint=false, destructiveHint=false, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:664`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L664).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -652,7 +666,7 @@ Annotations: `readOnlyHint=false, destructiveHint=false, openWorldHint=false`. D
 
 Get the current state of a workspace session. Returns: open files, recent queries, recent edits, and boost path count.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:654`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L654).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:683`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L683).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -662,7 +676,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Analyze a task across 6 dimensions and produce a task contract. Dimensions: blast_radius, breaking_risk, test_coverage, cross_coupling, complexity, rollback_difficulty. Automatically derives constraints (must_run_impact_review, must_add_tests, etc.) and execution strategy. Use this BEFORE starting any non-trivial task to understand risk and get a structured plan. Returns: profile, dimensions (scored 0-10), constraints, and strategy with phases.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:671`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L671).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:700`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L700).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -675,7 +689,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Check whether a task can proceed to the next phase based on its contract. Validates that required analyses, tests, and reviews have been completed. Returns: pass/blocked decision with reason_codes and required_actions. Phases: inspect, plan_changes, apply_changes, expand_changes, finalize.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:702`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L702).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:731`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L731).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -687,7 +701,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Run code quality checks (ruff) and tests (pytest) on a project. Use after making code changes to verify nothing is broken. Returns pass/fail status with detailed output.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:732`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L732).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:761`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L761).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -699,7 +713,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Find files that change most frequently and cross-reference with code complexity. Hotspot score = commit_count * (1 + complexity / 10). Uses 1 year of git history. Returns: ranked hotspots with commit count, complexity score, hotspot score, and recent authors.
 
-Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:751`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L751).
+Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:780`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L780).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -710,7 +724,7 @@ Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_reg
 
 Find files that frequently change together with a given file. Helps discover hidden coupling not visible in import graphs. Filters out obvious pairs (e.g. test file of same name) and requires min 2 co-changes. Returns: co-changed files with frequency, ratio, and sample commit hashes.
 
-Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:769`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L769).
+Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:798`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L798).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -722,7 +736,7 @@ Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_reg
 
 Measure code churn (insertions + deletions) for a file or entire project over a time period. When a path is given, maps churn to indexed symbols (approximate). Returns: total commits, unique authors, insertions, deletions, recent commits, and per-symbol churn.
 
-Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:789`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L789).
+Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:818`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L818).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -734,7 +748,7 @@ Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_reg
 
 Score recent commits by risk heuristics: large changesets, risky keywords (fix, hotfix, workaround, hack, revert), high line count, and touching complex files. Returns: ranked commits with risk score, risk factors, and change stats.
 
-Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:807`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L807).
+Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:836`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L836).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -746,7 +760,7 @@ Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_reg
 
 Generate a test coverage report mapped to indexed symbols. Parses .coverage (SQLite) or coverage.xml (Cobertura) files produced by pytest-cov / coverage.py. Shows overall coverage % and per-function breakdown sorted by worst coverage first. Use min_coverage (0.0-1.0) to filter to functions below a threshold.
 
-Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:826`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L826).
+Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:855`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L855).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -757,7 +771,7 @@ Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_reg
 
 Find high-impact coverage gaps: functions with low test coverage AND many references. Gap score = (1 - coverage%) * (1 + reference_count). Higher score = more critical to test. Use this to prioritize which functions to add tests for.
 
-Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:844`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L844).
+Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:873`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L873).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -768,7 +782,7 @@ Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_reg
 
 Cross-reference git diff with coverage data to find changed lines that lack test coverage. Shows per-file breakdown of uncovered changed lines with affected symbols. Use before committing to ensure new/modified code is tested.
 
-Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:861`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L861).
+Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:890`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L890).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -779,7 +793,7 @@ Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_reg
 
 Extract the field-level type schema from a Python class (Pydantic BaseModel, dataclass, TypedDict) or TypeScript interface/type alias. Returns field names, types, optionality, and defaults. Use this to inspect a type's contract before comparing with contract_drift or check_api_contracts.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:883`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L883).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:912`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L912).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -789,7 +803,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Check type contracts between API producers and consumers across projects. For each API endpoint, extracts the return type schema and compares it with consumer-side types. Detects missing fields, type mismatches, and optionality drift. Returns: contracts checked, mismatches found, and detailed per-endpoint breakdown.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:903`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L903).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:932`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L932).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -800,7 +814,7 @@ Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_re
 
 Scan a project directory for all package manifest files and extract external dependencies with version constraints and pinned versions from lockfiles. Supports npm (package.json), Python (requirements.txt, pyproject.toml, Pipfile), Go (go.mod), Rust (Cargo.toml), Java (pom.xml, build.gradle), PHP (composer.json), Ruby (Gemfile), and Docker (Dockerfile). Returns: dependency inventory with ecosystem, scope, version, pinned version, and source file.
 
-Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:921`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L921).
+Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_registry/mcp_tools.py:950`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L950).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
@@ -810,7 +824,7 @@ Annotations: `readOnlyHint=true, openWorldHint=true`. Definition: [`src/tool_reg
 
 Detect type schema drift between projects. Finds classes/interfaces with the same name in different projects and compares their field schemas. Reports missing fields, type mismatches, and optionality differences. Use this to catch when a shared type definition diverges across projects.
 
-Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:943`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L943).
+Annotations: `readOnlyHint=true, openWorldHint=false`. Definition: [`src/tool_registry/mcp_tools.py:972`](https://github.com/flytohub/flyto-indexer/blob/main/src/tool_registry/mcp_tools.py#L972).
 
 | Input | Type | Required | Default / enum | Purpose |
 |---|---|---|---|---|
