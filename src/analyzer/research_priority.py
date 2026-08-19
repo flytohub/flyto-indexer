@@ -130,6 +130,7 @@ EVIDENCE_REACHABILITY = {
     "sink_with_file_source": 0.35,
     "sanitized_flow": 0.3,
     "sink_only_entry_point": 0.2,
+    "operator_input_and_sink": 0.15,
 }
 
 _EVIDENCE_REASON = {
@@ -142,8 +143,26 @@ _EVIDENCE_REASON = {
         "dangerous sink here, untrusted input enters elsewhere in this file — link NOT proven"
     ),
     "sink_only_entry_point": "dangerous sink in an indexed entry-point file — no input traced",
+    "operator_input_and_sink": (
+        "sink fed by operator input (argv / prompt), not a remote request — "
+        "only interesting under a local threat model"
+    ),
     "sanitized_flow": "sanitizer claimed on this flow — verify it covers this sink",
 }
+
+#: Sink patterns that only mean anything in JavaScript. The rule tables are
+#: shared across languages, so scanning Python source text for them matched
+#: JS written inside Python string literals (gradio ships `.innerHTML = ...`
+#: inside template strings) and produced XSS leads in .py files.
+_JS_ONLY_SINKS = frozenset({
+    ".innerHTML", "document.write(", "v-html", ".outerHTML",
+    "insertAdjacentHTML(", "dangerouslySetInnerHTML",
+})
+
+#: Sources supplied by whoever runs the program, not by a remote attacker.
+#: They are real sources for a CLI threat model and stay in the list, but a
+#: lead built on them must not outrank one built on a request.
+_OPERATOR_SOURCES = ("input(", "sys.argv", "argparse", "click.prompt(")
 
 #: Files parsed by the unproven pass before it stops. The pass is a second
 #: read of the tree; this keeps it proportional to the taint scan itself.
@@ -536,6 +555,31 @@ def _build_reasons(candidate: ResearchCandidate, churn_commits: int | None) -> l
 # ── Unproven-evidence pass ──────────────────────────────────────────────────
 
 
+def _is_attack_surface(rel_path: str) -> bool:
+    """False for demo, example, script and generated trees.
+
+    Ranking those next to library code is what buried gradio's real upload
+    path under nine demo apps and CLI helpers: an `open()` in `demo/` is not a
+    lead, it is sample code shipped for humans to read.
+    """
+    try:
+        try:
+            from ..profile.filesystem import classify_path
+        except ImportError:  # pragma: no cover - flat-layout fallback
+            from profile.filesystem import classify_path  # type: ignore
+        if classify_path(rel_path) != "source":
+            return False
+    except Exception:  # pragma: no cover - defensive
+        pass
+    head = rel_path.split("/", 1)[0].lower()
+    return head not in {"scripts", "script", "tools", "bin", "docs", "benchmarks"}
+
+
+def _is_operator_source(source_expr: str) -> bool:
+    """True when the input comes from whoever runs the program."""
+    return any(marker in source_expr for marker in _OPERATOR_SOURCES)
+
+
 def _rule_tables(project_root: Path):
     """Sources / sinks / sanitizers, with the project's own YAML rules merged.
 
@@ -553,7 +597,36 @@ def _rule_tables(project_root: Path):
             )
     except Exception:  # pragma: no cover - defensive, rules are optional
         pass
+    flat_sinks = [entry for entry in flat_sinks if entry[0] not in _JS_ONLY_SINKS]
     return sources.get("python", []), flat_sinks, [s[0] for s in sanitizers]
+
+
+def _sink_present(text: str, pattern: str) -> bool:
+    """Substring match on a token boundary.
+
+    A bare `pattern in text` made `exec(` match `create_subprocess_exec(` and
+    `Template(` match `ResourceTemplate(`.
+    """
+    start = 0
+    while True:
+        idx = text.find(pattern, start)
+        if idx < 0:
+            return False
+        start = idx + 1
+        if idx > 0 and not pattern.startswith("."):
+            prev = text[idx - 1]
+            if prev.isalnum() or prev == "_":
+                continue
+        # `.raw` must not match `.rawtext`; a pattern ending in `(` is already
+        # delimited and is followed by its arguments.
+        end = idx + len(pattern)
+        if (
+            (pattern[-1].isalnum() or pattern[-1] == "_")
+            and end < len(text)
+            and (text[end].isalnum() or text[end] == "_")
+        ):
+            continue
+        return True
 
 
 def _worst_sink(text: str, flat_sinks) -> tuple[str, str, str] | None:
@@ -561,7 +634,7 @@ def _worst_sink(text: str, flat_sinks) -> tuple[str, str, str] | None:
     best = None
     best_rank = -1.0
     for pattern, category, severity, _rec in flat_sinks:
-        if pattern not in text:
+        if not _sink_present(text, pattern):
             continue
         rank = _SEVERITY_VALUE.get(severity, 0.3)
         if rank > best_rank:
@@ -671,7 +744,12 @@ def _unproven_seeds(
             rel = _normalize(str(path.relative_to(project_root)))
         except ValueError:  # pragma: no cover - defensive
             continue
-        if SKIP_DIR_PATTERNS.search(rel) or _is_hidden_path(rel) or _is_test_file(rel):
+        if (
+            SKIP_DIR_PATTERNS.search(rel)
+            or _is_hidden_path(rel)
+            or _is_test_file(rel)
+            or not _is_attack_surface(rel)
+        ):
             continue
         try:
             content = path.read_text(encoding="utf-8", errors="ignore")
@@ -710,10 +788,18 @@ def _unproven_seeds(
 
             func_source = _first_present(body, source_patterns)
             if func_source:
-                evidence = "source_and_sink_same_function"
+                evidence = (
+                    "operator_input_and_sink"
+                    if _is_operator_source(func_source)
+                    else "source_and_sink_same_function"
+                )
                 source_expr = func_source
             elif file_source:
-                evidence = "sink_with_file_source"
+                evidence = (
+                    "operator_input_and_sink"
+                    if _is_operator_source(file_source)
+                    else "sink_with_file_source"
+                )
                 source_expr = file_source
             elif rel in entry_files:
                 evidence = "sink_only_entry_point"

@@ -760,11 +760,18 @@ class TaintAnalyzer:
             match_pat = pattern.rstrip("(")
             if match_pat not in call_str:
                 continue
-            # Avoid partial matches: "exec" should not match "execute"
+            # Avoid partial matches at either end. The right-hand guard alone
+            # let "exec(" match "create_subprocess_exec(" and "Template("
+            # match "ResourceTemplate(" — a whole false-positive class on real
+            # projects.
             idx = call_str.find(match_pat)
             end_idx = idx + len(match_pat)
             if end_idx < len(call_str) and call_str[end_idx].isalnum():
                 continue
+            if idx > 0 and not match_pat.startswith("."):
+                prev = call_str[idx - 1]
+                if prev.isalnum() or prev == "_":
+                    continue
 
             # subprocess.* is only an RCE sink in this AST pass when shell=True.
             # Arg-list subprocess usage is handled as safe by default; shell=True

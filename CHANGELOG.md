@@ -13,12 +13,25 @@
 ## Unreleased
 
 ### Changed
+- Scoped research-priority ranking to the attack surface after a run against a
+  real 117k-line project (gradio) put nine demo apps, CLI helpers and dev
+  scripts in its top twenty. Demo, example, script, docs and generated trees no
+  longer seed unproven leads, and a sink fed by operator input (argv, prompt)
+  is labelled `operator_input_and_sink` and ranks below one fed by a request
+  rather than competing with it.
 - Moved git log plumbing (`find_git_root`, `run_git`, the two log parsers and
   the TTL-cached log reader) from `tools/git_intel.py` to `src/git_history.py`
   so analyzers can share it without importing the tool surface. `git_intel`
   keeps its private names and public behavior.
 
 ### Fixed
+- Required sink patterns to match on a token boundary at both ends. The
+  right-hand guard alone let `exec(` match `create_subprocess_exec(` and
+  `Template(` match `ResourceTemplate(`, which produced critical-severity RCE
+  and SSTI leads out of ordinary async and MCP code.
+- Stopped applying JavaScript-only sinks (`.innerHTML`, `document.write(`,
+  `v-html`) to Python source text. The rule tables are shared across languages,
+  so JS written inside Python string literals was reported as XSS in .py files.
 - Restored cross-project taint recall. The engine reported zero source-to-sink
   flows on every real project in the workspace while still reporting large
   source and sink counts. Four causes: the 1000-function cap counted across the

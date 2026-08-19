@@ -11,10 +11,12 @@ from src.analyzer.research_priority import (
     EVIDENCE_REACHABILITY,
     ResearchCandidate,
     _has_dynamic_sql,
+    _is_attack_surface,
     _is_hidden_path,
     _looks_like_sql,
     _normalize,
     _score_candidate,
+    _sink_present,
     rank_research_priority,
 )
 
@@ -374,3 +376,113 @@ class TestToolAdapter:
 
         assert "research_priority" in focus
         assert len(SMART_TOOLS) == 20
+
+
+# ── Precision fixes found by scanning a real project ────────────────────────
+
+
+class TestSinkTokenBoundary:
+    """`exec(` must not match `create_subprocess_exec(`."""
+
+    @pytest.mark.parametrize("text,pattern,expected", [
+        ("os.system(cmd)", "os.system(", True),
+        ("await asyncio.create_subprocess_exec(*cmd)", "exec(", False),
+        ("exec(payload)", "exec(", True),
+        ("types.ResourceTemplate(uri)", "Template(", False),
+        ("Template(source).render(x)", "Template(", True),
+        ("el.innerHTML = x", ".innerHTML", True),
+    ])
+    def test_boundary(self, text, pattern, expected):
+        assert _sink_present(text, pattern) is expected
+
+    def test_subprocess_exec_is_not_an_rce_lead(self, project):
+        _write(project, "media.py", """\
+            import asyncio
+            from flask import request
+
+            def read_input():
+                return request.args.get("f")
+
+            async def convert(path):
+                await asyncio.create_subprocess_exec("ffmpeg", "-i", path)
+        """)
+        report = rank_research_priority(project)
+
+        assert not [c for c in report.candidates if c.category == "rce"]
+
+
+class TestAttackSurfaceScoping:
+    @pytest.mark.parametrize("path,expected", [
+        ("gradio/routes.py", True),
+        ("demo/gif_maker/run.py", False),
+        ("examples/basic/app.py", False),
+        ("scripts/profile/analyze.py", False),
+        ("docs/conf.py", False),
+        ("src/app/handlers.py", True),
+    ])
+    def test_is_attack_surface(self, path, expected):
+        assert _is_attack_surface(path) is expected
+
+    def test_demo_code_does_not_crowd_out_library_code(self, project):
+        lead = """\
+            from flask import request
+            import subprocess
+
+            def read_input():
+                return request.args.get("host")
+
+            def ping(target):
+                subprocess.run("ping " + target, shell=True)
+        """
+        _write(project, "app/service.py", lead)
+        for i in range(5):
+            _write(project, f"demo/sample{i}/run.py", lead)
+        report = rank_research_priority(project)
+
+        assert [c.file for c in report.candidates] == ["app/service.py"]
+
+
+class TestOperatorInputTier:
+    def test_argv_fed_sink_is_labelled_and_outranked(self, project):
+        _write(project, "web.py", """\
+            from flask import request
+            import subprocess
+
+            def read_input():
+                return request.args.get("host")
+
+            def ping(target):
+                subprocess.run("ping " + target, shell=True)
+        """)
+        _write(project, "cli.py", """\
+            import subprocess
+            import sys
+
+            def read_args():
+                return sys.argv[1]
+
+            def deploy(target):
+                subprocess.run("deploy " + target, shell=True)
+        """)
+        report = rank_research_priority(project)
+        by_file = {c.file: c for c in report.candidates}
+
+        assert by_file["cli.py"].evidence == "operator_input_and_sink"
+        assert any("not a remote request" in r for r in by_file["cli.py"].reasons)
+        assert by_file["web.py"].score > by_file["cli.py"].score
+
+
+class TestJavaScriptSinksInPython:
+    def test_innerhtml_in_a_python_string_is_not_an_xss_lead(self, project):
+        _write(project, "page.py", """\
+            from flask import request
+
+            def read_input():
+                return request.args.get("q")
+
+            def render(value):
+                return f"<script>el.innerHTML = '{value}'</script>"
+        """)
+        report = rank_research_priority(project)
+
+        assert not [c for c in report.candidates if c.category == "xss"]
