@@ -32,6 +32,10 @@
   diff coverage applies only to targets newly added by the latest amendment.
   Scope shrinkage, unplanned diffs, chain integrity, and bounded requirement
   sanitization continue to fail closed independently.
+- Intent ledgers now emit their own `intent-ledger.v1` schema label while
+  instruction context remains `task-context.v1`. Amendment planning accepts
+  the historical ledger label only as a transition-compatible parent, and
+  compound successors explicitly mirror the immutable root intent.
 - A task-plan-only recovery request can bind one exact parent contract to an
   audited prior implementation scope and explicit successor targets. The
   producer derives normalization itself, drops a historical fuzzy label only

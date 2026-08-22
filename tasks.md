@@ -15,6 +15,8 @@
 
 ## Done
 
+- Restored parent-proof-compatible task amendments across legacy ledger labels
+  and compound successor profiles.
 - Fixed dotted module IDs being misclassified as required diff paths by the
   task intent ledger.
 - Bootstrapped project memory skeleton and lint gate.

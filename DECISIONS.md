@@ -1,5 +1,19 @@
 # Decisions
 
+## 2026-08-22 - Amendment successors preserve schema and intent identity
+
+Decision: emit `intent-ledger.v1` for new intent ledgers, keep instruction
+context on `task-context.v1`, and accept the former shared ledger label only
+when reading an existing parent contract. Finalization pins the root intent on
+every amendment successor, including compound plans whose analyzer profile
+otherwise exposes only `original_intent`.
+
+Reason: first-round plans did not compare the two context schemas, so the
+shared label and missing compound intent remained latent until an audited
+rework attempted parent-proof validation. The producer must emit the canonical
+contract and preserve immutable identity; consumers should not have to weaken
+digest, path, chain, or fingerprint checks to make rework usable.
+
 ## 2026-08-14 - Recovery authority is proof-bound and producer-derived
 
 Decision: expose recovery only on `task plan` as an exact content-bound

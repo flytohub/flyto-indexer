@@ -23,6 +23,10 @@
   `undo_vibe_edit` path traversal, with demo and operator-fed flows demoted.
 
 ### Fixed
+- Restored multi-round task-plan interoperability by emitting the intent ledger
+  as `intent-ledger.v1`, retaining the legacy `task-context.v1` ledger label as
+  a read-compatible parent during transition, and pinning the immutable root
+  intent when compound analysis produces an amendment successor.
 - Stopped the non-Python regex taint pass from mining generated and vendored
   bundles. gogs's only two findings were `jquery.min.js` and `mermaid.min.js`:
   one line of a minified bundle is tens of thousands of characters, so a

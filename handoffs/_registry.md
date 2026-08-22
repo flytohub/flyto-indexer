@@ -2,6 +2,7 @@
 
 | Date | Topic | File | Status |
 | --- | --- | --- | --- |
+| 2026-08-22 | Task amendment ledger and intent parity | `2026-08-22-plan-ledger-parity.md` | Regression fixed; verification recorded in handoff |
 | 2026-08-19 | Security triage handoff for code & engine | `2026-08-19-security-triage-for-code-and-engine.md` | Capability + disclosure discipline handed off |
 | 2026-08-19 | External project evaluation (gradio) | `2026-08-19-external-project-evaluation.md` | Measured; 3 precision fixes shipped; 1 finding pending disclosure |
 | 2026-08-19 | Taint recall and callee resolution | `2026-08-19-taint-recall-and-callee-resolution.md` | Local gates passed; LSP branch unexercised |

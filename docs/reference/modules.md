@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **186 Python modules**, **78,501 lines**, and **2,409 class/function/method declarations**.
+Generated inventory: **186 Python modules**, **78,512 lines**, and **2,409 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -180,9 +180,9 @@ Generated inventory: **186 Python modules**, **78,501 lines**, and **2,409 class
 | [`src/tools/search.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/search.py#L1) | 712 | 18 | `bm25, importlib, index_store, re, synonyms` | Search tools for flyto-indexer MCP server. |
 | [`src/tools/smart.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/smart.py#L1) | 1564 | 67 | `analyzer, change_patterns, code_info, context_budget, conventions, coverage_intel, data_flow, dependency_scanner, diff_impact, git_intel, grill, index_store` | Smart tools — 5 consolidated entry points with association-based triggering. |
 | [`src/tools/staleness.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/staleness.py#L1) | 215 | 4 | `datetime, git_intel, index_store, logging, os, subprocess, tools, typing` | Staleness detection — identify stale but heavily-referenced symbols via git. |
-| [`src/tools/task_amendment.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_amendment.py#L1) | 1155 | 25 | `__future__, grill_evidence, hashlib, pathlib, typing` | Cumulative plan amendments on one immutable root task identity. |
+| [`src/tools/task_amendment.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_amendment.py#L1) | 1165 | 25 | `__future__, grill_evidence, hashlib, pathlib, typing` | Cumulative plan amendments on one immutable root task identity. |
 | [`src/tools/task_analysis.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_analysis.py#L1) | 2023 | 35 | `code_info, datetime, governance, hashlib, index_store, pathlib, quality, references, search, time, tools, typing` | Task Analysis — multi-dimensional task contract generation. |
-| [`src/tools/task_context.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_context.py#L1) | 1356 | 42 | `__future__, fnmatch, governance, grill_conformance, grill_evidence, hashlib, json, pathlib, re, task_amendment, typing` | Lean task context: scoped instructions and requirement traceability. |
+| [`src/tools/task_context.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_context.py#L1) | 1357 | 42 | `__future__, fnmatch, governance, grill_conformance, grill_evidence, hashlib, json, pathlib, re, task_amendment, typing` | Lean task context: scoped instructions and requirement traceability. |
 | [`src/tools/task_parent_recovery.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_parent_recovery.py#L1) | 725 | 23 | `__future__, json, pathlib, task_recovery_evidence, typing` | Proof-bound recovery of one historical task parent's edit authority. |
 | [`src/tools/task_recovery_evidence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_recovery_evidence.py#L1) | 634 | 29 | `__future__, hashlib, json, typing` | Strict JSON digests and schema validation for task recovery evidence. |
 | [`src/tools/trace.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/trace.py#L1) | 233 | 7 | `collections, index_store, logging, typing` | Call path tracing — find execution paths through the call graph. |

@@ -13,6 +13,7 @@ from src.tools.task_amendment import (
     MAX_AMENDMENT_CHAIN,
     MAX_AMENDMENT_TARGETS,
     build_amendment_request,
+    finalize_amended_contract,
     parent_contract_digest,
     validate_amendment_state,
 )
@@ -77,6 +78,8 @@ def test_plan_without_parent_keeps_legacy_shape(repo: Path) -> None:
 
     assert "task_amendment" not in contract
     assert "amendment_requirements" not in contract["intent_ledger"]
+    assert contract["intent_ledger"]["version"] == "intent-ledger.v1"
+    assert contract["instruction_context"]["version"] == "task-context.v1"
     assert contract["intent_ledger"]["allowed_paths"] == ["alpha.py"]
     assert "root_task_id" not in contract["task_profile"]
 
@@ -142,6 +145,46 @@ def test_first_amendment_unions_scope_on_the_same_root(repo: Path) -> None:
         amended["task_profile"]["intent_fingerprint"]
         == amended["intent_ledger"]["fingerprint"]
     )
+
+
+def test_compound_amendment_preserves_root_intent_mirror(repo: Path) -> None:
+    root = _plan(repo, "Refactor alpha", ["alpha.py"])
+    request = build_amendment_request(
+        root,
+        project=str(repo),
+        description="Repair beta",
+        targets=["beta.py"],
+    )
+    assert request["pass"] is True
+
+    # Mixed-intent analysis exposes only ``original_intent`` at the compound
+    # root. Finalization must restore the canonical immutable intent mirror
+    # expected by downstream parent-proof validation.
+    compound = {
+        "task_profile": {
+            "version": "task-contract.v2",
+            "original_intent": request["intent"],
+            "project": str(repo),
+        },
+        "sub_tasks": [],
+    }
+
+    amended = finalize_amended_contract(compound, request)
+
+    assert amended["task_profile"]["intent"] == root["task_profile"]["intent"]
+    assert amended["task_profile"]["original_intent"] == request["intent"]
+
+
+def test_amendment_accepts_legacy_ledger_version_during_transition(
+    repo: Path,
+) -> None:
+    root = _plan(repo, "Refactor alpha", ["alpha.py"])
+    root["intent_ledger"]["version"] = "task-context.v1"
+
+    amended = _plan(repo, "Also touch beta", ["beta.py"], root)
+
+    assert amended["task_amendment"]["status"] == "amended"
+    assert amended["intent_ledger"]["version"] == "intent-ledger.v1"
 
 
 def test_second_amendment_stays_on_the_same_root_and_objective(repo: Path) -> None:

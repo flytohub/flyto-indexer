@@ -40,6 +40,11 @@ HTTP references.
    successor resolution row is confined to its exact project and plan input.
    Strict canonical digests bind the raw parent, normalized authority,
    executable successor, and emitted evidence.
+   Intent-ledger and instruction-context payloads have distinct version labels:
+   new ledgers emit `intent-ledger.v1`, while instructions remain
+   `task-context.v1`. Amendment reads retain the former shared label only for
+   existing parent contracts; every new successor emits the canonical ledger
+   label and mirrors the root intent even when analysis becomes compound.
    Orchestration job, session, mission, and retry state remain outside the
    public Indexer contract.
 4. Verify combines index integrity, context lookup, impact closure, secret

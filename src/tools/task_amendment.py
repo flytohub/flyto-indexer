@@ -53,7 +53,10 @@ AMENDMENT_VERSION = "task-amendment.v1"
 # version is a hard refusal, never a best-effort parse.
 SUPPORTED_PARENT_CONTRACT_VERSIONS = frozenset({"task-contract.v2"})
 SUPPORTED_AMENDMENT_VERSIONS = frozenset({AMENDMENT_VERSION})
-SUPPORTED_CONTEXT_VERSIONS = frozenset({"task-context.v1"})
+SUPPORTED_LEDGER_VERSIONS = frozenset(
+    {"intent-ledger.v1", "task-context.v1"}
+)
+SUPPORTED_INSTRUCTION_VERSIONS = frozenset({"task-context.v1"})
 
 # Domain separation tags keep the three digest families from ever colliding.
 _PARENT_DIGEST_TAG = "task-amendment.parent.v1"
@@ -633,7 +636,7 @@ def _read_parent_state(parent: dict[str, Any]) -> tuple[dict[str, Any], list[str
     )
     if not ledger.get("fingerprint"):
         codes.append("AMENDMENT_PARENT_LEDGER_MISSING")
-    elif ledger.get("version") not in SUPPORTED_CONTEXT_VERSIONS:
+    elif ledger.get("version") not in SUPPORTED_LEDGER_VERSIONS:
         codes.append("AMENDMENT_PARENT_VERSION_UNSUPPORTED")
     elif _stored_fingerprint(ledger, _LEDGER_PAYLOAD_KEYS) != ledger.get("fingerprint"):
         # The recorded payload does not hash to the recorded fingerprint, so
@@ -641,7 +644,7 @@ def _read_parent_state(parent: dict[str, Any]) -> tuple[dict[str, Any], list[str
         codes.append("AMENDMENT_PARENT_LEDGER_TAMPERED")
     if not instruction.get("fingerprint"):
         codes.append("AMENDMENT_PARENT_INSTRUCTION_MISSING")
-    elif instruction.get("version") not in SUPPORTED_CONTEXT_VERSIONS:
+    elif instruction.get("version") not in SUPPORTED_INSTRUCTION_VERSIONS:
         codes.append("AMENDMENT_PARENT_VERSION_UNSUPPORTED")
     elif _stored_fingerprint(
         instruction, _INSTRUCTION_PAYLOAD_KEYS
@@ -1048,6 +1051,13 @@ def finalize_amended_contract(
     profile["root_task_id"] = request["root_task_id"]
     profile["description"] = request["objective"]
     profile["title"] = request["objective"][:120]
+    # A compound analysis records ``original_intent`` but has no root-level
+    # ``intent``.  Amendments still continue one immutable root intent, so pin
+    # its canonical mirror here just like the root task id and objective.
+    # Otherwise a mixed-intent rework successor is rejected by the consumer's
+    # parent-proof validation even though Indexer produced it from a valid
+    # parent contract.
+    profile["intent"] = request["intent"]
     profile["amendment_index"] = request["amendment_index"]
     profile["amendment_contract_id"] = request["contract_id"]
     # A run id belongs to the run that produced it, never to a successor.

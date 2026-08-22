@@ -17,6 +17,7 @@ from typing import Any, Iterable
 from .grill_evidence import resolve_project_root
 
 CONTEXT_VERSION = "task-context.v1"
+INTENT_LEDGER_VERSION = "intent-ledger.v1"
 MAX_INSTRUCTION_BYTES = 256 * 1024
 MAX_SPEC_BYTES = 512 * 1024
 MAX_INSTRUCTION_FILES = 24
@@ -902,7 +903,7 @@ def build_intent_ledger(
     amendments = _sanitize_amendment_requirements(amendment_requirements)
     if root is None:
         return {
-            "version": CONTEXT_VERSION,
+            "version": INTENT_LEDGER_VERSION,
             "status": "unavailable",
             "description": description,
             "targets": target_inputs,
@@ -959,7 +960,7 @@ def build_intent_ledger(
     if amendments:
         payload["amendment_requirements"] = amendments
     return {
-        "version": CONTEXT_VERSION,
+        "version": INTENT_LEDGER_VERSION,
         "status": "blocked" if orphan_ids else "ready",
         **payload,
         "orphan_requirements": orphan_ids,
