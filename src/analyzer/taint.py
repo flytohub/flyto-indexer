@@ -81,6 +81,11 @@ def _is_generated_asset(rel_path: str) -> bool:
     would otherwise mine for noise.
     """
     parts = [part.lower() for part in rel_path.split("/")]
+    if any(
+        parts[index:index + 2] == ["static", "assets"]
+        for index in range(len(parts) - 1)
+    ):
+        return True
     if {"vendor", "vendors", "third_party", "thirdparty", "bundle", "bundles"} & set(parts[:-1]):
         return True
     try:

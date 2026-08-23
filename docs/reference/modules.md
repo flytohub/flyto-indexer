@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **186 Python modules**, **78,512 lines**, and **2,409 class/function/method declarations**.
+Generated inventory: **186 Python modules**, **78,522 lines**, and **2,409 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -56,7 +56,7 @@ Generated inventory: **186 Python modules**, **78,512 lines**, and **2,409 class
 | [`src/analyzer/rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/rules.py#L1) | 485 | 16 | `dataclasses, datetime, fnmatch, layers, logging, pathlib, re, yaml` | Project rules engine — loads .flyto-rules.yaml and checks compliance. |
 | [`src/analyzer/security.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/security.py#L1) | 580 | 20 | `ast, dataclasses, pathlib, re, rule_loader` | Security scanning - detect potential security issues |
 | [`src/analyzer/stale_files.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/stale_files.py#L1) | 216 | 11 | `collections, dataclasses, datetime, pathlib, subprocess` | Stale file detection - use git history to find files untouched for a long time |
-| [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 2204 | 57 | `analyzer, ast, collections, dataclasses, finding_identity, logging, pathlib, profile, re, taint_lsp, taint_rules, type_filter` | AST-based taint analysis engine. |
+| [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 2209 | 57 | `analyzer, ast, collections, dataclasses, finding_identity, logging, pathlib, profile, re, taint_lsp, taint_rules, type_filter` | AST-based taint analysis engine. |
 | [`src/analyzer/taint_dsl.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L1) | 211 | 9 | `logging, pathlib, yaml` | Taint DSL — read/write helpers for the `taint:` block in .flyto-rules.yaml. |
 | [`src/analyzer/taint_lsp.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_lsp.py#L1) | 203 | 7 | `__future__, ast, logging, lsp, os, pathlib, typing` | Type-aware callee verification for the cross-function taint pass. |
 | [`src/analyzer/taint_rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_rules.py#L1) | 558 | 0 | `none` | Default taint analysis rules — sources, sinks, and sanitizers by language. |
@@ -88,7 +88,7 @@ Generated inventory: **186 Python modules**, **78,512 lines**, and **2,409 class
 | [`src/iac_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/iac_scanner.py#L1) | 923 | 20 | `dataclasses, finding_identity, logging, os, pathlib, re, typing` | IaC Scanner — security checks for Terraform, Kubernetes, Docker Compose configs. |
 | [`src/index_store.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/index_store.py#L1) | 952 | 37 | `bm25, contextlib, dataclasses, gzip, hashlib, json, logging, lsp, os, pathlib, re, safe_io` | Index store — centralized index loading, caching, and content management. |
 | [`src/indexer/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/indexer/__init__.py#L1) | 19 | 0 | `incremental` | Indexer module exports. |
-| [`src/indexer/incremental.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/indexer/incremental.py#L1) | 441 | 28 | `dataclasses, hashlib, json, models, os, pathlib, safe_io, typing` | Incremental indexing - only update what changed. |
+| [`src/indexer/incremental.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/indexer/incremental.py#L1) | 446 | 28 | `dataclasses, hashlib, json, models, os, pathlib, safe_io, typing` | Incremental indexing - only update what changed. |
 | [`src/license_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/license_scanner.py#L1) | 372 | 11 | `dataclasses, dependency_scanner, json, logging, os, pathlib, re, rule_loader, tomli, tomllib, typing` | License Scanner — detect project license and dependency licenses. |
 | [`src/lsp/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/lsp/__init__.py#L1) | 29 | 0 | `cache, call_graph, manager, resolver, workspace_symbols` | LSP integration for flyto-indexer — optional type-aware code intelligence. |
 | [`src/lsp/cache.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/lsp/cache.py#L1) | 82 | 10 | `dataclasses, logging, os, pathlib, typing` | LSP response cache — mtime-keyed, session-scoped. |
