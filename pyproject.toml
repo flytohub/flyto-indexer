@@ -36,7 +36,7 @@ dev = [
     "pytest-cov>=7.1.0",
     "hypothesis>=6.0",
     "ruff==0.16.3",
-    "mypy==2.3.0",
+    "mypy==2.3.1",
     "tomli>=2.0.0; python_version < '3.11'",
 ]
 test-evidence = [
