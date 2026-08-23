@@ -17,7 +17,7 @@ version: flyto.coding-config.v1
 # generated-reference check below.
 actions:
   - name: generate_reference
-    argv: [python, scripts/generate-reference.py]
+    argv: [.venv/bin/python, scripts/generate-reference.py]
     timeout_seconds: 300
     description: Rewrite generated reference docs from the current Indexer source.
 
@@ -27,27 +27,27 @@ checks:
     timeout_seconds: 120
     required: true
   - name: version-metadata
-    argv: [python, scripts/sync-version.py, --check]
+    argv: [.venv/bin/python, scripts/sync-version.py, --check]
     timeout_seconds: 120
     required: true
   - name: generated-reference
-    argv: [python, scripts/generate-reference.py, --check]
+    argv: [.venv/bin/python, scripts/generate-reference.py, --check]
     timeout_seconds: 300
     required: true
   - name: language-evidence
-    argv: [python, scripts/check_language_evidence.py, --check]
+    argv: [.venv/bin/python, scripts/check_language_evidence.py, --check]
     timeout_seconds: 120
     required: true
   - name: quality-debt
-    argv: [python, scripts/check_quality_debt.py]
+    argv: [.venv/bin/python, scripts/check_quality_debt.py]
     timeout_seconds: 300
     required: true
   - name: fatal-lint
-    argv: [ruff, check, ., --select, "E9,F63,F7,F82"]
+    argv: [.venv/bin/python, -m, ruff, check, ., --select, "E9,F63,F7,F82"]
     timeout_seconds: 300
     required: true
   - name: tests
-    argv: [bash, scripts/test_fast.sh]
+    argv: [.venv/bin/python, -m, pytest, -q, -m, "not slow", --timeout=60, --timeout-method=thread]
     timeout_seconds: 900
     required: true
 

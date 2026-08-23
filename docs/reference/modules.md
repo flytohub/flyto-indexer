@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **186 Python modules**, **78,522 lines**, and **2,409 class/function/method declarations**.
+Generated inventory: **186 Python modules**, **78,567 lines**, and **2,411 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -187,7 +187,7 @@ Generated inventory: **186 Python modules**, **78,522 lines**, and **2,409 class
 | [`src/tools/task_recovery_evidence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/task_recovery_evidence.py#L1) | 634 | 29 | `__future__, hashlib, json, typing` | Strict JSON digests and schema validation for task recovery evidence. |
 | [`src/tools/trace.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/trace.py#L1) | 233 | 7 | `collections, index_store, logging, typing` | Call path tracing — find execution paths through the call graph. |
 | [`src/tools/type_contracts.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/type_contracts.py#L1) | 1099 | 26 | `ast, index_store, re, typing` | Cross-repo Type Contract checking for flyto-indexer MCP server. |
-| [`src/tools/validation.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L1) | 288 | 5 | `index_store, os, pathlib, re, shlex, subprocess, sys` | Post-change validation — run ruff (lint) and pytest on a project. |
+| [`src/tools/validation.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L1) | 333 | 7 | `index_store, os, pathlib, re, shlex, subprocess, sys` | Post-change validation — run ruff (lint) and pytest on a project. |
 | [`src/tree_sitter_adapter.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tree_sitter_adapter.py#L1) | 216 | 10 | `__future__, hashlib, importlib, json, os, pathlib, typing` | Optional Tree-sitter structural validation with deterministic fallback. |
 | [`src/verify.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/verify.py#L1) | 3303 | 126 | `__future__, analyzer, ast, doc_scanner, engine, finding_identity, fnmatch, hashlib, html, index_store, json, mcp_server` | Self-contained verification gate for flyto-indexer. |
 | [`src/version.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/version.py#L1) | 25 | 1 | `importlib, pathlib, tomllib` | Resolve the Flyto2 Indexer package version in source and installed modes. |

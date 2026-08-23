@@ -1,5 +1,29 @@
 # Decisions
 
+## 2026-08-24 - Post-change lint uses the target project's toolchain
+
+Decision: prefer a launchable Python at the exact repository-contained
+conventional `.venv` location and invoke Ruff through fixed `-m ruff check`
+arguments. Require the virtual-environment directory to resolve inside the
+repository while allowing its final Python executable to follow the normal
+symlink chain to a base interpreter. Fall back to the existing bounded
+ambient/runtime candidates only when the preferred executable or module is
+unavailable, never after it returns a real lint failure. Report the selected
+tool source and exact argv. Governed checks use the prepared repository venv
+rather than interpreter or Ruff resolution from ambient PATH.
+
+Reason: an ambient Ruff version can enforce rules absent from the target
+repository's declared toolchain and create a false post-validation failure.
+Project-owned lint policy must be authoritative without allowing repository
+escape, shell parsing, arbitrary caller arguments, or a fallback that weakens
+a genuine failure.
+
+The source-owned coding contract cannot rewrite a command already frozen by an
+in-flight job. Therefore `scripts/test_fast.sh` also owns interpreter
+selection: repository venv first, then supported Python 3 ambient candidates,
+with an explicit failure below Python 3.11. This keeps old frozen jobs and new
+direct contracts on the same supported runtime.
+
 ## 2026-08-24 - Static production chunks are generated evidence, not source
 
 Decision: exclude the exact `static/assets` path sequence from symbol indexing

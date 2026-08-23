@@ -2,6 +2,7 @@
 
 import os
 import sys
+import venv
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -26,6 +27,165 @@ def test_run_ruff_defaults_to_repository_wide(monkeypatch, tmp_path):
     assert result["scope"] == "repository"
     assert result["targets"] == ["."]
     assert captured["cmd"] == ["ruff", "check", "."]
+    assert result["tool"] == "ambient_path"
+    assert result["command"] == captured["cmd"]
+
+
+def test_run_ruff_prefers_project_venv_over_incompatible_ambient(
+    monkeypatch,
+    tmp_path,
+):
+    project_python = tmp_path / ".venv" / "bin" / "python"
+    project_python.parent.mkdir(parents=True)
+    project_python.write_text("", encoding="utf-8")
+    project_python.chmod(0o755)
+    calls = []
+
+    def fake_run(cmd, cwd, capture_output, text, timeout):
+        calls.append(cmd)
+        if cmd[0] == "ruff":
+            raise AssertionError("ambient Ruff must not run after project Ruff passes")
+        return SimpleNamespace(returncode=0, stdout="All checks passed!", stderr="")
+
+    monkeypatch.setattr(validation.subprocess, "run", fake_run)
+
+    result = validation._run_ruff(str(tmp_path))
+
+    expected = [str(project_python), "-m", "ruff", "check", "."]
+    assert calls == [expected]
+    assert result["status"] == "pass"
+    assert result["tool"] == "project_venv"
+    assert result["command"] == expected
+
+
+def test_run_ruff_does_not_fallback_after_project_lint_failure(
+    monkeypatch,
+    tmp_path,
+):
+    project_python = tmp_path / ".venv" / "bin" / "python"
+    project_python.parent.mkdir(parents=True)
+    project_python.write_text("", encoding="utf-8")
+    project_python.chmod(0o755)
+    calls = []
+
+    def fake_run(cmd, cwd, capture_output, text, timeout):
+        calls.append(cmd)
+        return SimpleNamespace(
+            returncode=1,
+            stdout="src/app.py:1:1: F401 unused import\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(validation.subprocess, "run", fake_run)
+
+    result = validation._run_ruff(str(tmp_path))
+
+    assert len(calls) == 1
+    assert result["status"] == "fail"
+    assert result["errors"] == 1
+    assert result["tool"] == "project_venv"
+
+
+def test_run_ruff_falls_back_when_project_ruff_module_is_unavailable(
+    monkeypatch,
+    tmp_path,
+):
+    project_python = tmp_path / ".venv" / "bin" / "python"
+    project_python.parent.mkdir(parents=True)
+    project_python.write_text("", encoding="utf-8")
+    project_python.chmod(0o755)
+    calls = []
+
+    def fake_run(cmd, cwd, capture_output, text, timeout):
+        calls.append(cmd)
+        if cmd[0] == str(project_python):
+            return SimpleNamespace(
+                returncode=1,
+                stdout="",
+                stderr=f"{project_python}: No module named ruff\n",
+            )
+        return SimpleNamespace(returncode=0, stdout="All checks passed!", stderr="")
+
+    monkeypatch.setattr(validation.subprocess, "run", fake_run)
+
+    result = validation._run_ruff(str(tmp_path), ["."])
+
+    assert calls == [
+        [str(project_python), "-m", "ruff", "check", "."],
+        ["ruff", "check", "."],
+    ]
+    assert result["status"] == "pass"
+    assert result["tool"] == "ambient_path"
+
+
+def test_project_ruff_command_allows_interpreter_symlink_chain(tmp_path):
+    outside = tmp_path.parent / "outside-python"
+    outside.write_text("", encoding="utf-8")
+    outside.chmod(0o755)
+    project_python = tmp_path / ".venv" / "bin" / "python"
+    project_python.parent.mkdir(parents=True)
+    project_python.symlink_to(outside)
+
+    assert validation._project_ruff_command(str(tmp_path)) == [
+        str(project_python),
+        "-m",
+        "ruff",
+    ]
+
+
+def test_project_ruff_command_rejects_venv_directory_escape(tmp_path):
+    outside_venv = tmp_path.parent / "outside-venv"
+    outside_bin = outside_venv / "bin"
+    outside_bin.mkdir(parents=True)
+    outside_python = outside_bin / "python"
+    outside_python.write_text("", encoding="utf-8")
+    outside_python.chmod(0o755)
+    (tmp_path / ".venv").symlink_to(outside_venv, target_is_directory=True)
+
+    assert validation._project_ruff_command(str(tmp_path)) is None
+
+
+def test_real_project_ruff_failure_does_not_launch_ambient_fallback(
+    monkeypatch,
+    tmp_path,
+):
+    project_venv = tmp_path / ".venv"
+    venv.EnvBuilder(with_pip=False).create(project_venv)
+    project_python = project_venv / "bin" / "python"
+    site_packages = next((project_venv / "lib").glob("python*/site-packages"))
+    ruff_package = site_packages / "ruff"
+    ruff_package.mkdir()
+    (ruff_package / "__init__.py").write_text("", encoding="utf-8")
+    (ruff_package / "__main__.py").write_text(
+        "import sys\n"
+        "print('src/app.py:1:1: F401 real local failure')\n"
+        "raise SystemExit(1)\n",
+        encoding="utf-8",
+    )
+    ambient_bin = tmp_path / "ambient-bin"
+    ambient_bin.mkdir()
+    ambient_marker = tmp_path / "ambient-ran"
+    ambient_ruff = ambient_bin / "ruff"
+    ambient_ruff.write_text(
+        f"#!/bin/sh\ntouch {ambient_marker}\nexit 0\n",
+        encoding="utf-8",
+    )
+    ambient_ruff.chmod(0o755)
+    monkeypatch.setenv("PATH", str(ambient_bin))
+
+    result = validation._run_ruff(str(tmp_path))
+
+    assert result["status"] == "fail"
+    assert result["errors"] == 1
+    assert result["tool"] == "project_venv"
+    assert result["command"] == [
+        str(project_python),
+        "-m",
+        "ruff",
+        "check",
+        ".",
+    ]
+    assert not ambient_marker.exists()
 
 
 def test_run_ruff_scopes_existing_python_targets_and_rejects_escape(

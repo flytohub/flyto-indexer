@@ -2,6 +2,19 @@
 
 ## Current State
 
+- Post-change Python lint resolves an executable, repository-contained
+  `.venv` interpreter location before ambient Ruff and records the exact argv
+  and tool source. A normal interpreter symlink chain may terminate at the base
+  Python while the `.venv` directory itself must remain contained. It falls
+  back only when that interpreter or its Ruff module is unavailable; a
+  project-owned lint failure remains authoritative. The governed coding
+  contract uses the prepared `.venv` for Python, Ruff, and tests. Task target
+  scoping and docs-only skipping are unchanged.
+- The frozen fast-test entrypoint independently prefers the repository venv,
+  accepts only Python 3.11 or newer, and fails with an explicit interpreter
+  diagnostic when neither the venv nor bounded ambient candidates qualify.
+  Its pytest marker, timeout policy, timeout method, and forwarded arguments
+  remain unchanged.
 - Symbol and taint scans share a generated-build boundary for
   `static/assets`. Framework bundles copied there for a static-file backend are
   skipped just like `dist`, `build`, and minified vendor assets; authored source

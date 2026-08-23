@@ -2,7 +2,7 @@
 
 # Python API Reference
 
-Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,409 declarations across 170 files**.
+Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,411 declarations across 170 files**.
 
 ## `analyze.py`
 
@@ -3093,11 +3093,13 @@ Every declared class, function, nested function, and method in the package, supp
 
 | Kind | Signature | Responsibility | Source |
 |---|---|---|---|
-| function | `def _pytest_timeout_seconds() -> int` | Return a bounded timeout suitable for full stress/subprocess suites. | [`src/tools/validation.py:26`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L26) |
-| function | `def _lint_targets(project_root: str, lint_paths: list&#91;str&#93;) -> list&#91;str&#93;` | Return existing in-project Python files/directories for a task lint. | [`src/tools/validation.py:36`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L36) |
-| function | `def _run_ruff(project_root: str, lint_paths: list&#91;str&#93; \| None=None) -> dict` | Run Ruff repository-wide or on one frozen task's Python targets. | [`src/tools/validation.py:63`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L63) |
-| function | `def _run_pytest(project_root: str, test_path: str=None) -> dict` | Run pytest on project root. | [`src/tools/validation.py:133`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L133) |
-| function | `def validate_changes(project: str=None, run_tests: bool=True, test_path: str=None, lint_paths: list&#91;str&#93; \| None=None) -> dict` | Run code quality checks (ruff) and tests (pytest) on a project. | [`src/tools/validation.py:204`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L204) |
+| function | `def _project_ruff_command(project_root: str) -> list&#91;str&#93; \| None` | Return a contained conventional project-venv Ruff command, if usable. | [`src/tools/validation.py:27`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L27) |
+| function | `def _ruff_module_unavailable(cmd: list&#91;str&#93;, proc: subprocess.CompletedProcess) -> bool` | Recognize only Python's explicit missing-Ruff-module failure. | [`src/tools/validation.py:46`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L46) |
+| function | `def _pytest_timeout_seconds() -> int` | Return a bounded timeout suitable for full stress/subprocess suites. | [`src/tools/validation.py:54`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L54) |
+| function | `def _lint_targets(project_root: str, lint_paths: list&#91;str&#93;) -> list&#91;str&#93;` | Return existing in-project Python files/directories for a task lint. | [`src/tools/validation.py:64`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L64) |
+| function | `def _run_ruff(project_root: str, lint_paths: list&#91;str&#93; \| None=None) -> dict` | Run Ruff repository-wide or on one frozen task's Python targets. | [`src/tools/validation.py:91`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L91) |
+| function | `def _run_pytest(project_root: str, test_path: str=None) -> dict` | Run pytest on project root. | [`src/tools/validation.py:178`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L178) |
+| function | `def validate_changes(project: str=None, run_tests: bool=True, test_path: str=None, lint_paths: list&#91;str&#93; \| None=None) -> dict` | Run code quality checks (ruff) and tests (pytest) on a project. | [`src/tools/validation.py:249`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/validation.py#L249) |
 
 ## `src/tree_sitter_adapter.py`
 

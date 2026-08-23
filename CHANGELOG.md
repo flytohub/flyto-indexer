@@ -23,6 +23,16 @@
   `undo_vibe_edit` path traversal, with demo and operator-fed flows demoted.
 
 ### Fixed
+- Made post-change Ruff selection target-project-aware. A contained
+  conventional `.venv` Python now wins over incompatible ambient Ruff,
+  including normal venvs whose Python symlinks to a base interpreter. Real
+  project-owned lint failures cannot fall through to a weaker tool, and the
+  result reports exact command/tool provenance while preserving task-only and
+  docs-only scope. Governed Python, Ruff, and test checks now use the prepared
+  repository venv instead of ambient PATH.
+- Made the frozen `scripts/test_fast.sh` test entrypoint prefer the repository
+  venv and reject interpreters older than the package's Python 3.11 minimum,
+  while retaining its fast marker, timeout controls, and forwarded arguments.
 - Excluded generated `static/assets` production chunks from symbol indexing and
   taint analysis. Hashed Vite/Rollup bundles served by a Python static backend
   no longer create parser failures or high-risk XSS findings against code no

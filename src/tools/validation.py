@@ -21,6 +21,34 @@ except ImportError:
 DEFAULT_PYTEST_TIMEOUT_SECONDS = 900
 MIN_PYTEST_TIMEOUT_SECONDS = 30
 MAX_PYTEST_TIMEOUT_SECONDS = 3600
+RUFF_TIMEOUT_SECONDS = 30
+
+
+def _project_ruff_command(project_root: str) -> list[str] | None:
+    """Return a contained conventional project-venv Ruff command, if usable."""
+    root = Path(project_root).resolve()
+    relative_candidates = (
+        Path(".venv/bin/python"),
+        Path(".venv/Scripts/python.exe"),
+    )
+    for relative in relative_candidates:
+        candidate = root / relative
+        try:
+            candidate.relative_to(root)
+            candidate.parent.resolve().relative_to(root)
+        except ValueError:
+            continue
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return [str(candidate), "-m", "ruff"]
+    return None
+
+
+def _ruff_module_unavailable(cmd: list[str], proc: subprocess.CompletedProcess) -> bool:
+    """Recognize only Python's explicit missing-Ruff-module failure."""
+    if cmd[1:3] != ["-m", "ruff"] or proc.returncode == 0:
+        return False
+    output = (proc.stdout or "") + (proc.stderr or "")
+    return bool(re.search(r"No module named ['\"]?ruff['\"]?", output))
 
 
 def _pytest_timeout_seconds() -> int:
@@ -76,28 +104,41 @@ def _run_ruff(
         "output": "",
         "scope": "repository" if lint_paths is None else "task_targets",
         "targets": targets,
+        "command": [],
+        "tool": None,
     }
 
     if not targets:
         result["output"] = "No existing Python targets declared by task contract"
         return result
 
-    cmds = [
-        ["ruff", "check", *targets],
-        [sys.executable, "-m", "ruff", "check", *targets],
-    ]
+    project_cmd = _project_ruff_command(project_root)
+    commands = []
+    if project_cmd is not None:
+        commands.append((project_cmd, "project_venv"))
+    commands.extend(
+        (
+            (["ruff"], "ambient_path"),
+            ([sys.executable, "-m", "ruff"], "indexer_runtime"),
+        )
+    )
 
-    for cmd in cmds:
+    for prefix, tool in commands:
+        cmd = [*prefix, "check", *targets]
         try:
             proc = subprocess.run(
                 cmd,
                 cwd=project_root,
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=RUFF_TIMEOUT_SECONDS,
             )
+            if _ruff_module_unavailable(prefix, proc):
+                continue
             output = (proc.stdout or "") + (proc.stderr or "")
             result["output"] = output[:2000]
+            result["command"] = cmd
+            result["tool"] = tool
 
             # Count errors and warnings from ruff output
             # Ruff lines look like: path.py:10:1: E501 ...
@@ -118,10 +159,14 @@ def _run_ruff(
             continue
         except subprocess.TimeoutExpired:
             result["status"] = "fail"
-            result["output"] = "ruff timed out after 30 seconds"
+            result["command"] = cmd
+            result["tool"] = tool
+            result["output"] = f"ruff timed out after {RUFF_TIMEOUT_SECONDS} seconds"
             return result
         except Exception as e:
             result["status"] = "fail"
+            result["command"] = cmd
+            result["tool"] = tool
             result["output"] = str(e)[:2000]
             return result
 
