@@ -188,6 +188,51 @@ def test_real_project_ruff_failure_does_not_launch_ambient_fallback(
     assert not ambient_marker.exists()
 
 
+def test_real_project_ruff_success_ignores_failing_ambient(
+    monkeypatch,
+    tmp_path,
+):
+    source = tmp_path / "src" / "app.py"
+    source.parent.mkdir()
+    source.write_text("value = 1\n", encoding="utf-8")
+    project_venv = tmp_path / ".venv"
+    venv.EnvBuilder(with_pip=False).create(project_venv)
+    project_python = project_venv / "bin" / "python"
+    site_packages = next((project_venv / "lib").glob("python*/site-packages"))
+    ruff_package = site_packages / "ruff"
+    ruff_package.mkdir()
+    (ruff_package / "__init__.py").write_text("", encoding="utf-8")
+    (ruff_package / "__main__.py").write_text(
+        "import sys\n"
+        "raise SystemExit(0 if sys.argv[1:] == ['check', 'src/app.py'] else 2)\n",
+        encoding="utf-8",
+    )
+    ambient_bin = tmp_path / "ambient-bin"
+    ambient_bin.mkdir()
+    ambient_marker = tmp_path / "ambient-ran"
+    ambient_ruff = ambient_bin / "ruff"
+    ambient_ruff.write_text(
+        f"#!/bin/sh\ntouch {ambient_marker}\nexit 1\n",
+        encoding="utf-8",
+    )
+    ambient_ruff.chmod(0o755)
+    monkeypatch.setenv("PATH", str(ambient_bin))
+
+    result = validation._run_ruff(str(tmp_path), ["src/app.py"])
+
+    expected = [
+        str(project_python),
+        "-m",
+        "ruff",
+        "check",
+        "src/app.py",
+    ]
+    assert result["status"] == "pass"
+    assert result["tool"] == "project_venv"
+    assert result["command"] == expected
+    assert not ambient_marker.exists()
+
+
 def test_run_ruff_scopes_existing_python_targets_and_rejects_escape(
     monkeypatch,
     tmp_path,
