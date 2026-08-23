@@ -23,6 +23,10 @@
   `undo_vibe_edit` path traversal, with demo and operator-fed flows demoted.
 
 ### Fixed
+- Excluded generated `static/assets` production chunks from symbol indexing and
+  taint analysis. Hashed Vite/Rollup bundles served by a Python static backend
+  no longer create parser failures or high-risk XSS findings against code no
+  project author wrote.
 - Restored multi-round task-plan interoperability by emitting the intent ledger
   as `intent-ledger.v1`, retaining the legacy `task-context.v1` ledger label as
   a read-compatible parent during transition, and pinning the immutable root

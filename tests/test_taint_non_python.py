@@ -47,6 +47,7 @@ class TestGeneratedAssetsAreSkipped:
         assert _is_generated_asset("public/js/jquery-3.7.1.min.js") is True
         assert _is_generated_asset("public/plugins/mermaid/mermaid.min.js") is True
         assert _is_generated_asset("vendor/lib/thing.js") is True
+        assert _is_generated_asset("src/ui/web/backend/static/assets/app-a1b2.js") is True
         assert _is_generated_asset("src/app.ts") is False
 
     def test_minified_bundle_produces_no_findings(self, tmp_path):

@@ -315,6 +315,11 @@ DEFAULT_IGNORE_PATTERNS = [
     # components. Indexing a bundle is worse than useless: minified vendor
     # code produces symbols nobody wrote and trips the taint rules.
     "dist-ce", "dist-next", "dist-ssr",
+    # Framework production builds commonly copy hashed, minified Rollup/Vite
+    # chunks here for a Python static-file server. These are generated bundles,
+    # not authored source, and already sit outside the security scanner's source
+    # boundary for the same reason.
+    "static/assets",
     ".venv", "venv", ".pytest_cache", ".mypy_cache",
     ".vitepress/cache", ".next", ".open-next", ".nuxt", ".output",
     # Agent scratch checkouts are full copies of the project; indexing them

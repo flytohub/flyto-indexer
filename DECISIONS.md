@@ -1,5 +1,15 @@
 # Decisions
 
+## 2026-08-24 - Static production chunks are generated evidence, not source
+
+Decision: exclude the exact `static/assets` path sequence from symbol indexing
+and classify files below it as generated for taint analysis.
+
+Reason: Vite and Rollup chunks copied beneath a Python static backend are
+minified, content-addressed build output. Parsing and tainting them duplicates
+frontend source, creates parser errors, and reports XSS inside framework code.
+The exact two-component boundary avoids substring exclusions of authored paths.
+
 ## 2026-08-22 - Amendment successors preserve schema and intent identity
 
 Decision: emit `intent-ledger.v1` for new intent ledgers, keep instruction

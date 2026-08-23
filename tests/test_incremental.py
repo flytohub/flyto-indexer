@@ -621,6 +621,16 @@ class TestIgnorePatternsMatchComponents:
         ])
         assert set(scan_directory_hashes(root, [".ts", ".js"])) == {"src/app.ts"}
 
+    def test_static_asset_build_output_stays_ignored(self):
+        """A Python static server may own generated Vite chunks outside dist."""
+        from indexer.incremental import scan_directory_hashes
+
+        root = self._tree([
+            "src/app.js",
+            "src/ui/web/backend/static/assets/app-a1b2c3.js",
+        ])
+        assert set(scan_directory_hashes(root, [".js"])) == {"src/app.js"}
+
     def test_a_directory_named_like_a_pattern_prefix_is_kept(self):
         from indexer.incremental import scan_directory_hashes
 

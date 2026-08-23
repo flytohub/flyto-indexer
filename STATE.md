@@ -2,6 +2,11 @@
 
 ## Current State
 
+- Symbol and taint scans share a generated-build boundary for
+  `static/assets`. Framework bundles copied there for a static-file backend are
+  skipped just like `dist`, `build`, and minified vendor assets; authored source
+  outside that exact path remains indexed.
+
 - The repository is a public, general-purpose local code-intelligence package.
   Product packaging, commercial edition policy, and company release gates are
   owned by private product repositories and are not shipped here.
