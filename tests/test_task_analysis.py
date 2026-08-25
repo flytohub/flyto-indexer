@@ -1260,7 +1260,7 @@ class TestExecutionPlan:
         assert len(gate_steps[0]["depends_on"]) >= 1
 
     def test_high_coupling_adds_cross_project_step(self):
-        """High cross_coupling adds a check_cross_project step."""
+        """High coupling is covered by the enriched exact impact call."""
         from tools.task_analysis import _build_execution_plan
         resolved = [{"symbol_id": "proj-a:src/auth.py:function:login",
                       "path": "src/auth.py", "name": "login"}]
@@ -1269,8 +1269,15 @@ class TestExecutionPlan:
                  "cross_coupling", "complexity", "rollback_difficulty"]}
         dims["cross_coupling"] = {"score": 8.0, "level": "high"}
         plan = _build_execution_plan(resolved, dims, "refactor", {})
-        purposes = [s["purpose"] for s in plan]
-        assert "check_cross_project" in purposes
+        impact_steps = [
+            step for step in plan
+            if step["tool"] == "impact"
+            and step["args"] == {
+                "target": "proj-a:src/auth.py:function:login",
+                "change_type": "modify",
+            }
+        ]
+        assert len(impact_steps) == 1
 
     def test_high_breaking_adds_preview_step(self):
         """High breaking_risk adds edit_impact_preview step."""
@@ -1322,6 +1329,78 @@ class TestExecutionPlan:
             for dep in step["depends_on"]:
                 assert dep in all_ids, f"Step {step['id']} depends on unknown step {dep}"
 
+    @staticmethod
+    def _assert_plan_reuses_identical_impact_calls(plan):
+        impact_calls = [
+            (step["tool"], tuple(sorted(step["args"].items())))
+            for step in plan
+            if step["tool"] == "impact"
+        ]
+        assert len(impact_calls) == len(set(impact_calls))
+
+        all_ids = {step["id"] for step in plan}
+        assert all(
+            dependency in all_ids
+            for step in plan
+            for dependency in step["depends_on"]
+        )
+        assert {
+            step["purpose"]
+            for step in plan
+            if step["tool"] == "task" and step["args"].get("action") == "gate"
+        } == {"gate_before_plan", "gate_before_apply"}
+
+    def test_single_target_reuses_inspect_impact_for_assess(self):
+        from tools.task_analysis import _build_execution_plan
+
+        resolved = [{
+            "symbol_id": "proj-a:src/auth.py:function:login",
+            "path": "src/auth.py",
+            "name": "login",
+        }]
+        dims = {key: {"score": 6.0, "level": "medium"} for key in [
+            "blast_radius", "breaking_risk", "test_risk",
+            "cross_coupling", "complexity", "rollback_difficulty",
+        ]}
+        dims["cross_coupling"] = {"score": 2.0, "level": "low"}
+
+        plan = _build_execution_plan(resolved, dims, "refactor", {})
+
+        self._assert_plan_reuses_identical_impact_calls(plan)
+        scope_step = next(step for step in plan if step["purpose"] == "scope_callers")
+        preview_step = next(step for step in plan if step["purpose"] == "preview_change_risk")
+        assert preview_step["depends_on"] == [scope_step["id"]]
+
+    def test_batch_targets_reuse_identical_assess_impact(self):
+        from tools.task_analysis import MAX_INDIVIDUAL_INSPECT, _build_execution_plan
+
+        resolved = [
+            {
+                "symbol_id": f"proj-a:src/service_{idx}.py:function:target_{idx}",
+                "path": f"src/service_{idx}.py",
+                "name": f"target_{idx}",
+            }
+            for idx in range(MAX_INDIVIDUAL_INSPECT + 1)
+        ]
+        dims = {key: {"score": 6.0, "level": "medium"} for key in [
+            "blast_radius", "breaking_risk", "test_risk",
+            "cross_coupling", "complexity", "rollback_difficulty",
+        ]}
+        dims["cross_coupling"] = {"score": 2.0, "level": "low"}
+
+        plan = _build_execution_plan(resolved, dims, "refactor", {})
+
+        self._assert_plan_reuses_identical_impact_calls(plan)
+        impact_targets = {
+            step["args"]["target"]
+            for step in plan
+            if step["tool"] == "impact" and step["args"].get("change_type") == "modify"
+        }
+        assert impact_targets == {target["symbol_id"] for target in resolved}
+        assert not any(
+            step["purpose"] == "batch_assess_blast_radius" for step in plan
+        )
+
     def test_feature_skips_scope_callers(self):
         """Feature intent doesn't scope existing callers (additive)."""
         from tools.task_analysis import _build_execution_plan
@@ -1333,6 +1412,14 @@ class TestExecutionPlan:
         plan = _build_execution_plan(resolved, dims, "feature", {})
         purposes = [s["purpose"] for s in plan]
         assert "scope_callers" not in purposes
+        assert any(
+            step["tool"] == "impact"
+            and step["args"] == {
+                "target": "proj-a:src/utils.py:function:helper",
+                "change_type": "modify",
+            }
+            for step in plan
+        )
 
     def test_multi_target_generates_per_target_steps(self):
         """V2: Multiple targets generate inspect/assess steps for ALL targets."""
@@ -1380,6 +1467,69 @@ class TestExecutionPlan:
         )
 
         assert test_step["args"] == {"query": "tests covering src/auth.py"}
+
+    @pytest.mark.parametrize("test_path", [
+        "internal/auth/handler_test.go",
+        "test_auth.py",
+        "src/auth_test.py",
+        "web/auth.test.js",
+        "web/auth.spec.tsx",
+        "tests/helpers/auth.py",
+        "web/__tests__/auth.ts",
+    ])
+    def test_test_targets_do_not_search_for_self_coverage(self, test_path):
+        from tools.task_analysis import _build_execution_plan
+
+        resolved = [{"symbol_id": None, "path": test_path, "name": test_path}]
+        dims = {key: {"score": 2.0, "level": "low"} for key in [
+            "blast_radius", "breaking_risk", "test_risk",
+            "cross_coupling", "complexity", "rollback_difficulty",
+        ]}
+        dims["test_risk"] = {"score": 6.0, "level": "medium"}
+
+        plan = _build_execution_plan(resolved, dims, "feature", {})
+
+        assert not any(
+            step["tool"] == "search"
+            and step["args"].get("query") == f"tests covering {test_path}"
+            for step in plan
+        )
+
+    @pytest.mark.parametrize("production_path", [
+        "internal/auth/test.go",
+        "src/testing.py",
+        "src/contest.py",
+        "web/auth.testimonial.ts",
+        "web/auth.specification.ts",
+        "fixtures/auth.test.json",
+        "fixtures/auth.spec.yaml",
+        "src/mytests/auth.py",
+        "src/__tests_utils__/auth.ts",
+    ])
+    def test_production_path_forms_are_not_false_positives(self, production_path):
+        from tools.task_analysis import _is_test_path
+
+        assert _is_test_path(production_path) is False
+
+    def test_mixed_production_and_test_targets_search_only_production_coverage(self):
+        from tools.task_analysis import _build_execution_plan
+
+        resolved = [
+            {"symbol_id": None, "path": "src/auth.py", "name": "auth"},
+            {"symbol_id": None, "path": "tests/test_auth.py", "name": "test_auth"},
+        ]
+        dims = {key: {"score": 2.0, "level": "low"} for key in [
+            "blast_radius", "breaking_risk", "test_risk",
+            "cross_coupling", "complexity", "rollback_difficulty",
+        ]}
+        dims["test_risk"] = {"score": 6.0, "level": "medium"}
+
+        plan = _build_execution_plan(resolved, dims, "feature", {})
+        coverage_queries = [
+            step["args"]["query"] for step in plan if step["tool"] == "search"
+        ]
+
+        assert coverage_queries == ["tests covering src/auth.py"]
 
     def test_test_risk_maps_target_and_callers_in_their_projects(self):
         from tools.task_analysis import _score_test_risk

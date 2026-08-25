@@ -67,7 +67,28 @@ VALID_INTENTS = {"refactor", "bugfix", "feature", "cleanup", "migration"}
 
 CONTRACT_VERSION = "task-contract.v2"
 
-MAX_INDIVIDUAL_INSPECT = 10  # Above this, batch the rest into one step
+MAX_INDIVIDUAL_INSPECT = 10  # Bound detailed inspect searches before assess
+
+
+def _is_test_path(path: str) -> bool:
+    """Return whether a canonical repository path names a test source file."""
+    parts = tuple(part for part in path.split("/") if part)
+    if not parts:
+        return False
+    if any(part in {"tests", "__tests__"} for part in parts[:-1]):
+        return True
+
+    name = parts[-1]
+    if name.endswith("_test.go"):
+        return True
+    if name.endswith(".py") and (name.startswith("test_") or name.endswith("_test.py")):
+        return True
+    stem, separator, suffix = name.rpartition(".")
+    return (
+        bool(separator)
+        and suffix in {"js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts"}
+        and (stem.endswith(".test") or stem.endswith(".spec"))
+    )
 
 # =========================================================================
 # Intent → default strategy
@@ -1288,15 +1309,6 @@ def _plan_inspect_steps(symbol_ids, file_paths, first_sid, first_path,
                 purpose,
             )
             ref_steps.append(sid_step)
-        # Batch remainder if more than MAX_INDIVIDUAL_INSPECT
-        if len(symbol_ids) > MAX_INDIVIDUAL_INSPECT:
-            batch_sids = symbol_ids[MAX_INDIVIDUAL_INSPECT:]
-            batch_step = _add(
-                "impact",
-                {"target": batch_sids[0], "change_type": "modify"},
-                "batch_scope_callers",
-            )
-            ref_steps.append(batch_step)
         inspect_step_ids.extend(ref_steps)
 
     # Back-compat alias for downstream deps (single-target case)
@@ -1305,7 +1317,9 @@ def _plan_inspect_steps(symbol_ids, file_paths, first_sid, first_path,
     # Step(s): verify test coverage — one per unique file path
     test_steps = []
     if file_paths:
-        unique_test_paths = list(dict.fromkeys(file_paths))  # dedupe, preserve order
+        unique_test_paths = [
+            path for path in dict.fromkeys(file_paths) if not _is_test_path(path)
+        ]
         individual_paths = unique_test_paths[:MAX_INDIVIDUAL_INSPECT]
         for idx, fpath in enumerate(individual_paths):
             purpose = "verify_test_coverage" if len(unique_test_paths) == 1 else f"verify_test_coverage_{idx}"
@@ -1321,12 +1335,11 @@ def _plan_inspect_steps(symbol_ids, file_paths, first_sid, first_path,
 
     # Step: check cross-project usage (if coupling is a concern)
     cross_step = None
-    if coupling_level in ("medium", "high") and first_sid:
+    if coupling_level in ("medium", "high") and first_sid and not ref_step:
         cross_step = _add(
             "impact",
             {"target": first_sid, "change_type": "modify"},
             "check_cross_project",
-            depends_on=[ref_step] if ref_step else [],
         )
         inspect_step_ids.append(cross_step)
 
@@ -1345,42 +1358,38 @@ def _plan_inspect_steps(symbol_ids, file_paths, first_sid, first_path,
 
 
 def _plan_assess_steps(symbol_ids, first_sid, blast_level, breaking_level,
-                       intent, ref_steps, ref_step, _add):
+                       intent, inspect_steps, inspect_step_ids, _add):
     """Phase 2: ASSESS — quantify risk before making changes."""
     assess_step_ids = []
 
-    # Step(s): impact analysis — one per symbol or batched
+    inspect_ids = set(inspect_step_ids)
+    inspect_impact_by_target = {
+        step["args"]["target"]: step["id"]
+        for step in inspect_steps
+        if step.get("id") in inspect_ids
+        and step.get("tool") == "impact"
+        and step.get("args", {}).get("change_type") == "modify"
+        and step.get("args", {}).get("target")
+    }
+
+    # Step(s): exact impact analysis — one per symbol
     impact_steps = []
     if symbol_ids:
-        if len(symbol_ids) <= MAX_INDIVIDUAL_INSPECT:
-            for idx, sid in enumerate(symbol_ids):
-                purpose = "assess_blast_radius" if len(symbol_ids) == 1 else f"assess_blast_radius_{idx}"
-                # Each impact step depends on its corresponding ref step if available
-                impact_deps = []
-                if idx < len(ref_steps):
-                    impact_deps.append(ref_steps[idx])
-                elif ref_step:
-                    impact_deps.append(ref_step)
+        for idx, sid in enumerate(symbol_ids):
+            purpose = "assess_blast_radius" if len(symbol_ids) == 1 else f"assess_blast_radius_{idx}"
+            i_step = inspect_impact_by_target.get(sid)
+            if i_step is None:
                 i_step = _add(
                     "impact",
                     {"target": sid, "change_type": "modify"},
                     purpose,
                     required=blast_level in ("medium", "high"),
-                    depends_on=impact_deps,
                 )
-                impact_steps.append(i_step)
-        else:
-            # Batch: single impact_analysis step using first sid as representative
-            impact_deps = [ref_steps[0]] if ref_steps else []
-            batch_impact = _add(
-                "impact",
-                {"target": first_sid, "change_type": "modify"},
-                "batch_assess_blast_radius",
-                required=blast_level in ("medium", "high"),
-                depends_on=impact_deps,
-            )
-            impact_steps.append(batch_impact)
-        assess_step_ids.extend(impact_steps)
+                assess_step_ids.append(i_step)
+            impact_steps.append(i_step)
+
+    # Reused inspect IDs already participate in the inspect gate dependency set;
+    # only newly emitted assess calls need to be added to assess_step_ids.
 
     # Back-compat alias
     impact_step = impact_steps[0] if impact_steps else None
@@ -1392,16 +1401,20 @@ def _plan_assess_steps(symbol_ids, first_sid, blast_level, breaking_level,
             "refactor": "signature_change", "bugfix": "modify",
             "feature": "modify", "cleanup": "delete", "migration": "rename",
         }
-        preview_step = _add(
-            "impact",
-            {
-                "target": first_sid,
-                "change_type": change_type_map.get(intent, "modify"),
-            },
-            "preview_change_risk",
-            depends_on=[impact_step] if impact_step else [],
-        )
-        assess_step_ids.append(preview_step)
+        preview_change_type = change_type_map.get(intent, "modify")
+        if preview_change_type == "modify":
+            preview_step = impact_step
+        else:
+            preview_step = _add(
+                "impact",
+                {
+                    "target": first_sid,
+                    "change_type": preview_change_type,
+                },
+                "preview_change_risk",
+                depends_on=[impact_step] if impact_step else [],
+            )
+            assess_step_ids.append(preview_step)
 
     return assess_step_ids, impact_step
 
@@ -1492,7 +1505,7 @@ def _build_execution_plan(
 
     assess_step_ids, impact_step = _plan_assess_steps(
         symbol_ids, first_sid, blast_level, breaking_level,
-        intent, ref_steps, ref_step, _add,
+        intent, steps, inspect_step_ids, _add,
     )
 
     # =================================================================
