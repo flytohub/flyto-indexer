@@ -2,7 +2,7 @@
 
 # Python API Reference
 
-Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,412 declarations across 170 files**.
+Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,413 declarations across 170 files**.
 
 ## `analyze.py`
 
@@ -215,13 +215,14 @@ Every declared class, function, nested function, and method in the package, supp
 | Kind | Signature | Responsibility | Source |
 |---|---|---|---|
 | function | `def _run(command: list&#91;str&#93;) -> subprocess.CompletedProcess&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`scripts/check_quality_debt.py:22`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L22) |
-| function | `def _tool_version(command: str) -> str` | The declaration and linked implementation are authoritative. | [`scripts/check_quality_debt.py:32`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L32) |
-| function | `def _configured_debt_codes() -> tuple&#91;list&#91;str&#93;, list&#91;str&#93;&#93;` | The declaration and linked implementation are authoritative. | [`scripts/check_quality_debt.py:39`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L39) |
-| function | `def _ruff_counts(codes: list&#91;str&#93;) -> dict&#91;str, int&#93;` | The declaration and linked implementation are authoritative. | [`scripts/check_quality_debt.py:46`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L46) |
-| function | `def _mypy_counts(codes: list&#91;str&#93;) -> dict&#91;str, int&#93;` | The declaration and linked implementation are authoritative. | [`scripts/check_quality_debt.py:68`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L68) |
-| function | `def collect_debt() -> dict&#91;str, Any&#93;` | Collect deterministic production-source debt for configured exemptions. | [`scripts/check_quality_debt.py:95`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L95) |
-| function | `def compare_debt(current: dict&#91;str, Any&#93;, baseline: dict&#91;str, Any&#93;) -> list&#91;str&#93;` | Return actionable drift messages; exact equality closes baseline headroom. | [`scripts/check_quality_debt.py:123`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L123) |
-| function | `def main() -> int` | The declaration and linked implementation are authoritative. | [`scripts/check_quality_debt.py:145`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L145) |
+| function | `def _tool_command(module: str, *args: str) -> list&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`scripts/check_quality_debt.py:32`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L32) |
+| function | `def _tool_version(module: str) -> str` | The declaration and linked implementation are authoritative. | [`scripts/check_quality_debt.py:36`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L36) |
+| function | `def _configured_debt_codes() -> tuple&#91;list&#91;str&#93;, list&#91;str&#93;&#93;` | The declaration and linked implementation are authoritative. | [`scripts/check_quality_debt.py:43`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L43) |
+| function | `def _ruff_counts(codes: list&#91;str&#93;) -> dict&#91;str, int&#93;` | The declaration and linked implementation are authoritative. | [`scripts/check_quality_debt.py:50`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L50) |
+| function | `def _mypy_counts(codes: list&#91;str&#93;) -> dict&#91;str, int&#93;` | The declaration and linked implementation are authoritative. | [`scripts/check_quality_debt.py:72`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L72) |
+| function | `def collect_debt() -> dict&#91;str, Any&#93;` | Collect deterministic production-source debt for configured exemptions. | [`scripts/check_quality_debt.py:99`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L99) |
+| function | `def compare_debt(current: dict&#91;str, Any&#93;, baseline: dict&#91;str, Any&#93;) -> list&#91;str&#93;` | Return actionable drift messages; exact equality closes baseline headroom. | [`scripts/check_quality_debt.py:127`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L127) |
+| function | `def main() -> int` | The declaration and linked implementation are authoritative. | [`scripts/check_quality_debt.py:149`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L149) |
 
 ## `scripts/check_release_tag.py`
 

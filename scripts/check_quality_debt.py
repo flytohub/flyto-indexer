@@ -29,10 +29,14 @@ def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _tool_version(command: str) -> str:
-    result = _run([command, "--version"])
+def _tool_command(module: str, *args: str) -> list[str]:
+    return [sys.executable, "-m", module, *args]
+
+
+def _tool_version(module: str) -> str:
+    result = _run(_tool_command(module, "--version"))
     if result.returncode != 0:
-        raise RuntimeError(f"{command} is unavailable: {result.stderr.strip()}")
+        raise RuntimeError(f"{module} is unavailable: {result.stderr.strip()}")
     return result.stdout.strip()
 
 
@@ -46,7 +50,7 @@ def _configured_debt_codes() -> tuple[list[str], list[str]]:
 def _ruff_counts(codes: list[str]) -> dict[str, int]:
     if not codes:
         return {}
-    result = _run([
+    result = _run(_tool_command(
         "ruff",
         "check",
         "src",
@@ -57,7 +61,7 @@ def _ruff_counts(codes: list[str]) -> dict[str, int]:
         "--output-format",
         "json",
         "--exit-zero",
-    ])
+    ))
     if result.returncode != 0:
         raise RuntimeError(f"Ruff debt scan failed: {result.stderr.strip()}")
     findings = json.loads(result.stdout or "[]")
@@ -68,7 +72,7 @@ def _ruff_counts(codes: list[str]) -> dict[str, int]:
 def _mypy_counts(codes: list[str]) -> dict[str, int]:
     if not codes:
         return {}
-    command = [
+    command = _tool_command(
         "mypy",
         "src",
         "--show-error-codes",
@@ -76,7 +80,7 @@ def _mypy_counts(codes: list[str]) -> dict[str, int]:
         "--platform",
         MYPY_PLATFORM,
         "--no-site-packages",
-    ]
+    )
     for code in codes:
         command.extend(["--enable-error-code", code])
     result = _run(command)

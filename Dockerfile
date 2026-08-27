@@ -57,7 +57,9 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 # login and libblkid1 with it) was held back and CVE-2026-53615 stayed in the
 # image while the build looked clean. The version assertions below fail the
 # build loudly if either fix ever regresses.
-RUN apt-get update \
+ARG RUNTIME_SECURITY_REFRESH=local
+RUN test -n "${RUNTIME_SECURITY_REFRESH}" \
+    && apt-get update \
     && apt-get dist-upgrade -y \
     && apt-get install -y --no-install-recommends \
         git \
@@ -69,6 +71,9 @@ RUN apt-get update \
     && dpkg --compare-versions \
         "$(dpkg-query -W -f='${Version}' util-linux)" \
         ge "2.41.5-0+deb13u1" \
+    && dpkg --compare-versions \
+        "$(dpkg-query -W -f='${Version}' openssl-provider-legacy)" \
+        ge "3.5.7-1~deb13u2" \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
