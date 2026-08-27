@@ -29,6 +29,8 @@ jobs:
           push: false
           load: true
           tags: flyto-indexer:${{ github.sha }}
+          build-args: |
+            RUNTIME_SECURITY_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
