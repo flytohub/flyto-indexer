@@ -23,6 +23,12 @@
   `undo_vibe_edit` path traversal, with demo and operator-fed flows demoted.
 
 ### Fixed
+- Refined SecurityScanner discovery, every TaintAnalyzer filesystem phase and
+  caller cache, and incremental directory hashing with Git's standard local
+  excludes. Untracked ignored files are omitted while force-added ignored
+  files remain visible; bounded NUL-safe queries validate Git's response, and
+  Git absence, timeout, malformed output, or failure preserves existing
+  exclusions.
 - Made post-change Ruff selection target-project-aware. A contained
   conventional `.venv` Python now wins over incompatible ambient Ruff,
   including normal venvs whose Python symlinks to a base interpreter. Real

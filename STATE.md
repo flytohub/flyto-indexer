@@ -2,6 +2,11 @@
 
 ## Current State
 
+- Security discovery, taint's Python, regex, and index-caller paths, and
+  incremental directory hashes now refine their existing built-in exclusions
+  with bounded local Git ignore checks. Untracked ignored paths are excluded;
+  tracked ignored files remain visible, and invalid, oversized, timed-out, or
+  failed Git queries fail open.
 - Post-change Python lint resolves an executable, repository-contained
   `.venv` interpreter location before ambient Ruff and records the exact argv
   and tool source. A normal interpreter symlink chain may terminate at the base

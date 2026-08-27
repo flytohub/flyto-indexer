@@ -1,5 +1,22 @@
 # Decisions
 
+## 2026-08-27 - Git ignores refine scans without hiding tracked source
+
+Decision: apply one bounded, batched, NUL-delimited local `git check-ignore`
+filter after each scanner's built-in discovery boundary. Use Git's default
+index-aware behavior so only untracked ignored paths are removed and tracked
+ignored files remain source. Cache decisions for taint's index-derived caller
+paths. Validate return-code/output consistency, membership, uniqueness, and
+NUL termination. Missing Git, non-repositories, timeouts, malformed output,
+oversized individual inputs, and command errors fail open to the candidates
+already accepted by built-in exclusions.
+
+Reason: generated and private local files commonly use repository, global, or
+info excludes, but an ignored file that was deliberately force-added remains
+part of the authored project. One batched local query avoids subprocesses per
+file, shell parsing, delimiter ambiguity, nondeterministic ordering, and code
+egress while retaining conservative legacy behavior when Git cannot answer.
+
 ## 2026-08-24 - Post-change lint uses the target project's toolchain
 
 Decision: prefer a launchable Python at the exact repository-contained

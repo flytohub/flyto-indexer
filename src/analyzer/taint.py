@@ -18,6 +18,7 @@ Cross-function flow tracking:
 """
 
 import ast
+import importlib
 import logging
 import re
 from collections import defaultdict
@@ -29,6 +30,11 @@ try:
     from ..finding_identity import finding_evidence, suppression_provenance
 except ImportError:  # Direct source imports expose analyzer as a top-level package.
     from finding_identity import finding_evidence, suppression_provenance
+
+try:
+    gitignore_module = importlib.import_module("..gitignore", __package__)
+except (ImportError, TypeError):
+    gitignore_module = importlib.import_module("gitignore")
 
 from .taint_rules import (
     GO_TAINT_PATTERNS,
@@ -449,6 +455,7 @@ class TaintAnalyzer:
 
     def __init__(self, project_root: Path, index: dict | None = None):
         self.project_root = project_root
+        self._gitignore = gitignore_module.GitIgnoreFilter(project_root)
         self.index = index or {}
         self._verifier: "CalleeVerifier | None" = None
         #: Variables in the current function that hold an ORM expression object
@@ -502,6 +509,15 @@ class TaintAnalyzer:
 
         # Type-aware FP suppression: counts how many sources LSP filtered out
         self._type_filtered: int = 0
+
+    def _filesystem_paths(self, pattern: str) -> list[Path]:
+        """Return sorted built-in candidates refined by standard Git excludes."""
+        candidates = sorted(self.project_root.rglob(pattern))
+        relative = [
+            str(path.relative_to(self.project_root)).replace("\\", "/")
+            for path in candidates
+        ]
+        return [self.project_root / path for path in self._gitignore.filter(relative)]
 
     # ── Public API ──────────────────────────────────────────────────────────
 
@@ -580,7 +596,7 @@ class TaintAnalyzer:
         func_nodes: list[tuple[str, ast.FunctionDef | ast.AsyncFunctionDef]] = []
         def_counts: dict[str, int] = defaultdict(int)
         seen_funcs = 0
-        for py_path in sorted(self.project_root.rglob("*.py")):
+        for py_path in self._filesystem_paths("*.py"):
             if seen_funcs >= MAX_RETURN_SOURCE_FUNCS:
                 self._truncation.add("return_registry_cap")
                 break
@@ -852,7 +868,7 @@ class TaintAnalyzer:
     def _scan_python_files(self):
         """Walk project for .py files and analyze each function."""
         total_funcs = 0
-        py_files = sorted(self.project_root.rglob("*.py"))
+        py_files = self._filesystem_paths("*.py")
 
         for py_path in py_files:
             if len(self.findings) >= MAX_FINDINGS:
@@ -1641,6 +1657,8 @@ class TaintAnalyzer:
 
     def _find_param_index(self, func_name: str, param_name: str, file_path: str) -> int | None:
         """Find index of param_name in func_name's signature (excluding self/cls)."""
+        if not self._gitignore.includes_cached(file_path):
+            return None
         tree = self._ast_cache.get(file_path)
         if tree is None:
             py_path = self.project_root / file_path
@@ -1806,6 +1824,8 @@ class TaintAnalyzer:
         # Try AST cache first, then read from disk
         tree = self._ast_cache.get(caller_file)
         if SKIP_DIR_PATTERNS.search(caller_file.replace("\\", "/")):
+            return
+        if not self._gitignore.includes_cached(caller_file):
             return
         if tree is None:
             caller_path = self.project_root / caller_file
@@ -1985,6 +2005,8 @@ class TaintAnalyzer:
         """Parse a caller file and check if tainted data is passed at dangerous param positions."""
         if SKIP_DIR_PATTERNS.search(caller_file.replace("\\", "/")):
             return
+        if not self._gitignore.includes_cached(caller_file):
+            return
         caller_path = self.project_root / caller_file
         if not caller_path.is_file():
             return
@@ -2118,7 +2140,7 @@ class TaintAnalyzer:
         for ext, patterns in ext_map.items():
             if len(self.findings) >= MAX_FINDINGS:
                 return
-            for fpath in sorted(self.project_root.rglob(f"*{ext}")):
+            for fpath in self._filesystem_paths(f"*{ext}"):
                 if len(self.findings) >= MAX_FINDINGS:
                     return
                 rel = str(fpath.relative_to(self.project_root)).replace("\\", "/")
