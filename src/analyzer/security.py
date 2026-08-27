@@ -10,9 +10,15 @@ Checks:
 """
 
 import ast
+import importlib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+
+try:
+    gitignore_module = importlib.import_module("..gitignore", __package__)
+except (ImportError, TypeError):
+    gitignore_module = importlib.import_module("gitignore")
 
 #: Python string literals, written so the two branches are disjoint: a
 #: character that is neither the quote nor a backslash, or a backslash and
@@ -201,7 +207,7 @@ class SecurityScanner:
                 rel_path = str(file_path.relative_to(self.project_root))
                 if not self._should_skip(rel_path):
                     files.append(rel_path)
-        return files
+        return gitignore_module.GitIgnoreFilter(self.project_root).filter(files)
 
     def scan_file(self, rel_path: str, content: str) -> list[SecurityIssue]:
         """Scan a single file"""

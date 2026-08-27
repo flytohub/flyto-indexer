@@ -9,6 +9,7 @@ Core logic:
 """
 
 import hashlib
+import importlib
 import json
 import os
 from dataclasses import dataclass
@@ -21,6 +22,11 @@ try:
 except ImportError:
     from models import Dependency, FileManifest, Symbol
     from safe_io import atomic_write_json
+
+try:
+    gitignore_module = importlib.import_module("..gitignore", __package__)
+except (ImportError, TypeError):
+    gitignore_module = importlib.import_module("gitignore")
 
 MANIFEST_VERSION = 2
 CONTENT_HASH_ALGORITHM = "sha256"
@@ -443,4 +449,5 @@ def scan_directory_hashes(
                 # Skip files that cannot be read
                 pass
 
-    return result
+    visible = gitignore_module.GitIgnoreFilter(root).filter(result)
+    return {path: result[path] for path in visible}
