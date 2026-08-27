@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **186 Python modules**, **78,580 lines**, and **2,412 class/function/method declarations**.
+Generated inventory: **186 Python modules**, **78,584 lines**, and **2,413 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -26,7 +26,7 @@ Generated inventory: **186 Python modules**, **78,580 lines**, and **2,412 class
 | [`examples/test_stale_files.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/examples/test_stale_files.py#L1) | 31 | 1 | `analyzer, pathlib, sys` | Test stale file detection. |
 | [`index_all.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/index_all.py#L1) | 446 | 14 | `datetime, gzip, hashlib, json, pathlib, src, sys, traceback, yaml` | Index projects from config |
 | [`scripts/check_language_evidence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_language_evidence.py#L1) | 157 | 4 | `__future__, argparse, collections, json, pathlib, sys, typing` | Validate and render the public per-language evidence matrix. |
-| [`scripts/check_quality_debt.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L1) | 184 | 8 | `__future__, argparse, collections, json, pathlib, re, subprocess, sys, tomllib, typing` | Fail when configured Ruff or mypy debt changes without review. |
+| [`scripts/check_quality_debt.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_quality_debt.py#L1) | 188 | 9 | `__future__, argparse, collections, json, pathlib, re, subprocess, sys, tomllib, typing` | Fail when configured Ruff or mypy debt changes without review. |
 | [`scripts/check_release_tag.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/check_release_tag.py#L1) | 54 | 3 | `__future__, argparse, pathlib, sys, tomllib` | Verify that a release tag matches package metadata and the changelog. |
 | [`scripts/generate-reference.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/generate-reference.py#L1) | 449 | 23 | `__future__, argparse, ast, collections, json, pathlib, re, sys, typing, yaml` | Generate exhaustive Flyto2 Indexer references from implementation sources. |
 | [`scripts/reproduce_impact_case.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/reproduce_impact_case.py#L1) | 251 | 9 | `__future__, argparse, hashlib, json, os, pathlib, subprocess, sys, tempfile, typing` | Reproduce the pinned public impact-analysis case study. |

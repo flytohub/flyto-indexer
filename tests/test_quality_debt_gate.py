@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -33,3 +35,25 @@ def test_quality_debt_gate_blocks_regression_and_unlocked_improvement():
     assert improvement == [
         "mypy:arg-type improved 3 -> 2; update the baseline to lock it in"
     ]
+
+
+def test_quality_debt_gate_uses_active_python_when_path_has_no_tools(monkeypatch):
+    monkeypatch.setenv("PATH", "")
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        if "--version" in command:
+            module = command[2]
+            return subprocess.CompletedProcess(command, 0, f"{module} 1\n", "")
+        if command[2] == "ruff":
+            return subprocess.CompletedProcess(command, 0, "[]", "")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(MODULE, "_run", fake_run)
+
+    debt = MODULE.collect_debt()
+
+    assert debt["tools"] == {"ruff": "ruff 1", "mypy": "mypy 1"}
+    assert commands
+    assert all(command[:2] == [sys.executable, "-m"] for command in commands)
