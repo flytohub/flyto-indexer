@@ -4,13 +4,13 @@
 
 Implemented locally on `codex/route-active-rework-scope`. Do not call it
 accepted, landed, or released until independent review, full verification, and
-the paired Flyto AI consumer change pass together.
+the paired Flyto2 AI consumer change pass together.
 
 ## Problem reproduced
 
 An authenticated parent with 63 cumulative paths and a small same-scope audit
 compiled a 58-step successor because ordinary amendment analysis received the
-entire cumulative target union. Flyto AI correctly refused it at the unchanged
+entire cumulative target union. Flyto2 AI correctly refused it at the unchanged
 32-step executable bound before provider start.
 
 ## Producer change
@@ -31,6 +31,6 @@ entire cumulative target union. Flyto AI correctly refused it at the unchanged
 
 ## Required paired closure
 
-Flyto AI must accept exact active-plan coverage while retaining rolling support
+Flyto2 AI must accept exact active-plan coverage while retaining rolling support
 for an exact legacy cumulative plan. It must reject partial, extra, malformed,
 or unrequested authority and keep the 32-step executable bound unchanged.
