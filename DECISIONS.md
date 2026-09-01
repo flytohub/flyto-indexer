@@ -1,5 +1,26 @@
 # Decisions
 
+## 2026-09-01 - Amendment execution planning is active; authority stays cumulative
+
+Decision: for an ordinary amendment, pass only the validated current
+`amendment_targets` into risk analysis and execution-plan compilation. Pass the
+ordered `cumulative_targets` separately into instruction-context and intent-ledger
+construction. Keep recovery on its existing proof-derived `plan_targets` and
+`cumulative_paths` split.
+
+Reason: a real 63-path parent contract and a small same-scope audit produced 58
+successor steps when the analyzer replayed the cumulative target union. The host
+correctly refused that plan at its unchanged 32-step bound, leaving a valid
+repair unable to reach the implementer. Cumulative paths are edit authority and
+post-validation scope; they are not a requirement to repeat every analysis step
+in every round.
+
+Consequence: immutable root identity, ancestry, path partition, fingerprints,
+allowed paths, and cumulative validation remain unchanged. The successor plan
+is attributable only to the current host-requested target set. Rolling consumers
+must validate either this exact active plan or the legacy exact cumulative plan,
+and reject every partial or extra coverage set.
+
 ## 2026-08-27 - Git ignores refine scans without hiding tracked source
 
 Decision: apply one bounded, batched, NUL-delimited local `git check-ignore`

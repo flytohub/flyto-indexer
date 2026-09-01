@@ -95,7 +95,7 @@ def test_plan_without_parent_is_fingerprint_stable(repo: Path) -> None:
     assert first["task_profile"]["task_id"] != second["task_profile"]["task_id"]
 
 
-def test_ordinary_amendment_keeps_raw_target_context_byte_compatibility(
+def test_ordinary_amendment_separates_active_plan_from_cumulative_authority(
     repo: Path,
 ) -> None:
     symbol = f"{repo.name}:alpha.py:function:handler"
@@ -105,13 +105,42 @@ def test_ordinary_amendment_keeps_raw_target_context_byte_compatibility(
     second = _plan(repo, "Also touch beta", ["beta.py"], root)
 
     assert "recovery_evidence" not in first
-    assert first["task_profile"]["targets"] == [symbol, "beta.py"]
+    assert first["task_profile"]["targets"] == ["beta.py"]
     assert first["instruction_context"]["targets"] == [symbol, "beta.py"]
     assert first["intent_ledger"]["targets"] == [symbol, "beta.py"]
     for contract in (first, second):
         contract.pop("continuity", None)
         contract["task_profile"].pop("generated_at", None)
     assert first == second
+
+
+def test_broad_parent_replans_only_exact_active_existing_targets(
+    repo: Path,
+) -> None:
+    parent_targets = [f"scope/file_{index:02d}.py" for index in range(63)]
+    for relative in parent_targets:
+        _write(repo, relative, "value = 1\n")
+    root = _plan(repo, "Repair the broad governed surface", parent_targets)
+
+    active = [parent_targets[7], parent_targets[41], parent_targets[62]]
+    amended = _plan(repo, "Address three exact audit findings", active, root)
+
+    assert amended["task_profile"]["targets"] == active
+    assert amended["instruction_context"]["targets"] == parent_targets
+    assert amended["intent_ledger"]["allowed_paths"] == parent_targets
+    assert amended["task_amendment"]["amendment_targets"] == active
+    assert amended["task_amendment"]["added_paths"] == []
+
+    sources = amended.get("sub_tasks") or [amended]
+    assert {
+        item["input"]
+        for source in sources
+        for item in (
+            source.get("resolved_targets")
+            or source.get("task_profile", {}).get("resolved_targets", [])
+        )
+    } == set(active)
+    assert sum(len(source.get("execution_plan") or []) for source in sources) <= 32
 
 
 def test_empty_parent_dict_is_treated_as_no_parent(repo: Path) -> None:

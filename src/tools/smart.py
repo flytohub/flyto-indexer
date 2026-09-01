@@ -811,8 +811,15 @@ def _task_plan(description, targets, intent, project, grill_session_id=None,
             targets = list(request["plan_targets"])
             context_targets = list(request["cumulative_paths"])
         else:
-            targets = list(request["cumulative_targets"])
-            context_targets = targets
+            # Planning work and edit authority are deliberately different
+            # sets during ordinary rework.  The successor keeps the complete
+            # cumulative ledger as its authorization boundary, but only the
+            # exact targets declared for this amendment are analyzed again.
+            # Replaying every parent target here makes a broad, otherwise
+            # valid parent contract grow past the host's unchanged execution
+            # bound before the implementer can address a small audit finding.
+            targets = list(request["amendment_targets"])
+            context_targets = list(request["cumulative_targets"])
         intent = request["intent"] or intent
     task = _task_mod()
     result = task.analyze_task(
