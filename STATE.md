@@ -55,6 +55,12 @@
   diff coverage applies only to targets newly added by the latest amendment.
   Scope shrinkage, unplanned diffs, chain integrity, and bounded requirement
   sanitization continue to fail closed independently.
+- Ordinary amendment analysis is now active-scope-only: `task_profile` plan
+  targets are the exact current `amendment_targets`, while instruction context,
+  the intent ledger, and `task_amendment.cumulative_*` retain the full parent
+  authority. A reproduced 63-path parent with three existing active findings
+  compiles within the unchanged 32-step host bound. Recovery behavior and
+  first-round plans are unchanged.
 - Intent ledgers now emit their own `intent-ledger.v1` schema label while
   instruction context remains `task-context.v1`. Amendment planning accepts
   the historical ledger label only as a transition-compatible parent, and
@@ -67,8 +73,9 @@
   matrix, and emits content-bound generation-2 evidence. Audited prior scope
   and the resulting executable plan are each bounded to 32 canonical paths;
   every nonempty successor path and symbol stays bound to its exact project and
-  plan input. Ordinary amendments remain byte-compatible and no job, session,
-  or retry identity enters this public contract.
+  plan input. Ordinary amendments now intentionally distinguish their active
+  analyzer target set from cumulative ledger authority; no job, session, or
+  retry identity enters this public contract.
 - Task planning grants edit authority only to exact symbol identities or
   bounded paths. BM25-only labels remain unresolved, hostile filesystem probes
   fail closed, and execution-plan file order is stable across hash seeds.

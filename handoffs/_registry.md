@@ -2,6 +2,7 @@
 
 | Date | Topic | File | Status |
 | --- | --- | --- | --- |
+| 2026-09-01 | Active amendment plan scope | `2026-09-01-active-amendment-plan-scope.md` | Implemented locally; focused verification passed, full independent audit pending. Owner: codex |
 | 2026-08-27 | Git ignore scan boundary | `2026-08-27-gitignore-scan-boundary.md` | Implemented locally; independent host verification pending. Owner: coding worker |
 | 2026-08-24 | Target-project Ruff selection | `2026-08-24-target-project-ruff.md` | Implemented locally; independent audit pending. Owner: coding worker |
 | 2026-08-24 | Generated static asset scan boundary | `2026-08-24-generated-static-assets.md` | Implemented locally; focused and full verification recorded in handoff. Owner: codex |

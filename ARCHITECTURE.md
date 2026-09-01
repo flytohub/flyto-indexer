@@ -47,6 +47,13 @@ HTTP references.
    label and mirrors the root intent even when analysis becomes compound.
    Orchestration job, session, mission, and retry state remain outside the
    public Indexer contract.
+   Ordinary amendment planning also separates execution scope from authority:
+   the analyzer receives only the exact current `amendment_targets`, while
+   instruction context and the intent ledger retain the complete ordered
+   `cumulative_targets`. Recovery keeps its independent proof-bound
+   `plan_targets` behavior. This prevents a small same-scope audit repair from
+   replaying a broad parent plan without shrinking, re-rooting, or weakening
+   cumulative edit authority.
 4. Verify combines index integrity, context lookup, impact closure, secret
    checks, taint rules, documentation checks, rules/layers policy checks, and
    release hygiene checks.

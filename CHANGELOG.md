@@ -23,6 +23,11 @@
   `undo_vibe_edit` path traversal, with demo and operator-fed flows demoted.
 
 ### Fixed
+- Split ordinary amendment execution planning from cumulative authority. The
+  analyzer now receives only exact current amendment targets while instruction
+  context, the intent ledger, root identity, chain, and validation retain the
+  ordered cumulative union. A 63-path same-scope regression remains within the
+  unchanged 32-step route bound; recovery and first-round behavior are unchanged.
 - Refined SecurityScanner discovery, every TaintAnalyzer filesystem phase and
   caller cache, and incremental directory hashing with Git's standard local
   excludes. Untracked ignored files are omitted while force-added ignored
