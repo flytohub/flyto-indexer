@@ -408,6 +408,21 @@ def format_workspace_verification(result: dict[str, Any]) -> str:
         f"{result['summary'].get('workspace_fail', 0)} fail",
         "",
     ]
+    # Only the counts used to be printed here, so a workspace-level finding was
+    # visible as the digit in "1 warn" and nowhere else -- the reader could not
+    # tell which check spoke or what it said. The single-project report has
+    # always named every check; this one now does too.
+    for check in result.get("workspace_checks") or []:
+        lines.append(f"[{check['status'].upper()}] {check['name']}: {check['summary']}")
+        if check["status"] != "pass":
+            metrics = check.get("metrics") or {}
+            if metrics:
+                compact = json.dumps(metrics, ensure_ascii=False, sort_keys=True)
+                if len(compact) > 280:
+                    compact = compact[:277] + "..."
+                lines.append(f"  {compact}")
+    if result.get("workspace_checks"):
+        lines.append("")
     for project in result["projects"]:
         summary = project["summary"]
         status = "PASS" if project["pass"] else "FAIL"
@@ -1546,7 +1561,17 @@ def _check_product_loop_closure(projects: list[Path], checks: list[dict[str, Any
     summary = "Product surfaces have closed-loop signals"
     if gaps:
         status = "warn"
-        summary = "Product surfaces have missing loop signals"
+        # Naming the surface and its reason is the whole value of this check.
+        # A fixed sentence left the reader to open the metrics JSON, and the
+        # report truncates that before `gaps` -- so the finding was reachable
+        # only through --json.
+        shown = ", ".join(
+            f"{gap['surface']} ({'/'.join(gap['reasons'])})" for gap in gaps[:3]
+        )
+        remainder = len(gaps) - 3
+        if remainder > 0:
+            shown += f", and {remainder} more"
+        summary = f"Product surfaces have missing loop signals: {shown}"
 
     checks.append({
         "name": "product_loop_closure",
