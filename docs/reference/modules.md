@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **199 Python modules**, **79,590 lines**, and **2,452 class/function/method declarations**.
+Generated inventory: **202 Python modules**, **79,923 lines**, and **2,466 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -21,12 +21,14 @@ Generated inventory: **199 Python modules**, **79,590 lines**, and **2,452 class
 | [`benchmarks/fixture/corpus/python-ldap/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-ldap/app.py#L1) | 6 | 1 | `ldap` | The declaration and linked implementation are authoritative. |
 | [`benchmarks/fixture/corpus/python-nosql/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-nosql/app.py#L1) | 3 | 1 | `none` | The declaration and linked implementation are authoritative. |
 | [`benchmarks/fixture/corpus/python-nosql-constant/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-nosql-constant/app.py#L1) | 2 | 1 | `none` | The declaration and linked implementation are authoritative. |
+| [`benchmarks/fixture/corpus/python-nosql-named-handle/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-nosql-named-handle/app.py#L1) | 3 | 1 | `none` | The declaration and linked implementation are authoritative. |
 | [`benchmarks/fixture/corpus/python-path-traversal/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-path-traversal/app.py#L1) | 3 | 1 | `none` | The declaration and linked implementation are authoritative. |
 | [`benchmarks/fixture/corpus/python-rce/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-rce/app.py#L1) | 6 | 1 | `os` | The declaration and linked implementation are authoritative. |
 | [`benchmarks/fixture/corpus/python-rce-sanitized/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-rce-sanitized/app.py#L1) | 7 | 1 | `os, shlex` | The declaration and linked implementation are authoritative. |
 | [`benchmarks/fixture/corpus/python-redos/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-redos/app.py#L1) | 6 | 1 | `re` | The declaration and linked implementation are authoritative. |
 | [`benchmarks/fixture/corpus/python-sanitized/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-sanitized/app.py#L1) | 7 | 1 | `os, shlex` | The declaration and linked implementation are authoritative. |
 | [`benchmarks/fixture/corpus/python-ssti/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-ssti/app.py#L1) | 6 | 1 | `flask` | The declaration and linked implementation are authoritative. |
+| [`benchmarks/fixture/corpus/python-str-find/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-str-find/app.py#L1) | 3 | 1 | `none` | The declaration and linked implementation are authoritative. |
 | [`benchmarks/fixture/corpus/python-xss/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-xss/app.py#L1) | 6 | 1 | `markupsafe` | The declaration and linked implementation are authoritative. |
 | [`benchmarks/fixture/corpus/python-xxe/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-xxe/app.py#L1) | 6 | 1 | `lxml` | The declaration and linked implementation are authoritative. |
 | [`examples/audit_all.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/examples/audit_all.py#L1) | 271 | 5 | `auditor, datetime, json, os, pathlib, sys, tqdm` | Full project LLM audit. |
@@ -64,14 +66,15 @@ Generated inventory: **199 Python modules**, **79,590 lines**, and **2,452 class
 | [`src/analyzer/lens.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/lens.py#L1) | 268 | 8 | `collections, dataclasses, pathlib, typing` | Lens engine — per-perspective ranked findings with cross-signal hotspots. |
 | [`src/analyzer/perf_patterns.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/perf_patterns.py#L1) | 250 | 14 | `ast, dataclasses, pathlib, re` | Performance Anti-pattern detector — find common performance issues in code. |
 | [`src/analyzer/pyramid.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/pyramid.py#L1) | 232 | 8 | `dataclasses, typing` | Pyramid aggregation engine — multi-perspective composite scoring. |
-| [`src/analyzer/research_priority.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/research_priority.py#L1) | 1346 | 39 | `__future__, analyzer, ast, complexity, contextlib, dataclasses, error_handling, git_history, json, math, pathlib, profile` | Security Research Priority ranking. |
+| [`src/analyzer/research_priority.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/research_priority.py#L1) | 1352 | 39 | `__future__, analyzer, ast, complexity, contextlib, dataclasses, error_handling, git_history, json, math, pathlib, profile` | Security Research Priority ranking. |
 | [`src/analyzer/rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/rules.py#L1) | 485 | 16 | `dataclasses, datetime, fnmatch, layers, logging, pathlib, re, yaml` | Project rules engine — loads .flyto-rules.yaml and checks compliance. |
 | [`src/analyzer/security.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/security.py#L1) | 586 | 20 | `ast, dataclasses, importlib, pathlib, re, rule_loader` | Security scanning - detect potential security issues |
 | [`src/analyzer/stale_files.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/stale_files.py#L1) | 216 | 11 | `collections, dataclasses, datetime, pathlib, subprocess` | Stale file detection - use git history to find files untouched for a long time |
-| [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 2315 | 59 | `analyzer, ast, collections, dataclasses, finding_identity, importlib, logging, pathlib, profile, re, taint_lsp, taint_rules` | AST-based taint analysis engine. |
-| [`src/analyzer/taint_dsl.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L1) | 395 | 17 | `json, logging, pathlib, re, yaml` | Taint DSL — read/write helpers for the `taint:` block in .flyto-rules.yaml. |
+| [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 2373 | 60 | `analyzer, ast, collections, dataclasses, finding_identity, importlib, logging, pathlib, profile, re, taint_lsp, taint_rules` | AST-based taint analysis engine. |
+| [`src/analyzer/taint_dsl.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L1) | 408 | 17 | `json, logging, pathlib, re, yaml` | Taint DSL — read/write helpers for the `taint:` block in .flyto-rules.yaml. |
 | [`src/analyzer/taint_lsp.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_lsp.py#L1) | 203 | 7 | `__future__, ast, logging, lsp, os, pathlib, typing` | Type-aware callee verification for the cross-function taint pass. |
-| [`src/analyzer/taint_rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_rules.py#L1) | 558 | 0 | `none` | Default taint analysis rules — sources, sinks, and sanitizers by language. |
+| [`src/analyzer/taint_rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_rules.py#L1) | 569 | 0 | `none` | Default taint analysis rules — sources, sinks, and sanitizers by language. |
+| [`src/analyzer/taint_shapes.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L1) | 215 | 11 | `ast` | Argument-shape gates for sink rules. |
 | [`src/analyzer/tech_debt.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/tech_debt.py#L1) | 142 | 4 | `dataclasses, pathlib, re` | Tech Debt tracker — scan source files for TODO/FIXME/HACK/XXX markers. |
 | [`src/analyzer/type_filter.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/type_filter.py#L1) | 208 | 5 | `logging, lsp, pathlib, re, typing` | Type-aware filter for taint analysis. |
 | [`src/api_server.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/api_server.py#L1) | 475 | 19 | `argparse, http, index_store, json, logging, os, pathlib, urllib` | Flyto2 Indexer HTTP API Server |
@@ -80,7 +83,7 @@ Generated inventory: **199 Python modules**, **79,590 lines**, and **2,452 class
 | [`src/auditor/llm_auditor.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/auditor/llm_auditor.py#L1) | 348 | 11 | `json, logging, openai, os, pathlib, requests, tqdm, typing` | LLM Auditor - Use LLM to understand code purpose |
 | [`src/auditor/workflow.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/auditor/workflow.py#L1) | 352 | 9 | `dataclasses, json, pathlib` | AI Workflow - High-level -> Mid-level -> Detail -> Impact Analysis |
 | [`src/bm25.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/bm25.py#L1) | 246 | 8 | `json, math, pathlib, re, safe_io, typing` | Pure-Python BM25 (Okapi BM25) index for code search. |
-| [`src/cli.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1) | 2664 | 58 | `analyzer, argparse, contextlib, dataclasses, datetime, dependency_scanner, doc_scanner, engine, flyto_output, fnmatch, framework_detector, hashlib` | Command-line interface for Flyto2 Indexer. |
+| [`src/cli.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1) | 2688 | 58 | `analyzer, argparse, contextlib, dataclasses, datetime, dependency_scanner, doc_scanner, engine, flyto_output, fnmatch, framework_detector, hashlib` | Command-line interface for Flyto2 Indexer. |
 | [`src/context/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/context/__init__.py#L1) | 5 | 0 | `loader` | Context loading module. |
 | [`src/context/loader.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/context/loader.py#L1) | 410 | 17 | `dataclasses, models, pathlib, re, typing` | Progressive Context Loading |
 | [`src/dependency_resolver.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_resolver.py#L1) | 510 | 18 | `logging, models` | Dependency resolution mixin for IndexEngine. |

@@ -42,6 +42,11 @@ taint:
     - pattern: "cursor.execute("
       vuln_type: sql_injection
       severity: high
+    - pattern: ".find("        # the receiver is whatever the project named it
+      vuln_type: nosql_injection
+      severity: high
+      requires:                # this counts only when it is given a mapping
+        - {arg: 0, shape: mapping}
   sanitizers:
     - pattern: "escape_sql("
       cleanses: ["sql_injection"]
@@ -58,6 +63,33 @@ Sources, sinks, sanitizers and propagators share one file. Sources, sinks and
 sanitizers also have `add_taint_*` MCP tools; propagators are YAML-only (no
 `add_*` tool, to keep the MCP surface at its fixed tool count) and are listed
 back by `list_taint_rules`.
+
+### Argument-shape gates (`requires:`)
+
+A sink pattern is matched as a substring, so a rule that names a receiver only
+finds the projects that chose the same name: `collection.find(` misses
+`users.find(` and `self.db.orders.find(`. Dropping the receiver matches all of
+them and also matches `line.find(",")`, which is `str.find`. What separates
+them is the argument, so a rule can say so.
+
+Every requirement listed must hold for the match to count:
+
+| Requirement | Holds when |
+| --- | --- |
+| `{arg: 0, shape: mapping}` | argument 0 is a mapping. `any` and `after_first` may replace the index; shapes are `mapping`, `sequence`, `scalar`, `constant`, `dynamic` |
+| `{callee_tail: ["re.search"]}` | the dotted callee ends there at a name boundary, so `store.search` does not qualify |
+| `{keyword: "shell", equals: true}` | that keyword argument is present with that value |
+| `{min_args: 2}` / `{max_args: 1}` | the positional argument count is in range |
+| `{not: {...}}` | the requirement inside does not hold |
+
+Shapes fail open. `shape: mapping` passes unless the argument is *provably*
+something else -- a string literal, or a name bound to one earlier in the same
+function. An unknown expression stays a candidate, because a gate that guesses
+drops real flows silently.
+
+Requirements describe a call, so a rule that carries them does not apply to a
+subscript sink (`response.headers[`), and the text-level `research_priority`
+ranker skips it rather than evaluating a gate it cannot see.
 
 Policy files are YAML parsed with `safe_load`; malformed content fails closed.
 The built-in corpus under `config/rules/` supplies default complexity,

@@ -348,6 +348,32 @@
       ]
     },
     {
+      "id": "python-nosql-named-handle",
+      "path": "python-nosql-named-handle",
+      "language": "python",
+      "kind": "positive",
+      "expected": {
+        "nosql_injection": 1
+      },
+      "reference_categories": [
+        "nosql_injection"
+      ],
+      "reference_sources": [
+        "semgrep/python-nosql-injection"
+      ]
+    },
+    {
+      "id": "python-str-find",
+      "path": "python-str-find",
+      "language": "python",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": [
+        "semgrep/python-nosql-injection"
+      ]
+    },
+    {
       "id": "python-crlf-constant",
       "path": "python-crlf-constant",
       "language": "python",
