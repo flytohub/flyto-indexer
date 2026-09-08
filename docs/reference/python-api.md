@@ -2,7 +2,7 @@
 
 # Python API Reference
 
-Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,428 declarations across 171 files**.
+Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,430 declarations across 171 files**.
 
 ## `analyze.py`
 
@@ -2705,16 +2705,18 @@ Every declared class, function, nested function, and method in the package, supp
 | function | `def _is_referenced_by_context(sym_type, sym_name, sym_project, sym_path, ref_ctx)` | Check if symbol is referenced via names, classes, or file imports. | [`src/tools/maintenance.py:365`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L365) |
 | function | `def _is_imported_component(sym_type, sym_name, sym_path, dependencies)` | Check if a composable/class/component is imported via dependency analysis. | [`src/tools/maintenance.py:400`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L400) |
 | function | `def _is_potentially_dead(sym_id, sym, ref_ctx, dependencies, symbols, _same_file_content_cache, project_roots=None, source_text_cache=None)` | Return True if the symbol should be considered dead code. | [`src/tools/maintenance.py:426`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L426) |
-| function | `def _format_dead_code_result(dead_code: list) -> dict` | The declaration and linked implementation are authoritative. | [`src/tools/maintenance.py:447`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L447) |
-| function | `def _find_dead_code_from_index(index, project=None, symbol_type=None, min_lines=5)` | Find dead code from an explicit index snapshot. | [`src/tools/maintenance.py:477`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L477) |
-| function | `def find_dead_code(project=None, symbol_type=None, min_lines=5)` | The declaration and linked implementation are authoritative. | [`src/tools/maintenance.py:556`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L556) |
-| function | `def find_todos(project=None, priority=None, max_results=100)` | Find all TODO, FIXME, HACK, XXX markers. | [`src/tools/maintenance.py:565`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L565) |
-| function | `def check_index_status()` | Check if the index is stale and needs to be updated. | [`src/tools/maintenance.py:642`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L642) |
-| function | `def _perform_live_reindex(project=None)` | Reindex one or all projects. | [`src/tools/maintenance.py:748`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L748) |
-| function | `def _perform_live_reindex_unlocked(project=None)` | Internal reindex — caller must hold _reindex_lock. | [`src/tools/maintenance.py:768`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L768) |
-| function | `def check_and_reindex(dry_run=True, project=None, auto_reindex=False)` | The declaration and linked implementation are authoritative. | [`src/tools/maintenance.py:813`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L813) |
-| function | `def session_track(session_id, event_type, target, workspace_root='')` | The declaration and linked implementation are authoritative. | [`src/tools/maintenance.py:856`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L856) |
-| function | `def session_get(session_id)` | The declaration and linked implementation are authoritative. | [`src/tools/maintenance.py:870`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L870) |
+| function | `def _quoted_names_in(source_text_cache) -> set&#91;str&#93;` | Every identifier that appears somewhere as a whole quoted string. | [`src/tools/maintenance.py:453`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L453) |
+| function | `def _dead_code_confidence(sym, sym_name, source_text_cache) -> str` | How strongly "unreferenced here" supports "safe to delete". | [`src/tools/maintenance.py:477`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L477) |
+| function | `def _format_dead_code_result(dead_code: list) -> dict` | The declaration and linked implementation are authoritative. | [`src/tools/maintenance.py:494`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L494) |
+| function | `def _find_dead_code_from_index(index, project=None, symbol_type=None, min_lines=5)` | Find dead code from an explicit index snapshot. | [`src/tools/maintenance.py:555`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L555) |
+| function | `def find_dead_code(project=None, symbol_type=None, min_lines=5)` | The declaration and linked implementation are authoritative. | [`src/tools/maintenance.py:635`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L635) |
+| function | `def find_todos(project=None, priority=None, max_results=100)` | Find all TODO, FIXME, HACK, XXX markers. | [`src/tools/maintenance.py:644`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L644) |
+| function | `def check_index_status()` | Check if the index is stale and needs to be updated. | [`src/tools/maintenance.py:721`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L721) |
+| function | `def _perform_live_reindex(project=None)` | Reindex one or all projects. | [`src/tools/maintenance.py:827`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L827) |
+| function | `def _perform_live_reindex_unlocked(project=None)` | Internal reindex — caller must hold _reindex_lock. | [`src/tools/maintenance.py:847`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L847) |
+| function | `def check_and_reindex(dry_run=True, project=None, auto_reindex=False)` | The declaration and linked implementation are authoritative. | [`src/tools/maintenance.py:892`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L892) |
+| function | `def session_track(session_id, event_type, target, workspace_root='')` | The declaration and linked implementation are authoritative. | [`src/tools/maintenance.py:935`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L935) |
+| function | `def session_get(session_id)` | The declaration and linked implementation are authoritative. | [`src/tools/maintenance.py:949`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L949) |
 
 ## `src/tools/proof_receipts.py`
 

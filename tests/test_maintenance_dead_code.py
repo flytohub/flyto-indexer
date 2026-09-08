@@ -286,3 +286,91 @@ def test_find_dead_code_scopes_source_and_dependency_work(monkeypatch, tmp_path)
 
     assert visited_roots == [root_a]
     assert {item["project"] for item in result["dead_symbols"]} <= {"proj-a"}
+
+
+def _one_dead(monkeypatch, tmp_path, body: str, *, name: str, exports=None):
+    source = tmp_path / "src" / "mod.py"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(body, encoding="utf-8")
+    sid = f"proj:src/mod.py:function:{name}"
+    index = _index(tmp_path, {
+        sid: _symbol("proj", "src/mod.py", "function", name, end=8, exports=exports),
+    })
+    monkeypatch.setattr(maintenance, "load_index", lambda: index)
+    return maintenance.find_dead_code(project="proj", min_lines=1)
+
+
+def test_unexported_and_unquoted_symbol_is_definitely_removable(monkeypatch, tmp_path):
+    result = _one_dead(
+        monkeypatch, tmp_path,
+        "fn helper_only_here(value: i32) -> i32 {\n    value\n}\n",
+        name="helper_only_here",
+    )
+
+    assert result["total_dead"] == 1
+    assert result["dead_symbols"][0]["confidence"] == "definite"
+    assert result["removable"] == 1
+    assert "Largest removable symbol" in result["next_action"]
+
+
+def test_exported_symbol_is_only_probably_dead(monkeypatch, tmp_path):
+    result = _one_dead(
+        monkeypatch, tmp_path,
+        "def public_api(value):\n    return value\n",
+        name="public_api", exports=["public_api"],
+    )
+
+    # flyto-core publishes to PyPI; calling its unreferenced exports removable
+    # is advice to break consumers this index cannot see.
+    assert result["dead_symbols"][0]["confidence"] == "probable"
+    assert result["removable"] == 0
+    assert "may have consumers outside this repository" in result["next_action"]
+
+
+def test_a_name_used_as_a_string_literal_is_unknown(monkeypatch, tmp_path):
+    result = _one_dead(
+        monkeypatch, tmp_path,
+        "def route(app):\n    return app.get('dispatch_entry')\n",
+        name="dispatch_entry",
+    )
+
+    # Reachable by a name no reference graph resolves.
+    assert result["dead_symbols"][0]["confidence"] == "unknown"
+    assert result["removable"] == 0
+    assert "dispatched dynamically" in result["next_action"]
+
+
+def test_string_literal_outranks_export_when_both_apply(monkeypatch, tmp_path):
+    source = tmp_path / "src" / "mod.py"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text("def public_api(value):\n    return value\n", encoding="utf-8")
+    # A registry in another file: the same-file check cannot see it, so the
+    # symbol is still reported, and only the confidence carries the doubt.
+    registry = tmp_path / "src" / "registry.py"
+    registry.write_text("ROUTES = {'public_api': None}\n", encoding="utf-8")
+
+    sid = "proj:src/mod.py:function:public_api"
+    rid = "proj:src/registry.py:variable:ROUTES"
+    index = _index(tmp_path, {
+        sid: _symbol("proj", "src/mod.py", "function", "public_api", end=8, exports=["public_api"]),
+        rid: _symbol("proj", "src/registry.py", "variable", "ROUTES", end=2),
+    })
+    monkeypatch.setattr(maintenance, "load_index", lambda: index)
+    result = maintenance.find_dead_code(project="proj", min_lines=1)
+
+    entry = next(s for s in result["dead_symbols"] if s["name"] == "public_api")
+    # "We cannot tell" is the weaker claim, and it wins over "exported".
+    assert entry["confidence"] == "unknown"
+
+
+def test_confidence_does_not_change_the_dead_count(monkeypatch, tmp_path):
+    result = _one_dead(
+        monkeypatch, tmp_path,
+        "def public_api(value):\n    return value\n",
+        name="public_api", exports=["public_api"],
+    )
+
+    # The health score reads total_dead; grading must not move because the
+    # finding was described more precisely.
+    assert result["total_dead"] == 1
+    assert result["total"] == 1
