@@ -882,6 +882,43 @@ def test_workspace_verification_aggregates_projects(tmp_path):
     assert "Flyto2 Workspace Verify" in format_workspace_verification(result)
 
 
+def test_workspace_report_names_every_workspace_check(tmp_path):
+    project_a = tmp_path / "project-a"
+    _write_project(project_a)
+    result = run_workspace_verification(tmp_path, project_paths=[project_a], full_scan=True)
+    result["workspace_checks"] = [
+        {"name": "cross_project_contract", "status": "pass", "summary": "Contracts line up", "metrics": {"a": 1}},
+        {"name": "product_loop_closure", "status": "warn", "summary": "Surface x is open", "metrics": {"b": 2}},
+    ]
+
+    report = format_workspace_verification(result)
+
+    # The counts alone left the reader unable to tell which check spoke.
+    assert "[PASS] cross_project_contract: Contracts line up" in report
+    assert "[WARN] product_loop_closure: Surface x is open" in report
+    # Metrics are noise for a check that passed, and the payload for one that did not.
+    assert '{"b": 2}' in report
+    assert '{"a": 1}' not in report
+
+
+def test_loop_closure_summary_names_the_surface_and_its_reason(tmp_path):
+    frontend = tmp_path / "frontend"
+    backend = tmp_path / "backend"
+    _write_frontend_loop_index(frontend)
+    _write_backend_index(backend, [("GET", "/api/v1/code/orgs/{id}/footprint/graph")])
+    checks = []
+
+    _check_product_loop_closure([frontend, backend], checks)
+
+    check = {c["name"]: c for c in checks}["product_loop_closure"]
+    assert check["status"] == "warn"
+    gap = check["metrics"]["gaps"][0]
+    # A fixed sentence forced the reader into --json, because the report
+    # truncates the metrics before `gaps`.
+    assert gap["surface"] in check["summary"]
+    assert gap["reasons"][0] in check["summary"]
+
+
 def test_cross_project_contract_matches_frontend_to_backend(tmp_path):
     frontend = tmp_path / "frontend"
     backend = tmp_path / "backend"
