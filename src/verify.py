@@ -287,6 +287,7 @@ def run_verification(
     _check_change_hygiene(root, add_check)
     _check_mcp_registry(root, add_check)
     _check_mcp_runtime_smoke(root, add_check)
+    _check_suppression_drift(root, add_check)
     _check_agent_hygiene(root, add_check)
     _check_policy_budget(root, checks, policy_path)
 
@@ -2336,6 +2337,202 @@ def _is_contract_skipped_path(path: str) -> bool:
         return True
     stem = Path(path).stem
     return any(stem.endswith(suffix) for suffix in _CONTRACT_SKIP_SUFFIXES)
+
+
+# A file-level pragma removes the whole file from a tool's reach. A targeted
+# one -- suppressing a single code on a single line -- is ordinary engineering,
+# so only the blanket forms are counted.
+#
+# The pragmas are assembled rather than written out: a linter reading this file
+# treats its own directive spelled literally in a string as a directive, and
+# warns about the one it cannot parse.
+_HASH = "#"
+_TS_SUFFIXES = (".ts", ".tsx", ".vue", ".js", ".jsx", ".mts", ".cts")
+_PY_SUFFIXES = (".py", ".pyi")
+_BLANKET_SUPPRESSIONS: tuple[tuple[str, str, re.Pattern[str], tuple[str, ...]], ...] = (
+    (
+        "typescript", "@ts-nocheck",
+        re.compile(r"^\s*//\s*@ts-nocheck\s*$"), _TS_SUFFIXES,
+    ),
+    (
+        "eslint", "eslint-disable",
+        re.compile(r"^\s*/\*\s*eslint-disable\s*\*/\s*$"), _TS_SUFFIXES,
+    ),
+    (
+        "mypy", "mypy: ignore-errors",
+        re.compile(rf"^\s*{_HASH}\s*mypy:\s*ignore-errors\s*$"), _PY_SUFFIXES,
+    ),
+    (
+        "ruff", "ruff: " + "noqa",
+        re.compile(rf"^\s*{_HASH}\s*ruff:\s*" + r"noqa\s*$"), _PY_SUFFIXES,
+    ),
+    (
+        "flake8", "flake8: " + "noqa",
+        re.compile(rf"^\s*{_HASH}\s*flake8:\s*" + r"noqa\s*$"), _PY_SUFFIXES,
+    ),
+)
+
+# Read far enough to clear a licence header; a blanket pragma has to precede
+# the code it silences, so it cannot hide further down than this.
+_SUPPRESSION_HEADER_LINES = 30
+
+# Five files is where a reviewer stops noticing them one at a time, and two
+# percent is an order of magnitude above the incidental use measured across
+# this workspace (3 of 1,673). A fifth of the files is material on its own,
+# however few they are.
+_SUPPRESSION_MIN_FILES = 5
+_SUPPRESSION_MIN_RATIO = 0.02
+_SUPPRESSION_MATERIAL_RATIO = 0.20
+
+
+def _quality_tool_is_configured(root: Path, tool: str) -> bool:
+    """Whether the repository claims to run this tool at all."""
+    def pyproject_has(section: str) -> bool:
+        pyproject = root / "pyproject.toml"
+        if not pyproject.exists():
+            return False
+        try:
+            data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        except (tomllib.TOMLDecodeError, OSError):
+            return False
+        return section in (data.get("tool") or {})
+
+    if tool == "typescript":
+        return any(root.glob("tsconfig*.json"))
+    if tool == "eslint":
+        if any(root.glob(".eslintrc*")) or any(root.glob("eslint.config.*")):
+            return True
+        package = root / "package.json"
+        if not package.exists():
+            return False
+        try:
+            data = json.loads(package.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return False
+        if "eslintConfig" in data:
+            return True
+        return any("eslint" in (data.get(key) or {}) for key in ("devDependencies", "dependencies"))
+    if tool == "mypy":
+        return (
+            pyproject_has("mypy")
+            or (root / "mypy.ini").exists()
+            or (root / ".mypy.ini").exists()
+        )
+    if tool == "ruff":
+        return (
+            pyproject_has("ruff")
+            or (root / "ruff.toml").exists()
+            or (root / ".ruff.toml").exists()
+        )
+    if tool == "flake8":
+        return (
+            (root / ".flake8").exists()
+            or (root / "tox.ini").exists()
+            or (root / "setup.cfg").exists()
+        )
+    return False
+
+
+def _file_opens_with_blanket_pragma(path: Path, pattern: re.Pattern[str]) -> bool:
+    try:
+        with path.open(encoding="utf-8", errors="ignore") as handle:
+            for offset, line in enumerate(handle):
+                if offset >= _SUPPRESSION_HEADER_LINES:
+                    return False
+                if pattern.match(line):
+                    return True
+    except OSError:
+        return False
+    return False
+
+
+def _check_suppression_drift(root: Path, add_check) -> None:
+    """Catch a repository that runs a quality tool and exempts its files from it.
+
+    A green lint or typecheck run says nothing about the files the tool was
+    told to skip. The contradiction -- configured, and broadly silenced -- is
+    invisible to every other check here, and to the tool itself, which exits
+    zero precisely because it obeyed.
+    """
+    configured = {
+        tool for tool, _, _, _ in _BLANKET_SUPPRESSIONS
+        if _quality_tool_is_configured(root, tool)
+    }
+    if not configured:
+        add_check(
+            "suppression_drift", "pass",
+            "No typecheck or lint tooling configured; suppression drift not applicable",
+        )
+        return
+
+    candidates: dict[str, int] = dict.fromkeys(configured, 0)
+    # Not dict.fromkeys: every key would share one list.
+    suppressed: dict[str, list[str]] = {tool: [] for tool in configured}
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        if set(path.relative_to(root).parts) & _SKIP_WORKSPACE_DIRS:
+            continue
+        for tool, _label, pattern, suffixes in _BLANKET_SUPPRESSIONS:
+            if tool not in configured or path.suffix not in suffixes:
+                continue
+            candidates[tool] += 1
+            if _file_opens_with_blanket_pragma(path, pattern):
+                suppressed[tool].append(str(path.relative_to(root)))
+
+    labels = {tool: label for tool, label, _, _ in _BLANKET_SUPPRESSIONS}
+    drifted: list[dict[str, Any]] = []
+    for tool in sorted(configured):
+        total = candidates[tool]
+        count = len(suppressed[tool])
+        if not total or not count:
+            continue
+        ratio = count / total
+        material = ratio >= _SUPPRESSION_MATERIAL_RATIO or (
+            count >= _SUPPRESSION_MIN_FILES and ratio >= _SUPPRESSION_MIN_RATIO
+        )
+        if material:
+            drifted.append({
+                "tool": tool,
+                "pragma": labels[tool],
+                "suppressed": count,
+                "candidates": total,
+                "ratio": round(ratio, 4),
+                "samples": sorted(suppressed[tool])[:10],
+            })
+
+    status = "pass"
+    summary = "Configured typecheck and lint tooling covers its files"
+    if drifted:
+        status = "warn"
+        shown = ", ".join(
+            f"{d['tool']} exempts {d['suppressed']}/{d['candidates']} files"
+            f" ({d['ratio'] * 100:.0f}%) via {d['pragma']}"
+            for d in drifted[:3]
+        )
+        remainder = len(drifted) - 3
+        if remainder > 0:
+            shown += f", and {remainder} more"
+        summary = f"Configured tooling is broadly suppressed: {shown}"
+
+    add_check(
+        "suppression_drift",
+        status,
+        summary,
+        metrics={
+            "configured": sorted(configured),
+            "counts": {
+                tool: {"suppressed": len(suppressed[tool]), "candidates": candidates[tool]}
+                for tool in sorted(configured)
+            },
+            "drift": drifted,
+            "thresholds": {
+                "min_files": _SUPPRESSION_MIN_FILES,
+                "min_ratio": _SUPPRESSION_MIN_RATIO,
+                "material_ratio": _SUPPRESSION_MATERIAL_RATIO,
+            },
+        },
+    )
 
 
 def _check_agent_hygiene(root: Path, add_check) -> None:
