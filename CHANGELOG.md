@@ -40,6 +40,11 @@
   mapping too, so no argument shape separates it.
 
 ### Fixed
+- `total_sinks` stopped counting gated rules. It is a text count, and a gated
+  rule is not a text match: `.find(` counts as a NoSQL sink only when its
+  argument is a mapping, so counting every occurrence reported every
+  `str.find` in a project as a sink. The number verify prints went 1554 ->
+  1890 on this repository, none of it a sink the analysis would report.
 - Adding or removing a taint rule no longer rewrites `.flyto-rules.yaml`. The
   writers parsed the whole document and dumped it back, which discarded every
   comment and reordered the file: on flyto-cloud's 332-line policy that turned

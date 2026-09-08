@@ -306,3 +306,26 @@ class TestDuplicateFlows:
         """))
         findings = TaintAnalyzer(tmp_path).analyze()
         assert len(findings) == 1
+
+
+class TestSinkCounting:
+    def test_a_gated_rule_is_not_counted_as_a_text_match(self, tmp_path):
+        # `total_sinks` is what verify prints. Counting `.find(` textually
+        # reported every `str.find` in the project as a sink -- 1554 -> 1890
+        # on this repository -- none of which the analysis would report.
+        (tmp_path / "app.py").write_text(textwrap.dedent("""
+            def offsets(line):
+                a = line.find(",")
+                b = line.find(";")
+                c = line.find(":")
+                return a, b, c
+        """))
+        result = TaintAnalyzer(tmp_path).analyze_full()
+        assert result.total_sinks == 0
+
+    def test_an_ungated_rule_is_still_counted(self, tmp_path):
+        (tmp_path / "app.py").write_text(textwrap.dedent("""
+            def lookup(users, q):
+                return users.findOne(q)
+        """))
+        assert TaintAnalyzer(tmp_path).analyze_full().total_sinks == 1
