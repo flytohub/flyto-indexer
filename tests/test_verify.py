@@ -25,6 +25,7 @@ from src.verify import (
     _check_mcp_runtime_smoke,
     _check_product_loop_closure,
     _check_single_project_islands,
+    _check_suppression_drift,
     _extract_openapi_json_api_contracts,
     _extract_api_calls_from_text,
     _find_status_regressions,
@@ -880,6 +881,68 @@ def test_workspace_verification_aggregates_projects(tmp_path):
     assert result["summary"]["projects"] == 2
     assert len(result["projects"]) == 2
     assert "Flyto2 Workspace Verify" in format_workspace_verification(result)
+
+
+def _write_typescript_project(root: Path, *, files: int, suppressed: int, pragma: str = "// @ts-nocheck"):
+    (root / "src").mkdir(parents=True, exist_ok=True)
+    (root / "tsconfig.json").write_text('{"compilerOptions": {"strict": true}}', encoding="utf-8")
+    for index in range(files):
+        head = f"{pragma}\n" if index < suppressed else ""
+        (root / "src" / f"module{index}.ts").write_text(f"{head}export const value{index} = {index}\n", encoding="utf-8")
+
+
+def _drift(root: Path):
+    checks = []
+    _check_suppression_drift(root, lambda name, status, summary, metrics=None: checks.append(
+        {"name": name, "status": status, "summary": summary, "metrics": metrics or {}}
+    ))
+    return checks[0]
+
+
+def test_suppression_drift_flags_a_tool_that_is_configured_and_exempted(tmp_path):
+    _write_typescript_project(tmp_path, files=40, suppressed=8)
+
+    check = _drift(tmp_path)
+
+    # A typecheck run over this repository exits zero precisely because it was
+    # told to skip a fifth of the files.
+    assert check["status"] == "warn"
+    assert "typescript" in check["summary"]
+    assert "8/40" in check["summary"]
+    assert check["metrics"]["drift"][0]["pragma"] == "@ts-nocheck"
+
+
+def test_suppression_drift_ignores_targeted_suppressions(tmp_path):
+    # Narrowing one line is ordinary engineering; only the blanket form removes
+    # a whole file from the tool's reach.
+    _write_typescript_project(tmp_path, files=40, suppressed=20, pragma="// @ts-expect-error narrow")
+
+    assert _drift(tmp_path)["status"] == "pass"
+
+
+def test_suppression_drift_stays_silent_when_the_tool_is_not_configured(tmp_path):
+    _write_typescript_project(tmp_path, files=40, suppressed=20)
+    (tmp_path / "tsconfig.json").unlink()
+
+    check = _drift(tmp_path)
+
+    # Without a tsconfig there is no claim to contradict.
+    assert check["status"] == "pass"
+    assert "not applicable" in check["summary"]
+
+
+def test_suppression_drift_tolerates_incidental_use(tmp_path):
+    # Matches the measured shape of flyto-cloud: 3 files in a large tree.
+    _write_typescript_project(tmp_path, files=400, suppressed=3)
+
+    assert _drift(tmp_path)["status"] == "pass"
+
+
+def test_suppression_drift_flags_a_small_tree_that_is_mostly_exempt(tmp_path):
+    # Under the file floor, but four of six files is not incidental.
+    _write_typescript_project(tmp_path, files=6, suppressed=4)
+
+    assert _drift(tmp_path)["status"] == "warn"
 
 
 def test_workspace_report_names_every_workspace_check(tmp_path):
