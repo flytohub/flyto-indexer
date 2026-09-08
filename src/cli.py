@@ -500,6 +500,14 @@ def _configure_architecture_commands(subparsers) -> None:
     add_tsk_parser.add_argument("--vuln-type", dest="vuln_type", default="custom", help="Category (rce, xss, sql_injection, path_traversal, ...)")
     add_tsk_parser.add_argument("--severity", choices=["critical", "high", "medium", "low"], default="high", help="Severity (default: high)")
     add_tsk_parser.add_argument("--recommendation", default="", help="What to do instead (shown in taint report)")
+    add_tsk_parser.add_argument(
+        "--requires", default="",
+        help=(
+            "JSON argument-shape gates, e.g. "
+            "'[{\"arg\": 0, \"shape\": \"mapping\"}]'. "
+            "Lets a rule name a method without naming its receiver."
+        ),
+    )
 
     add_tsan_parser = subparsers.add_parser(
         "add-taint-sanitizer",
@@ -2097,12 +2105,28 @@ def cmd_add_taint_sink(args):
         print(f"Path does not exist: {project_path}", file=sys.stderr)
         sys.exit(1)
 
+    requires = None
+    if getattr(args, "requires", ""):
+        import json
+
+        try:
+            requires = json.loads(args.requires)
+        except json.JSONDecodeError as error:
+            print(f"--requires is not valid JSON: {error}", file=sys.stderr)
+            sys.exit(1)
+        if isinstance(requires, dict):
+            requires = [requires]
+        if not isinstance(requires, list):
+            print("--requires must be a JSON object or list of objects", file=sys.stderr)
+            sys.exit(1)
+
     return add_taint_sink(
         project_path,
         pattern=args.pattern,
         vuln_type=args.vuln_type,
         severity=args.severity,
         recommendation=args.recommendation,
+        requires=requires,
     )
 
 

@@ -23,6 +23,21 @@
   `undo_vibe_edit` path traversal, with demo and operator-fed flows demoted.
 - `flyto-index remove-taint-rule --kind --pattern` — the CLI could add the
   three kinds of taint rule but only the MCP surface could remove one.
+- Argument-shape gates on sink rules (`requires:`, `analyzer.taint_shapes`). A
+  sink pattern is matched as a substring, so naming a receiver only found the
+  projects that chose the same name — `collection.find(` missed `users.find(`
+  and every other handle. A rule can now name the method and state the shape
+  its argument has to have, which is what actually separates a Mongo query
+  (a mapping) from `str.find` (a string). The vocabulary covers argument shape
+  and constancy, callee tail at a name boundary, keyword values, argument
+  counts, and negation; it is available to project rules in
+  `.flyto-rules.yaml` and to `flyto-index add-taint-sink --requires`.
+  Gates fail open: an argument whose shape cannot be proven stays a candidate.
+- The built-in NoSQL and header-injection rules use it, so they no longer
+  assume the receiver is called `collection`, `Model`, `res`, or `response`.
+  Two benchmark cases cover the change (27 cases, precision and recall 1.0).
+  `.update(` deliberately keeps its receiver: `dict.update({...})` takes a
+  mapping too, so no argument shape separates it.
 
 ### Fixed
 - Adding or removing a taint rule no longer rewrites `.flyto-rules.yaml`. The
@@ -33,6 +48,9 @@
   neighbours, and an emptied list has its key removed rather than being left as
   a null the analyzer would crash on. A file whose shape cannot be edited
   safely is reported with the snippet to paste, never rewritten.
+- Identical taint flows are reported once. Two rules can name the same call —
+  a project declaring `.find(` now overlaps the built-in one — and the same
+  flow appearing twice inflated every count downstream.
 - `_apply_yaml_rules` tolerates a declared-but-empty `sources:`, `sinks:`, or
   `sanitizers:` key. It read back as `None`, and the scan raised `TypeError`
   instead of finding nothing.
