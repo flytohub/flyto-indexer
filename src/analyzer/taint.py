@@ -957,7 +957,14 @@ class TaintAnalyzer:
         for source in self._sources.get(lang, []):
             src_clean = source.rstrip("(")
             self._source_count += content.count(src_clean)
-        for pattern, _vt, _sev, _rec, _req in self._flat_sinks:
+        for pattern, _vt, _sev, _rec, requires in self._flat_sinks:
+            if requires:
+                # This is a text count, and a gated rule is not a text match.
+                # `.find(` counts only when its argument is a mapping, so
+                # counting every occurrence reports `str.find` as a sink and
+                # inflated the number verify prints: 1554 -> 1890 on this
+                # repository, none of it a sink the analysis would report.
+                continue
             pat_clean = pattern.rstrip("(")
             self._sink_count += content.count(pat_clean)
 

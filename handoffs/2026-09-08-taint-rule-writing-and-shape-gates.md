@@ -80,15 +80,44 @@ behaviour for aesthetic reasons.
 - PR #56 CI: 21 checks green (one SBOM run failed on an artifact-upload 403 and
   passed on re-run; the same commit content had already passed that job).
 
+## Measured afterwards (2026-09-09)
+
+The fail-open cost was left unmeasured above. It has now been measured, on
+15,798 files of third-party Python (flyto-core's installed dependencies, copied
+out of `.venv` because the scanner excludes that path) and on all 43 workspace
+repositories, running the merged rules against the pre-change commit 9497948.
+
+- `.find(` call sites in that corpus: 1103. The shape gate rejects 708 (64%)
+  and passes 395 (36%). A 30-site random sample of the passers contained no
+  database call at all -- `str.find`, ElementTree `Element.find`, BeautifulSoup,
+  union-find, and sympy expression search.
+- Findings on that corpus: 17 before, 20 after. **Zero** of the three new ones
+  is a NoSQL finding: passing the gate is not a finding, and none of those 395
+  sites has tainted data reaching it. The fail-open FP class is real in
+  principle and empty here.
+- The three new findings all come from the receiver-free `.headers[` rule.
+  One (`blackd/middlewares.py:34`) is a genuine server-side CORS echo, guarded
+  by an allow-list check the engine cannot see. Two (`aiohttp/client_reqrep.py`,
+  `aiohttp/client_middleware_digest_auth.py`) set headers on an outgoing
+  *client* request -- a real false-positive class, because the rule cannot tell
+  a client request object from a server response object.
+- Across all 43 workspace repositories: one new finding,
+  `flyto-ai/flyto_ai/cli.py:2254`, the same CORS shape, sanitized in code by
+  `_get_cors_origin` (strips CR/LF, then checks a whitelist). Zero new NoSQL
+  findings.
+- The measurement also found a defect this change introduced:
+  `total_sinks` counted gated patterns textually, so every `str.find` was
+  counted as a sink and the number verify prints went 1554 -> 1890 on this
+  repository. Fixed on `fix/a-gated-rule-is-not-a-text-count`.
+
 ## Not verified
 
-- No measurement of the new receiver-free rules against a real Mongo or
-  Express codebase. Our own repositories contain no Mongo, so the recall gain
-  is demonstrated on constructed cases, not on production code.
-- Argument-shape gates fail open by design: an argument whose shape cannot be
-  proven stays a candidate. On a codebase that calls `str.find` with a variable
-  needle, that is a false positive this change introduces. The size of that
-  class is unmeasured.
+- Still no measurement against a real Mongo or Express codebase: no
+  pymongo/mongoose is installed anywhere in this workspace, so the recall gain
+  remains demonstrated on constructed cases and the benchmark corpus, not on
+  production database code.
+- The client-request false-positive class above is identified but not sized;
+  it needs a corpus of HTTP-client-heavy code to bound.
 - PR #57's first push ran only 2 checks: its base was PR #56's branch, and most
   workflows run on pull requests into `main` only. Squash-merging #56 and
   deleting that branch closed #57, so it was rebuilt on `main` and reopened;
