@@ -23,6 +23,10 @@
   `undo_vibe_edit` path traversal, with demo and operator-fed flows demoted.
 - `flyto-index remove-taint-rule --kind --pattern` — the CLI could add the
   three kinds of taint rule but only the MCP surface could remove one.
+- `receiver_root` in the argument-shape vocabulary: what a sink hangs off, not
+  just what it is given. It is the one requirement a sink with no call can
+  still answer, so a subscript sink such as `resp.headers[name] = value` can be
+  gated on its receiver where an argument rule cannot reach it.
 - Argument-shape gates on sink rules (`requires:`, `analyzer.taint_shapes`). A
   sink pattern is matched as a substring, so naming a receiver only found the
   projects that chose the same name — `collection.find(` missed `users.find(`
@@ -40,6 +44,12 @@
   mapping too, so no argument shape separates it.
 
 ### Fixed
+- The header rules mean the *response*. `.headers[` and `.setHeader(` now carry
+  `{not: {receiver_root: ["request", "req"]}}`, because server frameworks make
+  `request.headers` read-only -- an assignment into it is an HTTP client
+  building its own outgoing request. Measured on 15,798 files of third-party
+  Python, this removes aiohttp's digest-auth middleware from the findings
+  while keeping blackd's genuine CORS echo.
 - `total_sinks` stopped counting gated rules. It is a text count, and a gated
   rule is not a text match: `.find(` counts as a NoSQL sink only when its
   argument is a mapping, so counting every occurrence reported every

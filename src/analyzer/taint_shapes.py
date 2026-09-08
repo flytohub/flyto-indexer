@@ -22,7 +22,13 @@ Requirements are evaluated against the call's AST and every one must hold.
     {callee_tail: ["re.search", ...]}             dotted callee ends here
     {keyword: "shell", equals: true}              keyword argument value
     {min_args: 1} / {max_args: 1}                 argument count
+    {receiver_root: ["request", "req"]}           what the call hangs off
     {not: {...}}                                  negation of one requirement
+
+`receiver_root` is the one requirement a sink with no call can still answer:
+`resp.headers[name] = value` has a receiver even though it has no arguments.
+It is how a header rule says it means a *response*, since writing into
+`request.headers` is a client building its own outgoing request.
 
 Shapes fail open, on purpose. ``shape: mapping`` passes unless the argument is
 *provably* something else -- a string literal, or a name bound to one earlier in
@@ -172,14 +178,58 @@ def _keyword_holds(call: ast.Call, requirement: dict) -> bool:
     return False
 
 
+#: Requirement keys that describe the call itself. A sink with no call --
+#: `resp.headers[name] = value` -- can be judged on its receiver but never on
+#: these, so a rule carrying one simply does not apply there.
+CALL_ONLY_KEYS = frozenset({"arg", "shape", "keyword", "min_args", "max_args",
+                            "callee_tail"})
+
+
+def receiver_root(expr: "ast.expr | None") -> str:
+    """The leftmost identifier of a receiver expression.
+
+    `request.headers` -> "request", `self.session.headers` -> "self",
+    `clients[0].headers` -> "clients". Empty when there is no name to read.
+    """
+    node = _unwrap(expr) if expr is not None else None
+    while True:
+        if isinstance(node, (ast.Attribute, ast.Subscript)):
+            node = _unwrap(node.value)
+        elif isinstance(node, ast.Call):
+            node = _unwrap(node.func)
+        else:
+            break
+    return node.id if isinstance(node, ast.Name) else ""
+
+
+def needs_call(requirement: dict) -> bool:
+    """Whether this requirement can only be judged against a call."""
+    if not isinstance(requirement, dict):
+        return False
+    if "not" in requirement:
+        return needs_call(requirement["not"])
+    return bool(CALL_ONLY_KEYS & set(requirement))
+
+
 def requirement_holds(
-    call: ast.Call, call_str: str, requirement: dict, bindings=None,
+    call: "ast.Call | None", call_str: str, requirement: dict, bindings=None,
+    receiver: "ast.expr | None" = None,
 ) -> bool:
-    """Whether one requirement holds for this call."""
+    """Whether one requirement holds for this call or receiver."""
     if not isinstance(requirement, dict):
         return True
     if "not" in requirement:
-        return not requirement_holds(call, call_str, requirement["not"], bindings)
+        return not requirement_holds(
+            call, call_str, requirement["not"], bindings, receiver,
+        )
+    if "receiver_root" in requirement:
+        names = requirement["receiver_root"]
+        if isinstance(names, str):
+            names = [names]
+        return receiver_root(receiver) in set(names)
+    if call is None:
+        # A requirement about the call, asked of something that is not one.
+        return False
     if "callee_tail" in requirement:
         tails = requirement["callee_tail"]
         if isinstance(tails, str):
@@ -200,8 +250,25 @@ def call_satisfies(call: ast.Call, call_str: str, requirements, bindings=None) -
     """Whether every requirement on a sink rule holds for this call."""
     if not requirements:
         return True
+    receiver = getattr(call.func, "value", None)
     return all(
-        requirement_holds(call, call_str, requirement, bindings)
+        requirement_holds(call, call_str, requirement, bindings, receiver)
+        for requirement in requirements
+    )
+
+
+def receiver_satisfies(receiver: "ast.expr | None", requirements) -> bool:
+    """Whether every requirement holds for a sink that has no call.
+
+    A rule that asks about arguments cannot be answered here, and answering
+    "satisfied" would let it through unchecked -- so it does not apply.
+    """
+    if not requirements:
+        return True
+    if any(needs_call(requirement) for requirement in requirements):
+        return False
+    return all(
+        requirement_holds(None, "", requirement, None, receiver)
         for requirement in requirements
     )
 

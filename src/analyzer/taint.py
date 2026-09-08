@@ -50,6 +50,7 @@ from .taint_shapes import (
     is_constant_literal,
     normalize_requirements,
     provable_shape,
+    receiver_satisfies,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -1459,12 +1460,13 @@ class TaintAnalyzer:
             for pattern, vuln_type, severity, rec, requires in self._flat_sinks:
                 if not pattern.endswith("["):
                     continue
-                if requires:
-                    # Argument shapes describe a call. A subscript assignment
-                    # has no arguments to judge, so a gated rule does not apply
-                    # here rather than being silently treated as satisfied.
-                    continue
                 if pattern not in receiver:
+                    continue
+                if not receiver_satisfies(target.value, requires):
+                    # A subscript assignment has no arguments, so a rule that
+                    # asks about them does not apply. It does have a receiver:
+                    # `request.headers[k] = v` is a client building its own
+                    # outgoing request, not a response header being written.
                     continue
                 if self._is_sanitized_for(value, vuln_type):
                     continue
