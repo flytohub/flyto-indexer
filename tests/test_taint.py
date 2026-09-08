@@ -671,3 +671,48 @@ class TestFalsePositiveReductions:
                 eval(code)
         """)
         assert any(f.category == "rce" for f in findings)
+
+
+class TestSinkNameBoundary:
+    """A sink pattern must match a whole name, not a prefix of a longer one."""
+
+    def test_underscore_continues_an_identifier(self):
+        # "fetch" is an ssrf sink. fetch_user_config builds no URL: it is a
+        # different function whose name merely starts with one.
+        findings = _analyze_code("""\
+            import flask
+            def handler():
+                token = flask.request.args.get("t")
+                return fetch_user_config(token)
+        """)
+        assert [f for f in findings if f.category == "ssrf"] == []
+
+    def test_the_sink_itself_still_matches(self):
+        findings = _analyze_code("""\
+            import flask
+            def handler():
+                target = flask.request.args.get("url")
+                return fetch(target)
+        """)
+        assert [f.category for f in findings if f.category == "ssrf"] == ["ssrf"]
+
+    def test_underscore_does_not_hide_a_dotted_sink(self):
+        # The guard applies to the character after the match, so a real
+        # attribute call is unaffected by a leading identifier.
+        findings = _analyze_code("""\
+            import flask, requests
+            def handler():
+                target = flask.request.args.get("url")
+                return requests.get(target)
+        """)
+        assert any(f.category == "ssrf" for f in findings)
+
+    def test_rce_prefix_is_not_a_sink_either(self):
+        # Same class on another category: "eval" must not match eval_expression.
+        findings = _analyze_code("""\
+            import flask
+            def handler():
+                expr = flask.request.args.get("e")
+                return eval_expression(expr)
+        """)
+        assert [f for f in findings if f.category == "rce"] == []

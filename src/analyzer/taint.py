@@ -1251,9 +1251,16 @@ class TaintAnalyzer:
             # let "exec(" match "create_subprocess_exec(" and "Template("
             # match "ResourceTemplate(" — a whole false-positive class on real
             # projects.
+            #
+            # An underscore continues an identifier exactly as a letter does,
+            # and leaving it out kept the same class alive on the other side:
+            # "fetch" matched "fetch_user_config" and "fetch_template_listing",
+            # reporting SSRF against two functions that build no URL at all.
             idx = call_str.find(match_pat)
             end_idx = idx + len(match_pat)
-            if end_idx < len(call_str) and call_str[end_idx].isalnum():
+            if end_idx < len(call_str) and (
+                call_str[end_idx].isalnum() or call_str[end_idx] == "_"
+            ):
                 continue
             if idx > 0 and not match_pat.startswith("."):
                 prev = call_str[idx - 1]
