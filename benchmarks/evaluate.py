@@ -341,7 +341,7 @@ def main() -> int:
     parser.add_argument("--max-false-positive-rate", type=float, default=0.0)
     parser.add_argument("--max-p95-latency-ms", type=float, default=1000.0)
     parser.add_argument("--max-case-latency-ms", type=float, default=2500.0)
-    parser.add_argument("--min-cases", type=int, default=13)
+    parser.add_argument("--min-cases", type=int, default=25)
     args = parser.parse_args()
 
     result = evaluate_corpus(args.corpus)

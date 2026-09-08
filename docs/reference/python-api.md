@@ -2,7 +2,7 @@
 
 # Python API Reference
 
-Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,430 declarations across 171 files**.
+Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,443 declarations across 183 files**.
 
 ## `analyze.py`
 
@@ -84,6 +84,24 @@ Every declared class, function, nested function, and method in the package, supp
 | function | `def evaluate() -> dict` | The declaration and linked implementation are authoritative. | [`benchmarks/evaluate_task_efficiency.py:689`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/evaluate_task_efficiency.py#L689) |
 | function | `def main() -> int` | The declaration and linked implementation are authoritative. | [`benchmarks/evaluate_task_efficiency.py:735`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/evaluate_task_efficiency.py#L735) |
 
+## `benchmarks/fixture/corpus/python-chained-constant/app.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def read_licence()` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-chained-constant/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-chained-constant/app.py#L1) |
+
+## `benchmarks/fixture/corpus/python-crlf/app.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def trace(request, response)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-crlf/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-crlf/app.py#L1) |
+
+## `benchmarks/fixture/corpus/python-crlf-constant/app.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def trace(response)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-crlf-constant/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-crlf-constant/app.py#L1) |
+
 ## `benchmarks/fixture/corpus/python-cross-file-sqli/api.py`
 
 | Kind | Signature | Responsibility | Source |
@@ -96,11 +114,41 @@ Every declared class, function, nested function, and method in the package, supp
 |---|---|---|---|
 | function | `def run_query(query)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-cross-file-sqli/db_utils.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-cross-file-sqli/db_utils.py#L1) |
 
+## `benchmarks/fixture/corpus/python-deserialization/app.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def load_state(request)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-deserialization/app.py:4`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-deserialization/app.py#L4) |
+
 ## `benchmarks/fixture/corpus/python-direct-sqli/app.py`
 
 | Kind | Signature | Responsibility | Source |
 |---|---|---|---|
 | function | `def handle_request(request)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-direct-sqli/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-direct-sqli/app.py#L1) |
+
+## `benchmarks/fixture/corpus/python-ldap/app.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def find_user(request, conn)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-ldap/app.py:4`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-ldap/app.py#L4) |
+
+## `benchmarks/fixture/corpus/python-nosql/app.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def lookup(request, collection)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-nosql/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-nosql/app.py#L1) |
+
+## `benchmarks/fixture/corpus/python-nosql-constant/app.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def lookup(collection)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-nosql-constant/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-nosql-constant/app.py#L1) |
+
+## `benchmarks/fixture/corpus/python-path-traversal/app.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def read_report(request)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-path-traversal/app.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-path-traversal/app.py#L1) |
 
 ## `benchmarks/fixture/corpus/python-rce/app.py`
 
@@ -114,11 +162,35 @@ Every declared class, function, nested function, and method in the package, supp
 |---|---|---|---|
 | function | `def run_command(request)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-rce-sanitized/app.py:5`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-rce-sanitized/app.py#L5) |
 
+## `benchmarks/fixture/corpus/python-redos/app.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def match(request)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-redos/app.py:4`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-redos/app.py#L4) |
+
 ## `benchmarks/fixture/corpus/python-sanitized/app.py`
 
 | Kind | Signature | Responsibility | Source |
 |---|---|---|---|
 | function | `def run_command(request)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-sanitized/app.py:5`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-sanitized/app.py#L5) |
+
+## `benchmarks/fixture/corpus/python-ssti/app.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def render(request)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-ssti/app.py:4`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-ssti/app.py#L4) |
+
+## `benchmarks/fixture/corpus/python-xss/app.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def show(request)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-xss/app.py:4`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-xss/app.py#L4) |
+
+## `benchmarks/fixture/corpus/python-xxe/app.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def parse(request)` | The declaration and linked implementation are authoritative. | [`benchmarks/fixture/corpus/python-xxe/app.py:4`](https://github.com/flytohub/flyto-indexer/blob/main/benchmarks/fixture/corpus/python-xxe/app.py#L4) |
 
 ## `examples/audit_all.py`
 
@@ -765,30 +837,31 @@ Every declared class, function, nested function, and method in the package, supp
 | method | `def TaintAnalyzer._visit_body(self, stmts: list&#91;ast.stmt&#93;, taint_state: dict, file_path: str, func_name: str)` | Walk a list of statements in order. | [`src/analyzer/taint.py:1016`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1016) |
 | method | `def TaintAnalyzer._visit_stmt(self, stmt: ast.stmt, taint_state: dict, file_path: str, func_name: str)` | Handle a single statement. | [`src/analyzer/taint.py:1029`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1029) |
 | method | `def TaintAnalyzer._handle_assign(self, stmt: ast.stmt, taint_state: dict, file_path: str, func_name: str)` | Handle assignment — propagate or introduce taint. | [`src/analyzer/taint.py:1091`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1091) |
-| method | `def TaintAnalyzer._sql_arg_is_dynamic(self, call: ast.Call) -> bool` | True when some argument is a SQL string built at runtime. | [`src/analyzer/taint.py:1158`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1158) |
-| method | `def TaintAnalyzer._taint_expr_target(self, expr: ast.expr, src: str, chain: list&#91;str&#93;, taint_state: dict) -> None` | Mark the variable an expression denotes as tainted. | [`src/analyzer/taint.py:1177`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1177) |
-| method | `def TaintAnalyzer._apply_propagators(self, call: ast.Call, taint_state: dict) -> None` | Spread taint through in-place mutation (Semgrep-style propagators). | [`src/analyzer/taint.py:1195`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1195) |
-| method | `def TaintAnalyzer._handle_call_stmt(self, call: ast.Call, taint_state: dict, file_path: str, func_name: str)` | Handle a call expression as a statement — check if it's a sink. | [`src/analyzer/taint.py:1230`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1230) |
-| method | `def TaintAnalyzer._is_subprocess_sink(match_pat: str) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint.py:1366`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1366) |
-| method | `def TaintAnalyzer._is_real_regex_call(call_str: str) -> bool` | True iff the call's dotted func name is an actual regex operation. | [`src/analyzer/taint.py:1374`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1374) |
-| method | `def TaintAnalyzer._redos_pattern_is_dynamic(call: ast.Call) -> bool` | True iff the regex pattern argument is not a constant literal. | [`src/analyzer/taint.py:1398`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1398) |
-| method | `def TaintAnalyzer._join_has_only_constant_extra_segments(call: ast.Call) -> bool` | True iff an os.path.join has >1 arg and every arg after the first is a string literal. | [`src/analyzer/taint.py:1417`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1417) |
-| method | `def TaintAnalyzer._handle_subprocess_shell_call(self, call: ast.Call, taint_state: dict, file_path: str, func_name: str) -> None` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint.py:1438`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1438) |
-| method | `def TaintAnalyzer._expr_is_tainted(self, node: ast.AST, taint_state: dict) -> tuple&#91;bool, str, list&#91;str&#93;&#93;` | Check if an AST expression references tainted data. | [`src/analyzer/taint.py:1470`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1470) |
-| method | `def TaintAnalyzer._is_source(self, node: ast.AST) -> str \| None` | Check if node is a taint source. | [`src/analyzer/taint.py:1571`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1571) |
-| method | `def TaintAnalyzer._is_sanitizer_expr(self, node: ast.AST) -> bool` | Check if node is a sanitizer call. | [`src/analyzer/taint.py:1624`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1624) |
-| method | `def TaintAnalyzer._is_sanitized_for(self, node: ast.AST, vuln_type: str) -> bool` | Check if expression is wrapped in a sanitizer for given vuln type. | [`src/analyzer/taint.py:1634`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1634) |
-| method | `def TaintAnalyzer._target_name(self, target: ast.AST) -> str \| None` | Extract variable name from an assignment target. | [`src/analyzer/taint.py:1645`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1645) |
-| method | `def TaintAnalyzer._find_param_index(self, func_name: str, param_name: str, file_path: str) -> int \| None` | Find index of param_name in func_name's signature (excluding self/cls). | [`src/analyzer/taint.py:1665`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1665) |
-| method | `def TaintAnalyzer._scan_cross_function_via_index(self)` | Trace callers of dangerous functions using the index dependency graph. | [`src/analyzer/taint.py:1695`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1695) |
-| method | `def TaintAnalyzer._trace_via_dependencies(self, dangerous_by_name: dict, dependencies: dict, symbols: dict)` | Use index dependency graph (type=calls) to find callers. | [`src/analyzer/taint.py:1725`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1725) |
-| method | `def TaintAnalyzer._trace_via_reverse_index(self, dangerous_by_name: dict, reverse_index: dict)` | Fallback: use reverse_index to find callers of dangerous functions. | [`src/analyzer/taint.py:1778`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1778) |
-| method | `def TaintAnalyzer._check_caller_for_taint(self, caller_file: str, caller_func_name: str, callee_name: str, param_info_list: list&#91;tuple&#91;int, str, str, str, str&#93;&#93;, call_line: int, depth: int=1, callee_file: str='')` | Parse a caller file and check if tainted data flows to dangerous param positions. | [`src/analyzer/taint.py:1807`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1807) |
-| method | `def TaintAnalyzer._check_caller_body_v2(self, stmts: list&#91;ast.stmt&#93;, taint_state: dict, caller_file: str, caller_func: str, callee_name: str, param_info_list: list&#91;tuple&#91;int, str, str, str, str&#93;&#93;, depth: int, callee_file: str='')` | Walk caller function body, build taint state, check callee calls. | [`src/analyzer/taint.py:1870`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1870) |
-| method | `def TaintAnalyzer._check_caller(self, caller_file: str, callee_name: str, param_info_list: list&#91;tuple&#91;int, str, str, str, str&#93;&#93;, callee_file: str='')` | Parse a caller file and check if tainted data is passed at dangerous param positions. | [`src/analyzer/taint.py:2005`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L2005) |
-| method | `def TaintAnalyzer._check_caller_body(self, stmts: list&#91;ast.stmt&#93;, taint_state: dict, caller_file: str, callee_name: str, param_info_list: list&#91;tuple&#91;int, str, str, str, str&#93;&#93;, callee_file: str='')` | Walk caller function body in order, building taint state and checking callee calls. | [`src/analyzer/taint.py:2037`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L2037) |
-| method | `def TaintAnalyzer._scan_regex_languages(self)` | Scan non-Python files with targeted regex patterns. | [`src/analyzer/taint.py:2137`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L2137) |
-| method | `def TaintAnalyzer._scan_file_regex(self, file_path: str, content: str, patterns: list&#91;tuple&#91;str, str, str, str&#93;&#93;)` | Scan a file's lines with regex taint patterns. | [`src/analyzer/taint.py:2175`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L2175) |
+| method | `def TaintAnalyzer._sql_arg_is_dynamic(self, call: ast.Call) -> bool` | True when some argument is a SQL string built at runtime. | [`src/analyzer/taint.py:1164`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1164) |
+| method | `def TaintAnalyzer._taint_expr_target(self, expr: ast.expr, src: str, chain: list&#91;str&#93;, taint_state: dict) -> None` | Mark the variable an expression denotes as tainted. | [`src/analyzer/taint.py:1183`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1183) |
+| method | `def TaintAnalyzer._apply_propagators(self, call: ast.Call, taint_state: dict) -> None` | Spread taint through in-place mutation (Semgrep-style propagators). | [`src/analyzer/taint.py:1201`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1201) |
+| method | `def TaintAnalyzer._handle_call_stmt(self, call: ast.Call, taint_state: dict, file_path: str, func_name: str)` | Handle a call expression as a statement — check if it's a sink. | [`src/analyzer/taint.py:1236`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1236) |
+| method | `def TaintAnalyzer._check_subscript_sinks(self, targets: list, value: ast.expr, taint_state: dict, file_path: str, func_name: str) -> None` | Report a tainted value written into a subscript-shaped sink. | [`src/analyzer/taint.py:1380`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1380) |
+| method | `def TaintAnalyzer._is_subprocess_sink(match_pat: str) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint.py:1427`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1427) |
+| method | `def TaintAnalyzer._is_real_regex_call(call_str: str) -> bool` | True iff the call's dotted func name is an actual regex operation. | [`src/analyzer/taint.py:1435`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1435) |
+| method | `def TaintAnalyzer._redos_pattern_is_dynamic(call: ast.Call) -> bool` | True iff the regex pattern argument is not a constant literal. | [`src/analyzer/taint.py:1459`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1459) |
+| method | `def TaintAnalyzer._join_has_only_constant_extra_segments(call: ast.Call) -> bool` | True iff an os.path.join has >1 arg and every arg after the first is a string literal. | [`src/analyzer/taint.py:1478`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1478) |
+| method | `def TaintAnalyzer._handle_subprocess_shell_call(self, call: ast.Call, taint_state: dict, file_path: str, func_name: str) -> None` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint.py:1499`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1499) |
+| method | `def TaintAnalyzer._expr_is_tainted(self, node: ast.AST, taint_state: dict) -> tuple&#91;bool, str, list&#91;str&#93;&#93;` | Check if an AST expression references tainted data. | [`src/analyzer/taint.py:1531`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1531) |
+| method | `def TaintAnalyzer._is_source(self, node: ast.AST) -> str \| None` | Check if node is a taint source. | [`src/analyzer/taint.py:1648`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1648) |
+| method | `def TaintAnalyzer._is_sanitizer_expr(self, node: ast.AST) -> bool` | Check if node is a sanitizer call. | [`src/analyzer/taint.py:1701`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1701) |
+| method | `def TaintAnalyzer._is_sanitized_for(self, node: ast.AST, vuln_type: str) -> bool` | Check if expression is wrapped in a sanitizer for given vuln type. | [`src/analyzer/taint.py:1711`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1711) |
+| method | `def TaintAnalyzer._target_name(self, target: ast.AST) -> str \| None` | Extract variable name from an assignment target. | [`src/analyzer/taint.py:1722`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1722) |
+| method | `def TaintAnalyzer._find_param_index(self, func_name: str, param_name: str, file_path: str) -> int \| None` | Find index of param_name in func_name's signature (excluding self/cls). | [`src/analyzer/taint.py:1742`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1742) |
+| method | `def TaintAnalyzer._scan_cross_function_via_index(self)` | Trace callers of dangerous functions using the index dependency graph. | [`src/analyzer/taint.py:1772`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1772) |
+| method | `def TaintAnalyzer._trace_via_dependencies(self, dangerous_by_name: dict, dependencies: dict, symbols: dict)` | Use index dependency graph (type=calls) to find callers. | [`src/analyzer/taint.py:1802`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1802) |
+| method | `def TaintAnalyzer._trace_via_reverse_index(self, dangerous_by_name: dict, reverse_index: dict)` | Fallback: use reverse_index to find callers of dangerous functions. | [`src/analyzer/taint.py:1855`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1855) |
+| method | `def TaintAnalyzer._check_caller_for_taint(self, caller_file: str, caller_func_name: str, callee_name: str, param_info_list: list&#91;tuple&#91;int, str, str, str, str&#93;&#93;, call_line: int, depth: int=1, callee_file: str='')` | Parse a caller file and check if tainted data flows to dangerous param positions. | [`src/analyzer/taint.py:1884`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1884) |
+| method | `def TaintAnalyzer._check_caller_body_v2(self, stmts: list&#91;ast.stmt&#93;, taint_state: dict, caller_file: str, caller_func: str, callee_name: str, param_info_list: list&#91;tuple&#91;int, str, str, str, str&#93;&#93;, depth: int, callee_file: str='')` | Walk caller function body, build taint state, check callee calls. | [`src/analyzer/taint.py:1947`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1947) |
+| method | `def TaintAnalyzer._check_caller(self, caller_file: str, callee_name: str, param_info_list: list&#91;tuple&#91;int, str, str, str, str&#93;&#93;, callee_file: str='')` | Parse a caller file and check if tainted data is passed at dangerous param positions. | [`src/analyzer/taint.py:2082`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L2082) |
+| method | `def TaintAnalyzer._check_caller_body(self, stmts: list&#91;ast.stmt&#93;, taint_state: dict, caller_file: str, callee_name: str, param_info_list: list&#91;tuple&#91;int, str, str, str, str&#93;&#93;, callee_file: str='')` | Walk caller function body in order, building taint state and checking callee calls. | [`src/analyzer/taint.py:2114`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L2114) |
+| method | `def TaintAnalyzer._scan_regex_languages(self)` | Scan non-Python files with targeted regex patterns. | [`src/analyzer/taint.py:2214`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L2214) |
+| method | `def TaintAnalyzer._scan_file_regex(self, file_path: str, content: str, patterns: list&#91;tuple&#91;str, str, str, str&#93;&#93;)` | Scan a file's lines with regex taint patterns. | [`src/analyzer/taint.py:2252`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L2252) |
 
 ## `src/analyzer/taint_dsl.py`
 
