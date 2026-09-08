@@ -2,7 +2,7 @@
 
 # Python API Reference
 
-Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,443 declarations across 183 files**.
+Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,452 declarations across 183 files**.
 
 ## `analyze.py`
 
@@ -867,15 +867,23 @@ Every declared class, function, nested function, and method in the package, supp
 
 | Kind | Signature | Responsibility | Source |
 |---|---|---|---|
-| function | `def _load(project_root: Path) -> dict` | Load .flyto-rules.yaml as a dict (empty dict if missing). | [`src/analyzer/taint_dsl.py:35`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L35) |
-| function | `def _save(project_root: Path, data: dict) -> Path` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint_dsl.py:53`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L53) |
-| function | `def _taint_block(data: dict) -> dict` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint_dsl.py:63`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L63) |
-| function | `def _append_unique(lst_key: str, block: dict, entry: dict, dedup_key: str) -> bool` | Append entry to block[lst_key], return True if appended, False if duplicate. | [`src/analyzer/taint_dsl.py:71`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L71) |
-| function | `def add_taint_source(project_root: Path, pattern: str, language: str='python', taint_type: str \| None=None) -> dict` | Add a source pattern to `.flyto-rules.yaml → taint.sources`. | [`src/analyzer/taint_dsl.py:87`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L87) |
-| function | `def add_taint_sink(project_root: Path, pattern: str, vuln_type: str='custom', severity: str='high', recommendation: str='') -> dict` | Add a sink pattern to `.flyto-rules.yaml → taint.sinks`. | [`src/analyzer/taint_dsl.py:113`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L113) |
-| function | `def add_taint_sanitizer(project_root: Path, pattern: str, cleanses: list&#91;str&#93; \| None=None) -> dict` | Add a sanitizer to `.flyto-rules.yaml → taint.sanitizers`. | [`src/analyzer/taint_dsl.py:144`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L144) |
-| function | `def remove_taint_rule(project_root: Path, kind: str, pattern: str) -> dict` | Remove a taint rule by pattern. | [`src/analyzer/taint_dsl.py:170`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L170) |
-| function | `def list_taint_rules(project_root: Path) -> dict` | Show the taint block declared in .flyto-rules.yaml (project-specific only). | [`src/analyzer/taint_dsl.py:201`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L201) |
+| function | `def _load(project_root: Path) -> dict` | Load .flyto-rules.yaml as a dict (empty dict if missing). | [`src/analyzer/taint_dsl.py:36`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L36) |
+| function | `def _save(project_root: Path, data: dict) -> Path` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint_dsl.py:54`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L54) |
+| function | `def _render_value(value) -> str` | A value written the way the rest of the file writes its values. | [`src/analyzer/taint_dsl.py:72`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L72) |
+| function | `def _dump_entry(entry: dict, indent: str) -> str` | One list item, in the layout the file already uses. | [`src/analyzer/taint_dsl.py:94`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L94) |
+| function | `def _block_bounds(lines: list&#91;str&#93;, key: str, indent: str) -> 'tuple&#91;int, int&#93; \| None'` | Line range of `key:` and its body, or None when the key is absent. | [`src/analyzer/taint_dsl.py:103`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L103) |
+| function | `def _has_inline_value(lines: list&#91;str&#93;, key: str, indent: str) -> bool` | True when `key:` carries its value on the same line. | [`src/analyzer/taint_dsl.py:139`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L139) |
+| function | `def _list_indent(lines: list&#91;str&#93;, start: int, end: int) -> 'str \| None'` | The indent the items of an existing list are written at. | [`src/analyzer/taint_dsl.py:148`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L148) |
+| function | `def _append_entry_in_place(path: Path, list_key: str, entry: dict) -> bool` | Add one rule by editing text, leaving every other byte alone. | [`src/analyzer/taint_dsl.py:157`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L157) |
+| function | `def _remove_entry_in_place(path: Path, list_key: str, pattern: str) -> bool` | Delete one rule by editing text, for the same reason as the append. | [`src/analyzer/taint_dsl.py:202`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L202) |
+| function | `def _declared_taint(project_root: Path) -> dict` | The `taint:` mapping already in the file, or an empty one. | [`src/analyzer/taint_dsl.py:253`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L253) |
+| function | `def _has_pattern(block: dict, list_key: str, pattern: str) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint_dsl.py:259`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L259) |
+| function | `def _commit_addition(project_root: Path, list_key: str, entry: dict, kind: str) -> dict` | Write one new rule, creating the file only when there is none. | [`src/analyzer/taint_dsl.py:269`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L269) |
+| function | `def add_taint_source(project_root: Path, pattern: str, language: str='python', taint_type: str \| None=None) -> dict` | Add a source pattern to `.flyto-rules.yaml → taint.sources`. | [`src/analyzer/taint_dsl.py:289`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L289) |
+| function | `def add_taint_sink(project_root: Path, pattern: str, vuln_type: str='custom', severity: str='high', recommendation: str='') -> dict` | Add a sink pattern to `.flyto-rules.yaml → taint.sinks`. | [`src/analyzer/taint_dsl.py:310`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L310) |
+| function | `def add_taint_sanitizer(project_root: Path, pattern: str, cleanses: list&#91;str&#93; \| None=None) -> dict` | Add a sanitizer to `.flyto-rules.yaml → taint.sanitizers`. | [`src/analyzer/taint_dsl.py:336`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L336) |
+| function | `def remove_taint_rule(project_root: Path, kind: str, pattern: str) -> dict` | Remove a taint rule by pattern. | [`src/analyzer/taint_dsl.py:357`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L357) |
+| function | `def list_taint_rules(project_root: Path) -> dict` | Show the taint block declared in .flyto-rules.yaml (project-specific only). | [`src/analyzer/taint_dsl.py:385`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L385) |
 
 ## `src/analyzer/taint_lsp.py`
 
@@ -1003,57 +1011,58 @@ Every declared class, function, nested function, and method in the package, supp
 | function | `def _configure_scanner_commands(subparsers) -> None` | Register focused scanner and CI impact commands. | [`src/cli.py:237`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L237) |
 | function | `def _configure_verification_commands(subparsers) -> None` | Register verification, baseline, PR, and package commands. | [`src/cli.py:366`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L366) |
 | function | `def _configure_architecture_commands(subparsers) -> None` | Register architecture and taint-policy mutation commands. | [`src/cli.py:480`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L480) |
-| function | `def _command_handlers()` | Return the command-to-handler map after all handlers are defined. | [`src/cli.py:520`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L520) |
-| function | `def _emit_command_result(args, result) -> None` | Render one command result and enforce verification exit semantics. | [`src/cli.py:566`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L566) |
-| function | `def _invoke_with_project_scope(handler, *args, **kwargs)` | Invoke a CLI handler under one safely restored project identity. | [`src/cli.py:583`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L583) |
-| function | `def main()` | Parse, dispatch, and render one CLI command. | [`src/cli.py:598`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L598) |
-| function | `def cmd_init(args)` | Initialize .flyto/ in a project directory. | [`src/cli.py:619`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L619) |
-| function | `def _status_from_modern_index(project_path: Path) -> dict \| None` | Build status from the primary .flyto-index/index.json format. | [`src/cli.py:727`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L727) |
-| function | `def _status_from_legacy_flyto(project_path: Path) -> dict \| None` | Build status from the legacy .flyto/ metadata format. | [`src/cli.py:772`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L772) |
-| function | `def cmd_status(args)` | Show index status for a project. | [`src/cli.py:827`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L827) |
-| function | `def cmd_scan(args)` | Execute scan command | [`src/cli.py:883`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L883) |
-| function | `def cmd_impact(args)` | Execute impact command | [`src/cli.py:897`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L897) |
-| function | `def cmd_context(args)` | Execute context command | [`src/cli.py:910`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L910) |
-| function | `def cmd_outline(args)` | Execute outline command | [`src/cli.py:928`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L928) |
-| function | `def cmd_brief(args)` | Generate or display .flyto/brief.md. | [`src/cli.py:939`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L939) |
-| function | `def cmd_describe(args)` | Read or write file descriptions in .flyto/descriptions.jsonl. | [`src/cli.py:948`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L948) |
-| function | `def cmd_task(args)` | Run local task grill/plan/gate/validate/feedback workflow through smart_task. | [`src/cli.py:1033`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1033) |
-| function | `def cmd_task_status(args)` | Show project-local resumable task state. | [`src/cli.py:1043`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1043) |
-| function | `def cmd_usage_record(args)` | Record one normalized task usage event. | [`src/cli.py:1048`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1048) |
-| function | `def cmd_usage_report(args)` | Render task efficiency evidence. | [`src/cli.py:1053`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1053) |
-| function | `def cmd_tools(args)` | Output structured JSON describing all available CLI commands and their arguments. | [`src/cli.py:1058`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1058) |
-| function | `def cmd_install_hook(args)` | Install or remove git post-commit hook for auto-reindexing. | [`src/cli.py:1344`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1344) |
-| function | `def cmd_demo(args)` | Quick 30-second value demo: scan + impact analysis. | [`src/cli.py:1411`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1411) |
-| function | `def _configure_mcp_settings(remove=False)` | Add or remove flyto-indexer from ~/.claude/settings.json. | [`src/cli.py:1546`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1546) |
-| function | `def cmd_setup(args)` | One command setup: scan + CLAUDE.md + MCP config. | [`src/cli.py:1593`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1593) |
-| function | `def cmd_setup_claude(args)` | Add flyto-indexer instructions to CLAUDE.md. | [`src/cli.py:1635`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1635) |
-| function | `def cmd_deps(args)` | Scan and list all external package dependencies. | [`src/cli.py:1688`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1688) |
-| function | `def cmd_profile(args)` | Generate a comprehensive project profile. | [`src/cli.py:1707`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1707) |
-| function | `def cmd_export(args)` | Export scan results as a single JSON bundle for flyto-engine upload. | [`src/cli.py:1727`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1727) |
-| function | `def cmd_secrets(args)` | Scan project for hardcoded secrets. | [`src/cli.py:1851`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1851) |
-| function | `def cmd_license(args)` | Detect project and dependency licenses. | [`src/cli.py:1876`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1876) |
-| function | `def cmd_docs(args)` | Analyze documentation coverage. | [`src/cli.py:1895`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1895) |
-| function | `def cmd_pr_risk(args)` | Analyze PR/changeset risk. | [`src/cli.py:1914`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1914) |
-| function | `def cmd_sbom(args)` | Export SBOM in CycloneDX 1.5 format. | [`src/cli.py:1936`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1936) |
-| function | `def cmd_framework(args)` | Detect project frameworks. | [`src/cli.py:1963`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1963) |
-| function | `def cmd_layers(args)` | Check architecture layer rules (import graph). | [`src/cli.py:1981`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1981) |
-| function | `def cmd_add_layer(args)` | Write a layer definition into .flyto-rules.yaml. | [`src/cli.py:2031`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2031) |
-| function | `def cmd_add_taint_source(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2054`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2054) |
-| function | `def cmd_add_taint_sink(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2070`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2070) |
-| function | `def cmd_add_taint_sanitizer(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2087`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2087) |
-| function | `def cmd_list_taint_rules(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2106`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2106) |
-| function | `def _detect_changed_files(args, engine, project_path)` | Detect changed files via git diff (if --base given) or index staleness. | [`src/cli.py:2117`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2117) |
-| function | `def _compute_symbol_impact(changed_files, engine)` | For each changed file, find symbols and compute impact chains. | [`src/cli.py:2155`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2155) |
-| function | `def _format_check_output(output, symbol_details, args)` | Print check results as JSON or human-readable text. | [`src/cli.py:2190`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2190) |
-| function | `def cmd_call_sites(args)` | Emit per-package call sites + local call graph as JSON. | [`src/cli.py:2217`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2217) |
-| function | `def cmd_agent_audit(args)` | AI-agent security policy audit. | [`src/cli.py:2291`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2291) |
-| function | `def cmd_taint(args)` | Analyze data flow / taint tracking. | [`src/cli.py:2338`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2338) |
-| function | `def cmd_research_priority(args)` | Rank the code paths most worth a security researcher's next hour. | [`src/cli.py:2427`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2427) |
-| function | `def cmd_check(args)` | CI-friendly impact check — exits non-zero when changes are risky. | [`src/cli.py:2495`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2495) |
-| function | `def cmd_verify(args)` | Run the no-external-dependency verification gate. | [`src/cli.py:2538`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2538) |
-| function | `def cmd_verify_workspace(args)` | Run verification across a workspace. | [`src/cli.py:2569`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2569) |
-| function | `def cmd_verify_baseline(args)` | Create, compare, or update a verification baseline. | [`src/cli.py:2596`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2596) |
-| function | `def _write_verify_report(path: str, content: str) -> None` | The declaration and linked implementation are authoritative. | [`src/cli.py:2624`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2624) |
+| function | `def _command_handlers()` | Return the command-to-handler map after all handlers are defined. | [`src/cli.py:541`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L541) |
+| function | `def _emit_command_result(args, result) -> None` | Render one command result and enforce verification exit semantics. | [`src/cli.py:588`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L588) |
+| function | `def _invoke_with_project_scope(handler, *args, **kwargs)` | Invoke a CLI handler under one safely restored project identity. | [`src/cli.py:605`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L605) |
+| function | `def main()` | Parse, dispatch, and render one CLI command. | [`src/cli.py:620`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L620) |
+| function | `def cmd_init(args)` | Initialize .flyto/ in a project directory. | [`src/cli.py:641`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L641) |
+| function | `def _status_from_modern_index(project_path: Path) -> dict \| None` | Build status from the primary .flyto-index/index.json format. | [`src/cli.py:749`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L749) |
+| function | `def _status_from_legacy_flyto(project_path: Path) -> dict \| None` | Build status from the legacy .flyto/ metadata format. | [`src/cli.py:794`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L794) |
+| function | `def cmd_status(args)` | Show index status for a project. | [`src/cli.py:849`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L849) |
+| function | `def cmd_scan(args)` | Execute scan command | [`src/cli.py:905`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L905) |
+| function | `def cmd_impact(args)` | Execute impact command | [`src/cli.py:919`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L919) |
+| function | `def cmd_context(args)` | Execute context command | [`src/cli.py:932`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L932) |
+| function | `def cmd_outline(args)` | Execute outline command | [`src/cli.py:950`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L950) |
+| function | `def cmd_brief(args)` | Generate or display .flyto/brief.md. | [`src/cli.py:961`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L961) |
+| function | `def cmd_describe(args)` | Read or write file descriptions in .flyto/descriptions.jsonl. | [`src/cli.py:970`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L970) |
+| function | `def cmd_task(args)` | Run local task grill/plan/gate/validate/feedback workflow through smart_task. | [`src/cli.py:1055`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1055) |
+| function | `def cmd_task_status(args)` | Show project-local resumable task state. | [`src/cli.py:1065`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1065) |
+| function | `def cmd_usage_record(args)` | Record one normalized task usage event. | [`src/cli.py:1070`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1070) |
+| function | `def cmd_usage_report(args)` | Render task efficiency evidence. | [`src/cli.py:1075`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1075) |
+| function | `def cmd_tools(args)` | Output structured JSON describing all available CLI commands and their arguments. | [`src/cli.py:1080`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1080) |
+| function | `def cmd_install_hook(args)` | Install or remove git post-commit hook for auto-reindexing. | [`src/cli.py:1366`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1366) |
+| function | `def cmd_demo(args)` | Quick 30-second value demo: scan + impact analysis. | [`src/cli.py:1433`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1433) |
+| function | `def _configure_mcp_settings(remove=False)` | Add or remove flyto-indexer from ~/.claude/settings.json. | [`src/cli.py:1568`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1568) |
+| function | `def cmd_setup(args)` | One command setup: scan + CLAUDE.md + MCP config. | [`src/cli.py:1615`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1615) |
+| function | `def cmd_setup_claude(args)` | Add flyto-indexer instructions to CLAUDE.md. | [`src/cli.py:1657`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1657) |
+| function | `def cmd_deps(args)` | Scan and list all external package dependencies. | [`src/cli.py:1710`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1710) |
+| function | `def cmd_profile(args)` | Generate a comprehensive project profile. | [`src/cli.py:1729`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1729) |
+| function | `def cmd_export(args)` | Export scan results as a single JSON bundle for flyto-engine upload. | [`src/cli.py:1749`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1749) |
+| function | `def cmd_secrets(args)` | Scan project for hardcoded secrets. | [`src/cli.py:1873`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1873) |
+| function | `def cmd_license(args)` | Detect project and dependency licenses. | [`src/cli.py:1898`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1898) |
+| function | `def cmd_docs(args)` | Analyze documentation coverage. | [`src/cli.py:1917`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1917) |
+| function | `def cmd_pr_risk(args)` | Analyze PR/changeset risk. | [`src/cli.py:1936`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1936) |
+| function | `def cmd_sbom(args)` | Export SBOM in CycloneDX 1.5 format. | [`src/cli.py:1958`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1958) |
+| function | `def cmd_framework(args)` | Detect project frameworks. | [`src/cli.py:1985`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1985) |
+| function | `def cmd_layers(args)` | Check architecture layer rules (import graph). | [`src/cli.py:2003`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2003) |
+| function | `def cmd_add_layer(args)` | Write a layer definition into .flyto-rules.yaml. | [`src/cli.py:2053`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2053) |
+| function | `def cmd_add_taint_source(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2076`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2076) |
+| function | `def cmd_add_taint_sink(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2092`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2092) |
+| function | `def cmd_add_taint_sanitizer(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2109`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2109) |
+| function | `def cmd_remove_taint_rule(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2128`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2128) |
+| function | `def cmd_list_taint_rules(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2139`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2139) |
+| function | `def _detect_changed_files(args, engine, project_path)` | Detect changed files via git diff (if --base given) or index staleness. | [`src/cli.py:2150`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2150) |
+| function | `def _compute_symbol_impact(changed_files, engine)` | For each changed file, find symbols and compute impact chains. | [`src/cli.py:2188`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2188) |
+| function | `def _format_check_output(output, symbol_details, args)` | Print check results as JSON or human-readable text. | [`src/cli.py:2223`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2223) |
+| function | `def cmd_call_sites(args)` | Emit per-package call sites + local call graph as JSON. | [`src/cli.py:2250`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2250) |
+| function | `def cmd_agent_audit(args)` | AI-agent security policy audit. | [`src/cli.py:2324`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2324) |
+| function | `def cmd_taint(args)` | Analyze data flow / taint tracking. | [`src/cli.py:2371`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2371) |
+| function | `def cmd_research_priority(args)` | Rank the code paths most worth a security researcher's next hour. | [`src/cli.py:2460`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2460) |
+| function | `def cmd_check(args)` | CI-friendly impact check — exits non-zero when changes are risky. | [`src/cli.py:2528`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2528) |
+| function | `def cmd_verify(args)` | Run the no-external-dependency verification gate. | [`src/cli.py:2571`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2571) |
+| function | `def cmd_verify_workspace(args)` | Run verification across a workspace. | [`src/cli.py:2602`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2602) |
+| function | `def cmd_verify_baseline(args)` | Create, compare, or update a verification baseline. | [`src/cli.py:2629`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2629) |
+| function | `def _write_verify_report(path: str, content: str) -> None` | The declaration and linked implementation are authoritative. | [`src/cli.py:2657`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2657) |
 
 ## `src/context/loader.py`
 

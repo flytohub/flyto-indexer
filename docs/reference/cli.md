@@ -2,7 +2,7 @@
 
 # CLI Command Reference
 
-The `flyto-index` argparse surface contains **40 subcommands** and **194 command arguments**.
+The `flyto-index` argparse surface contains **41 subcommands** and **197 command arguments**.
 
 ## `flyto-index init`
 
@@ -452,15 +452,27 @@ Handler: `inline dispatch`. Source: [`src/cli.py:504`](https://github.com/flytoh
 | `--pattern` | yes | `` | `` | Match pattern (e.g., 'mysql.escape(', 'html.escape(') | [`src/cli.py:510`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L510) |
 | `--cleanses` | no | `*` | `` | Comma-separated vuln types this sanitizer clears, or '*' for all (default: *) | [`src/cli.py:511`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L511) |
 
-## `flyto-index list-taint-rules`
+## `flyto-index remove-taint-rule`
 
-List every project-declared source / sink / sanitizer. Built-in defaults are NOT included.
+Delete one declared source / sink / sanitizer. Built-in defaults are unaffected.
 
 Handler: `inline dispatch`. Source: [`src/cli.py:513`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L513).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:518`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L518) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:521`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L521) |
+| `--kind` | yes | `` | `source, sink, sanitizer` | Which list the rule is in | [`src/cli.py:525`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L525) |
+| `--pattern` | yes | `` | `` | The pattern to delete, exactly as declared | [`src/cli.py:529`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L529) |
+
+## `flyto-index list-taint-rules`
+
+List every project-declared source / sink / sanitizer. Built-in defaults are NOT included.
+
+Handler: `inline dispatch`. Source: [`src/cli.py:534`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L534).
+
+| Argument | Required | Default | Choices | Purpose | Source |
+|---|---|---|---|---|---|
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:539`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L539) |
 
 ## `flyto-index task`
 

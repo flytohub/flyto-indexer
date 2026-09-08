@@ -21,8 +21,21 @@
   sequencing and the stop rules, not in the engine. Validated end-to-end on
   gradio: the funnel surfaces the four proven flows including the
   `undo_vibe_edit` path traversal, with demo and operator-fed flows demoted.
+- `flyto-index remove-taint-rule --kind --pattern` — the CLI could add the
+  three kinds of taint rule but only the MCP surface could remove one.
 
 ### Fixed
+- Adding or removing a taint rule no longer rewrites `.flyto-rules.yaml`. The
+  writers parsed the whole document and dumped it back, which discarded every
+  comment and reordered the file: on flyto-cloud's 332-line policy that turned
+  one new sanitizer into 351 insertions, 332 deletions, and the loss of both
+  comments. Entries are now spliced in as text, in the style of their
+  neighbours, and an emptied list has its key removed rather than being left as
+  a null the analyzer would crash on. A file whose shape cannot be edited
+  safely is reported with the snippet to paste, never rewritten.
+- `_apply_yaml_rules` tolerates a declared-but-empty `sources:`, `sinks:`, or
+  `sanitizers:` key. It read back as `None`, and the scan raised `TypeError`
+  instead of finding nothing.
 - Split ordinary amendment execution planning from cumulative authority. The
   analyzer now receives only exact current amendment targets while instruction
   context, the intent ledger, root identity, chain, and validation retain the

@@ -716,3 +716,21 @@ class TestSinkNameBoundary:
                 return eval_expression(expr)
         """)
         assert [f for f in findings if f.category == "rce"] == []
+
+
+class TestProjectRulesTolerance:
+    """A hand-written `.flyto-rules.yaml` must not be able to crash the scan."""
+
+    def test_a_declared_but_empty_list_is_not_a_crash(self):
+        # `sinks:` with nothing under it parses as null, not as an empty list.
+        from src.analyzer.taint import _apply_yaml_rules
+
+        sources, sinks, sanitizers = _apply_yaml_rules(
+            {"sources": None, "sinks": None, "sanitizers": None},
+            {"python": ["request."]},
+            [("eval(", "rce", "critical", "")],
+            [],
+        )
+        assert sources == {"python": ["request."]}
+        assert sinks == [("eval(", "rce", "critical", "")]
+        assert sanitizers == []
