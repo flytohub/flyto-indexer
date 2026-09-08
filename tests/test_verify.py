@@ -21,6 +21,7 @@ from src.verify import (
     _check_context_loop,
     _check_cross_project_contract,
     _check_dependency_drift,
+    _check_env_contract,
     _check_dynamic_validation_plan,
     _check_impact_loop,
     _check_mcp_runtime_smoke,
@@ -882,6 +883,86 @@ def test_workspace_verification_aggregates_projects(tmp_path):
     assert result["summary"]["projects"] == 2
     assert len(result["projects"]) == 2
     assert "Flyto2 Workspace Verify" in format_workspace_verification(result)
+
+
+def _env_project(root: Path, *, example: str, code: str, code_path: str = "src/app.py"):
+    source = root / code_path
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(code, encoding="utf-8")
+    (root / ".env.example").write_text(example, encoding="utf-8")
+
+
+def _env_check(root: Path):
+    checks = []
+    _check_env_contract(root, lambda name, status, summary, metrics=None: checks.append(
+        {"name": name, "status": status, "summary": summary, "metrics": metrics or {}}
+    ))
+    return checks[0]
+
+
+def test_env_contract_flags_a_required_setting_the_example_omits(tmp_path):
+    _env_project(
+        tmp_path,
+        example="FLYTO_ENGINE_API_URL=\n",
+        code="import os\nSECRET = os.environ['FLYTO_RUNNER_SECRET']\n",
+    )
+
+    check = _env_check(tmp_path)
+
+    # The first sign of this is a crash, and the name that fixes it appears
+    # nowhere an operator would look.
+    assert check["status"] == "warn"
+    assert "FLYTO_RUNNER_SECRET" in check["summary"]
+    assert check["metrics"]["undocumented"][0]["first_read"] == "src/app.py"
+
+
+def test_env_contract_ignores_a_read_that_supplies_a_default(tmp_path):
+    _env_project(
+        tmp_path,
+        example="FLYTO_ENGINE_API_URL=\n",
+        code="import os\nLEVEL = os.environ.get('FLYTO_LOG_LEVEL', 'INFO')\n",
+    )
+
+    # A default makes it a preference: an operator who never sets it still
+    # gets a working system.
+    assert _env_check(tmp_path)["status"] == "pass"
+
+
+def test_env_contract_leaves_the_platforms_own_variables_alone(tmp_path):
+    _env_project(
+        tmp_path,
+        example="FLYTO_ENGINE_API_URL=\n",
+        code="import os\nD = os.environ['CUDA_VISIBLE_DEVICES']\nS = os.environ['NOTIFY_SOCKET']\n",
+    )
+
+    # CI, pytest, CUDA and systemd set these. Excluding them by namespace
+    # rather than by a list means the list cannot fall behind.
+    assert _env_check(tmp_path)["status"] == "pass"
+
+
+def test_env_contract_stays_silent_without_a_declared_surface(tmp_path):
+    source = tmp_path / "src" / "app.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("import os\nS = os.environ['FLYTO_RUNNER_SECRET']\n", encoding="utf-8")
+
+    check = _env_check(tmp_path)
+
+    # Without an .env.example the repository has made no claim to contradict.
+    assert check["status"] == "pass"
+    assert "no declared configuration surface" in check["summary"]
+
+
+def test_env_contract_does_not_read_tests_and_scripts(tmp_path):
+    _env_project(
+        tmp_path,
+        example="FLYTO_ENGINE_API_URL=\n",
+        code="import os\nS = os.environ['FLYTO_FIXTURE_ONLY']\n",
+        code_path="tests/test_thing.py",
+    )
+
+    # A fixture reaching for an environment variable is not an operator
+    # instruction.
+    assert _env_check(tmp_path)["status"] == "pass"
 
 
 def _write_npm_deps(root: Path, deps: dict[str, str]):

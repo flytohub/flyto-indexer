@@ -288,6 +288,7 @@ def run_verification(
     _check_mcp_registry(root, add_check)
     _check_mcp_runtime_smoke(root, add_check)
     _check_suppression_drift(root, add_check)
+    _check_env_contract(root, add_check)
     _check_agent_hygiene(root, add_check)
     _check_policy_budget(root, checks, policy_path)
 
@@ -2626,6 +2627,107 @@ def _check_suppression_drift(root: Path, add_check) -> None:
                 "min_ratio": _SUPPRESSION_MIN_RATIO,
                 "material_ratio": _SUPPRESSION_MATERIAL_RATIO,
             },
+        },
+    )
+
+
+# Reads with no fallback: absent, the process fails rather than degrades. A
+# read that supplies a default is a preference, and an operator who never sets
+# it still gets a working system.
+_REQUIRED_ENV_READS = (
+    re.compile(r"""os\.environ\[\s*['"]([A-Z][A-Z0-9_]{2,})['"]\s*\]"""),
+    re.compile(r"""os\.getenv\(\s*['"]([A-Z][A-Z0-9_]{2,})['"]\s*\)"""),
+    re.compile(r"""os\.environ\.get\(\s*['"]([A-Z][A-Z0-9_]{2,})['"]\s*\)"""),
+)
+_ENV_DECLARATION_RE = re.compile(r"^\s*#?\s*([A-Z][A-Z0-9_]{2,})\s*=")
+_ENV_SAMPLE_PARTS = {
+    "test", "tests", "conftest", "scripts",
+    "benchmark", "example", "examples", "demo",
+}
+
+
+def _declared_env_names(root: Path) -> tuple[set[str], list[str]]:
+    declared: set[str] = set()
+    sources: list[str] = []
+    for example in sorted(root.rglob(".env.example")):
+        if set(example.relative_to(root).parts) & _SKIP_WORKSPACE_DIRS:
+            continue
+        try:
+            text = example.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        sources.append(str(example.relative_to(root)))
+        for line in text.splitlines():
+            match = _ENV_DECLARATION_RE.match(line)
+            if match:
+                declared.add(match.group(1))
+    return declared, sources
+
+
+def _check_env_contract(root: Path, add_check) -> None:
+    """Catch a required setting an operator has no way to discover.
+
+    An .env.example is a claim about what you configure. A variable the code
+    refuses to start without, in a family that file already documents, is a
+    hole in that claim: the first sign of it is a crash, and the name that
+    would fix it appears nowhere an operator would look.
+
+    Only names sharing a prefix with something already declared are counted.
+    That is what keeps the platform's own variables -- CI, pytest, CUDA,
+    systemd -- out of it without maintaining a list of them.
+    """
+    declared, sources = _declared_env_names(root)
+    if not sources:
+        add_check(
+            "env_contract", "pass",
+            "No .env.example; no declared configuration surface to check against",
+        )
+        return
+
+    families = {name.split("_")[0] for name in declared if "_" in name}
+    required: dict[str, str] = {}
+    for path in root.rglob("*.py"):
+        relative = path.relative_to(root)
+        parts = set(relative.parts)
+        if parts & _SKIP_WORKSPACE_DIRS:
+            continue
+        lowered_parts = {part.lower() for part in parts}
+        if lowered_parts & _ENV_SAMPLE_PARTS or path.stem.lower() in _ENV_SAMPLE_PARTS:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for pattern in _REQUIRED_ENV_READS:
+            for name in pattern.findall(text):
+                required.setdefault(name, str(relative))
+
+    undocumented = sorted(
+        name for name in required
+        if name not in declared and name.split("_")[0] in families
+    )
+
+    status = "pass"
+    summary = "Every required setting appears in the declared configuration surface"
+    if undocumented:
+        status = "warn"
+        shown = ", ".join(undocumented[:3])
+        remainder = len(undocumented) - 3
+        if remainder > 0:
+            shown += f", and {remainder} more"
+        summary = f"Required settings are absent from .env.example: {shown}"
+
+    add_check(
+        "env_contract",
+        status,
+        summary,
+        metrics={
+            "declaration_files": sources,
+            "declared": len(declared),
+            "required_reads": len(required),
+            "undocumented": [
+                {"name": name, "first_read": required[name]} for name in undocumented[:20]
+            ],
         },
     )
 
