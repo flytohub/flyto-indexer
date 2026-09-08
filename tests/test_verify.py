@@ -20,6 +20,7 @@ from src.verify import (
     _check_ci_closed_loop,
     _check_context_loop,
     _check_cross_project_contract,
+    _check_dependency_drift,
     _check_dynamic_validation_plan,
     _check_impact_loop,
     _check_mcp_runtime_smoke,
@@ -881,6 +882,82 @@ def test_workspace_verification_aggregates_projects(tmp_path):
     assert result["summary"]["projects"] == 2
     assert len(result["projects"]) == 2
     assert "Flyto2 Workspace Verify" in format_workspace_verification(result)
+
+
+def _write_npm_deps(root: Path, deps: dict[str, str]):
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "package.json").write_text(
+        json.dumps({"name": root.name, "version": "1.0.0", "dependencies": deps}),
+        encoding="utf-8",
+    )
+
+
+def _drift_check(projects):
+    checks: list[dict] = []
+    _check_dependency_drift(list(projects), checks)
+    return checks[0]
+
+
+def test_dependency_drift_flags_a_package_this_workspace_publishes(tmp_path):
+    publisher = tmp_path / "flyto-core"
+    consumer_old = tmp_path / "consumer-old"
+    consumer_new = tmp_path / "consumer-new"
+    _write_npm_deps(publisher, {"left-pad": "^1.0.0"})
+    _write_npm_deps(consumer_old, {"flyto-core": "^1.4.0"})
+    _write_npm_deps(consumer_new, {"flyto-core": "^2.1.0"})
+
+    check = _drift_check([publisher, consumer_old, consumer_new])
+
+    # Each repository's own gates only see the version it pinned, so nothing
+    # else in this tool can notice the two consumers disagreeing.
+    assert check["status"] == "warn"
+    assert "flyto-core at 1 and 2" in check["summary"]
+    versions = check["metrics"]["internal_drift"][0]["versions"]
+    assert versions["1"] == ["consumer-old"]
+    assert versions["2"] == ["consumer-new"]
+
+
+def test_dependency_drift_counts_third_party_spread_without_gating(tmp_path):
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    _write_npm_deps(a, {"react": "^18.0.0"})
+    _write_npm_deps(b, {"react": "^19.0.0"})
+
+    check = _drift_check([a, b])
+
+    # Repositories legitimately upgrade third-party packages at different times.
+    assert check["status"] == "pass"
+    assert check["metrics"]["external_major_drift"] == 1
+    assert check["metrics"]["internal_drift"] == []
+
+
+def test_dependency_drift_treats_the_minor_as_breaking_below_one(tmp_path):
+    publisher = tmp_path / "flyto-widget"
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    _write_npm_deps(publisher, {"left-pad": "^1.0.0"})
+    _write_npm_deps(a, {"flyto-widget": "^0.48.0"})
+    _write_npm_deps(b, {"flyto-widget": "^0.49.0"})
+
+    check = _drift_check([publisher, a, b])
+
+    # 0.48 and 0.49 are not interchangeable even though both read as major zero.
+    assert check["status"] == "warn"
+    assert "0.48" in check["summary"] and "0.49" in check["summary"]
+
+
+def test_dependency_drift_ignores_specs_that_name_no_published_version(tmp_path):
+    publisher = tmp_path / "flyto-core"
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    _write_npm_deps(publisher, {"left-pad": "^1.0.0"})
+    _write_npm_deps(a, {"flyto-core": "^2.0.0"})
+    _write_npm_deps(b, {"flyto-core": "file:../flyto-core"})
+
+    check = _drift_check([publisher, a, b])
+
+    # A local checkout is not a version, so it cannot disagree with one.
+    assert check["status"] == "pass"
 
 
 def _write_typescript_project(root: Path, *, files: int, suppressed: int, pragma: str = "// @ts-nocheck"):

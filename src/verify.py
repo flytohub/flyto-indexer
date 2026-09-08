@@ -347,6 +347,7 @@ def run_workspace_verification(
     _check_cross_project_contract(workspace_projects, workspace_checks)
     _check_product_loop_closure(workspace_projects, workspace_checks)
     _check_dynamic_validation_plan(workspace_projects, workspace_checks)
+    _check_dependency_drift(workspace_projects, workspace_checks)
     workspace_summary = _summarize_checks(workspace_checks)
     summary["workspace_checks"] = len(workspace_checks)
     summary["workspace_warn"] = workspace_summary.get("warn", 0)
@@ -1793,6 +1794,100 @@ def _classify_product_surfaces(text: str) -> list[str]:
         ):
             matches.append(surface)
     return matches
+
+
+# A local checkout, a workspace link or a VCS ref is not a published version,
+# so comparing them across repositories says nothing.
+_UNVERSIONED_SPEC_PREFIXES = ("file:", "link:", "workspace:", "path", "git+", "github:", "http")
+
+
+def _breaking_version_axis(spec: str) -> str | None:
+    """The component a bump of which is allowed to break callers.
+
+    Under semver that is the major, except below 1.0 where the minor carries
+    breaking change -- which is why lexical 0.48 and 0.49 are not
+    interchangeable even though both read as major zero.
+    """
+    match = re.search(r"(\d+)\s*\.\s*(\d+)", spec)
+    if match:
+        return f"0.{match.group(2)}" if match.group(1) == "0" else match.group(1)
+    lone = re.search(r"(\d+)", spec)
+    return lone.group(1) if lone else None
+
+
+def _check_dependency_drift(projects: list[Path], checks: list[dict[str, Any]]) -> None:
+    """Catch this workspace disagreeing with itself about a package it publishes.
+
+    A package the workspace both publishes and consumes is an internal
+    contract, and two consumers on different breaking versions of it is that
+    contract already broken -- silently, because each repository's own gates
+    only ever see the version it pinned. Third-party spread is reported but
+    does not gate: repositories legitimately upgrade at different times.
+    """
+    try:
+        from .dependency_scanner import scan_dependencies
+    except ImportError:  # pragma: no cover - packaging fallback
+        from dependency_scanner import scan_dependencies  # type: ignore[no-redef]
+
+    published = {project.name for project in projects}
+    consumers: dict[tuple[str, str], dict[str, set[str]]] = {}
+    scanned = 0
+    for project in projects:
+        try:
+            inventory = scan_dependencies(project)
+        except Exception:
+            continue
+        scanned += 1
+        for dependency in inventory.dependencies:
+            spec = (dependency.version or "").strip()
+            if not spec or spec.startswith(_UNVERSIONED_SPEC_PREFIXES):
+                continue
+            axis = _breaking_version_axis(spec)
+            if axis is None:
+                continue
+            by_axis = consumers.setdefault((dependency.ecosystem, dependency.name), {})
+            by_axis.setdefault(axis, set()).add(project.name)
+
+    internal_drift: list[dict[str, Any]] = []
+    external_drift = 0
+    for (ecosystem, name), by_axis in sorted(consumers.items()):
+        if len(by_axis) < 2:
+            continue
+        if name not in published:
+            external_drift += 1
+            continue
+        internal_drift.append({
+            "package": name,
+            "ecosystem": ecosystem,
+            "versions": {
+                axis: sorted(repos) for axis, repos in sorted(by_axis.items())
+            },
+        })
+
+    status = "pass"
+    summary = "Workspace-published packages are consumed at one breaking version"
+    if internal_drift:
+        status = "warn"
+        shown = ", ".join(
+            f"{drift['package']} at {' and '.join(sorted(drift['versions']))}"
+            for drift in internal_drift[:3]
+        )
+        remainder = len(internal_drift) - 3
+        if remainder > 0:
+            shown += f", and {remainder} more"
+        summary = f"Workspace packages are consumed at disagreeing versions: {shown}"
+
+    checks.append({
+        "name": "dependency_drift",
+        "status": status,
+        "summary": summary,
+        "metrics": {
+            "projects_scanned": scanned,
+            "packages_seen": len(consumers),
+            "internal_drift": internal_drift,
+            "external_major_drift": external_drift,
+        },
+    })
 
 
 def _check_dynamic_validation_plan(projects: list[Path], checks: list[dict[str, Any]]) -> None:
