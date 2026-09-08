@@ -2,7 +2,7 @@
 
 # CLI Command Reference
 
-The `flyto-index` argparse surface contains **41 subcommands** and **197 command arguments**.
+The `flyto-index` argparse surface contains **41 subcommands** and **198 command arguments**.
 
 ## `flyto-index init`
 
@@ -439,40 +439,41 @@ Handler: `inline dispatch`. Source: [`src/cli.py:493`](https://github.com/flytoh
 | `--vuln-type` | no | `custom` | `` | Category (rce, xss, sql_injection, path_traversal, ...) | [`src/cli.py:500`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L500) |
 | `--severity` | no | `high` | `critical, high, medium, low` | Severity (default: high) | [`src/cli.py:501`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L501) |
 | `--recommendation` | no | `` | `` | What to do instead (shown in taint report) | [`src/cli.py:502`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L502) |
+| `--requires` | no | `` | `` | JSON argument-shape gates, e.g. '[{"arg": 0, "shape": "mapping"}]'. Lets a rule name a method without naming its receiver. | [`src/cli.py:503`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L503) |
 
 ## `flyto-index add-taint-sanitizer`
 
 Declare a function that cleanses tainted data (e.g., shlex.quote, escape_html).
 
-Handler: `inline dispatch`. Source: [`src/cli.py:504`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L504).
+Handler: `inline dispatch`. Source: [`src/cli.py:512`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L512).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:509`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L509) |
-| `--pattern` | yes | `` | `` | Match pattern (e.g., 'mysql.escape(', 'html.escape(') | [`src/cli.py:510`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L510) |
-| `--cleanses` | no | `*` | `` | Comma-separated vuln types this sanitizer clears, or '*' for all (default: *) | [`src/cli.py:511`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L511) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:517`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L517) |
+| `--pattern` | yes | `` | `` | Match pattern (e.g., 'mysql.escape(', 'html.escape(') | [`src/cli.py:518`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L518) |
+| `--cleanses` | no | `*` | `` | Comma-separated vuln types this sanitizer clears, or '*' for all (default: *) | [`src/cli.py:519`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L519) |
 
 ## `flyto-index remove-taint-rule`
 
 Delete one declared source / sink / sanitizer. Built-in defaults are unaffected.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:513`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L513).
+Handler: `inline dispatch`. Source: [`src/cli.py:521`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L521).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:521`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L521) |
-| `--kind` | yes | `` | `source, sink, sanitizer` | Which list the rule is in | [`src/cli.py:525`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L525) |
-| `--pattern` | yes | `` | `` | The pattern to delete, exactly as declared | [`src/cli.py:529`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L529) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:529`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L529) |
+| `--kind` | yes | `` | `source, sink, sanitizer` | Which list the rule is in | [`src/cli.py:533`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L533) |
+| `--pattern` | yes | `` | `` | The pattern to delete, exactly as declared | [`src/cli.py:537`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L537) |
 
 ## `flyto-index list-taint-rules`
 
 List every project-declared source / sink / sanitizer. Built-in defaults are NOT included.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:534`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L534).
+Handler: `inline dispatch`. Source: [`src/cli.py:542`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L542).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:539`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L539) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:547`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L547) |
 
 ## `flyto-index task`
 

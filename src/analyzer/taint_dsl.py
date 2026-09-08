@@ -16,6 +16,11 @@ Schema (in .flyto-rules.yaml)
           vuln_type: rce
           severity: critical      # critical | high | medium | low
           recommendation: "Use arg list, no shell=True"
+        - pattern: ".find("       # the receiver is whatever the project named it
+          vuln_type: nosql_injection
+          severity: high
+          requires:               # optional; see analyzer.taint_shapes
+            - {arg: 0, shape: mapping}
       sanitizers:
         - pattern: "shlex.quote(*)"
           cleanses: ["rce"]       # or ["*"] for all
@@ -313,8 +318,14 @@ def add_taint_sink(
     vuln_type: str = "custom",
     severity: str = "high",
     recommendation: str = "",
+    requires: "list[dict] | None" = None,
 ) -> dict:
-    """Add a sink pattern to `.flyto-rules.yaml → taint.sinks`."""
+    """Add a sink pattern to `.flyto-rules.yaml → taint.sinks`.
+
+    `requires` are argument-shape gates (analyzer.taint_shapes): they let a
+    rule name a method without naming its receiver, e.g. `.find(` counted only
+    when its first argument is a mapping.
+    """
     try:
         import yaml  # noqa: F401
     except ImportError:
@@ -327,6 +338,8 @@ def add_taint_sink(
     }
     if recommendation:
         entry["recommendation"] = recommendation
+    if requires:
+        entry["requires"] = [dict(item) for item in requires if isinstance(item, dict)]
 
     if _has_pattern(_declared_taint(project_root), "sinks", pattern):
         return {"status": "already_exists", "pattern": pattern}

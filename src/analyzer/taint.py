@@ -45,6 +45,12 @@ from .taint_rules import (
     SINKS,
     SOURCES,
 )
+from .taint_shapes import (
+    call_satisfies,
+    is_constant_literal,
+    normalize_requirements,
+    provable_shape,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .taint_lsp import CalleeVerifier
@@ -351,12 +357,40 @@ def _builds_sql_string(node: ast.AST) -> bool:
     return False
 
 
-def _flatten_sinks() -> list[tuple[str, str, str, str]]:
-    """Return flat list: (pattern, vuln_type, severity, recommendation)."""
+def _without_duplicates(flows: "list[TaintFlow]") -> "list[TaintFlow]":
+    """One finding per (file, line, category, source, sink).
+
+    Two rules can name the same call -- a project that declares `.find(` for
+    its own driver now overlaps the built-in one -- and reporting the same flow
+    twice inflates every count downstream. First occurrence wins, so order is
+    unchanged.
+    """
+    seen = set()
+    unique = []
+    for flow in flows:
+        key = (
+            flow.file_path, flow.line, flow.category,
+            flow.source_expr, flow.sink_expr, flow.sanitized,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(flow)
+    return unique
+
+
+def _flatten_sinks() -> list[tuple[str, str, str, str, tuple]]:
+    """Return flat list: (pattern, vuln_type, severity, recommendation, requires).
+
+    A rule may carry a fourth element: the argument-shape requirements that
+    have to hold before the match counts. See analyzer.taint_shapes.
+    """
     out = []
     for vuln_type, entries in SINKS.items():
-        for pattern, severity, rec in entries:
-            out.append((pattern, vuln_type, severity, rec))
+        for entry in entries:
+            pattern, severity, rec = entry[0], entry[1], entry[2]
+            requires = normalize_requirements(entry[3] if len(entry) > 3 else None)
+            out.append((pattern, vuln_type, severity, rec, requires))
     return out
 
 
@@ -407,7 +441,7 @@ def _load_yaml_rules(project_root: Path) -> dict | None:
 def _apply_yaml_rules(
     yaml_cfg: dict,
     sources: dict[str, list[str]],
-    flat_sinks: list[tuple[str, str, str, str]],
+    flat_sinks: list[tuple[str, str, str, str, tuple]],
     sanitizers: list[tuple[str, list[str]]],
 ) -> tuple[dict, list, list]:
     """Merge YAML rules into working copies of sources/sinks/sanitizers."""
@@ -424,8 +458,9 @@ def _apply_yaml_rules(
         vuln = entry.get("vuln_type", "custom")
         sev = entry.get("severity", "high")
         rec = entry.get("recommendation", "Review this sink for taint flow")
+        requires = normalize_requirements(entry.get("requires"))
         if pat:
-            flat_sinks.append((pat, vuln, sev, rec))
+            flat_sinks.append((pat, vuln, sev, rec, requires))
 
     # Extra sanitizers
     for entry in yaml_cfg.get("sanitizers") or []:
@@ -461,6 +496,9 @@ class TaintAnalyzer:
         #: Variables in the current function that hold an ORM expression object
         #: (`select(...).where(...)`) rather than a SQL string.
         self._orm_expressions: set[str] = set()
+        # name -> the literal it was last assigned in the function being
+        # visited, so an argument-shape gate can resolve it.
+        self._literal_bindings: dict[str, ast.expr] = {}
         self._truncation: set[str] = set()
         self._functions_analyzed = 0
         self.findings: list[TaintFlow] = []
@@ -547,6 +585,7 @@ class TaintAnalyzer:
         self._scan_python_files()
         self._scan_cross_function_via_index()
         self._scan_regex_languages()
+        self.findings = _without_duplicates(self.findings)
         return self.findings
 
     def analyze_full(self) -> "DataFlowResult":
@@ -918,7 +957,7 @@ class TaintAnalyzer:
         for source in self._sources.get(lang, []):
             src_clean = source.rstrip("(")
             self._source_count += content.count(src_clean)
-        for pattern, _vt, _sev, _rec in self._flat_sinks:
+        for pattern, _vt, _sev, _rec, _req in self._flat_sinks:
             pat_clean = pattern.rstrip("(")
             self._sink_count += content.count(pat_clean)
 
@@ -929,6 +968,7 @@ class TaintAnalyzer:
         # taint_state: var_name -> (source_expr, flow_chain)
         taint_state: dict[str, tuple[str, list[str]]] = {}
         self._orm_expressions = set()
+        self._literal_bindings = {}
 
         # Mark all function params as "param-tainted" for cross-function analysis.
         param_names: list[str] = []
@@ -1116,6 +1156,10 @@ class TaintAnalyzer:
                     self._orm_expressions.add(name)
                 elif _builds_sql_string(value):
                     self._orm_expressions.discard(name)
+                if provable_shape(value) is not None or is_constant_literal(value):
+                    self._literal_bindings[name] = value
+                else:
+                    self._literal_bindings.pop(name, None)
 
         if value is None:
             return
@@ -1257,7 +1301,7 @@ class TaintAnalyzer:
             self._handle_subprocess_shell_call(call, taint_state, file_path, func_name)
             return
 
-        for pattern, vuln_type, severity, rec in self._flat_sinks:
+        for pattern, vuln_type, severity, rec, requires in self._flat_sinks:
             # Strip trailing ( for matching against unparsed func name
             match_pat = pattern.rstrip("(")
             if match_pat not in call_str:
@@ -1317,6 +1361,15 @@ class TaintAnalyzer:
                 vuln_type == "path_traversal"
                 and "os.path.join" in match_pat
                 and self._join_has_only_constant_extra_segments(call)
+            ):
+                continue
+
+            # Declarative gates. A rule that cannot name its receiver -- a
+            # Mongo collection is called whatever the project called it --
+            # states the argument shape instead, and `.find(` counts only when
+            # it is given a mapping rather than the string `str.find` takes.
+            if requires and not call_satisfies(
+                call, call_str, requires, self._literal_bindings,
             ):
                 continue
 
@@ -1396,8 +1449,13 @@ class TaintAnalyzer:
             # "response.headers[" describes the receiver, so compare against
             # the part before the index rather than the whole expression.
             receiver = _safe_unparse(target.value) + "["
-            for pattern, vuln_type, severity, rec in self._flat_sinks:
+            for pattern, vuln_type, severity, rec, requires in self._flat_sinks:
                 if not pattern.endswith("["):
+                    continue
+                if requires:
+                    # Argument shapes describe a call. A subscript assignment
+                    # has no arguments to judge, so a gated rule does not apply
+                    # here rather than being silently treated as satisfied.
                     continue
                 if pattern not in receiver:
                     continue

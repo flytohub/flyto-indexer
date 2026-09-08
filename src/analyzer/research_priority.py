@@ -737,7 +737,13 @@ def _worst_sink(text: str, flat_sinks) -> tuple[str, str, str] | None:
     """Return (pattern, category, severity) for the worst sink present."""
     best = None
     best_rank = -1.0
-    for pattern, category, severity, _rec in flat_sinks:
+    for pattern, category, severity, _rec, requires in flat_sinks:
+        if requires:
+            # This ranker reads text, not an AST, so it cannot evaluate an
+            # argument-shape gate. A rule that only counts when its argument is
+            # a mapping would otherwise rank every `line.find(",")` in the
+            # project -- which is the reason the gate exists.
+            continue
         if not _sink_present(text, pattern):
             continue
         rank = _SEVERITY_VALUE.get(severity, 0.3)

@@ -222,8 +222,10 @@ REDOS_REGEX_CALLS = (
 )
 
 # Sinks: dangerous functions that should not receive tainted data
-# Each entry: (pattern, severity, recommendation)
-SINKS = {
+# Each entry: (pattern, severity, recommendation) and optionally a fourth
+# element, the argument-shape requirements that must hold before the match
+# counts. See analyzer.taint_shapes for the vocabulary.
+SINKS: "dict[str, list[tuple]]" = {
     "sql_injection": [
         ("cursor.execute", "critical", "Use parameterized query: cursor.execute(sql, params)"),
         ("db.execute", "critical", "Use parameterized query: db.execute(sql, params)"),
@@ -362,24 +364,33 @@ SINKS = {
         ("ldapjs.search(", "high", "Escape filter chars in ldap-escape"),
     ],
 
+    # A Mongo handle is named by the project, not by the driver, so
+    # "collection.find(" only ever matched projects that happened to call
+    # theirs `collection`. These match the method and let the argument decide:
+    # a query is a mapping, and the `str.find` that shares the name is given a
+    # string. See analyzer.taint_shapes for the gate vocabulary.
     "nosql_injection": [
-        # Python + mongo
-        ("collection.find(", "high", "Do not pass raw dicts from user input as query"),
-        ("collection.find_one(", "high", "Validate query shape; reject $-keys from untrusted data"),
+        (".find(", "high", "Do not pass raw dicts from user input as query",
+         ({"arg": 0, "shape": "mapping"},)),
+        (".find_one(", "high", "Validate query shape; reject $-keys from untrusted data"),
+        (".findOne(", "high", "Reject $-prefixed keys; cast to expected schema first"),
+        (".delete_many(", "high", "Validate query before bulk delete"),
+        (".deleteMany(", "high", "Validate query before bulk delete"),
+        (".update_one(", "high", "Validate update document shape"),
+        (".updateOne(", "high", "Validate update document shape"),
+        (".aggregate(", "high", "Sanitize pipeline stages from user input"),
+        # `.update(` stays receiver-locked: `dict.update({...})` takes a
+        # mapping too, so no argument shape separates it from a Mongo update.
         ("collection.update(", "high", "Validate query + update documents before use"),
-        ("collection.delete_many(", "high", "Validate query before bulk delete"),
-        ("collection.aggregate(", "high", "Sanitize pipeline stages from user input"),
-        # JS + mongoose/mongodb
-        ("Model.find(", "high", "Reject $-prefixed keys; cast to expected schema first"),
-        ("Model.findOne(", "high", "Reject $-prefixed keys; cast to expected schema first"),
-        ("Model.updateOne(", "high", "Validate update document shape"),
         ("db.collection(", "medium", "Ensure downstream find/update sanitizes $-keys"),
     ],
 
     "crlf_injection": [
-        # Python — header injection via newlines in user-supplied values
-        ("response.headers[", "medium", "Strip CR/LF from header values; validate with regex"),
-        ("res.setHeader(", "medium", "Strip CR/LF from header values"),
+        # Python — header injection via newlines in user-supplied values.
+        # Receiver-free for the same reason: the response object is `res`,
+        # `resp`, or `response` depending on the codebase.
+        (".headers[", "medium", "Strip CR/LF from header values; validate with regex"),
+        (".setHeader(", "medium", "Strip CR/LF from header values"),
         ("set_cookie(", "medium", "Validate cookie name/value; strip CR/LF"),
         # Go
         ("w.Header().Set(", "medium", "Strip CR/LF from header values"),
