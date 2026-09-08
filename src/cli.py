@@ -510,6 +510,27 @@ def _configure_architecture_commands(subparsers) -> None:
     add_tsan_parser.add_argument("--pattern", required=True, help="Match pattern (e.g., 'mysql.escape(', 'html.escape(')")
     add_tsan_parser.add_argument("--cleanses", default="*", help="Comma-separated vuln types this sanitizer clears, or '*' for all (default: *)")
 
+    remove_taint_parser = subparsers.add_parser(
+        "remove-taint-rule",
+        help="Remove a taint rule from .flyto-rules.yaml by pattern",
+        description=(
+            "Delete one declared source / sink / sanitizer. "
+            "Built-in defaults are unaffected."
+        ),
+    )
+    remove_taint_parser.add_argument(
+        "path", nargs="?", default=".",
+        help="Project root path (default: current directory)",
+    )
+    remove_taint_parser.add_argument(
+        "--kind", required=True, choices=["source", "sink", "sanitizer"],
+        help="Which list the rule is in",
+    )
+    remove_taint_parser.add_argument(
+        "--pattern", required=True,
+        help="The pattern to delete, exactly as declared",
+    )
+
     list_taint_parser = subparsers.add_parser(
         "list-taint-rules",
         help="Show the taint rules declared in .flyto-rules.yaml (project-specific only)",
@@ -559,6 +580,7 @@ def _command_handlers():
         "add-taint-source": cmd_add_taint_source,
         "add-taint-sink": cmd_add_taint_sink,
         "add-taint-sanitizer": cmd_add_taint_sanitizer,
+        "remove-taint-rule": cmd_remove_taint_rule,
         "list-taint-rules": cmd_list_taint_rules,
     }
 
@@ -2101,6 +2123,17 @@ def cmd_add_taint_sanitizer(args):
         pattern=args.pattern,
         cleanses=cleanses,
     )
+
+
+def cmd_remove_taint_rule(args):
+    from .analyzer.taint_dsl import remove_taint_rule
+
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+
+    return remove_taint_rule(project_path, kind=args.kind, pattern=args.pattern)
 
 
 def cmd_list_taint_rules(args):

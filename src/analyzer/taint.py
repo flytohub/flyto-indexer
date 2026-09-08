@@ -412,14 +412,14 @@ def _apply_yaml_rules(
 ) -> tuple[dict, list, list]:
     """Merge YAML rules into working copies of sources/sinks/sanitizers."""
     # Extra sources
-    for entry in yaml_cfg.get("sources", []):
+    for entry in yaml_cfg.get("sources") or []:
         pat = entry.get("pattern", "")
         lang = entry.get("language", "python")
         if pat:
             sources.setdefault(lang, []).append(pat)
 
     # Extra sinks
-    for entry in yaml_cfg.get("sinks", []):
+    for entry in yaml_cfg.get("sinks") or []:
         pat = entry.get("pattern", "")
         vuln = entry.get("vuln_type", "custom")
         sev = entry.get("severity", "high")
@@ -428,7 +428,7 @@ def _apply_yaml_rules(
             flat_sinks.append((pat, vuln, sev, rec))
 
     # Extra sanitizers
-    for entry in yaml_cfg.get("sanitizers", []):
+    for entry in yaml_cfg.get("sanitizers") or []:
         pat = entry.get("pattern", "")
         cleanses = entry.get("cleanses", ["*"])
         if pat:
