@@ -61,7 +61,9 @@ behaviour for aesthetic reasons.
   the source change) and 29 in `tests/test_taint_shapes.py`.
 - `benchmarks/evaluate.py`: 27/27 cases, precision 1.000, recall 1.000,
   FPR 0.000. Two cases added (`python-nosql-named-handle`, `python-str-find`);
-  `--min-cases` raised 25 -> 27.
+  `--min-cases` raised 25 -> 27, and `docs/LANGUAGE_EVIDENCE.md` regenerated:
+  the corpus is what gates the language claims, so adding cases moves Python
+  from 17 (12 positive / 5 negative) to 19 (13 / 6).
 - `ruff check .` clean. `scripts/check_quality_debt.py`: Ruff=1133, mypy=729,
   unchanged from baseline.
 - `flyto-index verify --strict`: 22 PASS, no warnings, no failures.
