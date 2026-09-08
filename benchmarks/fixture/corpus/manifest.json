@@ -12,8 +12,13 @@
       "minimum_path_hops": 2,
       "metamorphic_group": "python-sqli-shape",
       "metamorphic_relation": "same_categories",
-      "reference_categories": ["sql_injection"],
-      "reference_sources": ["semgrep/python-sqli", "codeql/py-sql-injection"]
+      "reference_categories": [
+        "sql_injection"
+      ],
+      "reference_sources": [
+        "semgrep/python-sqli",
+        "codeql/py-sql-injection"
+      ]
     },
     {
       "id": "python-direct-sqli",
@@ -25,8 +30,13 @@
       },
       "metamorphic_group": "python-sqli-shape",
       "metamorphic_relation": "same_categories",
-      "reference_categories": ["sql_injection"],
-      "reference_sources": ["semgrep/python-sqli", "codeql/py-sql-injection"]
+      "reference_categories": [
+        "sql_injection"
+      ],
+      "reference_sources": [
+        "semgrep/python-sqli",
+        "codeql/py-sql-injection"
+      ]
     },
     {
       "id": "python-sanitized",
@@ -35,7 +45,10 @@
       "kind": "negative",
       "expected": {},
       "reference_categories": [],
-      "reference_sources": ["semgrep/python-sqli", "codeql/py-sql-injection"]
+      "reference_sources": [
+        "semgrep/python-sqli",
+        "codeql/py-sql-injection"
+      ]
     },
     {
       "id": "python-rce",
@@ -47,8 +60,13 @@
       },
       "metamorphic_group": "python-rce-sanitization",
       "metamorphic_relation": "sanitizer_removes",
-      "reference_categories": ["rce"],
-      "reference_sources": ["semgrep/python-command-injection", "codeql/py-command-line-injection"]
+      "reference_categories": [
+        "rce"
+      ],
+      "reference_sources": [
+        "semgrep/python-command-injection",
+        "codeql/py-command-line-injection"
+      ]
     },
     {
       "id": "python-rce-sanitized",
@@ -59,7 +77,10 @@
       "metamorphic_group": "python-rce-sanitization",
       "metamorphic_relation": "sanitizer_removes",
       "reference_categories": [],
-      "reference_sources": ["semgrep/python-command-injection", "codeql/py-command-line-injection"]
+      "reference_sources": [
+        "semgrep/python-command-injection",
+        "codeql/py-command-line-injection"
+      ]
     },
     {
       "id": "javascript-ssrf",
@@ -69,8 +90,13 @@
       "expected": {
         "ssrf": 1
       },
-      "reference_categories": ["ssrf"],
-      "reference_sources": ["semgrep/javascript-ssrf", "codeql/js-request-forgery"]
+      "reference_categories": [
+        "ssrf"
+      ],
+      "reference_sources": [
+        "semgrep/javascript-ssrf",
+        "codeql/js-request-forgery"
+      ]
     },
     {
       "id": "javascript-prototype-pollution",
@@ -80,8 +106,13 @@
       "expected": {
         "prototype_pollution": 1
       },
-      "reference_categories": ["prototype_pollution"],
-      "reference_sources": ["semgrep/javascript-prototype-pollution", "codeql/js-prototype-pollution"]
+      "reference_categories": [
+        "prototype_pollution"
+      ],
+      "reference_sources": [
+        "semgrep/javascript-prototype-pollution",
+        "codeql/js-prototype-pollution"
+      ]
     },
     {
       "id": "typescript-open-redirect",
@@ -93,8 +124,13 @@
       },
       "metamorphic_group": "typescript-redirect-constant",
       "metamorphic_relation": "constant_removes",
-      "reference_categories": ["open_redirect"],
-      "reference_sources": ["semgrep/typescript-open-redirect", "codeql/js-client-side-url-redirect"]
+      "reference_categories": [
+        "open_redirect"
+      ],
+      "reference_sources": [
+        "semgrep/typescript-open-redirect",
+        "codeql/js-client-side-url-redirect"
+      ]
     },
     {
       "id": "typescript-internal-redirect",
@@ -105,7 +141,10 @@
       "metamorphic_group": "typescript-redirect-constant",
       "metamorphic_relation": "constant_removes",
       "reference_categories": [],
-      "reference_sources": ["semgrep/typescript-open-redirect", "codeql/js-client-side-url-redirect"]
+      "reference_sources": [
+        "semgrep/typescript-open-redirect",
+        "codeql/js-client-side-url-redirect"
+      ]
     },
     {
       "id": "go-ssrf",
@@ -117,8 +156,13 @@
       },
       "metamorphic_group": "go-ssrf-constant",
       "metamorphic_relation": "constant_removes",
-      "reference_categories": ["ssrf"],
-      "reference_sources": ["semgrep/go-ssrf", "codeql/go-request-forgery"]
+      "reference_categories": [
+        "ssrf"
+      ],
+      "reference_sources": [
+        "semgrep/go-ssrf",
+        "codeql/go-request-forgery"
+      ]
     },
     {
       "id": "go-constant-url",
@@ -129,7 +173,10 @@
       "metamorphic_group": "go-ssrf-constant",
       "metamorphic_relation": "constant_removes",
       "reference_categories": [],
-      "reference_sources": ["semgrep/go-ssrf", "codeql/go-request-forgery"]
+      "reference_sources": [
+        "semgrep/go-ssrf",
+        "codeql/go-request-forgery"
+      ]
     },
     {
       "id": "go-rce",
@@ -139,8 +186,13 @@
       "expected": {
         "rce": 1
       },
-      "reference_categories": ["rce"],
-      "reference_sources": ["semgrep/go-command-injection", "codeql/go-command-line-injection"]
+      "reference_categories": [
+        "rce"
+      ],
+      "reference_sources": [
+        "semgrep/go-command-injection",
+        "codeql/go-command-line-injection"
+      ]
     },
     {
       "id": "go-regex-constant",
@@ -149,7 +201,189 @@
       "kind": "negative",
       "expected": {},
       "reference_categories": [],
-      "reference_sources": ["semgrep/go-redos", "codeql/go-redos"]
+      "reference_sources": [
+        "semgrep/go-redos",
+        "codeql/go-redos"
+      ]
+    },
+    {
+      "id": "python-deserialization",
+      "path": "python-deserialization",
+      "language": "python",
+      "kind": "positive",
+      "expected": {
+        "deserialization": 1
+      },
+      "reference_categories": [
+        "deserialization"
+      ],
+      "reference_sources": [
+        "semgrep/python-pickle",
+        "codeql/py-unsafe-deserialization"
+      ]
+    },
+    {
+      "id": "python-ssti",
+      "path": "python-ssti",
+      "language": "python",
+      "kind": "positive",
+      "expected": {
+        "ssti": 1,
+        "xss": 1
+      },
+      "reference_categories": [
+        "ssti",
+        "xss"
+      ],
+      "reference_sources": [
+        "semgrep/python-ssti",
+        "codeql/py-jinja2-ssti"
+      ]
+    },
+    {
+      "id": "python-xxe",
+      "path": "python-xxe",
+      "language": "python",
+      "kind": "positive",
+      "expected": {
+        "xxe": 1
+      },
+      "reference_categories": [
+        "xxe"
+      ],
+      "reference_sources": [
+        "semgrep/python-xxe",
+        "codeql/py-xxe"
+      ]
+    },
+    {
+      "id": "python-xss",
+      "path": "python-xss",
+      "language": "python",
+      "kind": "positive",
+      "expected": {
+        "xss": 1
+      },
+      "reference_categories": [
+        "xss"
+      ],
+      "reference_sources": [
+        "semgrep/python-xss",
+        "codeql/py-reflective-xss"
+      ]
+    },
+    {
+      "id": "python-path-traversal",
+      "path": "python-path-traversal",
+      "language": "python",
+      "kind": "positive",
+      "expected": {
+        "path_traversal": 1
+      },
+      "reference_categories": [
+        "path_traversal"
+      ],
+      "reference_sources": [
+        "semgrep/python-path-traversal",
+        "codeql/py-path-injection"
+      ]
+    },
+    {
+      "id": "python-nosql",
+      "path": "python-nosql",
+      "language": "python",
+      "kind": "positive",
+      "expected": {
+        "nosql_injection": 1
+      },
+      "reference_categories": [
+        "nosql_injection"
+      ],
+      "reference_sources": [
+        "semgrep/python-nosql",
+        "codeql/py-nosql-injection"
+      ]
+    },
+    {
+      "id": "python-crlf",
+      "path": "python-crlf",
+      "language": "python",
+      "kind": "positive",
+      "expected": {
+        "crlf_injection": 1
+      },
+      "reference_categories": [
+        "crlf_injection"
+      ],
+      "reference_sources": [
+        "semgrep/python-crlf",
+        "codeql/py-header-injection"
+      ]
+    },
+    {
+      "id": "python-redos",
+      "path": "python-redos",
+      "language": "python",
+      "kind": "positive",
+      "expected": {
+        "redos": 1
+      },
+      "reference_categories": [
+        "redos"
+      ],
+      "reference_sources": [
+        "semgrep/python-redos",
+        "codeql/py-polynomial-redos"
+      ]
+    },
+    {
+      "id": "python-nosql-constant",
+      "path": "python-nosql-constant",
+      "language": "python",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": [
+        "semgrep/python-nosql"
+      ]
+    },
+    {
+      "id": "python-crlf-constant",
+      "path": "python-crlf-constant",
+      "language": "python",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": [
+        "semgrep/python-crlf"
+      ]
+    },
+    {
+      "id": "python-chained-constant",
+      "path": "python-chained-constant",
+      "language": "python",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": [
+        "semgrep/python-path-traversal"
+      ]
+    },
+    {
+      "id": "python-ldap",
+      "path": "python-ldap",
+      "language": "python",
+      "kind": "positive",
+      "expected": {
+        "ldap_injection": 1
+      },
+      "reference_categories": [
+        "ldap_injection"
+      ],
+      "reference_sources": [
+        "semgrep/python-ldap-injection",
+        "codeql/py-ldap-injection"
+      ]
     }
   ]
 }

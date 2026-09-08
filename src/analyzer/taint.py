@@ -1120,6 +1120,12 @@ class TaintAnalyzer:
         if value is None:
             return
 
+        # Some sinks are written to, not called: response.headers["X"] = v and
+        # its Express and Go equivalents. Their patterns end in "[" and were
+        # only ever matched against call expressions, so the whole
+        # crlf_injection category never fired on the idiom it describes.
+        self._check_subscript_sinks(targets, value, taint_state, file_path, func_name)
+
         # Check sanitizer FIRST — e.g., int(request.args.get('id')) is safe
         if self._is_sanitizer_expr(value):
             for target in targets:
@@ -1235,6 +1241,15 @@ class TaintAnalyzer:
         func_name: str,
     ):
         """Handle a call expression as a statement — check if it's a sink."""
+        # A sink is often not the outermost call: open(p).read(), and
+        # requests.get(url).json(), put it in the receiver, where only the
+        # trailing method was ever examined. Walk down the chain first so the
+        # call that actually reaches the resource is seen.
+        receiver = getattr(call.func, "value", None)
+        inner = _unwrap_await(receiver) if receiver is not None else None
+        if isinstance(inner, ast.Call):
+            self._handle_call_stmt(inner, taint_state, file_path, func_name)
+
         self._apply_propagators(call, taint_state)
         call_str = _safe_unparse(call.func)
 
@@ -1361,6 +1376,52 @@ class TaintAnalyzer:
                                 (file_path, func_name), []
                             ).append((param_idx, param_name, vuln_type, severity, rec))
                     break  # one finding per call site
+
+    def _check_subscript_sinks(
+        self,
+        targets: list,
+        value: ast.expr,
+        taint_state: dict,
+        file_path: str,
+        func_name: str,
+    ) -> None:
+        """Report a tainted value written into a subscript-shaped sink."""
+        subscripts = [tg for tg in targets if isinstance(tg, ast.Subscript)]
+        if not subscripts:
+            return
+        tainted, src, chain = self._expr_is_tainted(value, taint_state)
+        if not tainted:
+            return
+        for target in subscripts:
+            # "response.headers[" describes the receiver, so compare against
+            # the part before the index rather than the whole expression.
+            receiver = _safe_unparse(target.value) + "["
+            for pattern, vuln_type, severity, rec in self._flat_sinks:
+                if not pattern.endswith("["):
+                    continue
+                if pattern not in receiver:
+                    continue
+                if self._is_sanitized_for(value, vuln_type):
+                    continue
+                line = getattr(target, "lineno", 0)
+                sink_str = f"{_safe_unparse(target)} = {_safe_unparse(value)}"
+                self.findings.append(TaintFlow(
+                    file_path=file_path,
+                    line=line,
+                    severity=severity,
+                    category=vuln_type,
+                    source_expr=src,
+                    sink_expr=sink_str,
+                    flow_chain=chain + [sink_str],
+                    recommendation=rec,
+                    source_file=file_path,
+                    source_line=line,
+                    sink_file=file_path,
+                    sink_line=line,
+                    path=[f"{file_path}:{func_name}:{line}"],
+                    sanitized=False,
+                ))
+                return
 
     @staticmethod
     def _is_subprocess_sink(match_pat: str) -> bool:
@@ -1544,6 +1605,22 @@ class TaintAnalyzer:
                     t, s, c = self._expr_is_tainted(val.value, taint_state)
                     if t:
                         return True, s, c
+            return False, "", []
+
+        if isinstance(node, (ast.Dict, ast.List, ast.Tuple, ast.Set)):
+            # A container carries the taint of what is put in it. Without this
+            # the Mongo idiom -- collection.find({"name": untrusted}) -- read
+            # as clean, which is the only way anyone writes that query, so the
+            # whole nosql category was effectively unreachable.
+            if isinstance(node, ast.Dict):
+                parts = [v for v in node.values if v is not None]
+                parts += [k for k in node.keys if k is not None]
+            else:
+                parts = list(node.elts)
+            for part in parts:
+                t, s, c = self._expr_is_tainted(part, taint_state)
+                if t:
+                    return True, s, c
             return False, "", []
 
         if isinstance(node, ast.BinOp):

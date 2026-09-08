@@ -10,7 +10,7 @@ rejects claims that are stronger than the checked-in corpus.
 
 | Language | Indexing | Relationship analysis | Security analysis | Committed cases | Evidence level |
 | --- | --- | --- | --- | ---: | --- |
-| Python | AST definitions, imports, calls, decorators, and routes | Resolved call graph with optional LSP and SCIP precision | AST taint with assignment, interpolation, call, and sanitizer tracking | 5 (3 positive / 2 negative) | gated |
+| Python | AST definitions, imports, calls, decorators, and routes | Resolved call graph with optional LSP and SCIP precision | AST taint with assignment, interpolation, call, and sanitizer tracking | 17 (12 positive / 5 negative) | gated |
 | JavaScript | Token-aware structural extraction with import and call edges | Static graph plus optional LSP and SCIP precision | Pattern-based taint fallback for common source-to-sink shapes | 2 (2 positive / 0 negative) | positive-only |
 | TypeScript | Token-aware functions, classes, types, imports, calls, and routes | Static graph plus optional LSP and SCIP precision | Pattern-based taint fallback for common source-to-sink shapes | 2 (1 positive / 1 negative) | gated |
 | Vue | SFC script and template-aware component, import, and API-call extraction | Component and call relationships with static fallback | JavaScript and TypeScript pattern fallback inside extracted scripts | 0 (0 positive / 0 negative) | indexing-only |
