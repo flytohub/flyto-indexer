@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **187 Python modules**, **79,055 lines**, and **2,426 class/function/method declarations**.
+Generated inventory: **187 Python modules**, **79,134 lines**, and **2,428 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -173,7 +173,7 @@ Generated inventory: **187 Python modules**, **79,055 lines**, and **2,426 class
 | [`src/tools/grill_evidence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill_evidence.py#L1) | 343 | 13 | `__future__, datetime, hashlib, importlib, json, pathlib, subprocess, typing` | Repository evidence snapshots, freshness checks, and Grill artifacts. |
 | [`src/tools/grill_intelligence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill_intelligence.py#L1) | 236 | 8 | `__future__, copy, typing` | Pure decision-intelligence helpers for the Grill workflow. |
 | [`src/tools/grill_outcomes.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/grill_outcomes.py#L1) | 198 | 11 | `__future__, datetime, fcntl, hashlib, json, os, pathlib, threading, typing` | Privacy-preserving local outcome learning for Grill decisions. |
-| [`src/tools/maintenance.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L1) | 875 | 25 | `ast, collections, datetime, engine, importlib, index_store, os, pathlib, re, search, tools, watcher` | Maintenance tools — dead code, TODOs, index status, reindex, sessions. |
+| [`src/tools/maintenance.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/maintenance.py#L1) | 954 | 27 | `ast, collections, datetime, engine, importlib, index_store, os, pathlib, re, search, tools, watcher` | Maintenance tools — dead code, TODOs, index status, reindex, sessions. |
 | [`src/tools/proof_receipts.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/proof_receipts.py#L1) | 230 | 6 | `__future__, datetime, hashlib, hmac, json, os, typing` | Validation for content-addressed and optionally attested external proof receipts. |
 | [`src/tools/references.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/references.py#L1) | 1319 | 31 | `importlib, index_store, logging, lsp, os, pathlib, re, resolver, scip_adapter` | Reference and impact analysis tools for flyto-indexer MCP server. |
 | [`src/tools/research_priority.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/tools/research_priority.py#L1) | 138 | 1 | `__future__, analyzer, index_store, pathlib, typing` | Research-priority tool adapter. |

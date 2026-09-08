@@ -444,6 +444,53 @@ def _is_potentially_dead(sym_id, sym, ref_ctx, dependencies, symbols,
                                         project_roots, source_text_cache)
 
 
+#: Confidence levels, strongest claim first.
+DEAD_CODE_CONFIDENCE = ("definite", "probable", "unknown")
+
+_STRING_LITERAL_CACHE: dict[int, set[str]] = {}
+
+
+def _quoted_names_in(source_text_cache) -> set[str]:
+    """Every identifier that appears somewhere as a whole quoted string.
+
+    That is the shape dynamic dispatch takes -- ``getattr(obj, "name")``, a
+    route table, a registry keyed by name -- and no reference graph can see it.
+    """
+    if source_text_cache is None:
+        return set()
+    key = id(source_text_cache)
+    cached = _STRING_LITERAL_CACHE.get(key)
+    if cached is not None:
+        return cached
+    quoted: set[str] = set()
+    for text in source_text_cache.values():
+        if not text:
+            continue
+        for match in re.finditer(r"""['"`]([A-Za-z_][A-Za-z0-9_]*)['"`]""", text):
+            quoted.add(match.group(1))
+    _STRING_LITERAL_CACHE[key] = quoted
+    if len(_STRING_LITERAL_CACHE) > 8:
+        _STRING_LITERAL_CACHE.pop(next(iter(_STRING_LITERAL_CACHE)))
+    return quoted
+
+
+def _dead_code_confidence(sym, sym_name, source_text_cache) -> str:
+    """How strongly "unreferenced here" supports "safe to delete".
+
+    Unreferenced is one fact, and it carries different weight depending on how
+    else the symbol could be reached. Reporting all three cases as one number
+    is what let an exported name on a published package read as removable.
+    """
+    if sym_name in _quoted_names_in(source_text_cache):
+        # Reachable by a name the reference graph never resolves.
+        return "unknown"
+    if sym_name in (sym.get("exports") or ()):
+        # On the module's public surface: a consumer outside this repository
+        # can import it, and nothing in this index would show that.
+        return "probable"
+    return "definite"
+
+
 def _format_dead_code_result(dead_code: list) -> dict:
     dead_code.sort(key=lambda x: x["lines"], reverse=True)
 
@@ -455,21 +502,52 @@ def _format_dead_code_result(dead_code: list) -> dict:
         by_project[proj].append(item)
 
     total_dead_lines = sum(item["lines"] for item in dead_code)
+    by_confidence = {
+        level: sum(1 for item in dead_code if item.get("confidence") == level)
+        for level in DEAD_CODE_CONFIDENCE
+    }
+    removable = [item for item in dead_code if item.get("confidence") == "definite"]
 
-    if dead_code:
-        largest = dead_code[0]
-        next_action = f"Largest dead symbol: {largest['name']} ({largest['lines']} lines) at {largest['path']}:{largest.get('start_line', 0)}. Use get_symbol_content to review before removing."
+    if removable:
+        largest = removable[0]
+        next_action = (
+            f"Largest removable symbol: {largest['name']} ({largest['lines']} lines) at "
+            f"{largest['path']}:{largest.get('start_line', 0)}. "
+            "Use get_symbol_content to review before removing."
+        )
+    elif dead_code:
+        # Every finding is exported or reachable by name. Pointing at the
+        # largest one as the thing to delete next is how an exported symbol on
+        # a published package gets removed out from under its consumers.
+        next_action = (
+            f"No symbol is provably removable: {by_confidence['probable']} are exported "
+            "and may have consumers outside this repository, "
+            f"{by_confidence['unknown']} are named in string literals "
+            "and may be dispatched dynamically. Confirm consumers before removing any."
+        )
     else:
         next_action = "Codebase is clean — no dead code detected."
+
+    if dead_code:
+        suggestion = (
+            f"Found {len(dead_code)} unreferenced symbols ({total_dead_lines} lines): "
+            f"{by_confidence['definite']} unreferenced and unexported, "
+            f"{by_confidence['probable']} exported with no reference here, "
+            f"{by_confidence['unknown']} named in a string literal somewhere."
+        )
+    else:
+        suggestion = "No unreferenced symbols found."
 
     return {
         "total": len(dead_code),
         "total_dead": len(dead_code),
         "total_dead_lines": total_dead_lines,
         "by_project": {k: len(v) for k, v in by_project.items()},
+        "by_confidence": by_confidence,
+        "removable": len(removable),
         "dead_symbols": dead_code[:20],
         "top_20": dead_code[:20],
-        "suggestion": f"Found {len(dead_code)} high-confidence unreferenced symbols, {total_dead_lines} total lines of code that can be considered for removal.",
+        "suggestion": suggestion,
         "next_action": next_action,
     }
 
@@ -548,6 +626,7 @@ def _find_dead_code_from_index(
             "project": sym_project,
             "lines": lines,
             "start_line": sym.get("start_line", 0),
+            "confidence": _dead_code_confidence(sym, sym_name, source_text_cache),
         })
 
     return _format_dead_code_result(dead_code)
