@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **202 Python modules**, **80,161 lines**, and **2,473 class/function/method declarations**.
+Generated inventory: **202 Python modules**, **80,204 lines**, and **2,474 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -73,8 +73,8 @@ Generated inventory: **202 Python modules**, **80,161 lines**, and **2,473 class
 | [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 2483 | 63 | `analyzer, ast, collections, dataclasses, finding_identity, importlib, logging, pathlib, profile, re, taint_lsp, taint_rules` | AST-based taint analysis engine. |
 | [`src/analyzer/taint_dsl.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L1) | 408 | 17 | `json, logging, pathlib, re, yaml` | Taint DSL — read/write helpers for the `taint:` block in .flyto-rules.yaml. |
 | [`src/analyzer/taint_lsp.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_lsp.py#L1) | 203 | 7 | `__future__, ast, logging, lsp, os, pathlib, typing` | Type-aware callee verification for the cross-function taint pass. |
-| [`src/analyzer/taint_rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_rules.py#L1) | 586 | 0 | `none` | Default taint analysis rules — sources, sinks, and sanitizers by language. |
-| [`src/analyzer/taint_shapes.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L1) | 295 | 14 | `ast` | Argument-shape gates for sink rules. |
+| [`src/analyzer/taint_rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_rules.py#L1) | 597 | 0 | `none` | Default taint analysis rules — sources, sinks, and sanitizers by language. |
+| [`src/analyzer/taint_shapes.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L1) | 327 | 15 | `ast, re` | Argument-shape gates for sink rules. |
 | [`src/analyzer/tech_debt.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/tech_debt.py#L1) | 142 | 4 | `dataclasses, pathlib, re` | Tech Debt tracker — scan source files for TODO/FIXME/HACK/XXX markers. |
 | [`src/analyzer/type_filter.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/type_filter.py#L1) | 208 | 5 | `logging, lsp, pathlib, re, typing` | Type-aware filter for taint analysis. |
 | [`src/api_server.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/api_server.py#L1) | 475 | 19 | `argparse, http, index_store, json, logging, os, pathlib, urllib` | Flyto2 Indexer HTTP API Server |

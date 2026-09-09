@@ -77,6 +77,7 @@ Every requirement listed must hold for the match to count:
 | Requirement | Holds when |
 | --- | --- |
 | `{arg: 0, shape: mapping}` | argument 0 is a mapping. `any` and `after_first` may replace the index; shapes are `mapping`, `sequence`, `scalar`, `constant`, `dynamic` |
+| `{arg: "any", shape: "sql_statement"}` | the literal text an argument carries reads as a SQL statement |
 | `{callee_tail: ["re.search"]}` | the dotted callee ends there at a name boundary, so `store.search` does not qualify |
 | `{keyword: "shell", equals: true}` | that keyword argument is present with that value |
 | `{min_args: 2}` / `{max_args: 1}` | the positional argument count is in range |
