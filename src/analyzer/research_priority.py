@@ -70,7 +70,7 @@ try:  # package-relative first, matching the rest of src/analyzer
         _apply_yaml_rules,
         _load_yaml_rules,
     )
-    from .taint_rules import SANITIZERS, SOURCES
+    from .taint_rules import OPERATOR_SOURCES, SANITIZERS, SOURCES
 except ImportError:  # pragma: no cover - flat-layout fallback used by the CLI
     from analyzer.complexity import (  # type: ignore
         _is_test_file,
@@ -87,7 +87,11 @@ except ImportError:  # pragma: no cover - flat-layout fallback used by the CLI
         _apply_yaml_rules,
         _load_yaml_rules,
     )
-    from analyzer.taint_rules import SANITIZERS, SOURCES  # type: ignore
+    from analyzer.taint_rules import (  # type: ignore
+        OPERATOR_SOURCES,
+        SANITIZERS,
+        SOURCES,
+    )
 
 
 # ── Tunables ────────────────────────────────────────────────────────────────
@@ -179,7 +183,8 @@ _JS_ONLY_SINKS = frozenset({
 #: Sources supplied by whoever runs the program, not by a remote attacker.
 #: They are real sources for a CLI threat model and stay in the list, but a
 #: lead built on them must not outrank one built on a request.
-_OPERATOR_SOURCES = ("input(", "sys.argv", "argparse", "click.prompt(")
+#: Shared with the taint engine, which demotes the same tier.
+_OPERATOR_SOURCES = OPERATOR_SOURCES
 
 #: A source this many lines from the sink still reads as "the same piece of
 #: code". Beyond it, sharing a file means little: gradio_client/client.py is

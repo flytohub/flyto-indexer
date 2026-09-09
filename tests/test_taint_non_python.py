@@ -83,3 +83,38 @@ class TestBareKeywordBoundary:
             }
         """)
         assert any(f.category == "sql_injection" for f in flows)
+
+
+class TestJavaScriptRceIsBidirectional:
+    """Every JS category carried both directions except rce.
+
+    `req.query.x` followed by `exec(...)` matched; `exec('ping ' + req.query.x)`
+    -- how the call is normally written -- did not.
+    """
+
+    def test_sink_first_exec_is_reported(self, tmp_path):
+        (tmp_path / "route.js").write_text(
+            "router.get('/ping', (req, res) => {\n"
+            "  exec('ping -c1 ' + req.query.host);\n"
+            "});\n"
+        )
+        findings = TaintAnalyzer(tmp_path).analyze()
+        assert [f.category for f in findings] == ["rce"]
+
+    def test_source_first_exec_is_still_reported(self, tmp_path):
+        (tmp_path / "route.js").write_text(
+            "router.get('/ping', (req, res) => {\n"
+            "  const host = req.query.host;\n"
+            "  execSync('ping -c1 ' + host);\n"
+            "});\n"
+        )
+        findings = TaintAnalyzer(tmp_path).analyze()
+        assert [f.category for f in findings] == ["rce"]
+
+    def test_a_constant_command_is_not_reported(self, tmp_path):
+        (tmp_path / "route.js").write_text(
+            "router.get('/ping', (req, res) => {\n"
+            "  exec('ping -c1 localhost');\n"
+            "});\n"
+        )
+        assert TaintAnalyzer(tmp_path).analyze() == []

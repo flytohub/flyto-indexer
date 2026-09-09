@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **202 Python modules**, **80,262 lines**, and **2,477 class/function/method declarations**.
+Generated inventory: **202 Python modules**, **80,381 lines**, and **2,480 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -66,14 +66,14 @@ Generated inventory: **202 Python modules**, **80,262 lines**, and **2,477 class
 | [`src/analyzer/lens.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/lens.py#L1) | 268 | 8 | `collections, dataclasses, pathlib, typing` | Lens engine — per-perspective ranked findings with cross-signal hotspots. |
 | [`src/analyzer/perf_patterns.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/perf_patterns.py#L1) | 250 | 14 | `ast, dataclasses, pathlib, re` | Performance Anti-pattern detector — find common performance issues in code. |
 | [`src/analyzer/pyramid.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/pyramid.py#L1) | 232 | 8 | `dataclasses, typing` | Pyramid aggregation engine — multi-perspective composite scoring. |
-| [`src/analyzer/research_priority.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/research_priority.py#L1) | 1383 | 40 | `__future__, analyzer, ast, complexity, contextlib, dataclasses, error_handling, git_history, json, math, os, pathlib` | Security Research Priority ranking. |
+| [`src/analyzer/research_priority.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/research_priority.py#L1) | 1388 | 40 | `__future__, analyzer, ast, complexity, contextlib, dataclasses, error_handling, git_history, json, math, os, pathlib` | Security Research Priority ranking. |
 | [`src/analyzer/rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/rules.py#L1) | 485 | 16 | `dataclasses, datetime, fnmatch, layers, logging, pathlib, re, yaml` | Project rules engine — loads .flyto-rules.yaml and checks compliance. |
 | [`src/analyzer/security.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/security.py#L1) | 586 | 20 | `ast, dataclasses, importlib, pathlib, re, rule_loader` | Security scanning - detect potential security issues |
 | [`src/analyzer/stale_files.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/stale_files.py#L1) | 216 | 11 | `collections, dataclasses, datetime, pathlib, subprocess` | Stale file detection - use git history to find files untouched for a long time |
-| [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 2541 | 66 | `analyzer, ast, collections, dataclasses, finding_identity, importlib, logging, pathlib, profile, re, taint_lsp, taint_rules` | AST-based taint analysis engine. |
+| [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 2634 | 69 | `analyzer, ast, collections, dataclasses, finding_identity, importlib, logging, pathlib, profile, re, taint_lsp, taint_rules` | AST-based taint analysis engine. |
 | [`src/analyzer/taint_dsl.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L1) | 408 | 17 | `json, logging, pathlib, re, yaml` | Taint DSL — read/write helpers for the `taint:` block in .flyto-rules.yaml. |
 | [`src/analyzer/taint_lsp.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_lsp.py#L1) | 203 | 7 | `__future__, ast, logging, lsp, os, pathlib, typing` | Type-aware callee verification for the cross-function taint pass. |
-| [`src/analyzer/taint_rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_rules.py#L1) | 597 | 0 | `none` | Default taint analysis rules — sources, sinks, and sanitizers by language. |
+| [`src/analyzer/taint_rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_rules.py#L1) | 618 | 0 | `none` | Default taint analysis rules — sources, sinks, and sanitizers by language. |
 | [`src/analyzer/taint_shapes.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L1) | 327 | 15 | `ast, re` | Argument-shape gates for sink rules. |
 | [`src/analyzer/tech_debt.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/tech_debt.py#L1) | 142 | 4 | `dataclasses, pathlib, re` | Tech Debt tracker — scan source files for TODO/FIXME/HACK/XXX markers. |
 | [`src/analyzer/type_filter.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/type_filter.py#L1) | 208 | 5 | `logging, lsp, pathlib, re, typing` | Type-aware filter for taint analysis. |

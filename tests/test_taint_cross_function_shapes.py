@@ -221,3 +221,120 @@ class TestEveryParameterThatReachesASink:
                 handle("users", request.args.get("cmd"))
         """})
         assert findings == []
+
+
+class TestTheCallerCanBeAMethod:
+    """The index names a method `Class.method`; the AST node is called `method`.
+
+    Comparing the two matched nothing, so a caller that was a method was never
+    scanned -- which is most callers in code that uses classes. A six-shape
+    class-based application scored 2 of 6 on this alone.
+    """
+
+    SINK = """\
+        import os
+
+        def run_cmd(host):
+            os.system("ping " + host)
+    """
+
+    def test_a_method_calling_a_private_method_in_its_own_class(self):
+        findings = _analyze({"app.py": """\
+            import os
+            from flask import request
+
+            class Handler:
+                def go(self):
+                    self._run(request.args.get("host"))
+
+                def _run(self, host):
+                    os.system("ping " + host)
+        """})
+        assert [f.category for f in findings] == ["rce"]
+
+    def test_a_method_calling_through_an_attribute(self):
+        findings = _analyze({"app.py": """\
+            import os
+            from flask import request
+
+            class Repo:
+                def run(self, cmd):
+                    os.system("x " + cmd)
+
+            class Handler:
+                def __init__(self):
+                    self.repo = Repo()
+
+                def go(self):
+                    self.repo.run(request.args.get("v"))
+        """})
+        assert [f.category for f in findings] == ["rce"]
+
+    def test_a_plain_function_caller_still_works(self):
+        findings = _analyze({"sink.py": self.SINK, "app.py": """\
+            from flask import request
+            from sink import run_cmd
+
+            def go():
+                run_cmd(request.args.get("host"))
+        """})
+        assert [f.category for f in findings] == ["rce"]
+
+
+class TestTheChainDoesNotStopAfterOneHop:
+    """Tracing a caller can find the caller dangerous, one hop further out.
+
+    That was recorded and never traced: the name map was built once, before
+    the round that grows it, so a three-function chain stopped at the second
+    no matter what MAX_CROSS_DEPTH said.
+    """
+
+    def test_two_hops(self):
+        findings = _analyze({"app.py": """\
+            import os
+            from flask import request
+
+            def go():
+                outer(request.args.get("v"))
+
+            def outer(v):
+                inner(v)
+
+            def inner(v):
+                os.system("echo " + v)
+        """})
+        assert [f.category for f in findings] == ["rce"]
+
+    def test_three_hops(self):
+        findings = _analyze({"app.py": """\
+            import os
+            from flask import request
+
+            def go():
+                first(request.args.get("v"))
+
+            def first(v):
+                second(v)
+
+            def second(v):
+                third(v)
+
+            def third(v):
+                os.system("echo " + v)
+        """})
+        assert [f.category for f in findings] == ["rce"]
+
+    def test_a_clean_chain_reports_nothing(self):
+        findings = _analyze({"app.py": """\
+            import os
+
+            def go():
+                first("static")
+
+            def first(v):
+                second(v)
+
+            def second(v):
+                os.system("echo " + v)
+        """})
+        assert findings == []

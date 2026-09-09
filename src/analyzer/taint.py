@@ -22,7 +22,7 @@ import importlib
 import logging
 import re
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -40,6 +40,7 @@ from .taint_rules import (
     GO_TAINT_PATTERNS,
     JS_TAINT_PATTERNS,
     NON_UNTRUSTED_SOURCE_MARKERS,
+    OPERATOR_SOURCES,
     REDOS_REGEX_CALLS,
     SANITIZERS,
     SINKS,
@@ -384,6 +385,30 @@ def _with_returned_calls(stmts: "list[ast.stmt]") -> "list[ast.stmt]":
     return out
 
 
+def _functions_with_qualnames(
+    tree: ast.AST,
+) -> "list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, str]]":
+    """Every function in the tree, paired with its `Class.method` name.
+
+    The index identifies a method by its qualified name, so matching a caller
+    needs the same shape alongside the AST node.
+    """
+    found: list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, str]] = []
+
+    def walk(node: ast.AST, prefix: str) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.ClassDef):
+                walk(child, f"{prefix}{child.name}.")
+            elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                found.append((child, f"{prefix}{child.name}"))
+                walk(child, prefix)
+            else:
+                walk(child, prefix)
+
+    walk(tree, "")
+    return found
+
+
 def _without_duplicates(flows: "list[TaintFlow]") -> "list[TaintFlow]":
     """One finding per (file, line, category, source, sink).
 
@@ -568,6 +593,8 @@ class TaintAnalyzer:
         #: Variables in the current function that hold an ORM expression object
         #: (`select(...).where(...)`) rather than a SQL string.
         self._orm_expressions: set[str] = set()
+        #: Functions that return the operator's own input and nothing worse.
+        self._operator_return_funcs: set[str] = set()
         # name -> the literal it was last assigned in the function being
         # visited, so an argument-shape gate can resolve it.
         self._literal_bindings: dict[str, ast.expr] = {}
@@ -657,7 +684,9 @@ class TaintAnalyzer:
         self._scan_python_files()
         self._scan_cross_function_via_index()
         self._scan_regex_languages()
-        self.findings = _without_duplicates(self.findings)
+        self.findings = _without_duplicates(
+            [self._demote_operator_sourced(flow) for flow in self.findings]
+        )
         return self.findings
 
     def analyze_full(self) -> "DataFlowResult":
@@ -785,6 +814,24 @@ class TaintAnalyzer:
                 break
             self._return_source_funcs = gated
 
+        # Of those, the ones whose only source is the operator's own input.
+        # A flow through such a function names the function, not argv, so the
+        # severity cap needs the set rather than a string match.
+        operator_only: set[str] = set()
+        for name, node in func_nodes:
+            if name not in self._return_source_funcs:
+                continue
+            text = _safe_unparse(node)
+            present = [
+                pattern for pattern in self._sources.get("python", [])
+                if _source_matches(pattern, text)
+            ]
+            if present and all(
+                pattern in OPERATOR_SOURCES for pattern in present
+            ):
+                operator_only.add(name)
+        self._operator_return_funcs = operator_only
+
     def _collect_tainted_self_attrs(self, rel: str, tree: ast.Module) -> None:
         """Record instance attributes a class assigns untrusted input to.
 
@@ -822,6 +869,29 @@ class TaintAnalyzer:
                             attrs.add(t.attr)
             if attrs:
                 self._tainted_self_attrs[(rel, cnode.name)] = attrs
+
+    def _demote_operator_sourced(self, flow: "TaintFlow") -> "TaintFlow":
+        """Cap the severity of a flow an operator fed, not a remote request.
+
+        `parse_args()` reading `sys.argv` is real input, and reaching a path
+        join with it is worth seeing -- but it is the operator's own
+        `--config`, and calling that high risk is what made this package's own
+        verify gate fail once the cross-function trace grew long enough to
+        reach it. research_priority already demotes this tier; the engine now
+        says the same thing, including through a function that only returns
+        operator input, where the flow names the function rather than argv.
+        """
+        if flow.severity not in ("critical", "high"):
+            return flow
+        source = flow.source_expr
+        # Boundary-matched, not substring-matched: a project's own
+        # `custom_sdk.get_input()` source is not the stdlib prompt, and
+        # demoting it silently is the very mistake the source patterns had.
+        if any(_source_matches(marker, source) for marker in OPERATOR_SOURCES):
+            return replace(flow, severity="medium")
+        if any(source.startswith(f"{name}(") for name in self._operator_return_funcs):
+            return replace(flow, severity="medium")
+        return flow
 
     def _extract_return_signature(
         self, func_node: ast.FunctionDef | ast.AsyncFunctionDef,
@@ -1645,6 +1715,7 @@ class TaintAnalyzer:
             "subprocess.run",
             "subprocess.call",
             "subprocess.Popen",
+            "subprocess.check_output",
         }
 
     @staticmethod
@@ -2005,31 +2076,51 @@ class TaintAnalyzer:
         if not self._dangerous_functions:
             return
 
-        # Build a map from function name -> [(file, func_name, param_info)]
-        # for quick lookup
-        dangerous_by_name: dict[str, list[tuple[str, str, list]]] = defaultdict(list)
-        for (file_path, func_name), param_info_list in self._dangerous_functions.items():
-            if SKIP_DIR_PATTERNS.search(file_path.replace("\\", "/")):
-                continue
-            dangerous_by_name[func_name].append((file_path, func_name, param_info_list))
-
-        # Strategy 1: Use index dependencies (call graph)
         dependencies = self.index.get("dependencies", {})
         symbols = self.index.get("symbols", {})
-
-        if dependencies:
-            self._trace_via_dependencies(dangerous_by_name, dependencies, symbols)
-
-        # Strategy 2: Use reverse_index as fallback
         reverse_index = self.index.get("reverse_index", {})
-        if reverse_index:
-            self._trace_via_reverse_index(dangerous_by_name, reverse_index)
+
+        # Tracing a caller can discover that the caller is itself dangerous,
+        # one hop further out. That was recorded and then never traced: the
+        # name map was built once, before the round that grows it, so a chain
+        # of three functions stopped at the second no matter what
+        # MAX_CROSS_DEPTH said. Repeat while the set grows; `_cross_visited`
+        # keeps each (caller, callee, depth) from being walked twice.
+        seen_keys: set[tuple[str, str]] = set()
+        for depth in range(1, MAX_CROSS_DEPTH + 1):
+            pending = {
+                key: value for key, value in self._dangerous_functions.items()
+                if key not in seen_keys
+            }
+            if not pending:
+                break
+            seen_keys.update(pending)
+
+            dangerous_by_name: dict[str, list[tuple[str, str, list]]] = defaultdict(list)
+            for (file_path, func_name), param_info_list in pending.items():
+                if SKIP_DIR_PATTERNS.search(file_path.replace("\\", "/")):
+                    continue
+                dangerous_by_name[func_name].append(
+                    (file_path, func_name, param_info_list)
+                )
+            if not dangerous_by_name:
+                continue
+
+            if dependencies:
+                self._trace_via_dependencies(
+                    dangerous_by_name, dependencies, symbols, depth,
+                )
+            if reverse_index:
+                # The fallback path has no depth of its own; it exists for
+                # indexes without a dependency graph.
+                self._trace_via_reverse_index(dangerous_by_name, reverse_index)
 
     def _trace_via_dependencies(
         self,
         dangerous_by_name: dict,
         dependencies: dict,
         symbols: dict,
+        depth: int = 1,
     ):
         """Use index dependency graph (type=calls) to find callers."""
         # Build caller -> callee map from dependencies
@@ -2074,7 +2165,7 @@ class TaintAnalyzer:
                     self._check_caller_for_taint(
                         caller_file, caller_func, func_name,
                         param_info_list, call_line,
-                        depth=1,
+                        depth=depth,
                         callee_file=df_file,
                     )
 
@@ -2149,11 +2240,13 @@ class TaintAnalyzer:
             except (OSError, SyntaxError):
                 return
 
-        # Find the specific function in the AST
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            if node.name != caller_func_name:
+        # Find the specific function in the AST. The index names a method
+        # `Class.method`, and comparing that to the AST's bare `method` matched
+        # nothing -- so a caller that was a method was never scanned, which is
+        # most callers in code that uses classes.
+        wanted = caller_func_name.rsplit(".", 1)[-1]
+        for node, qualified in _functions_with_qualnames(tree):
+            if caller_func_name not in (node.name, qualified) and node.name != wanted:
                 continue
 
             taint_state: dict[str, tuple[str, list[str]]] = {}

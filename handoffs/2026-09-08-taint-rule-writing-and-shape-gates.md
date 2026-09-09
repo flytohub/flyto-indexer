@@ -188,6 +188,28 @@ its function dangerous to call (#65), a parameter hiding a real source beside
 it in the same expression (#66), and only one parameter per sink being
 registered (`fix/every-parameter-that-reaches-a-sink`).
 
+## Second audit: harder shapes (2026-09-09)
+
+The eight-vulnerability application used module-level functions. Rebuilt as a
+class-based one -- methods calling methods, a repository behind an attribute, a
+three-hop helper chain, an awaited method, taint stored on `self`, a list
+comprehension -- it scored **2 of 6**. Methods were the blind spot: the index
+names a caller `Class.method`, the AST node is `method`, and the comparison
+matched nothing, so most callers in class-based code were never scanned. Fixing
+that plus the one-hop ceiling and two missing shell APIs takes it to 6 of 6.
+
+An Express/JS application scored **3 of 6**. One was a plain gap in the rule
+table -- rce was the only category without a sink-first pattern -- now 4 of 6.
+The two that remain are inherent to the JS path: it is regex-based, so there is
+no cross-file tracking, and `res.send('<div>' + req.query.x + '</div>')` is not
+in the table because `res.send` carries JSON and safe content too.
+
+Fixing the reach also made this package's own `verify --strict` fail: the trace
+finally reached `parse_args() -> resolve_projects(config_path)` and called the
+operator's `--config` path a high-risk traversal. research_priority already
+had an operator tier for exactly that; the engine now shares its source list
+and caps the severity, so the finding stays at medium and the gate passes.
+
 ## Not verified
 
 - The `prep` (3) and `proxy_req` (1) header writes are client-side and remain

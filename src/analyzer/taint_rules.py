@@ -233,6 +233,14 @@ _NOT_THE_REQUEST = (
     {"not": {"enclosing_class_suffix": ["Request"]}},
 )
 
+#: Sources that an operator supplies, not a remote request: a CLI argument, a
+#: terminal prompt. They are real input and stay in the results, but a flow fed
+#: by one is not the same risk as a flow fed by an HTTP request, which is what
+#: research_priority already says with its operator tier. The taint engine now
+#: agrees with it instead of reporting a `--config` path as a high-risk
+#: traversal.
+OPERATOR_SOURCES = ("input(", "sys.argv", "argparse", "click.prompt(")
+
 # Sinks: dangerous functions that should not receive tainted data
 # Each entry: (pattern, severity, recommendation) and optionally a fourth
 # element, the argument-shape requirements that must hold before the match
@@ -272,6 +280,13 @@ SINKS: "dict[str, list[tuple]]" = {
         ("subprocess.run", "high", "Do not pass shell=True with user input; use arg list"),
         ("subprocess.call", "high", "Do not pass shell=True with user input; use arg list"),
         ("subprocess.Popen", "high", "Do not pass shell=True with user input; use arg list"),
+        # Same family, same shell=True gate; it was simply absent.
+        ("subprocess.check_output", "high",
+         "Do not pass shell=True with user input; use arg list"),
+        # asyncio's shell form always goes through a shell, so unlike
+        # `create_subprocess_exec` there is no arg-list variant to wait for.
+        ("asyncio.create_subprocess_shell(", "critical",
+         "Use asyncio.create_subprocess_exec() with a list of args"),
         # Go
         ("exec.Command(", "high", "Validate and whitelist command arguments"),
     ],
@@ -500,6 +515,12 @@ JS_TAINT_PATTERNS = [
     # req → child_process / exec
     (r'(?:req|request)\.(?:body|query|params)\b.*?\bexec(?:Sync)?\s*\(',
      "rce", "critical", "Never pass user input to child_process.exec"),
+    # ... and sink-first, which is how the call is normally written:
+    # `exec('ping ' + req.query.host)`. Every other category here carries both
+    # directions; rce carried only the source-first one, so the ordinary shape
+    # was the one that got missed.
+    (r'\b(?:eval|exec|execSync|execFile|spawn)\s*\([^)]*(?:req|request)\.(?:body|query|params)\b',
+     "rce", "critical", "Never pass user input to eval/exec/child_process"),
     # req.cookies → response (session fixation)
     (r'(?:req|request)\.cookies\b.*?\b(?:query|execute)\s*\(',
      "sql_injection", "high", "Never use raw cookie values in SQL"),
