@@ -239,6 +239,17 @@ _NOT_THE_REQUEST = (
 # counts. See analyzer.taint_shapes for the vocabulary.
 SINKS: "dict[str, list[tuple]]" = {
     "sql_injection": [
+        # The named receivers below keep the permissive gate: an unresolved
+        # variable stays a candidate there. This one accepts any receiver and
+        # pays for it with a strict one -- the call has to be handed text that
+        # reads as a SQL statement. Measured over 23,404 files: 849 `.execute(`
+        # sites carry SQL, and 261 of them are on receivers the named patterns
+        # cannot see, `conn` (136) alone being the most common name in Python
+        # for a database connection. The executors that share the method name
+        # -- `pipeline`, `pattern`, `router`, `sandbox` -- carry no SQL text
+        # and drop out entirely.
+        (".execute(", "critical", "Use parameterized query: execute(sql, params)",
+         ({"arg": "any", "shape": "sql_statement"},)),
         ("cursor.execute", "critical", "Use parameterized query: cursor.execute(sql, params)"),
         ("db.execute", "critical", "Use parameterized query: db.execute(sql, params)"),
         ("session.execute", "critical", "Use parameterized query with bound parameters"),

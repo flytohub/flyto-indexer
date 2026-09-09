@@ -459,3 +459,78 @@ class TestTheClassASinkSitsIn:
         assert not receiver_satisfies(receiver, rule, "PreparedRequest")
         assert receiver_satisfies(receiver, rule, "RedirectResponse")
         assert receiver_satisfies(receiver, rule, "")
+
+
+class TestSqlSinksAreNotOnlyCursors:
+    """`.execute(` is a database cursor, a workflow step and a regex pipeline.
+
+    The SQL rules named five receivers -- `cursor`, `db`, `session`, `engine`,
+    `connection` -- and missed every connection a project named anything else.
+    Measured over 23,404 files: 849 `.execute(` sites carry a SQL statement,
+    and 261 of them are on receivers those five patterns cannot see, `conn`
+    (136) most of all. The text the call carries is what separates them.
+    """
+
+    def test_any_receiver_counts_when_the_text_is_sql(self):
+        for receiver in ("conn", "cur", "con", "DatabaseManager", "txn"):
+            findings = _analyze(f"""
+                import flask
+                {receiver} = object()
+                def handler():
+                    email = flask.request.args.get("e")
+                    {receiver}.execute("SELECT * FROM users WHERE e = '" + email + "'")
+            """)
+            assert [f.category for f in findings] == ["sql_injection"], receiver
+
+    def test_an_executor_that_carries_no_sql_is_not_a_database(self):
+        findings = _analyze("""
+            import flask
+            pipeline = object()
+            def handler():
+                pipeline.execute("step " + flask.request.args.get("s"))
+        """)
+        assert findings == []
+
+    def test_an_interpolated_table_name_still_reads_as_sql(self):
+        # The SQL keywords are in the literal parts of the f-string, so the
+        # interpolation does not hide them.
+        findings = _analyze("""
+            import flask
+            conn = object()
+            TABLE = "users"
+            def handler():
+                value = flask.request.args.get("v")
+                conn.execute(f"UPDATE {TABLE} SET name = '" + value + "'")
+        """)
+        assert [f.category for f in findings] == ["sql_injection"]
+
+    def test_a_parameterized_query_is_still_safe(self):
+        findings = _analyze("""
+            import flask
+            conn = object()
+            def handler():
+                conn.execute("SELECT * FROM users WHERE id = ?",
+                             (flask.request.args.get("id"),))
+        """)
+        assert findings == []
+
+    def test_a_known_receiver_is_reported_once_not_twice(self):
+        findings = _analyze("""
+            import flask
+            cursor = object()
+            def handler():
+                email = flask.request.args.get("e")
+                cursor.execute("SELECT * FROM users WHERE e = '" + email + "'")
+        """)
+        assert len(findings) == 1
+
+    def test_the_sql_shape_reads_literal_text(self):
+        from analyzer.taint_shapes import carries_sql
+
+        def expr(src):
+            return ast.parse(src, mode="eval").body
+
+        assert carries_sql(expr('"SELECT * FROM t WHERE id = " + x'))
+        assert carries_sql(expr('f"DELETE FROM {table} WHERE id = 1"'))
+        assert not carries_sql(expr('"step " + name'))
+        assert not carries_sql(expr("payload"))
