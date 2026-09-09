@@ -80,6 +80,7 @@ Every requirement listed must hold for the match to count:
 | `{callee_tail: ["re.search"]}` | the dotted callee ends there at a name boundary, so `store.search` does not qualify |
 | `{keyword: "shell", equals: true}` | that keyword argument is present with that value |
 | `{min_args: 2}` / `{max_args: 1}` | the positional argument count is in range |
+| `{receiver_root: ["request", "req"]}` | the leftmost name of what the sink hangs off is one of these |
 | `{not: {...}}` | the requirement inside does not hold |
 
 Shapes fail open. `shape: mapping` passes unless the argument is *provably*
@@ -87,9 +88,15 @@ something else -- a string literal, or a name bound to one earlier in the same
 function. An unknown expression stays a candidate, because a gate that guesses
 drops real flows silently.
 
-Requirements describe a call, so a rule that carries them does not apply to a
-subscript sink (`response.headers[`), and the text-level `research_priority`
-ranker skips it rather than evaluating a gate it cannot see.
+Most requirements describe a call, so a rule that carries one does not apply to
+a subscript sink (`resp.headers[name] = value`), and the text-level
+`research_priority` ranker skips it rather than evaluating a gate it cannot see.
+
+`receiver_root` is the exception: a subscript sink has no arguments but it does
+have a receiver. It is how the built-in header rules say they mean a
+*response* -- `{not: {receiver_root: ["request", "req"]}}` -- because server
+frameworks make `request.headers` read-only, so an assignment into it is an
+HTTP client building its own outgoing request.
 
 Policy files are YAML parsed with `safe_load`; malformed content fails closed.
 The built-in corpus under `config/rules/` supplies default complexity,

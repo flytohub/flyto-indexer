@@ -329,3 +329,84 @@ class TestSinkCounting:
                 return users.findOne(q)
         """))
         assert TaintAnalyzer(tmp_path).analyze_full().total_sinks == 1
+
+
+class TestReceiverRequirements:
+    def test_receiver_root_reads_the_leftmost_name(self):
+        from analyzer.taint_shapes import receiver_root
+
+        def expr(src):
+            return ast.parse(src, mode="eval").body
+
+        assert receiver_root(expr("request.headers")) == "request"
+        assert receiver_root(expr("self.session.headers")) == "self"
+        assert receiver_root(expr("clients[0].headers")) == "clients"
+        assert receiver_root(expr("make_response().headers")) == "make_response"
+        assert receiver_root(expr("'literal'")) == ""
+        assert receiver_root(None) == ""
+
+    def test_a_call_can_refuse_its_receiver(self):
+        call, name = _call("res.setHeader('X', v)")
+        rule = [{"not": {"receiver_root": ["request", "req"]}}]
+        assert call_satisfies(call, name, rule)
+        call, name = _call("req.setHeader('X', v)")
+        assert not call_satisfies(call, name, rule)
+
+    def test_a_sink_with_no_call_is_judged_on_its_receiver(self):
+        from analyzer.taint_shapes import receiver_satisfies
+
+        rule = [{"not": {"receiver_root": ["request", "req"]}}]
+        assert receiver_satisfies(ast.parse("resp.headers", mode="eval").body, rule)
+        assert not receiver_satisfies(
+            ast.parse("request.headers", mode="eval").body, rule,
+        )
+
+    def test_an_argument_requirement_still_does_not_reach_a_subscript(self):
+        from analyzer.taint_shapes import receiver_satisfies
+
+        # There are no arguments to judge, and treating it as satisfied would
+        # let the rule through unchecked.
+        assert not receiver_satisfies(
+            ast.parse("resp.headers", mode="eval").body,
+            [{"arg": 0, "shape": "mapping"}],
+        )
+        assert not receiver_satisfies(
+            ast.parse("resp.headers", mode="eval").body,
+            [{"not": {"arg": 0, "shape": "mapping"}}],
+        )
+
+
+class TestHeaderRulesMeanTheResponse:
+    def test_a_response_header_is_still_reported(self):
+        findings = _analyze("""
+            import flask
+            def handler(resp):
+                resp.headers["X-Thing"] = flask.request.args.get("v")
+        """)
+        assert [f.category for f in findings] == ["crlf_injection"]
+
+    def test_a_client_building_its_own_request_is_not(self):
+        # aiohttp's digest-auth middleware has exactly this shape, and the
+        # receiver-free rule read it as a response header injection.
+        findings = _analyze("""
+            import flask
+            def sign(request):
+                request.headers["Authorization"] = flask.request.args.get("v")
+        """)
+        assert findings == []
+
+    def test_req_set_header_is_not_a_response_either(self):
+        findings = _analyze("""
+            import flask
+            def handler(req):
+                req.setHeader("X-Thing", flask.request.args.get("v"))
+        """)
+        assert findings == []
+
+    def test_a_receiver_with_no_name_to_read_still_reports(self):
+        findings = _analyze("""
+            import flask
+            def handler():
+                make_response().headers["X"] = flask.request.args.get("v")
+        """)
+        assert [f.category for f in findings] == ["crlf_injection"]
