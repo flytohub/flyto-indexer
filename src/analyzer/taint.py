@@ -708,13 +708,16 @@ class TaintAnalyzer:
                 def_counts[node.name] += 1
                 func_nodes.append((node.name, node))
 
-        def _gate(names: set[str]) -> set[str]:
-            return {
-                name for name in names
-                if def_counts.get(name, 0) == 1
+        def _attributable(name: str) -> bool:
+            """Whether a call to this name resolves to one known definition."""
+            return (
+                def_counts.get(name, 0) == 1
                 and not (name.startswith("__") and name.endswith("__"))
                 and name not in {"_", ""}
-            }
+            )
+
+        def _gate(names: set[str]) -> set[str]:
+            return {name for name in names if _attributable(name)}
 
         # Global fixpoint (Pysa-style): re-extract every function's return
         # signature using the return-source set found so far, until it stops
@@ -732,11 +735,20 @@ class TaintAnalyzer:
                 if callees:
                     forwards[name] |= callees
 
+            # Forward only along a callee that resolves to one definition.
+            # `A` returning `B(...)` says nothing about `A` when the project
+            # has nineteen functions named `B`: that is how `typing.cast`
+            # marked every function calling it as returning untrusted input,
+            # `cast` having one tainted definition among its nineteen. The end
+            # gate below already refuses to report such a name as a source; it
+            # has to be refused as evidence too.
             tainting = set(direct)
             for _ in range(MAX_RETURN_TAINT_ROUNDS):
                 grew = False
                 for name, callees in forwards.items():
-                    if name not in tainting and (callees & tainting):
+                    if name in tainting:
+                        continue
+                    if any(c in tainting and _attributable(c) for c in callees):
                         tainting.add(name)
                         grew = True
                 if not grew:
