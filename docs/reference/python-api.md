@@ -2,7 +2,7 @@
 
 # Python API Reference
 
-Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,472 declarations across 186 files**.
+Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,473 declarations across 186 files**.
 
 ## `analyze.py`
 
@@ -917,20 +917,21 @@ Every declared class, function, nested function, and method in the package, supp
 
 | Kind | Signature | Responsibility | Source |
 |---|---|---|---|
-| function | `def _unwrap(expr: ast.expr) -> ast.expr` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint_shapes.py:52`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L52) |
-| function | `def provable_shape(expr: ast.expr, bindings: 'dict&#91;str, ast.expr&#93; \| None'=None, _depth: int=0) -> 'str \| None'` | The shape of `expr` when it can be proven, else None. | [`src/analyzer/taint_shapes.py:58`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L58) |
-| function | `def is_constant_literal(expr: ast.expr, bindings=None, _depth: int=0) -> bool` | Whether `expr` is written out in the source rather than assembled. | [`src/analyzer/taint_shapes.py:89`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L89) |
-| function | `def _selected_args(call: ast.Call, position) -> 'list&#91;ast.expr&#93; \| None'` | The arguments a requirement addresses, or None when there are none. | [`src/analyzer/taint_shapes.py:112`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L112) |
-| function | `def _shape_holds(call: ast.Call, requirement: dict, bindings) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint_shapes.py:127`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L127) |
-| function | `def _shape_holds.one(arg: ast.expr) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint_shapes.py:136`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L136) |
-| function | `def _callee_tail_holds(call_str: str, tails: 'list&#91;str&#93;') -> bool` | The dotted callee ends with one of `tails`, at a name boundary. | [`src/analyzer/taint_shapes.py:153`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L153) |
-| function | `def _keyword_holds(call: ast.Call, requirement: dict) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint_shapes.py:169`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L169) |
-| function | `def receiver_root(expr: 'ast.expr \| None') -> str` | The leftmost identifier of a receiver expression. | [`src/analyzer/taint_shapes.py:190`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L190) |
-| function | `def needs_call(requirement: dict) -> bool` | Whether this requirement can only be judged against a call. | [`src/analyzer/taint_shapes.py:207`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L207) |
-| function | `def requirement_holds(call: 'ast.Call \| None', call_str: str, requirement: dict, bindings=None, receiver: 'ast.expr \| None'=None, class_name: str='') -> bool` | Whether one requirement holds for this call or receiver. | [`src/analyzer/taint_shapes.py:216`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L216) |
-| function | `def call_satisfies(call: ast.Call, call_str: str, requirements, bindings=None, class_name: str='') -> bool` | Whether every requirement on a sink rule holds for this call. | [`src/analyzer/taint_shapes.py:258`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L258) |
-| function | `def receiver_satisfies(receiver: 'ast.expr \| None', requirements, class_name: str='') -> bool` | Whether every requirement holds for a sink that has no call. | [`src/analyzer/taint_shapes.py:271`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L271) |
-| function | `def normalize_requirements(raw) -> tuple` | A rule's `requires:` as a tuple of dicts, whatever shape it was written in. | [`src/analyzer/taint_shapes.py:289`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L289) |
+| function | `def _unwrap(expr: ast.expr) -> ast.expr` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint_shapes.py:67`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L67) |
+| function | `def provable_shape(expr: ast.expr, bindings: 'dict&#91;str, ast.expr&#93; \| None'=None, _depth: int=0) -> 'str \| None'` | The shape of `expr` when it can be proven, else None. | [`src/analyzer/taint_shapes.py:73`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L73) |
+| function | `def is_constant_literal(expr: ast.expr, bindings=None, _depth: int=0) -> bool` | Whether `expr` is written out in the source rather than assembled. | [`src/analyzer/taint_shapes.py:104`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L104) |
+| function | `def carries_sql(expr: ast.expr) -> bool` | Whether the literal text in this expression reads as a SQL statement. | [`src/analyzer/taint_shapes.py:127`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L127) |
+| function | `def _selected_args(call: ast.Call, position) -> 'list&#91;ast.expr&#93; \| None'` | The arguments a requirement addresses, or None when there are none. | [`src/analyzer/taint_shapes.py:142`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L142) |
+| function | `def _shape_holds(call: ast.Call, requirement: dict, bindings) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint_shapes.py:157`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L157) |
+| function | `def _shape_holds.one(arg: ast.expr) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint_shapes.py:166`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L166) |
+| function | `def _callee_tail_holds(call_str: str, tails: 'list&#91;str&#93;') -> bool` | The dotted callee ends with one of `tails`, at a name boundary. | [`src/analyzer/taint_shapes.py:185`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L185) |
+| function | `def _keyword_holds(call: ast.Call, requirement: dict) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/taint_shapes.py:201`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L201) |
+| function | `def receiver_root(expr: 'ast.expr \| None') -> str` | The leftmost identifier of a receiver expression. | [`src/analyzer/taint_shapes.py:222`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L222) |
+| function | `def needs_call(requirement: dict) -> bool` | Whether this requirement can only be judged against a call. | [`src/analyzer/taint_shapes.py:239`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L239) |
+| function | `def requirement_holds(call: 'ast.Call \| None', call_str: str, requirement: dict, bindings=None, receiver: 'ast.expr \| None'=None, class_name: str='') -> bool` | Whether one requirement holds for this call or receiver. | [`src/analyzer/taint_shapes.py:248`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L248) |
+| function | `def call_satisfies(call: ast.Call, call_str: str, requirements, bindings=None, class_name: str='') -> bool` | Whether every requirement on a sink rule holds for this call. | [`src/analyzer/taint_shapes.py:290`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L290) |
+| function | `def receiver_satisfies(receiver: 'ast.expr \| None', requirements, class_name: str='') -> bool` | Whether every requirement holds for a sink that has no call. | [`src/analyzer/taint_shapes.py:303`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L303) |
+| function | `def normalize_requirements(raw) -> tuple` | A rule's `requires:` as a tuple of dicts, whatever shape it was written in. | [`src/analyzer/taint_shapes.py:321`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L321) |
 
 ## `src/analyzer/tech_debt.py`
 

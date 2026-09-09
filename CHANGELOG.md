@@ -44,6 +44,14 @@
   mapping too, so no argument shape separates it.
 
 ### Fixed
+- A SQL sink is not only a cursor. The rules named five receivers -- `cursor`,
+  `db`, `session`, `engine`, `connection` -- and missed every connection a
+  project named anything else, `conn` above all. Measured over 23,404 files:
+  849 `.execute(` sites carry a SQL statement and 261 of them are on receivers
+  those five cannot see (`conn` 136, `DatabaseManager` 73, `self` 22, `cur` 11,
+  `con` 7). A receiver-free rule now covers them, gated on the call being
+  handed text that reads as SQL, so the workflow, regex and sandbox executors
+  that share the method name drop out.
 - The header rules also read the class they sit in. A client that writes
   through `self.headers` has no receiver name to give it away, but its class
   does: measured over 23,404 files, 54 of 173 header-write sites go through
