@@ -379,6 +379,51 @@ def _without_duplicates(flows: "list[TaintFlow]") -> "list[TaintFlow]":
     return unique
 
 
+def _source_matches(pattern: str, text: str) -> bool:
+    """Whether a source pattern occurs in `text` at a name boundary.
+
+    Sources were matched with a bare substring test, so FastAPI's `Cookie(`
+    marker matched `SimpleCookie(`, `File(` matched `NamedTemporaryFile(`, and
+    `input(` matched `make_input(`. Measured over 38,899 files that is 5,122
+    matches, and every sampled one is a different callable.
+
+    The two pattern shapes need different left boundaries, and the corpus says
+    which:
+
+    * A dotted pattern is deliberately matched as the tail of an object
+      expression -- `request.get_json(` is meant to catch
+      `flask_request.get_json(`, which is how a request threaded through a
+      parameter is read. Underscore therefore stays a boundary. A letter or
+      digit never precedes a dotted match in the corpus at all, so refusing it
+      costs nothing.
+    * A bare-name marker is one specific callable, and any longer identifier
+      ending in it is a different one. Underscore is not a boundary there.
+
+    A pattern ending in an identifier character also has a right boundary, so
+    `request.data` no longer matches `request.database`.
+    """
+    if not pattern:
+        return False
+    dotted = "." in pattern
+    tail_is_name = pattern[-1].isalnum() or pattern[-1] == "_"
+    start = 0
+    while True:
+        i = text.find(pattern, start)
+        if i < 0:
+            return False
+        start = i + 1
+        if i > 0:
+            previous = text[i - 1]
+            if previous.isalnum() or (previous == "_" and not dotted):
+                continue
+        end = i + len(pattern)
+        if tail_is_name and end < len(text):
+            following = text[end]
+            if following.isalnum() or following == "_":
+                continue
+        return True
+
+
 def _flatten_sinks() -> list[tuple[str, str, str, str, tuple]]:
     """Return flat list: (pattern, vuln_type, severity, recommendation, requires).
 
@@ -863,7 +908,7 @@ class TaintAnalyzer:
                 # conservative rule _is_source applies.
                 return False
             for source in self._sources.get("python", []):
-                if source in text:
+                if _source_matches(source, text):
                     return True
 
         if isinstance(node, ast.Attribute):
@@ -1633,7 +1678,7 @@ class TaintAnalyzer:
                 return True, src, chain
             # 2. Check if it's a source itself
             for s in self._sources.get("python", []):
-                if s in full:
+                if _source_matches(s, full):
                     return True, full, [full]
             # 3. Check if the value part is tainted (property propagation)
             #    e.g., user is tainted → user.email is also tainted
@@ -1741,7 +1786,7 @@ class TaintAnalyzer:
 
         matched = None
         for source in self._sources.get("python", []):
-            if source in text:
+            if _source_matches(source, text):
                 matched = text
                 break
         if matched is None:
