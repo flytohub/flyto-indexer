@@ -110,6 +110,24 @@ repositories, running the merged rules against the pre-change commit 9497948.
   counted as a sink and the number verify prints went 1554 -> 1890 on this
   repository. Fixed on `fix/a-gated-rule-is-not-a-text-count`.
 
+## Sized and fixed (2026-09-09)
+
+The client-request false-positive class above turned out to be two unrelated
+defects, not one.
+
+- `aiohttp/client_middleware_digest_auth.py:494` is a receiver problem:
+  `request.headers[...] = ...` is a client building its own outgoing request.
+  Server frameworks make `request.headers` read-only, so an assignment into it
+  is never a response header. Fixed by `receiver_root`, a requirement a sink
+  with no call can still answer, on branch
+  `feat/a-rule-can-refuse-a-receiver`. Corpus findings 20 -> 19: the aiohttp
+  site goes, blackd's genuine CORS echo and flyto-ai's stay.
+- `aiohttp/client_reqrep.py:1142` is not a receiver problem at all. Its source
+  is `SimpleCookie()`, matched because the source patterns have no name
+  boundary: FastAPI's `Cookie(` marker is a substring of `SimpleCookie(`. This
+  is the same class as the sink fix in #54, on the source side, and it is
+  unfixed as of this entry.
+
 ## Not verified
 
 - Still no measurement against a real Mongo or Express codebase: no

@@ -221,6 +221,10 @@ REDOS_REGEX_CALLS = (
     "regexp.MustCompile",
 )
 
+#: A response-header rule only means the response. Server frameworks make
+#: `request.headers` read-only; an assignment into it is a client request.
+_NOT_THE_REQUEST = ({"not": {"receiver_root": ["request", "req"]}},)
+
 # Sinks: dangerous functions that should not receive tainted data
 # Each entry: (pattern, severity, recommendation) and optionally a fourth
 # element, the argument-shape requirements that must hold before the match
@@ -388,9 +392,14 @@ SINKS: "dict[str, list[tuple]]" = {
     "crlf_injection": [
         # Python — header injection via newlines in user-supplied values.
         # Receiver-free for the same reason: the response object is `res`,
-        # `resp`, or `response` depending on the codebase.
-        (".headers[", "medium", "Strip CR/LF from header values; validate with regex"),
-        (".setHeader(", "medium", "Strip CR/LF from header values"),
+        # `resp`, or `response` depending on the codebase. What the rule does
+        # need from the receiver is that it is not the *request*: writing into
+        # `request.headers` is an HTTP client building its own outgoing
+        # request, which is how aiohttp's own client code read as a response
+        # header injection.
+        (".headers[", "medium", "Strip CR/LF from header values; validate with regex",
+         _NOT_THE_REQUEST),
+        (".setHeader(", "medium", "Strip CR/LF from header values", _NOT_THE_REQUEST),
         ("set_cookie(", "medium", "Validate cookie name/value; strip CR/LF"),
         # Go
         ("w.Header().Set(", "medium", "Strip CR/LF from header values"),
