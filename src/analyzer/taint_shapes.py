@@ -23,9 +23,11 @@ Requirements are evaluated against the call's AST and every one must hold.
     {keyword: "shell", equals: true}              keyword argument value
     {min_args: 1} / {max_args: 1}                 argument count
     {receiver_root: ["request", "req"]}           what the call hangs off
+    {enclosing_class_suffix: ["Request"]}         the class the sink sits in
     {not: {...}}                                  negation of one requirement
 
-`receiver_root` is the one requirement a sink with no call can still answer:
+`receiver_root` and `enclosing_class_suffix` are the requirements a sink with
+no call can still answer:
 `resp.headers[name] = value` has a receiver even though it has no arguments.
 It is how a header rule says it means a *response*, since writing into
 `request.headers` is a client building its own outgoing request.
@@ -213,20 +215,27 @@ def needs_call(requirement: dict) -> bool:
 
 def requirement_holds(
     call: "ast.Call | None", call_str: str, requirement: dict, bindings=None,
-    receiver: "ast.expr | None" = None,
+    receiver: "ast.expr | None" = None, class_name: str = "",
 ) -> bool:
     """Whether one requirement holds for this call or receiver."""
     if not isinstance(requirement, dict):
         return True
     if "not" in requirement:
         return not requirement_holds(
-            call, call_str, requirement["not"], bindings, receiver,
+            call, call_str, requirement["not"], bindings, receiver, class_name,
         )
     if "receiver_root" in requirement:
         names = requirement["receiver_root"]
         if isinstance(names, str):
             names = [names]
         return receiver_root(receiver) in set(names)
+    if "enclosing_class_suffix" in requirement:
+        suffixes = requirement["enclosing_class_suffix"]
+        if isinstance(suffixes, str):
+            suffixes = [suffixes]
+        return bool(class_name) and any(
+            class_name.endswith(suffix) for suffix in suffixes
+        )
     if call is None:
         # A requirement about the call, asked of something that is not one.
         return False
@@ -246,18 +255,22 @@ def requirement_holds(
     return True
 
 
-def call_satisfies(call: ast.Call, call_str: str, requirements, bindings=None) -> bool:
+def call_satisfies(
+    call: ast.Call, call_str: str, requirements, bindings=None, class_name: str = "",
+) -> bool:
     """Whether every requirement on a sink rule holds for this call."""
     if not requirements:
         return True
     receiver = getattr(call.func, "value", None)
     return all(
-        requirement_holds(call, call_str, requirement, bindings, receiver)
+        requirement_holds(call, call_str, requirement, bindings, receiver, class_name)
         for requirement in requirements
     )
 
 
-def receiver_satisfies(receiver: "ast.expr | None", requirements) -> bool:
+def receiver_satisfies(
+    receiver: "ast.expr | None", requirements, class_name: str = "",
+) -> bool:
     """Whether every requirement holds for a sink that has no call.
 
     A rule that asks about arguments cannot be answered here, and answering
@@ -268,7 +281,7 @@ def receiver_satisfies(receiver: "ast.expr | None", requirements) -> bool:
     if any(needs_call(requirement) for requirement in requirements):
         return False
     return all(
-        requirement_holds(None, "", requirement, None, receiver)
+        requirement_holds(None, "", requirement, None, receiver, class_name)
         for requirement in requirements
     )
 

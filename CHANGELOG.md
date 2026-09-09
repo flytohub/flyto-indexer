@@ -44,6 +44,14 @@
   mapping too, so no argument shape separates it.
 
 ### Fixed
+- The header rules also read the class they sit in. A client that writes
+  through `self.headers` has no receiver name to give it away, but its class
+  does: measured over 23,404 files, 54 of 173 header-write sites go through
+  `self`, and those split cleanly into `ClientRequest` (14) and
+  `PreparedRequest` (7) against `HTTPMove`, `HTTPMethodNotAllowed`,
+  `HTTPUnavailableForLegalReasons` and `RedirectResponse`. New requirement
+  `enclosing_class_suffix`; it closes 21 latent sites and changes no current
+  finding.
 - The header rules mean the *response*. `.headers[` and `.setHeader(` now carry
   `{not: {receiver_root: ["request", "req"]}}`, because server frameworks make
   `request.headers` read-only -- an assignment into it is an HTTP client

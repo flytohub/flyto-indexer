@@ -128,8 +128,42 @@ defects, not one.
   is the same class as the sink fix in #54, on the source side, and it is
   unfixed as of this entry.
 
+## The three open items, closed (2026-09-09)
+
+**1. Why `preserve_morsel_with_coded_value` was registered as returning
+untrusted input.** `_extract_return_signature` reports it as forwarding through
+`cast`. `cast` has 19 definitions in the corpus and one of them returns a
+source, so it entered the tainting set -- and the gate that refuses to *report*
+an unattributable name was applied only to the result, never to the evidence.
+1,106 of 3,223 direct names are unattributable that way, `__call__` and
+`__add__` among them. Registry 4,922 -> 29; 17 of the corpus's 18 findings
+rested on it, with sources like `o8(...)` (PIL's `chr(i & 255)`),
+`_posixify(...)`, `comma_separate(...)`. Fixed on
+`fix/a-name-that-cannot-be-attributed-cannot-carry-taint`. Benchmark recall
+stays 1.0 and the 43 repositories are unchanged.
+
+**2. Mongo/Express recall: still unmeasurable, now conclusively.** A full-tree
+search finds no `pymongo`, `motor`, `mongoengine`, `beanie` or `bson` anywhere
+on this machine, and no `mongoose` or `mongodb` package -- only three copies of
+`express`, which is not a database driver. No `.find({...})` call exists in any
+non-vendored source here. This cannot be measured locally; it needs a corpus
+that is not on this machine.
+
+**3. The client-request residue, sized and closed.** 173 header-write sites
+across 23,404 files, by receiver root: `response` 72, `self` 54, `request` 20,
+`resp` 9, `r` 7, `prep` 3, `request_parameters` 2, then singletons. The `self`
+half splits cleanly by the class it sits in -- `ClientRequest` (14) and
+`PreparedRequest` (7) building an outgoing request, against `HTTPMove`,
+`HTTPMethodNotAllowed`, `HTTPUnavailableForLegalReasons` and
+`RedirectResponse` setting a response header. `enclosing_class_suffix` closes
+those 21 latent sites. It changes no current finding, because the one it would
+have caught went with the registry fix.
+
 ## Not verified
 
+- The `prep` (3) and `proxy_req` (1) header writes are client-side and remain
+  unexcluded. They are local variable names in `requests/sessions.py`; adding
+  them to the receiver list is whack-a-mole, and neither produces a finding.
 - Still no measurement against a real Mongo or Express codebase: no
   pymongo/mongoose is installed anywhere in this workspace, so the recall gain
   remains demonstrated on constructed cases and the benchmark corpus, not on

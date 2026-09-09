@@ -410,3 +410,52 @@ class TestHeaderRulesMeanTheResponse:
                 make_response().headers["X"] = flask.request.args.get("v")
         """)
         assert [f.category for f in findings] == ["crlf_injection"]
+
+
+class TestTheClassASinkSitsIn:
+    """`self.headers[...] = ...` needs the class to say whose headers those are.
+
+    Measured over 23,404 files: of 173 header-write sites, 54 write through
+    `self`, and those split cleanly by class name -- `ClientRequest` (14) and
+    `PreparedRequest` (7) building an outgoing request, against `HTTPMove`,
+    `HTTPMethodNotAllowed`, `HTTPUnavailableForLegalReasons` and
+    `RedirectResponse` setting a response header.
+    """
+
+    def test_a_request_class_is_building_its_own_request(self):
+        findings = _analyze("""
+            import flask
+            class ClientRequest:
+                def update_auth(self):
+                    self.headers["Authorization"] = flask.request.args.get("v")
+        """)
+        assert findings == []
+
+    def test_a_response_class_is_not(self):
+        findings = _analyze("""
+            import flask
+            class RedirectResponse:
+                def go(self):
+                    self.headers["Location"] = flask.request.args.get("v")
+        """)
+        assert [f.category for f in findings] == ["crlf_injection"]
+
+    def test_a_class_that_says_nothing_still_reports(self):
+        # The gate excludes what it can name, and stays out of the way
+        # otherwise -- the same fail-open direction as the shape rules.
+        findings = _analyze("""
+            import flask
+            class Handler:
+                def go(self):
+                    self.headers["X"] = flask.request.args.get("v")
+        """)
+        assert [f.category for f in findings] == ["crlf_injection"]
+
+    def test_the_suffix_requirement_reads_the_class_name(self):
+        from analyzer.taint_shapes import receiver_satisfies
+
+        rule = [{"not": {"enclosing_class_suffix": ["Request"]}}]
+        receiver = ast.parse("self.headers", mode="eval").body
+        assert not receiver_satisfies(receiver, rule, "PreparedRequest")
+        assert receiver_satisfies(receiver, rule, "RedirectResponse")
+        assert receiver_satisfies(receiver, rule, "")

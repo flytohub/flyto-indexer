@@ -81,6 +81,7 @@ Every requirement listed must hold for the match to count:
 | `{keyword: "shell", equals: true}` | that keyword argument is present with that value |
 | `{min_args: 2}` / `{max_args: 1}` | the positional argument count is in range |
 | `{receiver_root: ["request", "req"]}` | the leftmost name of what the sink hangs off is one of these |
+| `{enclosing_class_suffix: ["Request"]}` | the sink sits in a class whose name ends this way |
 | `{not: {...}}` | the requirement inside does not hold |
 
 Shapes fail open. `shape: mapping` passes unless the argument is *provably*
@@ -92,11 +93,15 @@ Most requirements describe a call, so a rule that carries one does not apply to
 a subscript sink (`resp.headers[name] = value`), and the text-level
 `research_priority` ranker skips it rather than evaluating a gate it cannot see.
 
-`receiver_root` is the exception: a subscript sink has no arguments but it does
-have a receiver. It is how the built-in header rules say they mean a
+`receiver_root` and `enclosing_class_suffix` are the exceptions: a subscript
+sink has no arguments, but it does have a receiver and a class around it. It is how the built-in header rules say they mean a
 *response* -- `{not: {receiver_root: ["request", "req"]}}` -- because server
 frameworks make `request.headers` read-only, so an assignment into it is an
-HTTP client building its own outgoing request.
+HTTP client building its own outgoing request. The same rule adds
+`{not: {enclosing_class_suffix: ["Request"]}}` for the client that writes
+through `self`: measured over 23,404 files, `ClientRequest` and
+`PreparedRequest` write `self.headers` 21 times, while the classes doing it for
+a response are `HTTPMove`, `HTTPMethodNotAllowed` and `RedirectResponse`.
 
 Policy files are YAML parsed with `safe_load`; malformed content fails closed.
 The built-in corpus under `config/rules/` supplies default complexity,
