@@ -765,3 +765,45 @@ class TestExternalScannerFindings:
         report = rank_research_priority(project, sarif_path=path)
 
         assert report.candidates == []
+
+
+class TestFileWalkDoesNotEnterGit:
+    """`rglob` walked `.git/objects` and raced git's own housekeeping there.
+
+    A test that made four commits in a row failed in CI with
+    `FileNotFoundError: .../.git/objects/3a` -- git removed a loose-object
+    directory while the ranker was mid-walk. Nothing under `.git` was ever
+    going to be ranked, so the walk should not be in there at all.
+    """
+
+    def test_a_dot_directory_is_not_descended_into(self, tmp_path):
+        from src.analyzer.research_priority import _python_files
+
+        (tmp_path / "app.py").write_text("x = 1\n")
+        buried = tmp_path / ".git" / "objects" / "3a"
+        buried.mkdir(parents=True)
+        (buried / "loose.py").write_text("x = 2\n")
+
+        found = _python_files(tmp_path)
+        assert found == [tmp_path / "app.py"]
+
+    def test_a_skipped_directory_is_not_descended_into(self, tmp_path):
+        from src.analyzer.research_priority import _python_files
+
+        (tmp_path / "app.py").write_text("x = 1\n")
+        vendored = tmp_path / "node_modules" / "pkg"
+        vendored.mkdir(parents=True)
+        (vendored / "shim.py").write_text("x = 2\n")
+
+        assert _python_files(tmp_path) == [tmp_path / "app.py"]
+
+    def test_ordinary_nesting_is_still_walked_in_order(self, tmp_path):
+        from src.analyzer.research_priority import _python_files
+
+        (tmp_path / "b.py").write_text("x = 1\n")
+        (tmp_path / "a").mkdir()
+        (tmp_path / "a" / "c.py").write_text("x = 2\n")
+
+        assert _python_files(tmp_path) == [
+            tmp_path / "a" / "c.py", tmp_path / "b.py",
+        ]

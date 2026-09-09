@@ -51,6 +51,7 @@ import ast
 import contextlib
 import json
 import math
+import os
 import re
 import time
 from dataclasses import dataclass, field
@@ -826,6 +827,36 @@ def _first_present(text: str, patterns) -> str:
     return ""
 
 
+def _python_files(project_root: Path) -> list[Path]:
+    """Every .py file under the project, without descending into what is skipped.
+
+    `Path.rglob("*.py")` walks `.git/objects` on its way to finding nothing
+    there, and raises `FileNotFoundError` when git's own housekeeping removes a
+    loose-object directory mid-walk -- which is how this failed in CI after a
+    test made four commits in a row. Every directory it raised from is one the
+    filters below discard anyway, so pruning before descending removes both the
+    race and the wasted walk. `os.walk` also ignores an entry that vanishes
+    underneath it, where `rglob` propagates.
+
+    The surviving set and its order are unchanged: pruning drops exactly what
+    `_is_hidden_path` and `SKIP_DIR_PATTERNS` reject, and those are rejected
+    before anything is counted or read.
+    """
+    found: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(project_root):
+        relative = _normalize(os.path.relpath(dirpath, project_root))
+        prefix = "" if relative == "." else f"{relative}/"
+        dirnames[:] = [
+            name for name in dirnames
+            if not name.startswith(".")
+            and not SKIP_DIR_PATTERNS.search(f"{prefix}{name}")
+        ]
+        found.extend(
+            Path(dirpath) / name for name in filenames if name.endswith(".py")
+        )
+    return sorted(found)
+
+
 def _unproven_seeds(
     project_root: Path,
     entry_files: set[str],
@@ -846,7 +877,7 @@ def _unproven_seeds(
     truncated = False
     orm_suppressed = 0
 
-    for path in sorted(project_root.rglob("*.py")):
+    for path in _python_files(project_root):
         if files_scanned >= limit_files:
             truncated = True
             break
