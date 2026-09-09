@@ -358,6 +358,32 @@ def _builds_sql_string(node: ast.AST) -> bool:
     return False
 
 
+def _with_returned_calls(stmts: "list[ast.stmt]") -> "list[ast.stmt]":
+    """The statements, plus the calls that a return or an assignment makes.
+
+    Cross-function tracking matched `ast.Expr` only, so
+    `handle(request.args.get("x"))` was followed into `handle` while
+    `return handle(...)` and `y = handle(...)` were not -- and returning the
+    result is the ordinary shape of a web handler, not an edge case.
+
+    Rather than duplicate the check, the call is presented a second time as
+    the expression statement the walker already understands. It is yielded
+    before the assignment it came from, because the right-hand side is
+    evaluated before the target is bound.
+    """
+    out: list[ast.stmt] = []
+    for stmt in stmts:
+        if isinstance(stmt, (ast.Return, ast.Assign, ast.AnnAssign)):
+            value = _unwrap_await(stmt.value) if stmt.value is not None else None
+            if isinstance(value, ast.Call):
+                surfaced = ast.Expr(value=value)
+                surfaced.lineno = getattr(stmt, "lineno", 0)
+                surfaced.col_offset = getattr(stmt, "col_offset", 0)
+                out.append(surfaced)
+        out.append(stmt)
+    return out
+
+
 def _without_duplicates(flows: "list[TaintFlow]") -> "list[TaintFlow]":
     """One finding per (file, line, category, source, sink).
 
@@ -1548,6 +1574,21 @@ class TaintAnalyzer:
                     path=[f"{file_path}:{func_name}:{line}"],
                     sanitized=False,
                 ))
+
+                # A parameter reaching this sink makes the function dangerous
+                # to call, exactly as it does for a call sink. Only the call
+                # sink recorded it, so `def echo(resp, origin):
+                # resp.headers[k] = origin` was a finding in itself and
+                # invisible to every caller that passed a tainted origin in.
+                if src.startswith("param:"):
+                    param_name = src[len("param:"):]
+                    param_idx = self._find_param_index(
+                        func_name, param_name, file_path,
+                    )
+                    if param_idx is not None:
+                        self._dangerous_functions.setdefault(
+                            (file_path, func_name), []
+                        ).append((param_idx, param_name, vuln_type, severity, rec))
                 return
 
     @staticmethod
@@ -2093,7 +2134,7 @@ class TaintAnalyzer:
         callee_file: str = "",
     ):
         """Walk caller function body, build taint state, check callee calls."""
-        for stmt in stmts:
+        for stmt in _with_returned_calls(stmts):
             if len(self.findings) >= MAX_FINDINGS:
                 return
 
@@ -2258,7 +2299,7 @@ class TaintAnalyzer:
         callee_file: str = "",
     ):
         """Walk caller function body in order, building taint state and checking callee calls."""
-        for stmt in stmts:
+        for stmt in _with_returned_calls(stmts):
             if isinstance(stmt, (ast.Assign, ast.AnnAssign)):
                 if isinstance(stmt, ast.AnnAssign):
                     targets = [stmt.target] if stmt.target else []

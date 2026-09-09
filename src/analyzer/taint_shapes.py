@@ -19,6 +19,7 @@ can state that:
 Requirements are evaluated against the call's AST and every one must hold.
 
     {arg: 0 | "any" | "after_first", shape: ...}  argument shape
+    {arg: "any", shape: "sql_statement"}          the text reads as SQL
     {callee_tail: ["re.search", ...]}             dotted callee ends here
     {keyword: "shell", equals: true}              keyword argument value
     {min_args: 1} / {max_args: 1}                 argument count
@@ -39,6 +40,7 @@ guesses is a gate that drops real flows silently.
 """
 
 import ast
+import re
 
 # Literal shapes this can prove. Anything else answers None, meaning unknown.
 _MAPPING = "mapping"
@@ -46,6 +48,19 @@ _SEQUENCE = "sequence"
 _SCALAR = "scalar"
 
 _MAPPING_BUILDERS = {"dict", "OrderedDict", "defaultdict"}
+
+#: A whole statement, not a bare keyword. `.execute(` is the method name of a
+#: database cursor, a workflow step, a regex pipeline and a sandbox alike, and
+#: only one of them is handed text shaped like this.
+_SQL_STATEMENT = re.compile(
+    r"\bselect\b.*\bfrom\b"
+    r"|\binsert\s+into\b"
+    r"|\bupdate\b.*\bset\b"
+    r"|\bdelete\s+from\b"
+    r"|\bcreate\s+table\b"
+    r"|\bwhere\b.*[=<>]",
+    re.IGNORECASE | re.DOTALL,
+)
 _SEQUENCE_BUILDERS = {"list", "tuple", "set", "frozenset"}
 
 
@@ -109,6 +124,21 @@ def is_constant_literal(expr: ast.expr, bindings=None, _depth: int = 0) -> bool:
     return False
 
 
+def carries_sql(expr: ast.expr) -> bool:
+    """Whether the literal text in this expression reads as a SQL statement.
+
+    An f-string interpolating a table name still has its `SELECT ... FROM`
+    written out, so the literal parts are what to read -- and they are what
+    separates `conn.execute("SELECT * FROM t WHERE id = " + x)` from
+    `pipeline.execute(step)`.
+    """
+    parts = [
+        node.value for node in ast.walk(_unwrap(expr))
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    ]
+    return bool(parts) and bool(_SQL_STATEMENT.search(" ".join(parts)))
+
+
 def _selected_args(call: ast.Call, position) -> "list[ast.expr] | None":
     """The arguments a requirement addresses, or None when there are none."""
     if position == "any":
@@ -134,6 +164,8 @@ def _shape_holds(call: ast.Call, requirement: dict, bindings) -> bool:
         return True
 
     def one(arg: ast.expr) -> bool:
+        if wanted == "sql_statement":
+            return carries_sql(arg)
         if wanted == "constant":
             return is_constant_literal(arg, bindings)
         if wanted == "dynamic":
