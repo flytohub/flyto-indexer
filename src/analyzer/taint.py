@@ -1696,6 +1696,32 @@ class TaintAnalyzer:
                 ))
                 return
 
+    def _tainted_part(
+        self, parts, taint_state: dict,
+    ) -> tuple[bool, str, list[str]]:
+        """The taint a composite expression carries, preferring a real source.
+
+        Every composite branch used to return the first tainted part it found.
+        When that part was a function parameter, the finding it produced was
+        discarded later as param-only taint -- so
+        `f"report {table} --name '{value}'"` reported nothing while the same
+        f-string with its two interpolations swapped reported the injection.
+        A parameter is still returned when nothing better is there, since that
+        is what carries the flow deeper into the caller.
+        """
+        parameter = None
+        for part in parts:
+            if part is None:
+                continue
+            tainted, src, chain = self._expr_is_tainted(part, taint_state)
+            if not tainted:
+                continue
+            if not src.startswith("param:"):
+                return True, src, chain
+            if parameter is None:
+                parameter = (True, src, chain)
+        return parameter or (False, "", [])
+
     def _expr_is_tainted(
         self, node: ast.AST, taint_state: dict,
     ) -> tuple[bool, str, list[str]]:
@@ -1768,12 +1794,10 @@ class TaintAnalyzer:
 
         if isinstance(node, ast.JoinedStr):
             # f-string: tainted if any value is tainted
-            for val in node.values:
-                if isinstance(val, ast.FormattedValue):
-                    t, s, c = self._expr_is_tainted(val.value, taint_state)
-                    if t:
-                        return True, s, c
-            return False, "", []
+            return self._tainted_part(
+                [v.value for v in node.values if isinstance(v, ast.FormattedValue)],
+                taint_state,
+            )
 
         if isinstance(node, (ast.Dict, ast.List, ast.Tuple, ast.Set)):
             # A container carries the taint of what is put in it. Without this
@@ -1785,31 +1809,17 @@ class TaintAnalyzer:
                 parts += [k for k in node.keys if k is not None]
             else:
                 parts = list(node.elts)
-            for part in parts:
-                t, s, c = self._expr_is_tainted(part, taint_state)
-                if t:
-                    return True, s, c
-            return False, "", []
+            return self._tainted_part(parts, taint_state)
 
         if isinstance(node, ast.BinOp):
             # String concat or other binop: tainted if either side is
-            t_l, s_l, c_l = self._expr_is_tainted(node.left, taint_state)
-            if t_l:
-                return True, s_l, c_l
-            return self._expr_is_tainted(node.right, taint_state)
+            return self._tainted_part([node.left, node.right], taint_state)
 
         if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
-            for elt in node.elts:
-                t, s, c = self._expr_is_tainted(elt, taint_state)
-                if t:
-                    return True, s, c
-            return False, "", []
+            return self._tainted_part(node.elts, taint_state)
 
         if isinstance(node, ast.IfExp):
-            t, s, c = self._expr_is_tainted(node.body, taint_state)
-            if t:
-                return True, s, c
-            return self._expr_is_tainted(node.orelse, taint_state)
+            return self._tainted_part([node.body, node.orelse], taint_state)
 
         return False, "", []
 
