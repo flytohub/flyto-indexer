@@ -734,3 +734,99 @@ class TestProjectRulesTolerance:
         assert sources == {"python": ["request."]}
         assert sinks == [("eval(", "rce", "critical", "")]
         assert sanitizers == []
+
+
+class TestShellApisThatWereMissing:
+    """`check_output` and asyncio's shell form were simply absent.
+
+    Measured over 23,590 files: 126 `check_output(` sites and 13
+    `create_subprocess_shell(`. `create_subprocess_exec` (103) stays out --
+    it takes an argument list, like `subprocess.run` without `shell=True`.
+    """
+
+    def test_check_output_with_shell_true_is_a_sink(self):
+        findings = _analyze_code("""\
+            import subprocess
+            from flask import request
+            def handler():
+                subprocess.check_output("ls " + request.args.get("d"), shell=True)
+        """)
+        assert [f.category for f in findings] == ["rce"]
+
+    def test_check_output_with_an_argument_list_is_not(self):
+        findings = _analyze_code("""\
+            import subprocess
+            from flask import request
+            def handler():
+                subprocess.check_output(["ls", request.args.get("d")])
+        """)
+        assert findings == []
+
+    def test_the_asyncio_shell_form_is_a_sink(self):
+        findings = _analyze_code("""\
+            import asyncio
+            from flask import request
+            async def handler():
+                await asyncio.create_subprocess_shell("ls " + request.args.get("d"))
+        """)
+        assert [f.category for f in findings] == ["rce"]
+
+    def test_the_asyncio_exec_form_is_not(self):
+        findings = _analyze_code("""\
+            import asyncio
+            from flask import request
+            async def handler():
+                await asyncio.create_subprocess_exec("ls", request.args.get("d"))
+        """)
+        assert findings == []
+
+
+class TestOperatorInputIsNotRemoteInput:
+    """A CLI argument is real input, but it is not an HTTP request.
+
+    Once the cross-function trace grew long enough to follow
+    `parse_args() -> resolve_projects(config_path)`, this package's own
+    `verify --strict` failed on `weak_scan_taint` -- reporting the operator's
+    `--config` path as a high-risk traversal. research_priority already
+    demotes that tier; the engine now agrees, and the finding stays.
+    """
+
+    def test_an_argv_fed_flow_is_not_high_risk(self):
+        findings = _analyze_code("""\
+            import sys, os
+            def main():
+                target = sys.argv[1]
+                os.system("ping " + target)
+        """)
+        assert [f.category for f in findings] == ["rce"]
+        assert findings[0].severity == "medium"
+
+    def test_a_request_fed_flow_keeps_its_severity(self):
+        findings = _analyze_code("""\
+            import os
+            from flask import request
+            def handler():
+                os.system("ping " + request.args.get("t"))
+        """)
+        assert [f.severity for f in findings] == ["critical"]
+
+    def test_a_function_returning_only_operator_input_is_demoted_too(self):
+        # The flow names the function, not argv, so a string match on the
+        # source cannot see it.
+        findings = _analyze_code("""\
+            import sys, os
+            def parse_args():
+                return sys.argv[1]
+            def main():
+                os.system("ping " + parse_args())
+        """)
+        assert [f.category for f in findings] == ["rce"]
+        assert findings[0].severity == "medium"
+
+    def test_the_finding_is_demoted_not_dropped(self):
+        findings = _analyze_code("""\
+            import sys, os
+            def main():
+                os.system("ping " + sys.argv[1])
+        """)
+        assert len(findings) == 1
