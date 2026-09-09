@@ -1512,15 +1512,63 @@ class TaintAnalyzer:
                     )
                     self.findings.append(flow)
 
-                    # Track dangerous function params for cross-function analysis.
-                    if src.startswith("param:"):
-                        param_name = src[len("param:"):]
-                        param_idx = self._find_param_index(func_name, param_name, file_path)
-                        if param_idx is not None:
-                            self._dangerous_functions.setdefault(
-                                (file_path, func_name), []
-                            ).append((param_idx, param_name, vuln_type, severity, rec))
+                    # Track dangerous function params for cross-function
+                    # analysis. Every parameter the call passes counts, not
+                    # only whichever one the finding happens to name: the
+                    # finding stops at the first tainted argument, and a
+                    # callee registered on one parameter is unreachable
+                    # through the others.
+                    self._register_dangerous_params(
+                        call, taint_state, file_path, func_name,
+                        vuln_type, severity, rec,
+                    )
                     break  # one finding per call site
+
+    def _register_dangerous_params(
+        self, call: ast.Call, taint_state: dict, file_path: str, func_name: str,
+        vuln_type: str, severity: str, rec: str,
+    ) -> None:
+        """Record every parameter of this function that reaches this sink.
+
+        Only the parameter named by the finding used to be recorded, and a
+        finding names one argument. So
+
+            def handle(table, cmd):
+                os.system(f"run {table} {cmd}")
+
+        was reachable through `table` and invisible through `cmd`, and a
+        caller passing untrusted data as the second argument was missed.
+        """
+        existing = self._dangerous_functions.setdefault((file_path, func_name), [])
+        seen = {(idx, name) for idx, name, *_ in existing}
+        for arg in list(call.args) + [kw.value for kw in call.keywords]:
+            for node in self._unsanitized_names(arg, vuln_type):
+                state = taint_state.get(node.id)
+                if not state or state[0] != f"param:{node.id}":
+                    continue
+                param_idx = self._find_param_index(func_name, node.id, file_path)
+                if param_idx is None or (param_idx, node.id) in seen:
+                    continue
+                seen.add((param_idx, node.id))
+                existing.append((param_idx, node.id, vuln_type, severity, rec))
+        if not existing:
+            self._dangerous_functions.pop((file_path, func_name), None)
+
+    def _unsanitized_names(self, expr: ast.expr, vuln_type: str):
+        """Names in `expr` that a sanitizer does not already cover.
+
+        Sanitization is usually applied to one part of an argument --
+        `f"run {table} " + shlex.quote(cmd)` -- so asking about the whole
+        argument answers no and would register a parameter that is cleaned.
+        """
+        if self._is_sanitized_for(expr, vuln_type):
+            return
+        if isinstance(expr, ast.Name):
+            yield expr
+            return
+        for child in ast.iter_child_nodes(expr):
+            if isinstance(child, ast.expr):
+                yield from self._unsanitized_names(child, vuln_type)
 
     def _check_subscript_sinks(
         self,

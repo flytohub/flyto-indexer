@@ -159,6 +159,35 @@ half splits cleanly by the class it sits in -- `ClientRequest` (14) and
 those 21 latent sites. It changes no current finding, because the one it would
 have caught went with the registry fix.
 
+## Audit of the whole line of work (2026-09-09)
+
+Asked whether any of this made the engine genuinely stronger, the honest answer
+needed evidence that was not my own fixtures. Two corrections came out of it.
+
+- The registry collapse of 4,922 -> 29 in #62 was an artefact of the artificial
+  mega-corpus, not a realistic cost. On single repositories it barely moved:
+  flyto-cloud 35 -> 27, the other four unchanged. What it does cost is real but
+  narrow: higher-order wrappers (`return await dispatch(...)`, where `dispatch`
+  is a parameter) are now explicitly out of reach rather than accidentally
+  guessed via a name collision.
+- The first cross-file test I ran was wrong. `TaintAnalyzer` was called without
+  the `index=` the benchmark passes, so cross-file tracking had nothing to work
+  with and I read the result as a capability gap.
+
+Measured on a planted eight-vulnerability application with the shapes real code
+has -- a service layer, a repository module, a decorator, a sanitized control:
+the engine before this work found 4 of 7; after #56, #58-#66 it finds **7 of
+7**, with the `shlex.quote` control still silent. On 15,798 files of
+third-party Python the findings went 20 -> 1, and the one that remains is a
+genuine CORS echo.
+
+The audit also turned up four defects, all pre-existing, all since fixed:
+receiver-locked SQL sinks (#64), a call whose result is returned or assigned
+being invisible to cross-function tracking and a subscript sink never making
+its function dangerous to call (#65), a parameter hiding a real source beside
+it in the same expression (#66), and only one parameter per sink being
+registered (`fix/every-parameter-that-reaches-a-sink`).
+
 ## Not verified
 
 - The `prep` (3) and `proxy_req` (1) header writes are client-side and remain

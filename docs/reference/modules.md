@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **202 Python modules**, **80,214 lines**, and **2,475 class/function/method declarations**.
+Generated inventory: **202 Python modules**, **80,262 lines**, and **2,477 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -70,7 +70,7 @@ Generated inventory: **202 Python modules**, **80,214 lines**, and **2,475 class
 | [`src/analyzer/rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/rules.py#L1) | 485 | 16 | `dataclasses, datetime, fnmatch, layers, logging, pathlib, re, yaml` | Project rules engine — loads .flyto-rules.yaml and checks compliance. |
 | [`src/analyzer/security.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/security.py#L1) | 586 | 20 | `ast, dataclasses, importlib, pathlib, re, rule_loader` | Security scanning - detect potential security issues |
 | [`src/analyzer/stale_files.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/stale_files.py#L1) | 216 | 11 | `collections, dataclasses, datetime, pathlib, subprocess` | Stale file detection - use git history to find files untouched for a long time |
-| [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 2493 | 64 | `analyzer, ast, collections, dataclasses, finding_identity, importlib, logging, pathlib, profile, re, taint_lsp, taint_rules` | AST-based taint analysis engine. |
+| [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 2541 | 66 | `analyzer, ast, collections, dataclasses, finding_identity, importlib, logging, pathlib, profile, re, taint_lsp, taint_rules` | AST-based taint analysis engine. |
 | [`src/analyzer/taint_dsl.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L1) | 408 | 17 | `json, logging, pathlib, re, yaml` | Taint DSL — read/write helpers for the `taint:` block in .flyto-rules.yaml. |
 | [`src/analyzer/taint_lsp.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_lsp.py#L1) | 203 | 7 | `__future__, ast, logging, lsp, os, pathlib, typing` | Type-aware callee verification for the cross-function taint pass. |
 | [`src/analyzer/taint_rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_rules.py#L1) | 597 | 0 | `none` | Default taint analysis rules — sources, sinks, and sanitizers by language. |

@@ -141,3 +141,83 @@ class TestASubscriptSinkMakesItsFunctionDangerous:
                 echo_origin(resp, "https://example.com")
         """})
         assert findings == []
+
+
+class TestEveryParameterThatReachesASink:
+    """A callee registered on one parameter was unreachable through the others.
+
+    A finding names one argument, and only that argument's parameter was
+    recorded as making the function dangerous to call. So
+
+        def handle(table, cmd):
+            os.system(f"run {table} {cmd}")
+
+    could be reached through `table` and not through `cmd`.
+    """
+
+    SINK = """\
+        import os
+
+        def handle(table, cmd):
+            os.system(f"run {table} {cmd}")
+    """
+
+    def test_the_second_parameter_is_reachable(self):
+        findings = _analyze({"sink.py": self.SINK, "api.py": """\
+            from flask import request
+            from sink import handle
+
+            def lookup():
+                handle("users", request.args.get("cmd"))
+        """})
+        assert [f.category for f in findings] == ["rce"]
+
+    def test_the_first_parameter_is_still_reachable(self):
+        findings = _analyze({"sink.py": self.SINK, "api.py": """\
+            from flask import request
+            from sink import handle
+
+            def lookup():
+                handle(request.args.get("t"), "ls")
+        """})
+        assert [f.category for f in findings] == ["rce"]
+
+    def test_each_caller_is_reported_once(self):
+        findings = _analyze({"sink.py": self.SINK, "api.py": """\
+            from flask import request
+            from sink import handle
+
+            def first():
+                handle(request.args.get("t"), "ls")
+
+            def second():
+                handle("users", request.args.get("cmd"))
+
+            def neither():
+                handle("users", "ls")
+        """})
+        assert [f.line for f in findings] == [5, 8]
+
+    def test_constants_on_both_sides_report_nothing(self):
+        findings = _analyze({"sink.py": self.SINK, "api.py": """\
+            from sink import handle
+
+            def lookup():
+                handle("users", "ls")
+        """})
+        assert findings == []
+
+    def test_a_sanitized_parameter_is_not_registered(self):
+        findings = _analyze({"sink.py": """\
+            import os, shlex
+
+            def handle(table, cmd):
+                os.system(f"run {table} " + shlex.quote(cmd))
+        """, "api.py": """\
+            from flask import request
+            from sink import handle
+
+            def lookup():
+                handle("users", request.args.get("cmd"))
+        """})
+        assert findings == []
