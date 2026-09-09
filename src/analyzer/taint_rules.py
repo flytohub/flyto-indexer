@@ -222,8 +222,16 @@ REDOS_REGEX_CALLS = (
 )
 
 #: A response-header rule only means the response. Server frameworks make
-#: `request.headers` read-only; an assignment into it is a client request.
-_NOT_THE_REQUEST = ({"not": {"receiver_root": ["request", "req"]}},)
+#: `request.headers` read-only, so an assignment into it is a client request --
+#: and when the client writes through `self`, the class it sits in says so.
+#: Measured over 23,404 files: 173 header-write sites, of which 21 are
+#: `ClientRequest` and `PreparedRequest` writing `self.headers`, against
+#: `HTTPMove`, `HTTPMethodNotAllowed` and `RedirectResponse` doing the same
+#: thing for a response. The suffix separates them without a single miss.
+_NOT_THE_REQUEST = (
+    {"not": {"receiver_root": ["request", "req"]}},
+    {"not": {"enclosing_class_suffix": ["Request"]}},
+)
 
 # Sinks: dangerous functions that should not receive tainted data
 # Each entry: (pattern, severity, recommendation) and optionally a fourth

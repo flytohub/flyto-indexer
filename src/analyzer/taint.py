@@ -1423,6 +1423,7 @@ class TaintAnalyzer:
             # it is given a mapping rather than the string `str.find` takes.
             if requires and not call_satisfies(
                 call, call_str, requires, self._literal_bindings,
+                self._current_class,
             ):
                 continue
 
@@ -1507,7 +1508,9 @@ class TaintAnalyzer:
                     continue
                 if pattern not in receiver:
                     continue
-                if not receiver_satisfies(target.value, requires):
+                if not receiver_satisfies(
+                    target.value, requires, self._current_class,
+                ):
                     # A subscript assignment has no arguments, so a rule that
                     # asks about them does not apply. It does have a receiver:
                     # `request.headers[k] = v` is a client building its own
