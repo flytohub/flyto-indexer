@@ -381,3 +381,93 @@ class TestYamlConfigurablePropagators:
                 os.system(box[0])
         """)
         assert flows == []
+
+
+class TestForwardingNeedsAnAttributableCallee:
+    """`A` returning `B(...)` says nothing about `A` when `B` is ambiguous.
+
+    The registry already refused to report a name with several definitions as a
+    source, because a call site cannot be attributed to one of them. It still
+    accepted such a name as *evidence*: `cast` has nineteen definitions in a
+    large corpus and one of them returns a source, so every function returning
+    `typing.cast(...)` was marked as returning untrusted input, and the taint
+    spread from there. On 15,798 files of third-party Python that produced 17
+    findings whose sources were `o8(...)`, `_posixify(...)`, `comma_separate(...)`
+    and the like -- library helpers with no request anywhere near them.
+    """
+
+    def test_a_one_hop_source_helper_still_taints_its_caller(self, tmp_path):
+        flows = _analyze(tmp_path, """\
+            from flask import request
+            import os
+
+            def read_body():
+                return request.get_json()
+
+            def handler():
+                os.system(read_body())
+        """)
+        assert [f.category for f in flows] == ["rce"]
+
+    def test_a_two_hop_chain_of_unique_names_still_works(self, tmp_path):
+        flows = _analyze(tmp_path, """\
+            from flask import request
+            import os
+
+            def read_body():
+                return request.get_json()
+
+            def unwrap_body():
+                return read_body()
+
+            def handler():
+                os.system(unwrap_body())
+        """)
+        assert [f.category for f in flows] == ["rce"]
+
+    def test_forwarding_through_a_duplicated_name_is_refused(self, tmp_path):
+        flows = _analyze(tmp_path, """\
+            from flask import request
+            import os
+
+            def read_body():
+                return request.get_json()
+
+            class Tainted:
+                def get(self):
+                    return read_body()
+
+            class Safe:
+                def get(self):
+                    return "safe"
+
+            def handler(box):
+                os.system(box.get())
+        """)
+        assert flows == []
+
+    def test_a_wrapper_over_a_duplicated_name_is_not_itself_a_source(self, tmp_path):
+        # The `typing.cast` shape: `preserve()` forwards through `get`, which
+        # has two definitions, so `preserve()` must not become a source either.
+        flows = _analyze(tmp_path, """\
+            from flask import request
+            import os
+
+            def read_body():
+                return request.get_json()
+
+            class Tainted:
+                def get(self):
+                    return read_body()
+
+            class Safe:
+                def get(self):
+                    return "safe"
+
+            def preserve(box):
+                return box.get()
+
+            def handler(box):
+                os.system(preserve(box))
+        """)
+        assert flows == []
