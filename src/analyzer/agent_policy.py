@@ -22,10 +22,7 @@ import ast
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-SSRF_GUARDS = {"validate_url_with_env_config", "validate_url_ssrf",
-               "enforce_outbound_url", "validate_url", "guarded_aiohttp_request"}
-PATH_GUARDS = {"validate_path_with_env_config"}
-CRED_GUARDS = {"assert_env_credential_endpoint_allowed"}
+from .agent_guards import PATH, URL, GuardRecognizer
 HTTP_VERBS = {"get", "post", "put", "patch", "delete", "request", "goto"}
 HTTP_RECEIVERS = {"session", "client", "sess", "http", "aiohttp", "requests",
                   "httpx", "_session", "s", "conn", "page", "driver", "browser"}
@@ -89,6 +86,21 @@ BAND_CONFIRM = 70   # >= : deterministic confirm (no LLM)
 BAND_DROP = 35      # <  : deterministic drop/low (no LLM); between => review (LLM)
 
 
+def _soften(conf: str, guard) -> tuple[str, str]:
+    """Lower confidence when something guard-shaped was seen but not verified.
+
+    A conclusive guard suppresses the finding upstream and never reaches here.
+    What arrives is a name that reads like a guard whose behaviour this analyzer
+    cannot check. Dropping the finding would trust a naming convention; keeping
+    it at full confidence would ignore evidence. Lowering it does neither, and
+    the note says exactly what was seen so a reader can settle it in seconds.
+    """
+    if guard is None:
+        return conf, ""
+    lowered = {"high": "medium", "medium": "low", "low": "low"}.get(conf, conf)
+    return lowered, f" (note: {guard.describe()})"
+
+
 @dataclass
 class AgentFinding:
     file_path: str
@@ -128,8 +140,12 @@ def _unparse(node: ast.AST) -> str:
 
 
 class AgentPolicyAnalyzer:
-    def __init__(self, project_root: Path):
+    def __init__(self, project_root: Path, guards: GuardRecognizer | None = None):
         self.root = Path(project_root)
+        # Guard recognition is injected so a project can declare its own
+        # helpers; the default still recognizes shapes, so a repository is
+        # never called unguarded merely for naming its helper differently.
+        self.guards = guards or GuardRecognizer()
         self.findings: list[AgentFinding] = []
         self._reachable: set[str] = set()   # per-file MCP-reachable function names
         self._file_has_entries = False       # per-file: exposes any MCP/route entry
@@ -183,7 +199,7 @@ class AgentPolicyAnalyzer:
     # ── per-function detectors ─────────────────────────────────────────────
     def _analyze_function(self, fn, rel, called, ext):
         sinks = _http_sinks(fn)
-        has_ssrf = bool(called & SSRF_GUARDS)
+        ssrf_guard = self.guards.find(called, URL)
         fn_src = _unparse(fn)
         provider_host = any(h in fn_src for h in KNOWN_PROVIDER_HOSTS)
 
@@ -192,20 +208,27 @@ class AgentPolicyAnalyzer:
         # credential risk on a base_url override is covered by key-to-endpoint).
         for s in sinks:
             url = _url_arg(s)
-            if not has_ssrf and self._is_external(url, ext):
+            if (ssrf_guard is None or not ssrf_guard.conclusive) and self._is_external(url, ext):
                 conf = "low" if provider_host else "high"
+                conf, note = _soften(conf, ssrf_guard)
                 self._add(rel, s.lineno, "ssrf-no-guard", "high", fn,
-                          "outbound HTTP to a caller-controlled URL with no SSRF guard",
-                          "Call the SSRF guard (enforce_outbound_url/validate_url_with_env_config) before the request.",
+                          "outbound HTTP to a caller-controlled URL with no SSRF guard" + note,
+                          "Validate the URL against an allowlist of permitted hosts "
+                          "before the request, and reject redirects outside it.",
                           conf)
                 break
 
-        # redirect-follow (guarded module, follows redirects, no per-hop revalidation)
-        if sinks and has_ssrf and "guarded_aiohttp_request" not in called:
+        # redirect-follow (guarded module, follows redirects, no per-hop revalidation).
+        # This one needs a conclusive guard: the finding is "a real guard is
+        # present and redirects bypass it". A name that merely reads like a
+        # guard does not establish that a guard is being bypassed.
+        if (sinks and ssrf_guard is not None and ssrf_guard.conclusive
+                and "guarded_aiohttp_request" not in called):
             if any(_redirects_default_true(s) for s in sinks):
                 self._add(rel, sinks[0].lineno, "redirect-follow", "high", fn,
                           "guarded HTTP module follows redirects without per-hop revalidation",
-                          "Disable auto-redirects and revalidate every Location hop through the SSRF guard.",
+                          "Disable automatic redirects and revalidate every Location hop "
+                          "against the same allowlist before following it.",
                           "high")
 
         # unauth-route (state-changing route, no auth dependency). HIGH when the
@@ -264,11 +287,16 @@ class AgentPolicyAnalyzer:
 
         # path-traversal-read. file read from a caller path, no sandbox guard.
         for lineno, patharg in _file_reads(fn):
-            if not (called & PATH_GUARDS) and self._is_external(patharg, ext):
+            path_guard = self.guards.find(called, PATH)
+            unguarded = path_guard is None or not path_guard.conclusive
+            if unguarded and self._is_external(patharg, ext):
+                conf, note = _soften("medium", path_guard)
                 self._add(rel, lineno, "path-traversal-read", "high", fn,
-                          "file read from a caller-controlled path without the sandbox guard",
-                          "Confine reads to FLYTO_SANDBOX_DIR via validate_path_with_env_config.",
-                          "medium")
+                          "file read from a caller-controlled path without a "
+                          "confining guard" + note,
+                          "Resolve the path and confirm it stays inside an allowed root directory "
+                          "before reading, rejecting anything that escapes it.",
+                          conf)
                 break
 
         # ssti. template rendered from caller input.
@@ -284,11 +312,15 @@ class AgentPolicyAnalyzer:
         # MEDIUM for format-constrained library writers (img.save/wb.save).
         writes_fetched = bool(sinks) or ".read()" in fn_src or "content" in fn_src
         for lineno, patharg, kind in _file_writes(fn):
-            if not (called & PATH_GUARDS) and self._is_external(patharg, ext):
+            path_guard = self.guards.find(called, PATH)
+            unguarded = path_guard is None or not path_guard.conclusive
+            if unguarded and self._is_external(patharg, ext):
                 conf = "high" if (kind == "open" and writes_fetched) else "medium"
+                conf, note = _soften(conf, path_guard)
                 self._add(rel, lineno, "file-write-no-guard", "critical", fn,
-                          "file write to a caller-controlled path without the sandbox guard",
-                          "Route the path through validate_path_with_env_config to confine writes to FLYTO_SANDBOX_DIR.",
+                          "file write to a caller-controlled path without a confining guard" + note,
+                          "Resolve the path and confirm it stays inside an allowed root directory "
+                          "before writing, rejecting anything that escapes it.",
                           conf)
                 break
 

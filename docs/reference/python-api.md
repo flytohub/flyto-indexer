@@ -2,7 +2,7 @@
 
 # Python API Reference
 
-Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,480 declarations across 186 files**.
+Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,490 declarations across 187 files**.
 
 ## `analyze.py`
 
@@ -384,38 +384,53 @@ Every declared class, function, nested function, and method in the package, supp
 | function | `def write_markdown(data: dict&#91;str, Any&#93;, path: Path) -> None` | The declaration and linked implementation are authoritative. | [`scripts/write_public_site_verification_evidence.py:315`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/write_public_site_verification_evidence.py#L315) |
 | function | `def main(argv: list&#91;str&#93; \| None=None) -> int` | The declaration and linked implementation are authoritative. | [`scripts/write_public_site_verification_evidence.py:339`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/write_public_site_verification_evidence.py#L339) |
 
+## `src/analyzer/agent_guards.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| class | `class GuardMatch` | One recognized protective call, and how confident the recognition is. | [`src/analyzer/agent_guards.py:80`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards.py#L80) |
+| method | `def GuardMatch.conclusive(self) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_guards.py:93`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards.py#L93) |
+| method | `def GuardMatch.describe(self) -> str` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_guards.py:96`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards.py#L96) |
+| function | `def _terms(name: str) -> set&#91;str&#93;` | Lowercased word parts of a call name, including dotted attribute tails. | [`src/analyzer/agent_guards.py:105`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards.py#L105) |
+| function | `def _shape_matches(name: str, domain: str) -> bool` | Whether a name reads like a guard for this domain. | [`src/analyzer/agent_guards.py:111`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards.py#L111) |
+| class | `class GuardRecognizer` | Recognizes protective calls for one project. | [`src/analyzer/agent_guards.py:134`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards.py#L134) |
+| method | `def GuardRecognizer.__init__(self, declared: Mapping&#91;str, Iterable&#91;str&#93;&#93; \| None=None, *, use_shape: bool=True) -> None` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_guards.py:143`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards.py#L143) |
+| method | `def GuardRecognizer.from_rules(cls, yaml_cfg: dict \| None) -> 'GuardRecognizer'` | Build from a parsed .flyto-rules.yaml. | [`src/analyzer/agent_guards.py:152`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards.py#L152) |
+| method | `def GuardRecognizer.find(self, called: Iterable&#91;str&#93;, domain: str) -> GuardMatch \| None` | The strongest guard recognized among ``called`` for ``domain``. | [`src/analyzer/agent_guards.py:173`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards.py#L173) |
+
 ## `src/analyzer/agent_policy.py`
 
 | Kind | Signature | Responsibility | Source |
 |---|---|---|---|
-| class | `class AgentFinding` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:93`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L93) |
-| method | `def AgentFinding.to_dict(self) -> dict` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:109`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L109) |
-| function | `def _dotted(node: ast.AST) -> str` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:113`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L113) |
-| function | `def _unparse(node: ast.AST) -> str` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:123`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L123) |
-| class | `class AgentPolicyAnalyzer` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:130`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L130) |
-| method | `def AgentPolicyAnalyzer.__init__(self, project_root: Path)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:131`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L131) |
-| method | `def AgentPolicyAnalyzer._external_names(self, fn: ast.AST) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:139`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L139) |
-| method | `def AgentPolicyAnalyzer._is_external(self, arg: ast.AST, ext: set&#91;str&#93;) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:174`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L174) |
-| method | `def AgentPolicyAnalyzer._analyze_function(self, fn, rel, called, ext)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:184`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L184) |
-| method | `def AgentPolicyAnalyzer._analyze_file_text(self, text: str, rel: str)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:296`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L296) |
-| method | `def AgentPolicyAnalyzer._add(self, rel, line, cat, sev, fn, msg, rec='', conf='medium')` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:310`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L310) |
-| method | `def AgentPolicyAnalyzer.analyze(self) -> list&#91;AgentFinding&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:324`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L324) |
-| function | `def _tokens(s: str) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:347`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L347) |
-| function | `def _called(fn) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:352`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L352) |
-| function | `def _http_sinks(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:361`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L361) |
-| function | `def _url_arg(call)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:379`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L379) |
-| function | `def _redirects_default_true(call) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:386`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L386) |
-| function | `def _route(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:396`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L396) |
-| function | `def _has_depends(fn) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:405`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L405) |
-| function | `def _dynamic_env_reads(fn)` | os.getenv(x)/environ[x] with a non-constant, non-bounded-selector name. | [`src/analyzer/agent_policy.py:412`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L412) |
-| function | `def _is_bounded_selector(node) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:431`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L431) |
-| function | `def _mcp_reachable_set(tree) -> set` | Function names reachable from an MCP/module/route entrypoint (params are attacker-influenced). | [`src/analyzer/agent_policy.py:440`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L440) |
-| function | `def _eval_sinks(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:477`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L477) |
-| function | `def _file_reads(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:485`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L485) |
-| function | `def _ssti_sinks(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:501`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L501) |
-| function | `def _cmd_sinks(fn)` | Shell/command-execution sinks: (lineno, arg_node, shell_true). | [`src/analyzer/agent_policy.py:510`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L510) |
-| function | `def _deser_sinks(fn)` | Unsafe deserialization sinks: (lineno, arg_node). | [`src/analyzer/agent_policy.py:529`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L529) |
-| function | `def _file_writes(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:545`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L545) |
+| function | `def _soften(conf: str, guard) -> tuple&#91;str, str&#93;` | Lower confidence when something guard-shaped was seen but not verified. | [`src/analyzer/agent_policy.py:89`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L89) |
+| class | `class AgentFinding` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:105`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L105) |
+| method | `def AgentFinding.to_dict(self) -> dict` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:121`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L121) |
+| function | `def _dotted(node: ast.AST) -> str` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:125`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L125) |
+| function | `def _unparse(node: ast.AST) -> str` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:135`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L135) |
+| class | `class AgentPolicyAnalyzer` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:142`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L142) |
+| method | `def AgentPolicyAnalyzer.__init__(self, project_root: Path, guards: GuardRecognizer \| None=None)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:143`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L143) |
+| method | `def AgentPolicyAnalyzer._external_names(self, fn: ast.AST) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:155`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L155) |
+| method | `def AgentPolicyAnalyzer._is_external(self, arg: ast.AST, ext: set&#91;str&#93;) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:190`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L190) |
+| method | `def AgentPolicyAnalyzer._analyze_function(self, fn, rel, called, ext)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:200`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L200) |
+| method | `def AgentPolicyAnalyzer._analyze_file_text(self, text: str, rel: str)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:328`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L328) |
+| method | `def AgentPolicyAnalyzer._add(self, rel, line, cat, sev, fn, msg, rec='', conf='medium')` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:342`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L342) |
+| method | `def AgentPolicyAnalyzer.analyze(self) -> list&#91;AgentFinding&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:356`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L356) |
+| function | `def _tokens(s: str) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:379`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L379) |
+| function | `def _called(fn) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:384`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L384) |
+| function | `def _http_sinks(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:393`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L393) |
+| function | `def _url_arg(call)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:411`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L411) |
+| function | `def _redirects_default_true(call) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:418`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L418) |
+| function | `def _route(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:428`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L428) |
+| function | `def _has_depends(fn) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:437`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L437) |
+| function | `def _dynamic_env_reads(fn)` | os.getenv(x)/environ[x] with a non-constant, non-bounded-selector name. | [`src/analyzer/agent_policy.py:444`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L444) |
+| function | `def _is_bounded_selector(node) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:463`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L463) |
+| function | `def _mcp_reachable_set(tree) -> set` | Function names reachable from an MCP/module/route entrypoint (params are attacker-influenced). | [`src/analyzer/agent_policy.py:472`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L472) |
+| function | `def _eval_sinks(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:509`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L509) |
+| function | `def _file_reads(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:517`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L517) |
+| function | `def _ssti_sinks(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:533`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L533) |
+| function | `def _cmd_sinks(fn)` | Shell/command-execution sinks: (lineno, arg_node, shell_true). | [`src/analyzer/agent_policy.py:542`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L542) |
+| function | `def _deser_sinks(fn)` | Unsafe deserialization sinks: (lineno, arg_node). | [`src/analyzer/agent_policy.py:561`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L561) |
+| function | `def _file_writes(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:577`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L577) |
 
 ## `src/analyzer/api_consistency.py`
 

@@ -2,6 +2,7 @@
 
 | Date | Topic | File | Status |
 | --- | --- | --- | --- |
+| 2026-09-13 | Guard recognition without our own function names | `2026-09-13-agent-guard-recognition.md` | PR #69 open. Owner: claude |
 | 2026-09-08 | Taint rule writing and argument-shape gates | `2026-09-08-taint-rule-writing-and-shape-gates.md` | PR #56 merged to main; PR #57 rebuilt on main and open. Owner: claude |
 | 2026-09-01 | Active amendment plan scope | `2026-09-01-active-amendment-plan-scope.md` | Implemented locally; focused verification passed, full independent audit pending. Owner: codex |
 | 2026-08-27 | Git ignore scan boundary | `2026-08-27-gitignore-scan-boundary.md` | Implemented locally; independent host verification pending. Owner: coding worker |
