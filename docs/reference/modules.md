@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **203 Python modules**, **80,602 lines**, and **2,490 class/function/method declarations**.
+Generated inventory: **203 Python modules**, **80,605 lines**, and **2,490 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -48,8 +48,8 @@ Generated inventory: **203 Python modules**, **80,602 lines**, and **2,490 class
 | [`scripts/write_public_site_verification_evidence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/scripts/write_public_site_verification_evidence.py#L1) | 363 | 13 | `__future__, argparse, datetime, json, pathlib, socket, ssl, sys, typing, urllib` | Write Flyto2 public-site verification evidence. |
 | [`src/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/__init__.py#L1) | 31 | 0 | `engine, models, version` | Flyto2 Indexer - Code audit and smart indexing system. |
 | [`src/analyzer/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/__init__.py#L1) | 46 | 0 | `api_consistency, complexity, coverage, dead_code, duplicates, layers, rules, security, stale_files, taint, taint_dsl` | Code analyzers |
-| [`src/analyzer/agent_guards.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards.py#L1) | 192 | 9 | `__future__, dataclasses, re, typing` | Recognizing protective calls in code this analyzer did not write. |
-| [`src/analyzer/agent_policy.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L1) | 590 | 29 | `__future__, agent_guards, ast, dataclasses, pathlib, re` | AI-agent security-policy analyzer. |
+| [`src/analyzer/agent_guards.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards.py#L1) | 192 | 9 | `__future__, collections, dataclasses, re` | Recognizing protective calls in code this analyzer did not write. |
+| [`src/analyzer/agent_policy.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L1) | 593 | 29 | `__future__, agent_guards, ast, dataclasses, pathlib, re` | AI-agent security-policy analyzer. |
 | [`src/analyzer/api_consistency.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/api_consistency.py#L1) | 290 | 15 | `dataclasses, pathlib, re, typing` | API format consistency check |
 | [`src/analyzer/api_drift.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/api_drift.py#L1) | 224 | 7 | `dataclasses, pathlib, re` | API Contract Drift detector — compare backend route definitions vs frontend call sites. |
 | [`src/analyzer/bus_factor.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/bus_factor.py#L1) | 153 | 5 | `collections, dataclasses, pathlib, subprocess` | Bus Factor analyzer — identify files with dangerously low contributor count. |

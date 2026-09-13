@@ -22,7 +22,7 @@ import ast
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-from .agent_guards import CREDENTIAL_ENDPOINT, PATH, URL, GuardRecognizer
+from .agent_guards import PATH, URL, GuardRecognizer
 HTTP_VERBS = {"get", "post", "put", "patch", "delete", "request", "goto"}
 HTTP_RECEIVERS = {"session", "client", "sess", "http", "aiohttp", "requests",
                   "httpx", "_session", "s", "conn", "page", "driver", "browser"}
@@ -213,8 +213,8 @@ class AgentPolicyAnalyzer:
                 conf, note = _soften(conf, ssrf_guard)
                 self._add(rel, s.lineno, "ssrf-no-guard", "high", fn,
                           "outbound HTTP to a caller-controlled URL with no SSRF guard" + note,
-                          "Validate the URL against an allowlist of permitted hosts before the request, "
-                          "and reject redirects to hosts outside it.",
+                          "Validate the URL against an allowlist of permitted hosts "
+                          "before the request, and reject redirects outside it.",
                           conf)
                 break
 
@@ -288,10 +288,12 @@ class AgentPolicyAnalyzer:
         # path-traversal-read. file read from a caller path, no sandbox guard.
         for lineno, patharg in _file_reads(fn):
             path_guard = self.guards.find(called, PATH)
-            if (path_guard is None or not path_guard.conclusive) and self._is_external(patharg, ext):
+            unguarded = path_guard is None or not path_guard.conclusive
+            if unguarded and self._is_external(patharg, ext):
                 conf, note = _soften("medium", path_guard)
                 self._add(rel, lineno, "path-traversal-read", "high", fn,
-                          "file read from a caller-controlled path without a confining guard" + note,
+                          "file read from a caller-controlled path without a "
+                          "confining guard" + note,
                           "Resolve the path and confirm it stays inside an allowed root directory "
                           "before reading, rejecting anything that escapes it.",
                           conf)
@@ -311,7 +313,8 @@ class AgentPolicyAnalyzer:
         writes_fetched = bool(sinks) or ".read()" in fn_src or "content" in fn_src
         for lineno, patharg, kind in _file_writes(fn):
             path_guard = self.guards.find(called, PATH)
-            if (path_guard is None or not path_guard.conclusive) and self._is_external(patharg, ext):
+            unguarded = path_guard is None or not path_guard.conclusive
+            if unguarded and self._is_external(patharg, ext):
                 conf = "high" if (kind == "open" and writes_fetched) else "medium"
                 conf, note = _soften(conf, path_guard)
                 self._add(rel, lineno, "file-write-no-guard", "critical", fn,

@@ -29,8 +29,8 @@ finding, how severe it is, or what to say about it; those belong to the caller.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Iterable
 
 #: Domains a guard can protect. Each is an independent concern: recognizing a
 #: URL validator says nothing about whether a path is confined.
@@ -140,7 +140,7 @@ class GuardRecognizer:
     being told its code is unguarded for not using someone else's.
     """
 
-    def __init__(self, declared: dict[str, Iterable[str]] | None = None,
+    def __init__(self, declared: Mapping[str, Iterable[str]] | None = None,
                  *, use_shape: bool = True) -> None:
         self._declared = {
             domain: frozenset(declared.get(domain, ()) if declared else ())
