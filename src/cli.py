@@ -518,6 +518,48 @@ def _configure_architecture_commands(subparsers) -> None:
     add_tsan_parser.add_argument("--pattern", required=True, help="Match pattern (e.g., 'mysql.escape(', 'html.escape(')")
     add_tsan_parser.add_argument("--cleanses", default="*", help="Comma-separated vuln types this sanitizer clears, or '*' for all (default: *)")
 
+    add_guard_parser = subparsers.add_parser(
+        "add-agent-guard",
+        help="Declare one of this project's guard functions in .flyto-rules.yaml",
+        description=(
+            "Tell the agent-policy analyzer that a function of yours confines a "
+            "dangerous operation. A declared guard is conclusive: the analyzer "
+            "stops reporting the operations it protects."
+        ),
+    )
+    add_guard_parser.add_argument(
+        "path", nargs="?", default=".",
+        help="Project root path (default: current directory)")
+    add_guard_parser.add_argument(
+        "--domain", required=True,
+        choices=["path", "url", "credential_endpoint"],
+        help="What this guard protects")
+    add_guard_parser.add_argument(
+        "--name", required=True,
+        help="The function name, e.g. 'ensure_within_media_root'")
+
+    remove_guard_parser = subparsers.add_parser(
+        "remove-agent-guard",
+        help="Undeclare a project guard from .flyto-rules.yaml",
+        description="Built-in recognition is unaffected.",
+    )
+    remove_guard_parser.add_argument(
+        "path", nargs="?", default=".",
+        help="Project root path (default: current directory)")
+    remove_guard_parser.add_argument(
+        "--domain", required=True,
+        choices=["path", "url", "credential_endpoint"])
+    remove_guard_parser.add_argument("--name", required=True)
+
+    list_guards_parser = subparsers.add_parser(
+        "list-agent-guards",
+        help="Show the guards this project declared (project-specific only)",
+        description="Built-in guard names are NOT included; this shows what the project decided.",
+    )
+    list_guards_parser.add_argument(
+        "path", nargs="?", default=".",
+        help="Project root path (default: current directory)")
+
     remove_taint_parser = subparsers.add_parser(
         "remove-taint-rule",
         help="Remove a taint rule from .flyto-rules.yaml by pattern",
@@ -588,6 +630,9 @@ def _command_handlers():
         "add-taint-source": cmd_add_taint_source,
         "add-taint-sink": cmd_add_taint_sink,
         "add-taint-sanitizer": cmd_add_taint_sanitizer,
+        "add-agent-guard": cmd_add_agent_guard,
+        "remove-agent-guard": cmd_remove_agent_guard,
+        "list-agent-guards": cmd_list_agent_guards,
         "remove-taint-rule": cmd_remove_taint_rule,
         "list-taint-rules": cmd_list_taint_rules,
     }
@@ -2128,6 +2173,32 @@ def cmd_add_taint_sink(args):
         recommendation=args.recommendation,
         requires=requires,
     )
+
+
+def _agent_guard_project(args):
+    project_path = Path(args.path).resolve()
+    if not project_path.exists():
+        print(f"Path does not exist: {project_path}", file=sys.stderr)
+        sys.exit(1)
+    return project_path
+
+
+def cmd_add_agent_guard(args):
+    from .analyzer.agent_guards_dsl import add_agent_guard
+
+    return add_agent_guard(_agent_guard_project(args), args.domain, args.name)
+
+
+def cmd_remove_agent_guard(args):
+    from .analyzer.agent_guards_dsl import remove_agent_guard
+
+    return remove_agent_guard(_agent_guard_project(args), args.domain, args.name)
+
+
+def cmd_list_agent_guards(args):
+    from .analyzer.agent_guards_dsl import list_agent_guards
+
+    return list_agent_guards(_agent_guard_project(args))
 
 
 def cmd_add_taint_sanitizer(args):

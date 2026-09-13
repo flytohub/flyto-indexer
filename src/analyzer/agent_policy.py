@@ -19,10 +19,11 @@ not flagged). Pure stdlib; mirrors the style of analyzer/taint.py.
 from __future__ import annotations
 
 import ast
+import re as _re
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-from .agent_guards import PATH, URL, GuardRecognizer
+from .agent_guards import CREDENTIAL_ENDPOINT, PATH, URL, GuardRecognizer
 HTTP_VERBS = {"get", "post", "put", "patch", "delete", "request", "goto"}
 HTTP_RECEIVERS = {"session", "client", "sess", "http", "aiohttp", "requests",
                   "httpx", "_session", "s", "conn", "page", "driver", "browser"}
@@ -245,7 +246,6 @@ class AgentPolicyAnalyzer:
         # parts[1] / split) — the denylist-bypass shape; else MEDIUM.
         for lineno, nm in _dynamic_env_reads(fn):
             if "is_env_var_allowed" not in called:
-                import re as _re
                 # parsed name inline, OR the name var is assigned from a
                 # subscript/split upstream (e.g. env_var = parts[1]) = interpolation
                 parsed = ("[" in nm or "split" in nm or "parts" in nm
@@ -331,13 +331,23 @@ class AgentPolicyAnalyzer:
         has_auth = ("Authorization" in text or "Bearer" in text
                     or "api_key=" in text or "api_key =" in text)
         caller_endpoint = "base_url" in text
-        guarded = "assert_env_credential_endpoint_allowed" in text
+        # This detector is file-scoped, so there is no per-function call set to
+        # consult. Recover the call names from the text and use the same
+        # recognizer as the function-scoped rules: a project that checks its
+        # credential endpoint with its own helper must not be told it performs
+        # no check at all.
+        called = set(_re.findall(r"\b([A-Za-z_][A-Za-z0-9_.]*)\s*\(", text))
+        cred_guard = self.guards.find(called, CREDENTIAL_ENDPOINT)
+        guarded = cred_guard is not None and cred_guard.conclusive
         if has_env_key and has_auth and caller_endpoint and not guarded:
             ln = next((i for i, l in enumerate(text.splitlines(), 1) if "base_url" in l), 1)
+            conf, note = _soften("high", cred_guard)
             self._add(rel, ln, "key-to-endpoint", "high", None,
-                      "env-derived credential can reach a caller-controlled base_url without a trust check",
-                      "Only attach the env credential to the official endpoint or a trusted-host allowlist.",
-                      "high")
+                      "env-derived credential can reach a caller-controlled base_url "
+                      "without a trust check" + note,
+                      "Attach the credential only to the official endpoint, or check the "
+                      "endpoint against a trusted-host allowlist before sending it.",
+                      conf)
 
     def _add(self, rel, line, cat, sev, fn, msg, rec="", conf="medium"):
         mcp = self._file_has_entries if fn is None else (getattr(fn, "name", None) in self._reachable)

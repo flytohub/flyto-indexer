@@ -2,7 +2,7 @@
 
 # Python API Reference
 
-Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,490 declarations across 187 files**.
+Every declared class, function, nested function, and method in the package, support scripts, examples, benchmarks, and root command entry scripts. Generated inventory: **2,498 declarations across 188 files**.
 
 ## `analyze.py`
 
@@ -398,39 +398,48 @@ Every declared class, function, nested function, and method in the package, supp
 | method | `def GuardRecognizer.from_rules(cls, yaml_cfg: dict \| None) -> 'GuardRecognizer'` | Build from a parsed .flyto-rules.yaml. | [`src/analyzer/agent_guards.py:152`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards.py#L152) |
 | method | `def GuardRecognizer.find(self, called: Iterable&#91;str&#93;, domain: str) -> GuardMatch \| None` | The strongest guard recognized among ``called`` for ``domain``. | [`src/analyzer/agent_guards.py:173`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards.py#L173) |
 
+## `src/analyzer/agent_guards_dsl.py`
+
+| Kind | Signature | Responsibility | Source |
+|---|---|---|---|
+| function | `def _load(project_root: Path) -> tuple&#91;dict, Path&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_guards_dsl.py:22`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards_dsl.py#L22) |
+| function | `def add_agent_guard(project_root: Path, domain: str, name: str) -> dict` | Declare `name` as a guard for `domain` in this project's rules file. | [`src/analyzer/agent_guards_dsl.py:32`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards_dsl.py#L32) |
+| function | `def remove_agent_guard(project_root: Path, domain: str, name: str) -> dict` | Undeclare a guard. | [`src/analyzer/agent_guards_dsl.py:68`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards_dsl.py#L68) |
+| function | `def list_agent_guards(project_root: Path) -> dict` | Show what this project declared. | [`src/analyzer/agent_guards_dsl.py:101`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards_dsl.py#L101) |
+
 ## `src/analyzer/agent_policy.py`
 
 | Kind | Signature | Responsibility | Source |
 |---|---|---|---|
-| function | `def _soften(conf: str, guard) -> tuple&#91;str, str&#93;` | Lower confidence when something guard-shaped was seen but not verified. | [`src/analyzer/agent_policy.py:89`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L89) |
-| class | `class AgentFinding` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:105`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L105) |
-| method | `def AgentFinding.to_dict(self) -> dict` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:121`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L121) |
-| function | `def _dotted(node: ast.AST) -> str` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:125`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L125) |
-| function | `def _unparse(node: ast.AST) -> str` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:135`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L135) |
-| class | `class AgentPolicyAnalyzer` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:142`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L142) |
-| method | `def AgentPolicyAnalyzer.__init__(self, project_root: Path, guards: GuardRecognizer \| None=None)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:143`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L143) |
-| method | `def AgentPolicyAnalyzer._external_names(self, fn: ast.AST) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:155`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L155) |
-| method | `def AgentPolicyAnalyzer._is_external(self, arg: ast.AST, ext: set&#91;str&#93;) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:190`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L190) |
-| method | `def AgentPolicyAnalyzer._analyze_function(self, fn, rel, called, ext)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:200`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L200) |
+| function | `def _soften(conf: str, guard) -> tuple&#91;str, str&#93;` | Lower confidence when something guard-shaped was seen but not verified. | [`src/analyzer/agent_policy.py:90`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L90) |
+| class | `class AgentFinding` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:106`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L106) |
+| method | `def AgentFinding.to_dict(self) -> dict` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:122`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L122) |
+| function | `def _dotted(node: ast.AST) -> str` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:126`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L126) |
+| function | `def _unparse(node: ast.AST) -> str` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:136`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L136) |
+| class | `class AgentPolicyAnalyzer` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:143`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L143) |
+| method | `def AgentPolicyAnalyzer.__init__(self, project_root: Path, guards: GuardRecognizer \| None=None)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:144`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L144) |
+| method | `def AgentPolicyAnalyzer._external_names(self, fn: ast.AST) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:156`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L156) |
+| method | `def AgentPolicyAnalyzer._is_external(self, arg: ast.AST, ext: set&#91;str&#93;) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:191`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L191) |
+| method | `def AgentPolicyAnalyzer._analyze_function(self, fn, rel, called, ext)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:201`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L201) |
 | method | `def AgentPolicyAnalyzer._analyze_file_text(self, text: str, rel: str)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:328`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L328) |
-| method | `def AgentPolicyAnalyzer._add(self, rel, line, cat, sev, fn, msg, rec='', conf='medium')` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:342`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L342) |
-| method | `def AgentPolicyAnalyzer.analyze(self) -> list&#91;AgentFinding&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:356`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L356) |
-| function | `def _tokens(s: str) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:379`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L379) |
-| function | `def _called(fn) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:384`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L384) |
-| function | `def _http_sinks(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:393`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L393) |
-| function | `def _url_arg(call)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:411`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L411) |
-| function | `def _redirects_default_true(call) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:418`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L418) |
-| function | `def _route(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:428`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L428) |
-| function | `def _has_depends(fn) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:437`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L437) |
-| function | `def _dynamic_env_reads(fn)` | os.getenv(x)/environ[x] with a non-constant, non-bounded-selector name. | [`src/analyzer/agent_policy.py:444`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L444) |
-| function | `def _is_bounded_selector(node) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:463`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L463) |
-| function | `def _mcp_reachable_set(tree) -> set` | Function names reachable from an MCP/module/route entrypoint (params are attacker-influenced). | [`src/analyzer/agent_policy.py:472`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L472) |
-| function | `def _eval_sinks(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:509`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L509) |
-| function | `def _file_reads(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:517`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L517) |
-| function | `def _ssti_sinks(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:533`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L533) |
-| function | `def _cmd_sinks(fn)` | Shell/command-execution sinks: (lineno, arg_node, shell_true). | [`src/analyzer/agent_policy.py:542`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L542) |
-| function | `def _deser_sinks(fn)` | Unsafe deserialization sinks: (lineno, arg_node). | [`src/analyzer/agent_policy.py:561`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L561) |
-| function | `def _file_writes(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:577`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L577) |
+| method | `def AgentPolicyAnalyzer._add(self, rel, line, cat, sev, fn, msg, rec='', conf='medium')` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:352`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L352) |
+| method | `def AgentPolicyAnalyzer.analyze(self) -> list&#91;AgentFinding&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:366`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L366) |
+| function | `def _tokens(s: str) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:389`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L389) |
+| function | `def _called(fn) -> set&#91;str&#93;` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:394`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L394) |
+| function | `def _http_sinks(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:403`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L403) |
+| function | `def _url_arg(call)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:421`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L421) |
+| function | `def _redirects_default_true(call) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:428`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L428) |
+| function | `def _route(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:438`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L438) |
+| function | `def _has_depends(fn) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:447`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L447) |
+| function | `def _dynamic_env_reads(fn)` | os.getenv(x)/environ[x] with a non-constant, non-bounded-selector name. | [`src/analyzer/agent_policy.py:454`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L454) |
+| function | `def _is_bounded_selector(node) -> bool` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:473`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L473) |
+| function | `def _mcp_reachable_set(tree) -> set` | Function names reachable from an MCP/module/route entrypoint (params are attacker-influenced). | [`src/analyzer/agent_policy.py:482`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L482) |
+| function | `def _eval_sinks(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:519`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L519) |
+| function | `def _file_reads(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:527`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L527) |
+| function | `def _ssti_sinks(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:543`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L543) |
+| function | `def _cmd_sinks(fn)` | Shell/command-execution sinks: (lineno, arg_node, shell_true). | [`src/analyzer/agent_policy.py:552`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L552) |
+| function | `def _deser_sinks(fn)` | Unsafe deserialization sinks: (lineno, arg_node). | [`src/analyzer/agent_policy.py:571`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L571) |
+| function | `def _file_writes(fn)` | The declaration and linked implementation are authoritative. | [`src/analyzer/agent_policy.py:587`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L587) |
 
 ## `src/analyzer/api_consistency.py`
 
@@ -1069,58 +1078,62 @@ Every declared class, function, nested function, and method in the package, supp
 | function | `def _configure_scanner_commands(subparsers) -> None` | Register focused scanner and CI impact commands. | [`src/cli.py:237`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L237) |
 | function | `def _configure_verification_commands(subparsers) -> None` | Register verification, baseline, PR, and package commands. | [`src/cli.py:366`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L366) |
 | function | `def _configure_architecture_commands(subparsers) -> None` | Register architecture and taint-policy mutation commands. | [`src/cli.py:480`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L480) |
-| function | `def _command_handlers()` | Return the command-to-handler map after all handlers are defined. | [`src/cli.py:549`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L549) |
-| function | `def _emit_command_result(args, result) -> None` | Render one command result and enforce verification exit semantics. | [`src/cli.py:596`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L596) |
-| function | `def _invoke_with_project_scope(handler, *args, **kwargs)` | Invoke a CLI handler under one safely restored project identity. | [`src/cli.py:613`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L613) |
-| function | `def main()` | Parse, dispatch, and render one CLI command. | [`src/cli.py:628`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L628) |
-| function | `def cmd_init(args)` | Initialize .flyto/ in a project directory. | [`src/cli.py:649`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L649) |
-| function | `def _status_from_modern_index(project_path: Path) -> dict \| None` | Build status from the primary .flyto-index/index.json format. | [`src/cli.py:757`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L757) |
-| function | `def _status_from_legacy_flyto(project_path: Path) -> dict \| None` | Build status from the legacy .flyto/ metadata format. | [`src/cli.py:802`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L802) |
-| function | `def cmd_status(args)` | Show index status for a project. | [`src/cli.py:857`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L857) |
-| function | `def cmd_scan(args)` | Execute scan command | [`src/cli.py:913`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L913) |
-| function | `def cmd_impact(args)` | Execute impact command | [`src/cli.py:927`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L927) |
-| function | `def cmd_context(args)` | Execute context command | [`src/cli.py:940`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L940) |
-| function | `def cmd_outline(args)` | Execute outline command | [`src/cli.py:958`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L958) |
-| function | `def cmd_brief(args)` | Generate or display .flyto/brief.md. | [`src/cli.py:969`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L969) |
-| function | `def cmd_describe(args)` | Read or write file descriptions in .flyto/descriptions.jsonl. | [`src/cli.py:978`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L978) |
-| function | `def cmd_task(args)` | Run local task grill/plan/gate/validate/feedback workflow through smart_task. | [`src/cli.py:1063`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1063) |
-| function | `def cmd_task_status(args)` | Show project-local resumable task state. | [`src/cli.py:1073`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1073) |
-| function | `def cmd_usage_record(args)` | Record one normalized task usage event. | [`src/cli.py:1078`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1078) |
-| function | `def cmd_usage_report(args)` | Render task efficiency evidence. | [`src/cli.py:1083`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1083) |
-| function | `def cmd_tools(args)` | Output structured JSON describing all available CLI commands and their arguments. | [`src/cli.py:1088`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1088) |
-| function | `def cmd_install_hook(args)` | Install or remove git post-commit hook for auto-reindexing. | [`src/cli.py:1374`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1374) |
-| function | `def cmd_demo(args)` | Quick 30-second value demo: scan + impact analysis. | [`src/cli.py:1441`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1441) |
-| function | `def _configure_mcp_settings(remove=False)` | Add or remove flyto-indexer from ~/.claude/settings.json. | [`src/cli.py:1576`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1576) |
-| function | `def cmd_setup(args)` | One command setup: scan + CLAUDE.md + MCP config. | [`src/cli.py:1623`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1623) |
-| function | `def cmd_setup_claude(args)` | Add flyto-indexer instructions to CLAUDE.md. | [`src/cli.py:1665`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1665) |
-| function | `def cmd_deps(args)` | Scan and list all external package dependencies. | [`src/cli.py:1718`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1718) |
-| function | `def cmd_profile(args)` | Generate a comprehensive project profile. | [`src/cli.py:1737`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1737) |
-| function | `def cmd_export(args)` | Export scan results as a single JSON bundle for flyto-engine upload. | [`src/cli.py:1757`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1757) |
-| function | `def cmd_secrets(args)` | Scan project for hardcoded secrets. | [`src/cli.py:1881`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1881) |
-| function | `def cmd_license(args)` | Detect project and dependency licenses. | [`src/cli.py:1906`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1906) |
-| function | `def cmd_docs(args)` | Analyze documentation coverage. | [`src/cli.py:1925`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1925) |
-| function | `def cmd_pr_risk(args)` | Analyze PR/changeset risk. | [`src/cli.py:1944`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1944) |
-| function | `def cmd_sbom(args)` | Export SBOM in CycloneDX 1.5 format. | [`src/cli.py:1966`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1966) |
-| function | `def cmd_framework(args)` | Detect project frameworks. | [`src/cli.py:1993`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1993) |
-| function | `def cmd_layers(args)` | Check architecture layer rules (import graph). | [`src/cli.py:2011`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2011) |
-| function | `def cmd_add_layer(args)` | Write a layer definition into .flyto-rules.yaml. | [`src/cli.py:2061`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2061) |
-| function | `def cmd_add_taint_source(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2084`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2084) |
-| function | `def cmd_add_taint_sink(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2100`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2100) |
-| function | `def cmd_add_taint_sanitizer(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2133`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2133) |
-| function | `def cmd_remove_taint_rule(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2152`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2152) |
-| function | `def cmd_list_taint_rules(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2163`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2163) |
-| function | `def _detect_changed_files(args, engine, project_path)` | Detect changed files via git diff (if --base given) or index staleness. | [`src/cli.py:2174`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2174) |
-| function | `def _compute_symbol_impact(changed_files, engine)` | For each changed file, find symbols and compute impact chains. | [`src/cli.py:2212`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2212) |
-| function | `def _format_check_output(output, symbol_details, args)` | Print check results as JSON or human-readable text. | [`src/cli.py:2247`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2247) |
-| function | `def cmd_call_sites(args)` | Emit per-package call sites + local call graph as JSON. | [`src/cli.py:2274`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2274) |
-| function | `def cmd_agent_audit(args)` | AI-agent security policy audit. | [`src/cli.py:2348`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2348) |
-| function | `def cmd_taint(args)` | Analyze data flow / taint tracking. | [`src/cli.py:2395`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2395) |
-| function | `def cmd_research_priority(args)` | Rank the code paths most worth a security researcher's next hour. | [`src/cli.py:2484`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2484) |
-| function | `def cmd_check(args)` | CI-friendly impact check — exits non-zero when changes are risky. | [`src/cli.py:2552`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2552) |
-| function | `def cmd_verify(args)` | Run the no-external-dependency verification gate. | [`src/cli.py:2595`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2595) |
-| function | `def cmd_verify_workspace(args)` | Run verification across a workspace. | [`src/cli.py:2626`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2626) |
-| function | `def cmd_verify_baseline(args)` | Create, compare, or update a verification baseline. | [`src/cli.py:2653`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2653) |
-| function | `def _write_verify_report(path: str, content: str) -> None` | The declaration and linked implementation are authoritative. | [`src/cli.py:2681`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2681) |
+| function | `def _command_handlers()` | Return the command-to-handler map after all handlers are defined. | [`src/cli.py:591`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L591) |
+| function | `def _emit_command_result(args, result) -> None` | Render one command result and enforce verification exit semantics. | [`src/cli.py:641`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L641) |
+| function | `def _invoke_with_project_scope(handler, *args, **kwargs)` | Invoke a CLI handler under one safely restored project identity. | [`src/cli.py:658`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L658) |
+| function | `def main()` | Parse, dispatch, and render one CLI command. | [`src/cli.py:673`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L673) |
+| function | `def cmd_init(args)` | Initialize .flyto/ in a project directory. | [`src/cli.py:694`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L694) |
+| function | `def _status_from_modern_index(project_path: Path) -> dict \| None` | Build status from the primary .flyto-index/index.json format. | [`src/cli.py:802`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L802) |
+| function | `def _status_from_legacy_flyto(project_path: Path) -> dict \| None` | Build status from the legacy .flyto/ metadata format. | [`src/cli.py:847`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L847) |
+| function | `def cmd_status(args)` | Show index status for a project. | [`src/cli.py:902`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L902) |
+| function | `def cmd_scan(args)` | Execute scan command | [`src/cli.py:958`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L958) |
+| function | `def cmd_impact(args)` | Execute impact command | [`src/cli.py:972`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L972) |
+| function | `def cmd_context(args)` | Execute context command | [`src/cli.py:985`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L985) |
+| function | `def cmd_outline(args)` | Execute outline command | [`src/cli.py:1003`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1003) |
+| function | `def cmd_brief(args)` | Generate or display .flyto/brief.md. | [`src/cli.py:1014`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1014) |
+| function | `def cmd_describe(args)` | Read or write file descriptions in .flyto/descriptions.jsonl. | [`src/cli.py:1023`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1023) |
+| function | `def cmd_task(args)` | Run local task grill/plan/gate/validate/feedback workflow through smart_task. | [`src/cli.py:1108`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1108) |
+| function | `def cmd_task_status(args)` | Show project-local resumable task state. | [`src/cli.py:1118`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1118) |
+| function | `def cmd_usage_record(args)` | Record one normalized task usage event. | [`src/cli.py:1123`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1123) |
+| function | `def cmd_usage_report(args)` | Render task efficiency evidence. | [`src/cli.py:1128`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1128) |
+| function | `def cmd_tools(args)` | Output structured JSON describing all available CLI commands and their arguments. | [`src/cli.py:1133`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1133) |
+| function | `def cmd_install_hook(args)` | Install or remove git post-commit hook for auto-reindexing. | [`src/cli.py:1419`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1419) |
+| function | `def cmd_demo(args)` | Quick 30-second value demo: scan + impact analysis. | [`src/cli.py:1486`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1486) |
+| function | `def _configure_mcp_settings(remove=False)` | Add or remove flyto-indexer from ~/.claude/settings.json. | [`src/cli.py:1621`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1621) |
+| function | `def cmd_setup(args)` | One command setup: scan + CLAUDE.md + MCP config. | [`src/cli.py:1668`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1668) |
+| function | `def cmd_setup_claude(args)` | Add flyto-indexer instructions to CLAUDE.md. | [`src/cli.py:1710`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1710) |
+| function | `def cmd_deps(args)` | Scan and list all external package dependencies. | [`src/cli.py:1763`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1763) |
+| function | `def cmd_profile(args)` | Generate a comprehensive project profile. | [`src/cli.py:1782`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1782) |
+| function | `def cmd_export(args)` | Export scan results as a single JSON bundle for flyto-engine upload. | [`src/cli.py:1802`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1802) |
+| function | `def cmd_secrets(args)` | Scan project for hardcoded secrets. | [`src/cli.py:1926`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1926) |
+| function | `def cmd_license(args)` | Detect project and dependency licenses. | [`src/cli.py:1951`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1951) |
+| function | `def cmd_docs(args)` | Analyze documentation coverage. | [`src/cli.py:1970`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1970) |
+| function | `def cmd_pr_risk(args)` | Analyze PR/changeset risk. | [`src/cli.py:1989`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1989) |
+| function | `def cmd_sbom(args)` | Export SBOM in CycloneDX 1.5 format. | [`src/cli.py:2011`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2011) |
+| function | `def cmd_framework(args)` | Detect project frameworks. | [`src/cli.py:2038`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2038) |
+| function | `def cmd_layers(args)` | Check architecture layer rules (import graph). | [`src/cli.py:2056`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2056) |
+| function | `def cmd_add_layer(args)` | Write a layer definition into .flyto-rules.yaml. | [`src/cli.py:2106`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2106) |
+| function | `def cmd_add_taint_source(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2129`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2129) |
+| function | `def cmd_add_taint_sink(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2145`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2145) |
+| function | `def _agent_guard_project(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2178`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2178) |
+| function | `def cmd_add_agent_guard(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2186`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2186) |
+| function | `def cmd_remove_agent_guard(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2192`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2192) |
+| function | `def cmd_list_agent_guards(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2198`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2198) |
+| function | `def cmd_add_taint_sanitizer(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2204`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2204) |
+| function | `def cmd_remove_taint_rule(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2223`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2223) |
+| function | `def cmd_list_taint_rules(args)` | The declaration and linked implementation are authoritative. | [`src/cli.py:2234`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2234) |
+| function | `def _detect_changed_files(args, engine, project_path)` | Detect changed files via git diff (if --base given) or index staleness. | [`src/cli.py:2245`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2245) |
+| function | `def _compute_symbol_impact(changed_files, engine)` | For each changed file, find symbols and compute impact chains. | [`src/cli.py:2283`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2283) |
+| function | `def _format_check_output(output, symbol_details, args)` | Print check results as JSON or human-readable text. | [`src/cli.py:2318`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2318) |
+| function | `def cmd_call_sites(args)` | Emit per-package call sites + local call graph as JSON. | [`src/cli.py:2345`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2345) |
+| function | `def cmd_agent_audit(args)` | AI-agent security policy audit. | [`src/cli.py:2419`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2419) |
+| function | `def cmd_taint(args)` | Analyze data flow / taint tracking. | [`src/cli.py:2466`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2466) |
+| function | `def cmd_research_priority(args)` | Rank the code paths most worth a security researcher's next hour. | [`src/cli.py:2555`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2555) |
+| function | `def cmd_check(args)` | CI-friendly impact check — exits non-zero when changes are risky. | [`src/cli.py:2623`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2623) |
+| function | `def cmd_verify(args)` | Run the no-external-dependency verification gate. | [`src/cli.py:2666`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2666) |
+| function | `def cmd_verify_workspace(args)` | Run verification across a workspace. | [`src/cli.py:2697`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2697) |
+| function | `def cmd_verify_baseline(args)` | Create, compare, or update a verification baseline. | [`src/cli.py:2724`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2724) |
+| function | `def _write_verify_report(path: str, content: str) -> None` | The declaration and linked implementation are authoritative. | [`src/cli.py:2752`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L2752) |
 
 ## `src/context/loader.py`
 

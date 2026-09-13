@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **203 Python modules**, **80,605 lines**, and **2,490 class/function/method declarations**.
+Generated inventory: **204 Python modules**, **80,804 lines**, and **2,498 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -49,7 +49,8 @@ Generated inventory: **203 Python modules**, **80,605 lines**, and **2,490 class
 | [`src/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/__init__.py#L1) | 31 | 0 | `engine, models, version` | Flyto2 Indexer - Code audit and smart indexing system. |
 | [`src/analyzer/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/__init__.py#L1) | 46 | 0 | `api_consistency, complexity, coverage, dead_code, duplicates, layers, rules, security, stale_files, taint, taint_dsl` | Code analyzers |
 | [`src/analyzer/agent_guards.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards.py#L1) | 192 | 9 | `__future__, collections, dataclasses, re` | Recognizing protective calls in code this analyzer did not write. |
-| [`src/analyzer/agent_policy.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L1) | 593 | 29 | `__future__, agent_guards, ast, dataclasses, pathlib, re` | AI-agent security-policy analyzer. |
+| [`src/analyzer/agent_guards_dsl.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_guards_dsl.py#L1) | 118 | 4 | `__future__, agent_guards, pathlib, yaml` | Declaring project guards in `.flyto-rules.yaml`. |
+| [`src/analyzer/agent_policy.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/agent_policy.py#L1) | 603 | 29 | `__future__, agent_guards, ast, dataclasses, pathlib, re` | AI-agent security-policy analyzer. |
 | [`src/analyzer/api_consistency.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/api_consistency.py#L1) | 290 | 15 | `dataclasses, pathlib, re, typing` | API format consistency check |
 | [`src/analyzer/api_drift.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/api_drift.py#L1) | 224 | 7 | `dataclasses, pathlib, re` | API Contract Drift detector — compare backend route definitions vs frontend call sites. |
 | [`src/analyzer/bus_factor.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/bus_factor.py#L1) | 153 | 5 | `collections, dataclasses, pathlib, subprocess` | Bus Factor analyzer — identify files with dangerously low contributor count. |
@@ -84,7 +85,7 @@ Generated inventory: **203 Python modules**, **80,605 lines**, and **2,490 class
 | [`src/auditor/llm_auditor.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/auditor/llm_auditor.py#L1) | 348 | 11 | `json, logging, openai, os, pathlib, requests, tqdm, typing` | LLM Auditor - Use LLM to understand code purpose |
 | [`src/auditor/workflow.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/auditor/workflow.py#L1) | 352 | 9 | `dataclasses, json, pathlib` | AI Workflow - High-level -> Mid-level -> Detail -> Impact Analysis |
 | [`src/bm25.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/bm25.py#L1) | 246 | 8 | `json, math, pathlib, re, safe_io, typing` | Pure-Python BM25 (Okapi BM25) index for code search. |
-| [`src/cli.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1) | 2688 | 58 | `analyzer, argparse, contextlib, dataclasses, datetime, dependency_scanner, doc_scanner, engine, flyto_output, fnmatch, framework_detector, hashlib` | Command-line interface for Flyto2 Indexer. |
+| [`src/cli.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1) | 2759 | 62 | `analyzer, argparse, contextlib, dataclasses, datetime, dependency_scanner, doc_scanner, engine, flyto_output, fnmatch, framework_detector, hashlib` | Command-line interface for Flyto2 Indexer. |
 | [`src/context/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/context/__init__.py#L1) | 5 | 0 | `loader` | Context loading module. |
 | [`src/context/loader.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/context/loader.py#L1) | 410 | 17 | `dataclasses, models, pathlib, re, typing` | Progressive Context Loading |
 | [`src/dependency_resolver.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_resolver.py#L1) | 510 | 18 | `logging, models` | Dependency resolution mixin for IndexEngine. |

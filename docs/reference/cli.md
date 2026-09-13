@@ -2,7 +2,7 @@
 
 # CLI Command Reference
 
-The `flyto-index` argparse surface contains **41 subcommands** and **198 command arguments**.
+The `flyto-index` argparse surface contains **44 subcommands** and **205 command arguments**.
 
 ## `flyto-index init`
 
@@ -453,27 +453,61 @@ Handler: `inline dispatch`. Source: [`src/cli.py:512`](https://github.com/flytoh
 | `--pattern` | yes | `` | `` | Match pattern (e.g., 'mysql.escape(', 'html.escape(') | [`src/cli.py:518`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L518) |
 | `--cleanses` | no | `*` | `` | Comma-separated vuln types this sanitizer clears, or '*' for all (default: *) | [`src/cli.py:519`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L519) |
 
-## `flyto-index remove-taint-rule`
+## `flyto-index add-agent-guard`
 
-Delete one declared source / sink / sanitizer. Built-in defaults are unaffected.
+Tell the agent-policy analyzer that a function of yours confines a dangerous operation. A declared guard is conclusive: the analyzer stops reporting the operations it protects.
 
 Handler: `inline dispatch`. Source: [`src/cli.py:521`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L521).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:529`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L529) |
-| `--kind` | yes | `` | `source, sink, sanitizer` | Which list the rule is in | [`src/cli.py:533`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L533) |
-| `--pattern` | yes | `` | `` | The pattern to delete, exactly as declared | [`src/cli.py:537`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L537) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:530`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L530) |
+| `--domain` | yes | `` | `path, url, credential_endpoint` | What this guard protects | [`src/cli.py:533`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L533) |
+| `--name` | yes | `` | `` | The function name, e.g. 'ensure_within_media_root' | [`src/cli.py:537`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L537) |
+
+## `flyto-index remove-agent-guard`
+
+Built-in recognition is unaffected.
+
+Handler: `inline dispatch`. Source: [`src/cli.py:541`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L541).
+
+| Argument | Required | Default | Choices | Purpose | Source |
+|---|---|---|---|---|---|
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:546`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L546) |
+| `--domain` | yes | `` | `path, url, credential_endpoint` |  | [`src/cli.py:549`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L549) |
+| `--name` | yes | `` | `` |  | [`src/cli.py:552`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L552) |
+
+## `flyto-index list-agent-guards`
+
+Built-in guard names are NOT included; this shows what the project decided.
+
+Handler: `inline dispatch`. Source: [`src/cli.py:554`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L554).
+
+| Argument | Required | Default | Choices | Purpose | Source |
+|---|---|---|---|---|---|
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:559`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L559) |
+
+## `flyto-index remove-taint-rule`
+
+Delete one declared source / sink / sanitizer. Built-in defaults are unaffected.
+
+Handler: `inline dispatch`. Source: [`src/cli.py:563`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L563).
+
+| Argument | Required | Default | Choices | Purpose | Source |
+|---|---|---|---|---|---|
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:571`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L571) |
+| `--kind` | yes | `` | `source, sink, sanitizer` | Which list the rule is in | [`src/cli.py:575`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L575) |
+| `--pattern` | yes | `` | `` | The pattern to delete, exactly as declared | [`src/cli.py:579`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L579) |
 
 ## `flyto-index list-taint-rules`
 
 List every project-declared source / sink / sanitizer. Built-in defaults are NOT included.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:542`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L542).
+Handler: `inline dispatch`. Source: [`src/cli.py:584`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L584).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:547`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L547) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:589`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L589) |
 
 ## `flyto-index task`
 
