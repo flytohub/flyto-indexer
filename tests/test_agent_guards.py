@@ -175,3 +175,54 @@ def test_remediation_never_names_internal_helpers(tmp_path):
     for f in findings:
         for token in leaked:
             assert token not in f.recommendation, f"{token} leaked into: {f.recommendation}"
+
+
+# ── key-to-endpoint: the same defect in a file-scoped detector ────────────────
+
+SRC_CRED_OWN_GUARD = '''
+import os
+import httpx
+
+def check_endpoint_allowed(url):
+    return url
+
+def send(base_url):
+    key = os.getenv("ANTHROPIC_API_KEY")
+    check_endpoint_allowed(base_url)
+    return httpx.post(base_url, headers={"Authorization": f"Bearer {key}"})
+'''
+
+SRC_CRED_NO_GUARD = '''
+import os
+import httpx
+
+def send(base_url):
+    key = os.getenv("ANTHROPIC_API_KEY")
+    return httpx.post(base_url, headers={"Authorization": f"Bearer {key}"})
+'''
+
+
+def test_credential_endpoint_guard_is_recognized_by_shape(tmp_path):
+    """key-to-endpoint tested one hardcoded name via substring match, so a
+    project checking its endpoint with its own helper was reported as checking
+    nothing. It is file-scoped, which is why it escaped the first pass."""
+    own = _analyze(tmp_path, SRC_CRED_OWN_GUARD)
+    bare = _analyze(tmp_path, SRC_CRED_NO_GUARD)
+
+    own_hits = _by_cat(own, "key-to-endpoint")
+    bare_hits = _by_cat(bare, "key-to-endpoint")
+    assert bare_hits, "an unchecked credential endpoint must still be reported"
+    assert own_hits, "a shape-only guard must not suppress the finding"
+    assert own_hits[0].confidence != bare_hits[0].confidence
+    assert "not verified" in own_hits[0].message
+
+
+def test_declared_credential_guard_suppresses(tmp_path):
+    guards = GuardRecognizer({CREDENTIAL_ENDPOINT: ["check_endpoint_allowed"]})
+    findings = _analyze(tmp_path, SRC_CRED_OWN_GUARD, guards=guards)
+    assert "key-to-endpoint" not in _cats(findings)
+
+
+def test_credential_remediation_names_no_internal_helper(tmp_path):
+    for f in _by_cat(_analyze(tmp_path, SRC_CRED_NO_GUARD), "key-to-endpoint"):
+        assert "assert_env_credential_endpoint_allowed" not in f.recommendation
