@@ -417,3 +417,12 @@ external services by default.
 
 Reason: private and airgapped repositories must remain analyzable without code
 egress.
+
+## 2026-09-15 — One Docker FROM classifier
+
+Security rules and dependency inventory consume `dockerfile_model` rather than
+maintaining separate FROM regexes. Only references to previously declared stage
+aliases are internal; a forward/unknown alias is still an external image. The
+model does not evaluate ARG or consult the host environment. Dynamic expressions
+are not claimed to be pinned, latest, or absent. Dockerfile images are build
+inputs, not a verified final production inventory.

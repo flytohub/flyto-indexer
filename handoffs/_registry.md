@@ -30,3 +30,5 @@
 | 2026-07-15 | Product API mock fixture exclusion | `2026-07-15-product-api-mock-fixture-exclusion.md` | Active |
 | 2026-07-15 | Rules policy verify gate | `2026-07-15-rules-policy-verify-gate.md` | Active |
 | 2026-06-21 | Project memory bootstrap | `2026-06-21-project-memory-bootstrap.md` | Active |
+
+- [2026-09-15 Docker stage identity](2026-09-15-docker-stage-identity.md)
