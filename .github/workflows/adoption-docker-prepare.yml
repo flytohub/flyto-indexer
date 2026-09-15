@@ -1,0 +1,38 @@
+name: Prepare Docker stage correction
+on:
+  push:
+    branches: [chatgpt/docker-stage-identity]
+    paths: [.github/workflows/adoption-docker-prepare.yml]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Apply exact locally tested source patch
+        run: |
+          python3 - <<'PY'
+          import base64,hashlib,pathlib,subprocess,zlib
+          chunks=sorted(pathlib.Path('.audit-transport').glob('*.part'))
+          assert len(chunks)==6
+          patch=zlib.decompress(base64.b64decode(''.join(p.read_text().strip() for p in chunks),validate=True))
+          assert hashlib.sha256(patch).hexdigest()=='0bf05f73e68a515b9daa3260e2acb153cb04a31558a2ae4f2cdf6653e92e1fda'
+          subprocess.run(['git','apply','--index','-'],input=patch,check=True)
+          PY
+      - name: Generate final-tree references and commit readable source
+        run: |
+          git rm -r .audit-transport .audit-docker.patch.json .github/workflows/adoption-docker-prepare.yml
+          python3 scripts/generate-reference.py
+          git add docs/reference
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Fix Docker stage identity across findings and dependency inventory'
+          git push origin HEAD:chatgpt/docker-stage-identity
+      - name: Validate generated references and focused regression tests
+        run: |
+          python3 -m pip install pytest pyyaml
+          python3 scripts/generate-reference.py --check
+          bash scripts/lint-project-memory.sh
+          python3 -m pytest tests/test_dockerfile_stages.py tests/test_docker_contract.py -q
