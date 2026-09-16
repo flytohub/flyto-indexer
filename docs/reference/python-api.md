@@ -1260,11 +1260,11 @@ Every declared class, function, nested function, and method in the package, supp
 |---|---|---|---|
 | class | `class Instruction` | The declaration and linked implementation are authoritative. | [`src/dockerfile_model.py:13`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_model.py#L13) |
 | class | `class FromReference` | The declaration and linked implementation are authoritative. | [`src/dockerfile_model.py:20`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_model.py#L20) |
-| function | `def heredoc_delimiters(arguments: str) -> list&#91;str&#93;` | Recognize shell heredoc operators, not quoted strings or here-strings. | [`src/dockerfile_model.py:31`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_model.py#L31) |
-| function | `def instructions(content: str) -> Iterator&#91;Instruction&#93;` | Yield logical instructions with original first-line coordinates. | [`src/dockerfile_model.py:59`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_model.py#L59) |
-| function | `def from_references(content: str) -> list&#91;FromReference&#93;` | Classify FROM against previously declared aliases, scoped to one file. | [`src/dockerfile_model.py:99`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_model.py#L99) |
-| function | `def image_version(image: str) -> tuple&#91;str, str&#93;` | Split registry-port-safe image names; a digest takes precedence over a tag. | [`src/dockerfile_model.py:119`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_model.py#L119) |
-| function | `def unpinned_image(image: str) -> bool` | True for external images using latest/implicit tags, not digest references. | [`src/dockerfile_model.py:129`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_model.py#L129) |
+| function | `def heredoc_delimiters(arguments: str) -> list&#91;str&#93;` | Recognize shell heredoc operators, not quoted strings or here-strings. | [`src/dockerfile_model.py:34`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_model.py#L34) |
+| function | `def instructions(content: str) -> Iterator&#91;Instruction&#93;` | Yield logical instructions with original first-line coordinates. | [`src/dockerfile_model.py:62`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_model.py#L62) |
+| function | `def from_references(content: str) -> list&#91;FromReference&#93;` | Classify FROM against previously declared aliases, scoped to one file. | [`src/dockerfile_model.py:102`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_model.py#L102) |
+| function | `def image_version(image: str) -> tuple&#91;str, str&#93;` | Split registry-port-safe image names; a digest takes precedence over a tag. | [`src/dockerfile_model.py:122`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_model.py#L122) |
+| function | `def unpinned_image(image: str) -> bool` | True for external images using latest/implicit tags, not digest references. | [`src/dockerfile_model.py:132`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_model.py#L132) |
 
 ## `src/dockerfile_scanner.py`
 

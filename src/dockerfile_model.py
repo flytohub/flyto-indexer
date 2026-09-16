@@ -4,8 +4,8 @@ This is not a build evaluator. Dynamic FROM expressions stay dynamic; no ARG is
 resolved from the scanner's environment. Consumers share stage classification so
 an internal build stage cannot become either an image dependency or a tag alert.
 """
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 from typing import Iterator
 
 
@@ -25,7 +25,10 @@ class FromReference:
 
 
 _HEREDOC = re.compile(r"<<-?\s*(?:'([^']+)'|\"([^\"]+)\"|([A-Za-z_][A-Za-z0-9_]*))")
-_FROM = re.compile(r"^(?:--platform(?:=|\s+)\S+\s+)?(\S+)(?:\s+AS\s+([A-Za-z0-9_.-]+))?\s*$", re.IGNORECASE)
+_FROM = re.compile(
+    r"^(?:--platform(?:=|\s+)\S+\s+)?(\S+)(?:\s+AS\s+([A-Za-z0-9_.-]+))?\s*$",
+    re.IGNORECASE,
+)
 
 
 def heredoc_delimiters(arguments: str) -> list[str]:

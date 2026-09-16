@@ -1,9 +1,11 @@
 """Docker stage identity regressions shared by findings and dependency inventory."""
 from pathlib import Path
+
 import pytest
+
+from src.dependency_scanner import _parse_dockerfile
 from src.dockerfile_model import from_references, image_version
 from src.dockerfile_scanner import _scan_single_dockerfile
-from src.dependency_scanner import _parse_dockerfile
 
 
 def inspect(tmp_path, content):
@@ -13,7 +15,12 @@ def inspect(tmp_path, content):
 
 
 def test_multistage_aliases_are_not_external_images(tmp_path):
-    content = 'FROM node:22-bookworm-slim AS base\nFROM base AS builder\nFROM base AS browser\nFROM base\n'
+    content = (
+        'FROM node:22-bookworm-slim AS base\n'
+        'FROM base AS builder\n'
+        'FROM base AS browser\n'
+        'FROM base\n'
+    )
     issues, deps = inspect(tmp_path, content)
     assert not [i for i in issues if i['rule'] == 'FROM_LATEST']
     assert [(d.name, d.version) for d in deps] == [('node', '22-bookworm-slim')]
@@ -36,7 +43,13 @@ def test_external_images_remain_visible(tmp_path, image, expected, alert):
 
 
 def test_platform_case_continuations_and_file_scope(tmp_path):
-    content = '# escape=`\nfrom --platform=$BUILDPLATFORM `\n node:22 AS Base\nFrOm bAsE aS build\nFROM scratch\n'
+    content = (
+        '# escape=`\n'
+        'from --platform=$BUILDPLATFORM `\n'
+        ' node:22 AS Base\n'
+        'FrOm bAsE aS build\n'
+        'FROM scratch\n'
+    )
     refs = from_references(content)
     assert [(r.line, r.kind) for r in refs] == [(2, 'external'), (4, 'stage'), (5, 'scratch')]
     assert from_references('FROM base')[0].kind == 'external'
