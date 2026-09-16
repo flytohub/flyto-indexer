@@ -987,3 +987,8 @@ Priorities depend on real-world usage feedback from V1.
 - **Gate history tracking** — session-aware gates that remember which phases were completed (currently stateless)
 - **Feedback loop** — post-task result recording (success/failure, actual files changed) to improve future scoring
 - **Multi-target dependency analysis** — analyze interactions between targets, not just individual target scoring
+
+## 2026-09-15
+- Fix false `FROM_LATEST` findings and phantom image dependencies for multi-stage aliases.
+- Share stage parsing between container rules and dependency inventory; preserve
+  actual untagged external image findings, digest references and source lines.

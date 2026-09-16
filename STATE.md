@@ -1,5 +1,17 @@
 # Flyto2 Indexer State
 
+## 2026-09-15 — Shared Docker stage identity
+
+Docker tag findings and dependency inventory now use one bounded, read-only
+instruction/stage model. Previously declared stage aliases and scratch are not
+external images; dynamic FROM expressions remain unresolved rather than receiving
+a fabricated latest tag. Platform flags, registry ports, digest references,
+continuations and heredoc bodies have regression coverage. No build executes.
+
+Local verification: 2679 tests passed, 4 skipped and 8 deselected using the
+existing CI exclusions; 15 focused Docker tests passed. Remote release gates
+and engine embedded-package synchronization remain required before release.
+
 ## Current State
 
 - Security discovery, taint's Python, regex, and index-caller paths, and

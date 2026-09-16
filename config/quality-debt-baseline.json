@@ -9,13 +9,13 @@
       "assignment": 42,
       "attr-defined": 87,
       "index": 21,
-      "no-redef": 361,
+      "no-redef": 366,
       "operator": 11,
       "return-value": 7,
       "union-attr": 43,
       "var-annotated": 116
     },
-    "total": 729
+    "total": 734
   },
   "policy": "exact baseline; every decrease requires a baseline update",
   "ruff": {
@@ -25,22 +25,22 @@
       "C401": 3,
       "E402": 6,
       "E501": 849,
-      "E741": 6,
+      "E741": 5,
       "F401": 83,
       "I001": 86,
-      "SIM102": 30,
+      "SIM102": 29,
       "SIM103": 13,
       "SIM105": 19,
       "SIM108": 6,
       "SIM110": 2,
       "SIM114": 11
     },
-    "total": 1128
+    "total": 1126
   },
   "schema_version": 1,
   "scope": "src",
   "tools": {
     "mypy": "mypy 2.3.0 (compiled: yes)",
-    "ruff": "ruff 0.16.6"
+    "ruff": "ruff 0.16.7"
   }
 }

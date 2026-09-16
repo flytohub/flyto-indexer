@@ -10,6 +10,11 @@ import os
 import re
 from pathlib import Path
 
+try:
+    from .dockerfile_model import from_references, instructions, unpinned_image
+except ImportError:
+    from dockerfile_model import from_references, instructions, unpinned_image
+
 logger = logging.getLogger("flyto-indexer.dockerfile-scanner")
 
 # Load Docker rules from YAML (with hardcoded fallback)
@@ -82,36 +87,29 @@ def _scan_single_dockerfile(file_path: Path, rel_path: str) -> list[dict]:
     except OSError:
         return issues
 
-    lines = content.splitlines()
+    refs = {ref.line: ref for ref in from_references(content)}
+    # USER can be inherited from an earlier local stage, but not from an
+    # unrelated stage. External-image USER metadata is not inspected here.
+    users: dict[str, bool] = {}
     has_user_instruction = False
+    current_alias = ""
 
-    for line_num, line in enumerate(lines, start=1):
-        stripped = line.strip()
-
-        # Skip comments and empty lines
-        if not stripped or stripped.startswith("#"):
-            continue
-
+    for instruction in instructions(content):
+        line_num = instruction.line
+        stripped = instruction.keyword + " " + instruction.arguments
         upper = stripped.upper()
-
-        # Rule 1: FROM with :latest tag
-        if upper.startswith("FROM "):
-            # Parse the image reference
-            from_match = re.match(
-                r"FROM\s+(?:--platform=\S+\s+)?(\S+?)(?:\s+[Aa][Ss]\s+\S+)?$",
-                stripped, re.IGNORECASE,
-            )
-            if from_match:
-                image = from_match.group(1)
-                if "${" not in image:  # Skip ARG references
-                    if image.endswith(":latest") or (":" not in image and image != "scratch"):
-                        issues.append({
-                            "file": rel_path,
-                            "line": line_num,
-                            "rule": "FROM_LATEST",
-                            "severity": "MEDIUM",
-                            "description": f"Using ':latest' or untagged image '{image}' — pin to a specific version for reproducibility",
-                        })
+        if instruction.keyword == "FROM":
+            if current_alias:
+                users[current_alias] = has_user_instruction
+            ref = refs.get(line_num)
+            has_user_instruction = bool(ref and ref.kind == "stage" and users.get(ref.image.casefold()))
+            current_alias = ref.alias.casefold() if ref else ""
+            if ref and ref.kind == "external" and unpinned_image(ref.image):
+                issues.append({
+                    "file": rel_path, "line": line_num, "rule": "FROM_LATEST",
+                    "severity": "MEDIUM",
+                    "description": f"External image '{ref.image}' uses latest or an implicit tag; pin the image version or digest",
+                })
 
         # Rule 3: EXPOSE with sensitive ports
         if upper.startswith("EXPOSE "):
@@ -182,18 +180,16 @@ def _scan_single_dockerfile(file_path: Path, rel_path: str) -> list[dict]:
         if upper.startswith("USER "):
             has_user_instruction = True
 
-    # Rule 2: No USER instruction — running as root
-    if not has_user_instruction and lines:
-        # Only flag if it's a real Dockerfile with FROM
-        has_from = any(l.strip().upper().startswith("FROM ") for l in lines if l.strip() and not l.strip().startswith("#"))
-        if has_from:
-            issues.append({
-                "file": rel_path,
-                "line": 1,
-                "rule": "NO_USER",
-                "severity": "HIGH",
-                "description": "No USER instruction — container runs as root. Add 'USER nonroot' or 'USER 1000' for least privilege",
-            })
+    # Missing USER is a deployment review condition, not proof of UID 0:
+    # an external image may itself set USER. Never claim observed root access.
+    if refs and not has_user_instruction:
+        issues.append({
+            "file": rel_path,
+            "line": max(refs),
+            "rule": "NO_USER",
+            "severity": "HIGH",
+            "description": "Final stage has no locally established USER; inspect the base image and built artifact to verify least-privilege execution",
+        })
 
     return issues
 

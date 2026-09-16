@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **204 Python modules**, **80,804 lines**, and **2,498 class/function/method declarations**.
+Generated inventory: **205 Python modules**, **80,923 lines**, and **2,505 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -89,10 +89,11 @@ Generated inventory: **204 Python modules**, **80,804 lines**, and **2,498 class
 | [`src/context/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/context/__init__.py#L1) | 5 | 0 | `loader` | Context loading module. |
 | [`src/context/loader.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/context/loader.py#L1) | 410 | 17 | `dataclasses, models, pathlib, re, typing` | Progressive Context Loading |
 | [`src/dependency_resolver.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_resolver.py#L1) | 510 | 18 | `logging, models` | Dependency resolution mixin for IndexEngine. |
-| [`src/dependency_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_scanner.py#L1) | 1263 | 34 | `dataclasses, datetime, json, logging, os, pathlib, re, safe_xml, tomli, tomllib, typing, xml` | Dependency/package version scanner — extracts external package dependencies from manifest files across multiple ecosystems. |
+| [`src/dependency_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_scanner.py#L1) | 1252 | 34 | `dataclasses, datetime, dockerfile_model, json, logging, os, pathlib, re, safe_xml, tomli, tomllib, typing` | Dependency/package version scanner — extracts external package dependencies from manifest files across multiple ecosystems. |
 | [`src/diff_impact.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/diff_impact.py#L1) | 498 | 12 | `index_store, os, pathlib, re, signature, subprocess, test_evidence, tools, typing` | Diff-based Impact Analysis — parse git diff, match changed hunks to indexed symbols, classify change type (signature vs body), and run impact analysis. |
 | [`src/doc_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L1) | 563 | 13 | `dataclasses, fnmatch, gzip, json, logging, os, pathlib, re, typing, urllib` | Documentation Coverage Scanner — analyze documentation completeness. |
-| [`src/dockerfile_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_scanner.py#L1) | 240 | 3 | `logging, os, pathlib, re, rule_loader` | Dockerfile & IaC Scanner — detect security misconfigurations in Dockerfiles and docker-compose files. |
+| [`src/dockerfile_model.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_model.py#L1) | 134 | 7 | `dataclasses, re, typing` | Shared, read-only Dockerfile instruction and stage identity model. |
+| [`src/dockerfile_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dockerfile_scanner.py#L1) | 236 | 3 | `dockerfile_model, logging, os, pathlib, re, rule_loader` | Dockerfile & IaC Scanner — detect security misconfigurations in Dockerfiles and docker-compose files. |
 | [`src/embedding.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/embedding.py#L1) | 96 | 5 | `logging, pathlib, sentence_transformers, typing` | Embedding-based semantic search — optional hybrid layer. |
 | [`src/engine.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/engine.py#L1) | 772 | 22 | `context, datetime, dependency_resolver, glob, hashlib, index_store, indexer, json, logging, models, pathlib, reverse_index` | Main indexing engine - orchestrates the entire flow. |
 | [`src/execution_guard.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/execution_guard.py#L1) | 255 | 16 | `time, typing` | Execution Guard — server-side enforcement for task execution plans. |

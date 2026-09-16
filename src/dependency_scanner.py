@@ -25,6 +25,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+try:
+    from .dockerfile_model import from_references, image_version
+except ImportError:
+    from dockerfile_model import from_references, image_version
+
 logger = logging.getLogger("flyto-indexer.dependency-scanner")
 
 # Directories to skip when walking
@@ -728,12 +733,6 @@ def _parse_gemfile_lock(file_path: Path) -> dict[str, str]:
 # Docker (Dockerfile)
 # ---------------------------------------------------------------------------
 
-_DOCKERFILE_FROM_RE = re.compile(
-    r"^\s*FROM\s+(?:--platform=\S+\s+)?(\S+?)(?:\s+[Aa][Ss]\s+\S+)?\s*$",
-    re.IGNORECASE,
-)
-
-
 def _parse_dockerfile(file_path: Path, project_path: Path) -> list[PackageDependency]:
     """Parse Dockerfile for FROM base images."""
     deps = []
@@ -744,24 +743,14 @@ def _parse_dockerfile(file_path: Path, project_path: Path) -> list[PackageDepend
         logger.warning("Failed to read %s: %s", file_path, e)
         return deps
 
-    for line in content.splitlines():
-        m = _DOCKERFILE_FROM_RE.match(line)
-        if m:
-            image = m.group(1)
-            # Skip ARG references like ${BASE_IMAGE}
-            if "${" in image:
-                continue
-            if ":" in image:
-                name, tag = image.rsplit(":", 1)
-            else:
-                name, tag = image, "latest"
-            # Skip scratch
-            if name == "scratch":
-                continue
-            deps.append(PackageDependency(
-                name=name, version=tag, pinned_version=tag,
-                ecosystem="docker", scope="production", source_file=source,
-            ))
+    for ref in from_references(content):
+        if ref.kind != "external":
+            continue
+        name, version = image_version(ref.image)
+        deps.append(PackageDependency(
+            name=name, version=version, pinned_version=version,
+            ecosystem="docker", scope="build", source_file=source,
+        ))
     return deps
 
 
