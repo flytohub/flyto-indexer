@@ -1,0 +1,32 @@
+name: Cross-file workspace (temporary)
+on:
+  push:
+    branches: [codex/cross-file-evidence]
+    paths: [.github/workflows/cross-file-workspace.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 6758b92bf9cf010a50effd7ab3aed3c3a2aa7dfb
+          persist-credentials: false
+      - name: Export only committed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 6758b92bf9cf010a50effd7ab3aed3c3a2aa7dfb
+          mkdir -p /tmp/cross-file-source
+          git rev-parse HEAD > /tmp/cross-file-source/commit.txt
+          git rev-parse HEAD^{tree} > /tmp/cross-file-source/tree.txt
+          git archive --format=tar.gz HEAD > /tmp/cross-file-source/source.tar.gz
+          (cd /tmp/cross-file-source && sha256sum source.tar.gz > manifest.sha256)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: cross-file-source
+          path: /tmp/cross-file-source
+          retention-days: 2
+          if-no-files-found: error
