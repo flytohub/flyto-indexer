@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **205 Python modules**, **80,923 lines**, and **2,505 class/function/method declarations**.
+Generated inventory: **205 Python modules**, **80,939 lines**, and **2,507 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -72,7 +72,7 @@ Generated inventory: **205 Python modules**, **80,923 lines**, and **2,505 class
 | [`src/analyzer/rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/rules.py#L1) | 485 | 16 | `dataclasses, datetime, fnmatch, layers, logging, pathlib, re, yaml` | Project rules engine — loads .flyto-rules.yaml and checks compliance. |
 | [`src/analyzer/security.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/security.py#L1) | 586 | 20 | `ast, dataclasses, importlib, pathlib, re, rule_loader` | Security scanning - detect potential security issues |
 | [`src/analyzer/stale_files.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/stale_files.py#L1) | 216 | 11 | `collections, dataclasses, datetime, pathlib, subprocess` | Stale file detection - use git history to find files untouched for a long time |
-| [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 2634 | 69 | `analyzer, ast, collections, dataclasses, finding_identity, importlib, logging, pathlib, profile, re, taint_lsp, taint_rules` | AST-based taint analysis engine. |
+| [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 2636 | 71 | `analyzer, ast, collections, dataclasses, finding_identity, importlib, logging, pathlib, profile, re, taint_lsp, taint_rules` | AST-based taint analysis engine. |
 | [`src/analyzer/taint_dsl.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L1) | 408 | 17 | `json, logging, pathlib, re, yaml` | Taint DSL — read/write helpers for the `taint:` block in .flyto-rules.yaml. |
 | [`src/analyzer/taint_lsp.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_lsp.py#L1) | 203 | 7 | `__future__, ast, logging, lsp, os, pathlib, typing` | Type-aware callee verification for the cross-function taint pass. |
 | [`src/analyzer/taint_rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_rules.py#L1) | 618 | 0 | `none` | Default taint analysis rules — sources, sinks, and sanitizers by language. |
@@ -88,7 +88,7 @@ Generated inventory: **205 Python modules**, **80,923 lines**, and **2,505 class
 | [`src/cli.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1) | 2759 | 62 | `analyzer, argparse, contextlib, dataclasses, datetime, dependency_scanner, doc_scanner, engine, flyto_output, fnmatch, framework_detector, hashlib` | Command-line interface for Flyto2 Indexer. |
 | [`src/context/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/context/__init__.py#L1) | 5 | 0 | `loader` | Context loading module. |
 | [`src/context/loader.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/context/loader.py#L1) | 410 | 17 | `dataclasses, models, pathlib, re, typing` | Progressive Context Loading |
-| [`src/dependency_resolver.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_resolver.py#L1) | 510 | 18 | `logging, models` | Dependency resolution mixin for IndexEngine. |
+| [`src/dependency_resolver.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_resolver.py#L1) | 523 | 18 | `logging, models` | Dependency resolution mixin for IndexEngine. |
 | [`src/dependency_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/dependency_scanner.py#L1) | 1252 | 34 | `dataclasses, datetime, dockerfile_model, json, logging, os, pathlib, re, safe_xml, tomli, tomllib, typing` | Dependency/package version scanner — extracts external package dependencies from manifest files across multiple ecosystems. |
 | [`src/diff_impact.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/diff_impact.py#L1) | 498 | 12 | `index_store, os, pathlib, re, signature, subprocess, test_evidence, tools, typing` | Diff-based Impact Analysis — parse git diff, match changed hunks to indexed symbols, classify change type (signature vs body), and run impact analysis. |
 | [`src/doc_scanner.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/doc_scanner.py#L1) | 563 | 13 | `dataclasses, fnmatch, gzip, json, logging, os, pathlib, re, typing, urllib` | Documentation Coverage Scanner — analyze documentation completeness. |
@@ -149,7 +149,7 @@ Generated inventory: **205 Python modules**, **80,923 lines**, and **2,505 class
 | [`src/scanner/dart.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/dart.py#L1) | 392 | 17 | `__future__, base, models, pathlib, re, scanner, tokenizer` | Dart scanner for Flutter applications and standalone Dart packages. |
 | [`src/scanner/go.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/go.py#L1) | 829 | 22 | `base, models, pathlib, re, scanner, tokenizer` | Go scanner using token-aware regex parsing. |
 | [`src/scanner/java.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/java.py#L1) | 531 | 14 | `base, models, pathlib, re, scanner` | Java scanner using regex-based parsing. |
-| [`src/scanner/python.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/python.py#L1) | 546 | 17 | `ast, base, models, pathlib, scanner, typing` | Python scanner using AST analysis. |
+| [`src/scanner/python.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/python.py#L1) | 547 | 17 | `ast, base, models, pathlib, scanner, typing` | Python scanner using AST analysis. |
 | [`src/scanner/rust.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/rust.py#L1) | 460 | 13 | `base, models, pathlib, re, scanner` | Rust scanner using regex-based parsing. |
 | [`src/scanner/tokenizer.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/tokenizer.py#L1) | 282 | 3 | `re` | Lightweight token-aware text processing for scanners. |
 | [`src/scanner/typescript.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/scanner/typescript.py#L1) | 931 | 18 | `base, models, pathlib, re, scanner, tokenizer` | TypeScript/JavaScript scanner using token-aware regex parsing. |
