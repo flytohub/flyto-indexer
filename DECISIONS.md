@@ -1,5 +1,21 @@
 # Decisions
 
+## 2026-09-19 — Bind Python callees inside the existing taint pass
+
+Resolve unambiguous module imports from admitted ASTs before consulting the
+existing optional LSP/name-only fallback. Do not introduce a separate scanner,
+network resolution, executed imports, or a second finding identity. Explicit
+bindings to other modules reject name collisions; unknown bindings remain
+heuristic rather than becoming a proof. Parameter-to-sink summaries retain
+one shortest path per real terminal sink, with bounded rounds and caller work.
+Coverage and confidence must disclose fallback and every exhausted budget.
+
+Each scan owns a fresh source/AST snapshot. Read only bounded regular files,
+check file identity before and after reading, and refuse symbolic-link traversal.
+The byte budget is not a whole-process memory promise. Declaration-only source
+models, dynamic dispatch, comprehensions and general Python runtime semantics
+are not fully modeled; absence of a candidate is not a safety verdict.
+
 ## 2026-09-01 - Amendment execution planning is active; authority stays cumulative
 
 Decision: for an ordinary amendment, pass only the validated current

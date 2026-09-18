@@ -77,6 +77,10 @@ class CalleeVerifier:
         ] = None
         self._probed = False
 
+    def reset_scan(self) -> None:
+        """Each scan receives its own attribution counts and round-trip budget."""
+        self.checks = self.verified = self.rejected = self.unknown = 0
+
     # ── availability ────────────────────────────────────────────────────────
 
     def _probe(self) -> None:
