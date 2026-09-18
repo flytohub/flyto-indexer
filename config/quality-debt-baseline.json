@@ -5,8 +5,8 @@
   },
   "mypy": {
     "codes": {
-      "arg-type": 41,
-      "assignment": 42,
+      "arg-type": 40,
+      "assignment": 40,
       "attr-defined": 87,
       "index": 21,
       "no-redef": 366,
@@ -15,16 +15,16 @@
       "union-attr": 43,
       "var-annotated": 116
     },
-    "total": 734
+    "total": 731
   },
   "policy": "exact baseline; every decrease requires a baseline update",
   "ruff": {
     "codes": {
-      "B007": 12,
+      "B007": 11,
       "B904": 2,
       "C401": 3,
       "E402": 6,
-      "E501": 849,
+      "E501": 848,
       "E741": 5,
       "F401": 83,
       "I001": 86,
@@ -32,10 +32,10 @@
       "SIM103": 13,
       "SIM105": 19,
       "SIM108": 6,
-      "SIM110": 2,
+      "SIM110": 1,
       "SIM114": 11
     },
-    "total": 1126
+    "total": 1123
   },
   "schema_version": 1,
   "scope": "src",

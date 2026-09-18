@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-19
+
+- Reuse Python AST taint for import-bound cross-file calls, keyword/literal
+  argument binding, correct terminal sink provenance and multi-hop evidence.
+- Preserve unsafe alternatives across caller branches and respect sanitizer
+  context. Explicit module name collisions are rejected; unresolved calls and
+  regex matches no longer claim typed/AST proof.
+- Bound taint source snapshots and disclose file/parse/budget failures. Repeated
+  analysis does not reuse an earlier scan's source or dangerous summaries.
+
 ## 2026-08-13
 
 - Made task edit authority exact and deterministic: BM25-only labels such as

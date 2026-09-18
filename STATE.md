@@ -1,5 +1,19 @@
 # Flyto2 Indexer State
 
+## 2026-09-19 — Import-bound Python cross-file candidates
+
+The existing taint caller pass resolves unambiguous local module imports,
+relative imports and aliases without an LSP or executing source. Argument
+binding includes keywords and literal unpacking; terminal sink/source locations
+survive relays. Ambiguous/dynamic receivers retain explicitly heuristic
+candidates, not typed or runtime proof. Per-category sanitizer and branch-state
+handling prevent unrelated encoders or one safe branch from hiding a flow.
+
+All taint phases share a bounded admitted source snapshot (1 MiB per file,
+32 MiB total, 4,000 files), with file-identity checks and explicit read/parse/
+traversal gaps. Existing function, result and cross-depth budgets remain.
+See `handoffs/2026-09-19-python-call-binding.md` for tests and remaining limits.
+
 ## 2026-09-15 — Shared Docker stage identity
 
 Docker tag findings and dependency inventory now use one bounded, read-only
@@ -48,7 +62,7 @@ and engine embedded-package synchronization remain required before release.
   field-sensitive (self attributes, context-manager sinks) with YAML-
   configurable sources/sinks/sanitizers/propagators, and the
   `security-triage` skill orchestrates a budget-aware funnel. Honest bound:
-  cross-function taint is name-based, so raw recall is mid — the output is a
+  Python module calls can be import-bound; unresolved calls remain name-based, so raw recall is limited — the output is a
   ranked reading list with labelled evidence tiers, not a verdict, and it
   reports what it did not check. Deep type-resolved dataflow is deliberately
   out of scope to keep the 20-tool, zero-dependency surface.
@@ -57,7 +71,7 @@ and engine embedded-package synchronization remain required before release.
   (which a SARIF result does not carry) compose into one ordered list. A proven
   flow outranks an external finding; an overlap is corroboration, not a second
   lead. Measured on eight projects across four languages; the honest bound is
-  that raw cross-function recall stays name-based.
+  that dynamic/receiver call attribution and some source models remain name-based.
 - Project root, index directory, project label, and cache identity now resolve
   through one immutable operation scope shared by CLI, MCP/API, task planning,
   search, Grill, watcher, maintenance, and references. Explicit
