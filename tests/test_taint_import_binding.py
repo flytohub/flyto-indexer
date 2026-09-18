@@ -241,3 +241,14 @@ def test_regex_fallback_does_not_claim_ast_proof(tmp_path, monkeypatch):
     for flow in result.taint_flows:
         assert "intraprocedural_ast" not in flow.to_dict()["confidence"]["basis"]
         assert flow.to_dict()["confidence"]["level"] == "medium"
+
+
+def test_repeated_scan_does_not_reuse_lsp_budget_or_counts(tmp_path, monkeypatch):
+    analyzer, _ = analyze(tmp_path, {"app.py": "def clean():\n    return 1\n"}, monkeypatch)
+    verifier = analyzer._callee_verifier()
+    verifier.checks = verifier.max_checks
+    verifier.verified, verifier.rejected, verifier.unknown = 7, 8, 9
+    result = analyzer.analyze_full()
+    assert verifier.checks == verifier.verified == verifier.rejected == verifier.unknown == 0
+    assert result.callee_resolution["static_verified"] == 0
+    assert result.callee_resolution["name_only_calls"] == 0

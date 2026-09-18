@@ -767,6 +767,8 @@ class TaintAnalyzer:
 
     def analyze(self) -> list[TaintFlow]:
         """Run full taint analysis. Returns list of TaintFlow findings."""
+        if self._verifier is not None:
+            self._verifier.reset_scan()
         self._truncation = set()
         self._functions_analyzed = 0
         self._dangerous_functions = {}
