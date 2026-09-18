@@ -52,7 +52,10 @@ class PythonScanner(BaseScanner):
                 target_id=imp["module"],  # Resolved during post-processing
                 dep_type=DependencyType.IMPORTS,
                 source_line=imp["line"],
-                metadata={"names": imp["names"], **({"aliases": imp["aliases"]} if imp.get("aliases") else {})},
+                metadata={
+                    "names": imp["names"],
+                    **({"aliases": imp["aliases"]} if imp.get("aliases") else {}),
+                },
             )
             dependencies.append(dep)
 

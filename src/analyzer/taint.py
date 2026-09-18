@@ -1148,7 +1148,7 @@ class TaintAnalyzer:
             self._sink_count += content.count(pat_clean)
 
     def _analyze_function_ast(
-        self, func_node: ast.FunctionDef, file_path: str, content: str,
+        self, func_node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str, content: str,
         qualified_name: str = "",
     ):
         """Analyze a single function for taint flows."""
@@ -1185,7 +1185,7 @@ class TaintAnalyzer:
             or f.file_path != file_path
         ]
 
-    def _framework_source_params(self, func_node: ast.FunctionDef) -> dict[str, str]:
+    def _framework_source_params(self, func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> dict[str, str]:
         """Parameters a web framework fills with request data.
 
         Matches the declaration, not a call: `limit: str = Query(...)`,
@@ -1643,8 +1643,10 @@ class TaintAnalyzer:
                 if not state or state[0] != f"param:{node.id}":
                     continue
                 param_idx = self._find_param_index(func_name, node.id, file_path)
+                if param_idx is None:
+                    continue
                 key = (param_idx, node.id, vuln_type, call.lineno)
-                if param_idx is None or key in seen:
+                if key in seen:
                     continue
                 seen.add(key)
                 existing.append(_DangerousParameter(
@@ -2173,7 +2175,10 @@ class TaintAnalyzer:
             if caller_id and callee_raw:
                 # A resolved import can use an alias; keep the actual call
                 # expression and the declared target instead of losing both.
-                target_name = resolved.get("name", callee_raw) if resolved.get("type") in ("function", "method") else callee_raw
+                target_name = (
+                    resolved.get("name", callee_raw)
+                    if resolved.get("type") in ("function", "method") else callee_raw
+                )
                 callee_name = target_name.rsplit(".", 1)[-1]
                 callee_to_callers[callee_name].append((caller_id, callee_raw, call_line, resolved))
 
@@ -2205,7 +2210,8 @@ class TaintAnalyzer:
                 for df_file, df_name, param_info_list in entries:
                     if resolved and resolved.get("path") != df_file:
                         continue
-                    if resolved.get("type") in ("function", "method") and resolved.get("name") != df_name:
+                    if (resolved.get("type") in ("function", "method")
+                            and resolved.get("name") != df_name):
                         continue
                     self._check_caller_for_taint(
                         caller_file, caller_func, func_name,
@@ -2236,7 +2242,9 @@ class TaintAnalyzer:
                     self._truncation.add("finding_cap")
                     return
 
-                caller_file = caller_ref if isinstance(caller_ref, str) else caller_ref.get("file", "")
+                caller_file = (
+                    caller_ref if isinstance(caller_ref, str) else caller_ref.get("file", "")
+                )
                 if not caller_file:
                     continue
 
@@ -2266,7 +2274,10 @@ class TaintAnalyzer:
             return
 
         # Cycle detection — skip if we've already visited this exact traversal
-        visit_key = (caller_file, caller_func_name, callee_file, callee_name, callee_expr, tuple(param_info_list), depth)
+        visit_key = (
+            caller_file, caller_func_name, callee_file, callee_name,
+            callee_expr, tuple(param_info_list), depth,
+        )
         if visit_key in self._cross_visited:
             return
         self._cross_visited.add(visit_key)
@@ -2377,7 +2388,8 @@ class TaintAnalyzer:
                 # Exact segment match only. The previous `callee_name in
                 # call_name` substring test attributed `run(...)` flows to any
                 # call whose name merely contained it (`prerun_hook`).
-                if (callee_expr and call_name != callee_expr) or (not callee_expr and callee_name != call_name_short):
+                if ((callee_expr and call_name != callee_expr)
+                        or (not callee_expr and callee_name != call_name_short)):
                     continue
 
                 # Then ask the language server whether this call site really
@@ -2429,7 +2441,9 @@ class TaintAnalyzer:
                                     flow_chain=chain + [f"-> {callee_name}()"],
                                     recommendation=info.recommendation,
                                     source_file=caller_file,
-                                    source_line=self._source_coordinate(caller_file, caller_func, src, call.lineno),
+                                    source_line=self._source_coordinate(
+                                        caller_file, caller_func, src, call.lineno,
+                                    ),
                                     sink_file=info.sink_file,
                                     sink_line=info.sink_line,
                                     path=path_steps,
@@ -2514,13 +2528,14 @@ class TaintAnalyzer:
         for node, qualified in _functions_with_qualnames(tree):
             if function and qualified != function:
                 continue
-            pending = list(node.body)
+            pending: list[ast.AST] = list(node.body)
             while pending:
                 child = pending.pop()
                 if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                     continue
                 line = getattr(child, "lineno", 0)
-                if isinstance(child, ast.expr) and 0 < line <= before and _safe_unparse(child) == source:
+                if (isinstance(child, ast.expr) and 0 < line <= before
+                        and _safe_unparse(child) == source):
                     lines.add(line)
                 pending.extend(ast.iter_child_nodes(child))
         return next(iter(lines)) if len(lines) == 1 else 0
