@@ -253,6 +253,14 @@ class DependencyResolverMixin:
 
     def _resolve_call_deps(self, name_to_ids, file_imports, module_to_symbols, changed_paths: set = None):
         """Resolve each call dependency using import information and module lookups."""
+        aliases: dict[str, dict[str, tuple[str, str]]] = {}
+        for imported in self.index.dependencies.values():
+            if imported.dep_type.value != "imports":
+                continue
+            path = self._extract_path(imported.source_id)
+            for local, original in imported.metadata.get("aliases", {}).items():
+                if path and local and original:
+                    aliases.setdefault(path, {})[local] = (original, imported.target_id)
         for _dep_id, dep in self.index.dependencies.items():
             if dep.dep_type.value != "calls":
                 continue
@@ -268,7 +276,12 @@ class DependencyResolverMixin:
 
             # Handle simple calls: useToast()
             call_name = target.split('.')[0]  # Take the first part
-            resolved = self._resolve_simple_call(call_name, imports, name_to_ids, module_to_symbols)
+            binding = aliases.get(source_path, {}).get(call_name)
+            if binding and "." not in target:
+                original, module = binding
+                resolved = self._resolve_simple_call(original, {original: module}, name_to_ids, module_to_symbols)
+            else:
+                resolved = self._resolve_simple_call(call_name, imports, name_to_ids, module_to_symbols)
 
             # Handle method calls: obj.method()
             if not resolved and "." in target:

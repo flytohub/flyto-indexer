@@ -1,5 +1,20 @@
 # Flyto2 Indexer State
 
+## 2026-09-19 — Cross-file sink provenance and bounded traversal
+
+Cross-function parameter summaries retain the terminal file, line, expression
+and intermediate path. Explicit indexed imports constrain target matching,
+including imported aliases; same-named methods no longer share an unqualified
+summary. The legacy reverse-index fallback uses the same walker and cannot
+reintroduce a dependency graph's rejected namesake.
+
+Constant overwrites clear stale taint, named arguments use the existing parameter
+summary, repeated analysis clears per-run traversal state, and regex/caller/depth
+limits remain visible. Cross-function findings are qualified candidates, not
+runtime or whole-program proofs. Ambiguous source lines remain unknown rather
+than being replaced by the call-site line. No new scanner or runtime dependency.
+
+
 ## 2026-09-15 — Shared Docker stage identity
 
 Docker tag findings and dependency inventory now use one bounded, read-only

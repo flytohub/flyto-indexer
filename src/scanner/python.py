@@ -52,7 +52,7 @@ class PythonScanner(BaseScanner):
                 target_id=imp["module"],  # Resolved during post-processing
                 dep_type=DependencyType.IMPORTS,
                 source_line=imp["line"],
-                metadata={"names": imp["names"]},
+                metadata={"names": imp["names"], **({"aliases": imp["aliases"]} if imp.get("aliases") else {})},
             )
             dependencies.append(dep)
 
@@ -219,6 +219,7 @@ class PythonScanner(BaseScanner):
                 imports.append({
                     "module": node.module,
                     "names": names,
+                    "aliases": {a.asname: a.name for a in node.names if a.asname},
                     "line": node.lineno,
                     "is_relative": (node.level or 0) > 0,
                 })

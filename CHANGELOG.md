@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — cross-file evidence
+
+- Preserve terminal sink coordinates through cross-function wrappers and aliases.
+- Reject import-bound namesakes; distinguish unknown source coordinates from call sites.
+- Keep taint runs repeatable and disclose bounded caller, depth and finding traversal.
+
+
 ## 2026-08-13
 
 - Made task edit authority exact and deterministic: BM25-only labels such as

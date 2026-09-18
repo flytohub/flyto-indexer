@@ -160,6 +160,8 @@ class TaintFlow:
     sink_line: int = 0
     path: list[str] = field(default_factory=list)  # ["file:func:line", ...]
     sanitized: bool = False
+    # Evidence qualification, not a claim of runtime exploitability.
+    resolution: str = ""
 
     def to_dict(self) -> dict:
         source_file = self.source_file or self.file_path
@@ -174,9 +176,11 @@ class TaintFlow:
                 "source": self.source_expr,
                 "sink": self.sink_expr,
             },
-            confidence="high" if self.path else "medium",
+            confidence="high" if self.path and not self.resolution else "medium",
             confidence_basis=(
-                ["source_to_sink_path", "typed_or_cross_function_resolution"]
+                ["source_to_sink_path", self.resolution]
+                if self.resolution
+                else ["source_to_sink_path", "intraprocedural_ast"]
                 if self.path
                 else ["source_to_sink_dataflow"]
             ),
@@ -198,7 +202,7 @@ class TaintFlow:
             **evidence,
             "source": self.source_expr,
             "source_file": source_file,
-            "source_line": self.source_line or self.line,
+            "source_line": self.source_line if self.resolution else self.source_line or self.line,
             "sink": self.sink_expr,
             "sink_file": sink_file,
             "sink_line": sink_line,
@@ -208,6 +212,22 @@ class TaintFlow:
             "category": self.category,
             "recommendation": self.recommendation,
         }
+
+
+
+@dataclass(frozen=True)
+class _DangerousParameter:
+    """A parameter-to-sink summary with immutable terminal provenance."""
+
+    index: int
+    name: str
+    category: str
+    severity: str
+    recommendation: str
+    sink_file: str
+    sink_line: int
+    sink_expr: str
+    path: tuple[str, ...]
 
 
 @dataclass
@@ -623,15 +643,16 @@ class TaintAnalyzer:
             self._positional_propagators.update(extra_pos)
 
         # Cross-function: functions whose param reaches a sink
-        # Maps (file, func_name) -> list of (param_index, param_name, vuln_type, severity, rec)
+        # Maps (file, qualified function) to terminal sink summaries.
         self._dangerous_functions: dict[
-            tuple[str, str], list[tuple[int, str, str, str, str]]
+            tuple[str, str], list[_DangerousParameter]
         ] = {}
 
         # Visited set for cross-function traversal — prevents exponential
         # blowup and infinite loops when call graph has cycles.
-        # Key: (caller_file, caller_func, callee_name, depth)
-        self._cross_visited: set[tuple[str, str, str, int]] = set()
+        # Includes target file and summary: a namesake or another sink is not
+        # the same traversal. Cleared for every analyze invocation.
+        self._cross_visited: set[tuple] = set()
 
         # Source/sink counts for DataFlowResult
         self._source_count = 0
@@ -677,6 +698,10 @@ class TaintAnalyzer:
         self._func_class: dict[tuple[str, int], str] = {}
         self._current_class = ""
         self.findings = []
+        self._dangerous_functions.clear()
+        self._cross_visited.clear()
+        self._ast_cache.clear()
+        self._content_cache.clear()
         self._sanitized_findings = []
         self._source_count = 0
         self._sink_count = 0
@@ -1089,7 +1114,7 @@ class TaintAnalyzer:
             self._count_sources_sinks(content, "python")
 
             file_funcs = 0
-            for node in ast.walk(tree):
+            for node, qualified in _functions_with_qualnames(tree):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     if file_funcs >= MAX_FUNCTIONS:
                         self._truncation.add(f"file_function_cap:{rel}")
@@ -1103,7 +1128,7 @@ class TaintAnalyzer:
                     file_funcs += 1
                     total_funcs += 1
                     self._current_class = self._func_class.get((rel, node.lineno), "")
-                    self._analyze_function_ast(node, rel, content)
+                    self._analyze_function_ast(node, rel, content, qualified)
             self._functions_analyzed = total_funcs
 
     def _count_sources_sinks(self, content: str, lang: str):
@@ -1124,6 +1149,7 @@ class TaintAnalyzer:
 
     def _analyze_function_ast(
         self, func_node: ast.FunctionDef, file_path: str, content: str,
+        qualified_name: str = "",
     ):
         """Analyze a single function for taint flows."""
         # taint_state: var_name -> (source_expr, flow_chain)
@@ -1149,7 +1175,7 @@ class TaintAnalyzer:
             else:
                 taint_state[name] = (f"param:{name}", [f"param:{name}"])
 
-        self._visit_body(func_node.body, taint_state, file_path, func_node.name)
+        self._visit_body(func_node.body, taint_state, file_path, qualified_name or func_node.name)
 
         # After visiting: remove findings that came from param-only taint
         # (those are only real if a caller passes tainted data — Phase 2).
@@ -1610,17 +1636,22 @@ class TaintAnalyzer:
         caller passing untrusted data as the second argument was missed.
         """
         existing = self._dangerous_functions.setdefault((file_path, func_name), [])
-        seen = {(idx, name) for idx, name, *_ in existing}
+        seen = {(info.index, info.name, info.category, info.sink_line) for info in existing}
         for arg in list(call.args) + [kw.value for kw in call.keywords]:
             for node in self._unsanitized_names(arg, vuln_type):
                 state = taint_state.get(node.id)
                 if not state or state[0] != f"param:{node.id}":
                     continue
                 param_idx = self._find_param_index(func_name, node.id, file_path)
-                if param_idx is None or (param_idx, node.id) in seen:
+                key = (param_idx, node.id, vuln_type, call.lineno)
+                if param_idx is None or key in seen:
                     continue
-                seen.add((param_idx, node.id))
-                existing.append((param_idx, node.id, vuln_type, severity, rec))
+                seen.add(key)
+                existing.append(_DangerousParameter(
+                    param_idx, node.id, vuln_type, severity, rec,
+                    file_path, call.lineno, _safe_unparse(call),
+                    (f"{file_path}:{func_name}:{call.lineno}",),
+                ))
         if not existing:
             self._dangerous_functions.pop((file_path, func_name), None)
 
@@ -1706,7 +1737,11 @@ class TaintAnalyzer:
                     if param_idx is not None:
                         self._dangerous_functions.setdefault(
                             (file_path, func_name), []
-                        ).append((param_idx, param_name, vuln_type, severity, rec))
+                        ).append(_DangerousParameter(
+                            param_idx, param_name, vuln_type, severity, rec,
+                            file_path, line, sink_str,
+                            (f"{file_path}:{func_name}:{line}",),
+                        ))
                 return
 
     @staticmethod
@@ -2053,8 +2088,8 @@ class TaintAnalyzer:
             except (OSError, SyntaxError):
                 return None
 
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == func_name:
+        for node, qualified in _functions_with_qualnames(tree):
+            if qualified == func_name:
                 idx = 0
                 for arg in node.args.args:
                     if arg.arg in ("self", "cls"):
@@ -2086,21 +2121,22 @@ class TaintAnalyzer:
         # of three functions stopped at the second no matter what
         # MAX_CROSS_DEPTH said. Repeat while the set grows; `_cross_visited`
         # keeps each (caller, callee, depth) from being walked twice.
-        seen_keys: set[tuple[str, str]] = set()
+        seen_summaries: set[tuple[str, str, _DangerousParameter]] = set()
         for depth in range(1, MAX_CROSS_DEPTH + 1):
-            pending = {
-                key: value for key, value in self._dangerous_functions.items()
-                if key not in seen_keys
-            }
+            pending = {}
+            for key, summaries in self._dangerous_functions.items():
+                new = [info for info in summaries if (*key, info) not in seen_summaries]
+                if new:
+                    pending[key] = new
+                    seen_summaries.update((*key, info) for info in new)
             if not pending:
                 break
-            seen_keys.update(pending)
 
             dangerous_by_name: dict[str, list[tuple[str, str, list]]] = defaultdict(list)
             for (file_path, func_name), param_info_list in pending.items():
                 if SKIP_DIR_PATTERNS.search(file_path.replace("\\", "/")):
                     continue
-                dangerous_by_name[func_name].append(
+                dangerous_by_name[func_name.rsplit(".", 1)[-1]].append(
                     (file_path, func_name, param_info_list)
                 )
             if not dangerous_by_name:
@@ -2110,7 +2146,7 @@ class TaintAnalyzer:
                 self._trace_via_dependencies(
                     dangerous_by_name, dependencies, symbols, depth,
                 )
-            if reverse_index:
+            if reverse_index and not dependencies:
                 # The fallback path has no depth of its own; it exists for
                 # indexes without a dependency graph.
                 self._trace_via_reverse_index(dangerous_by_name, reverse_index)
@@ -2125,18 +2161,21 @@ class TaintAnalyzer:
         """Use index dependency graph (type=calls) to find callers."""
         # Build caller -> callee map from dependencies
         # dep: {source: caller_sym_id, target: callee_name, type: "calls"}
-        callee_to_callers: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
+        callee_to_callers: dict[str, list[tuple[str, str, int, dict]]] = defaultdict(list)
 
         for _dep_id, dep in dependencies.items():
             if dep.get("type", "") != "calls":
                 continue
             caller_id = dep.get("source", "")
             callee_raw = dep.get("target", "")
-            call_line = dep.get("source_line", 0)
+            call_line = dep.get("line", dep.get("source_line", 0))
+            resolved = symbols.get(dep.get("metadata", {}).get("resolved_target"), {})
             if caller_id and callee_raw:
-                # callee_raw might be "module.func" or "func"
-                callee_name = callee_raw.rsplit(".", 1)[-1] if "." in callee_raw else callee_raw
-                callee_to_callers[callee_name].append((caller_id, callee_raw, call_line))
+                # A resolved import can use an alias; keep the actual call
+                # expression and the declared target instead of losing both.
+                target_name = resolved.get("name", callee_raw) if resolved.get("type") in ("function", "method") else callee_raw
+                callee_name = target_name.rsplit(".", 1)[-1]
+                callee_to_callers[callee_name].append((caller_id, callee_raw, call_line, resolved))
 
         checks = 0
         # For each dangerous function, find its callers
@@ -2145,10 +2184,12 @@ class TaintAnalyzer:
             if not callers:
                 continue
 
-            for caller_sym_id, _callee_raw, call_line in callers:
+            for caller_sym_id, callee_raw, call_line, resolved in callers:
                 if checks >= MAX_CALLERS:
+                    self._truncation.add("caller_cap")
                     return
                 if len(self.findings) >= MAX_FINDINGS:
+                    self._truncation.add("finding_cap")
                     return
 
                 checks += 1
@@ -2161,12 +2202,17 @@ class TaintAnalyzer:
                     continue
 
                 # Get param info from any matching dangerous function entry
-                for df_file, _df_name, param_info_list in entries:
+                for df_file, df_name, param_info_list in entries:
+                    if resolved and resolved.get("path") != df_file:
+                        continue
+                    if resolved.get("type") in ("function", "method") and resolved.get("name") != df_name:
+                        continue
                     self._check_caller_for_taint(
                         caller_file, caller_func, func_name,
                         param_info_list, call_line,
                         depth=depth,
                         callee_file=df_file,
+                        callee_expr=callee_raw,
                     )
 
     def _trace_via_reverse_index(
@@ -2184,8 +2230,10 @@ class TaintAnalyzer:
 
             for caller_ref in callers:
                 if caller_checks >= MAX_CALLERS:
+                    self._truncation.add("caller_cap")
                     return
                 if len(self.findings) >= MAX_FINDINGS:
+                    self._truncation.add("finding_cap")
                     return
 
                 caller_file = caller_ref if isinstance(caller_ref, str) else caller_ref.get("file", "")
@@ -2203,10 +2251,11 @@ class TaintAnalyzer:
         caller_file: str,
         caller_func_name: str,
         callee_name: str,
-        param_info_list: list[tuple[int, str, str, str, str]],
+        param_info_list: list[_DangerousParameter],
         call_line: int,
         depth: int = 1,
         callee_file: str = "",
+        callee_expr: str = "",
     ):
         """Parse a caller file and check if tainted data flows to dangerous param positions.
 
@@ -2217,7 +2266,7 @@ class TaintAnalyzer:
             return
 
         # Cycle detection — skip if we've already visited this exact traversal
-        visit_key = (caller_file, caller_func_name, callee_name, depth)
+        visit_key = (caller_file, caller_func_name, callee_file, callee_name, callee_expr, tuple(param_info_list), depth)
         if visit_key in self._cross_visited:
             return
         self._cross_visited.add(visit_key)
@@ -2244,11 +2293,12 @@ class TaintAnalyzer:
         # `Class.method`, and comparing that to the AST's bare `method` matched
         # nothing -- so a caller that was a method was never scanned, which is
         # most callers in code that uses classes.
-        wanted = caller_func_name.rsplit(".", 1)[-1]
         for node, qualified in _functions_with_qualnames(tree):
-            if caller_func_name not in (node.name, qualified) and node.name != wanted:
+            if caller_func_name != qualified:
                 continue
 
+            self._current_file = caller_file
+            self._current_class = self._func_class.get((caller_file, node.lineno), "")
             taint_state: dict[str, tuple[str, list[str]]] = {}
 
             # Mark params as param-tainted for deeper propagation
@@ -2260,7 +2310,7 @@ class TaintAnalyzer:
             # Walk the function body, building taint state
             self._check_caller_body_v2(
                 node.body, taint_state, caller_file, caller_func_name,
-                callee_name, param_info_list, depth, callee_file,
+                callee_name, param_info_list, depth, callee_file, callee_expr,
             )
 
     def _check_caller_body_v2(
@@ -2270,13 +2320,15 @@ class TaintAnalyzer:
         caller_file: str,
         caller_func: str,
         callee_name: str,
-        param_info_list: list[tuple[int, str, str, str, str]],
+        param_info_list: list[_DangerousParameter],
         depth: int,
         callee_file: str = "",
+        callee_expr: str = "",
     ):
         """Walk caller function body, build taint state, check callee calls."""
         for stmt in _with_returned_calls(stmts):
             if len(self.findings) >= MAX_FINDINGS:
+                self._truncation.add("finding_cap")
                 return
 
             if isinstance(stmt, (ast.Assign, ast.AnnAssign)):
@@ -2309,11 +2361,13 @@ class TaintAnalyzer:
 
                 # Propagate taint
                 tainted, src, chain = self._expr_is_tainted(value, taint_state)
-                if tainted:
-                    for t in targets:
-                        name = self._target_name(t)
-                        if name:
+                for t in targets:
+                    name = self._target_name(t)
+                    if name:
+                        if tainted:
                             taint_state[name] = (src, chain + [name])
+                        else:
+                            taint_state.pop(name, None)
 
             elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
                 call = stmt.value
@@ -2323,7 +2377,7 @@ class TaintAnalyzer:
                 # Exact segment match only. The previous `callee_name in
                 # call_name` substring test attributed `run(...)` flows to any
                 # call whose name merely contained it (`prerun_hook`).
-                if callee_name != call_name_short:
+                if (callee_expr and call_name != callee_expr) or (not callee_expr and callee_name != call_name_short):
                     continue
 
                 # Then ask the language server whether this call site really
@@ -2334,16 +2388,18 @@ class TaintAnalyzer:
                 ) is False:
                     continue
 
-                for param_idx, param_name, vuln_type, severity, rec in param_info_list:
-                    if param_idx < len(call.args):
-                        tainted, src, chain = self._expr_is_tainted(
-                            call.args[param_idx], taint_state,
-                        )
+                for info in param_info_list:
+                    param_idx, param_name = info.index, info.name
+                    argument = call.args[param_idx] if param_idx < len(call.args) else next(
+                        (kw.value for kw in call.keywords if kw.arg == param_name), None,
+                    )
+                    if argument is not None:
+                        tainted, src, chain = self._expr_is_tainted(argument, taint_state)
                         if tainted:
                             # Build path showing the cross-function flow
                             path_steps = [
                                 f"{caller_file}:{caller_func}:{getattr(call, 'lineno', 0)}",
-                                f"-> {callee_name}(param:{param_name})",
+                                *info.path,
                             ]
 
                             if src.startswith("param:"):
@@ -2355,37 +2411,40 @@ class TaintAnalyzer:
                                 if caller_param_idx is not None and depth < MAX_CROSS_DEPTH:
                                     self._dangerous_functions.setdefault(
                                         (caller_file, caller_func), []
-                                    ).append((
-                                        caller_param_idx, caller_param,
-                                        vuln_type, severity, rec,
+                                    ).append(replace(
+                                        info, index=caller_param_idx, name=caller_param,
+                                        path=tuple(path_steps),
                                     ))
+                                elif caller_param_idx is not None:
+                                    self._truncation.add("cross_depth_cap")
                             else:
                                 # Direct source in caller — this is a real finding
                                 self.findings.append(TaintFlow(
                                     file_path=caller_file,
                                     line=getattr(call, "lineno", 0),
-                                    severity=severity,
-                                    category=vuln_type,
+                                    severity=info.severity,
+                                    category=info.category,
                                     source_expr=src,
-                                    sink_expr=f"{callee_name}({param_name}=...)",
+                                    sink_expr=info.sink_expr,
                                     flow_chain=chain + [f"-> {callee_name}()"],
-                                    recommendation=rec,
+                                    recommendation=info.recommendation,
                                     source_file=caller_file,
-                                    source_line=0,  # source line from chain
-                                    sink_file=caller_file,
-                                    sink_line=getattr(call, "lineno", 0),
+                                    source_line=self._source_coordinate(caller_file, caller_func, src, call.lineno),
+                                    sink_file=info.sink_file,
+                                    sink_line=info.sink_line,
                                     path=path_steps,
                                     sanitized=False,
+                                    resolution="bounded_cross_function_candidate",
                                 ))
 
             elif isinstance(stmt, (ast.If, ast.While)):
                 self._check_caller_body_v2(
                     stmt.body, taint_state, caller_file, caller_func,
-                    callee_name, param_info_list, depth, callee_file,
+                    callee_name, param_info_list, depth, callee_file, callee_expr,
                 )
                 self._check_caller_body_v2(
                     stmt.orelse, taint_state, caller_file, caller_func,
-                    callee_name, param_info_list, depth, callee_file,
+                    callee_name, param_info_list, depth, callee_file, callee_expr,
                 )
 
             elif isinstance(stmt, ast.For):
@@ -2394,7 +2453,7 @@ class TaintAnalyzer:
                     taint_state[stmt.target.id] = (src, chain + [stmt.target.id])
                 self._check_caller_body_v2(
                     stmt.body, taint_state, caller_file, caller_func,
-                    callee_name, param_info_list, depth, callee_file,
+                    callee_name, param_info_list, depth, callee_file, callee_expr,
                 )
 
     # Keep old method for backward compat with reverse_index path
@@ -2402,7 +2461,7 @@ class TaintAnalyzer:
         self,
         caller_file: str,
         callee_name: str,
-        param_info_list: list[tuple[int, str, str, str, str]],
+        param_info_list: list[_DangerousParameter],
         callee_file: str = "",
     ):
         """Parse a caller file and check if tainted data is passed at dangerous param positions."""
@@ -2420,6 +2479,7 @@ class TaintAnalyzer:
         except (OSError, SyntaxError):
             return
 
+        self._ast_cache[caller_file] = tree
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
@@ -2431,102 +2491,39 @@ class TaintAnalyzer:
             )
 
     def _check_caller_body(
-        self,
-        stmts: list[ast.stmt],
-        taint_state: dict,
-        caller_file: str,
-        callee_name: str,
-        param_info_list: list[tuple[int, str, str, str, str]],
+        self, stmts: list[ast.stmt], taint_state: dict, caller_file: str,
+        callee_name: str, param_info_list: list[_DangerousParameter],
         callee_file: str = "",
     ):
-        """Walk caller function body in order, building taint state and checking callee calls."""
-        for stmt in _with_returned_calls(stmts):
-            if isinstance(stmt, (ast.Assign, ast.AnnAssign)):
-                if isinstance(stmt, ast.AnnAssign):
-                    targets = [stmt.target] if stmt.target else []
-                    value = stmt.value
-                else:
-                    targets = stmt.targets
-                    value = stmt.value
+        """Legacy reverse-index reads use the same evidence-preserving walk."""
+        self._check_caller_body_v2(
+            stmts, taint_state, caller_file, "", callee_name,
+            param_info_list, 1, callee_file,
+        )
 
-                if value is None:
+    def _source_coordinate(self, file: str, function: str, source: str, before: int) -> int:
+        """Locate a unique source expression; ambiguous origins remain unknown.
+
+        Never substitute the wrapper call's line for an unknown input origin.
+        This does not turn a name-based call chain into type-resolved proof.
+        """
+        tree = self._ast_cache.get(file)
+        if tree is None:
+            return 0
+        lines = set()
+        for node, qualified in _functions_with_qualnames(tree):
+            if function and qualified != function:
+                continue
+            pending = list(node.body)
+            while pending:
+                child = pending.pop()
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                     continue
-
-                # Check sanitizer first
-                if self._is_sanitizer_expr(value):
-                    for t in targets:
-                        name = self._target_name(t)
-                        if name and name in taint_state:
-                            del taint_state[name]
-                    continue
-
-                # Check source
-                source = self._is_source(value)
-                if source:
-                    for t in targets:
-                        name = self._target_name(t)
-                        if name:
-                            taint_state[name] = (source, [source, name])
-                    continue
-
-                # Propagate taint
-                tainted, src, chain = self._expr_is_tainted(value, taint_state)
-                if tainted:
-                    for t in targets:
-                        name = self._target_name(t)
-                        if name:
-                            taint_state[name] = (src, chain + [name])
-
-            elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
-                call = stmt.value
-                call_name = _safe_unparse(call.func)
-                call_name_short = (
-                    call_name.rsplit(".", 1)[-1] if "." in call_name else call_name
-                )
-                if callee_name != call_name_short:
-                    continue
-                if self._callee_verifier().verify_call(
-                    caller_file, call, callee_file, callee_name,
-                ) is False:
-                    continue
-                for param_idx, param_name, vuln_type, severity, rec in param_info_list:
-                    if param_idx < len(call.args):
-                        tainted, src, chain = self._expr_is_tainted(
-                            call.args[param_idx], taint_state,
-                        )
-                        if tainted:
-                            self.findings.append(TaintFlow(
-                                file_path=caller_file,
-                                line=getattr(call, "lineno", 0),
-                                severity=severity,
-                                category=vuln_type,
-                                source_expr=src,
-                                sink_expr=f"{callee_name}(...)",
-                                flow_chain=chain + [f"-> {callee_name}()"],
-                                recommendation=rec,
-                                source_file=caller_file,
-                                source_line=0,
-                                sink_file=caller_file,
-                                sink_line=getattr(call, "lineno", 0),
-                                path=[f"{caller_file}:{getattr(call, 'lineno', 0)}"],
-                                sanitized=False,
-                            ))
-
-            elif isinstance(stmt, (ast.If, ast.While)):
-                self._check_caller_body(
-                    stmt.body, taint_state, caller_file, callee_name,
-                    param_info_list, callee_file,
-                )
-                self._check_caller_body(
-                    stmt.orelse, taint_state, caller_file, callee_name,
-                    param_info_list, callee_file,
-                )
-
-            elif isinstance(stmt, ast.For):
-                tainted, src, chain = self._expr_is_tainted(stmt.iter, taint_state)
-                if tainted and isinstance(stmt.target, ast.Name):
-                    taint_state[stmt.target.id] = (src, chain + [stmt.target.id])
-                self._check_caller_body(stmt.body, taint_state, caller_file, callee_name, param_info_list)
+                line = getattr(child, "lineno", 0)
+                if isinstance(child, ast.expr) and 0 < line <= before and _safe_unparse(child) == source:
+                    lines.add(line)
+                pending.extend(ast.iter_child_nodes(child))
+        return next(iter(lines)) if len(lines) == 1 else 0
 
     # ── Phase 3: Regex-based fallback for JS/TS/Go ─────────────────────────
 
@@ -2542,9 +2539,11 @@ class TaintAnalyzer:
 
         for ext, patterns in ext_map.items():
             if len(self.findings) >= MAX_FINDINGS:
+                self._truncation.add("finding_cap")
                 return
             for fpath in self._filesystem_paths(f"*{ext}"):
                 if len(self.findings) >= MAX_FINDINGS:
+                    self._truncation.add("finding_cap")
                     return
                 rel = str(fpath.relative_to(self.project_root)).replace("\\", "/")
                 if SKIP_DIR_PATTERNS.search(rel) or _in_hidden_dir(rel):
@@ -2578,6 +2577,9 @@ class TaintAnalyzer:
         lines = content.split("\n")
         # For multi-line patterns, also scan consecutive line pairs
         for i, line in enumerate(lines):
+            if len(self.findings) >= MAX_FINDINGS:
+                self._truncation.add("finding_cap")
+                return
             stripped = line.strip()
             if stripped.startswith("//") or stripped.startswith("#"):
                 continue
@@ -2604,7 +2606,7 @@ class TaintAnalyzer:
                     break
 
             # Check two-line window for flows split across lines
-            if i + 1 < len(lines):
+            if i + 1 < len(lines) and len(self.findings) < MAX_FINDINGS:
                 two_lines = line + " " + lines[i + 1]
                 for pat, vuln_type, severity, rec in patterns:
                     if re.search(pat, two_lines, re.IGNORECASE):
