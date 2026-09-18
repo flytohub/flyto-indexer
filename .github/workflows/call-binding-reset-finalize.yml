@@ -36,7 +36,7 @@ jobs:
           python -m pip install '.[dev]'
           python scripts/generate-reference.py
           python scripts/generate-reference.py --check
-          pytest -q tests/test_taint_import_binding.py tests/test_taint_callee_resolution.py
+          PYTHONPATH=. python -m pytest -q tests/test_taint_import_binding.py tests/test_taint_callee_resolution.py
           git add docs/reference/
           git diff --cached --check
           test "$(git write-tree)" = 0d45e4e2bc0a2b65e88aca0c50052f2cb310ee3f
