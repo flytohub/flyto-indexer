@@ -8,506 +8,506 @@ The `flyto-index` argparse surface contains **44 subcommands** and **205 command
 
 Create the legacy .flyto/ metadata directory and generated-index ignore rules.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:73`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L73).
+Handler: `inline dispatch`. Source: [`src/cli.py:100`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L100).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:78`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L78) |
-| `--name` | no | `` | `` | Project name (default: directory name) | [`src/cli.py:79`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L79) |
-| `--no-gitignore` | no | `` | `` | Do not add generated Flyto2 directories to .gitignore | [`src/cli.py:80`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L80) |
-| `--index` | no | `` | `` | Run indexer immediately after init | [`src/cli.py:81`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L81) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:105`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L105) |
+| `--name` | no | `` | `` | Project name (default: directory name) | [`src/cli.py:106`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L106) |
+| `--no-gitignore` | no | `` | `` | Do not add generated Flyto2 directories to .gitignore | [`src/cli.py:107`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L107) |
+| `--index` | no | `` | `` | Run indexer immediately after init | [`src/cli.py:108`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L108) |
 
 ## `flyto-index scan`
 
 Parse all source files, extract symbols (functions, classes, components), build dependency graph, and detect dead code.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:84`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L84).
+Handler: `inline dispatch`. Source: [`src/cli.py:111`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L111).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `required` | `` | Project root path | [`src/cli.py:89`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L89) |
-| `--full` | no | `` | `` | Full rebuild instead of incremental update | [`src/cli.py:90`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L90) |
-| `--name` | no | `` | `` | Project name (default: directory name) | [`src/cli.py:91`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L91) |
-| `--output` | no | `` | `` | Index output directory (default: .flyto-index/) | [`src/cli.py:92`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L92) |
+| `path` | no | `required` | `` | Project root path | [`src/cli.py:116`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L116) |
+| `--full` | no | `` | `` | Full rebuild instead of incremental update | [`src/cli.py:117`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L117) |
+| `--name` | no | `` | `` | Project name (default: directory name) | [`src/cli.py:118`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L118) |
+| `--output` | no | `` | `` | Index output directory (default: .flyto-index/) | [`src/cli.py:119`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L119) |
 
 ## `flyto-index impact`
 
 Show all code that depends on a given symbol. Use before modifying shared functions or components.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:95`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L95).
+Handler: `inline dispatch`. Source: [`src/cli.py:122`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L122).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `symbol_id` | no | `required` | `` | Symbol ID or name (e.g., 'useAuth' or 'project:path:type:name') | [`src/cli.py:100`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L100) |
-| `--path` | yes | `` | `` | Project root path | [`src/cli.py:101`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L101) |
-| `--depth` | no | `3` | `` | Max analysis depth (default: 3) | [`src/cli.py:102`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L102) |
+| `symbol_id` | no | `required` | `` | Symbol ID or name (e.g., 'useAuth' or 'project:path:type:name') | [`src/cli.py:127`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L127) |
+| `--path` | yes | `` | `` | Project root path | [`src/cli.py:128`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L128) |
+| `--depth` | no | `3` | `` | Max analysis depth (default: 3) | [`src/cli.py:129`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L129) |
 
 ## `flyto-index context`
 
 Extract structured context (symbols, summaries, dependencies) suitable for feeding to an LLM.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:108`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L108).
+Handler: `inline dispatch`. Source: [`src/cli.py:135`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L135).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `--path` | yes | `` | `` | Project root path | [`src/cli.py:113`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L113) |
-| `--query` | no | `` | `` | Natural language query to focus context on | [`src/cli.py:114`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L114) |
-| `--files` | no | `` | `` | Specific files to include (L1 detail) | [`src/cli.py:115`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L115) |
-| `--symbols` | no | `` | `` | Specific symbols to include (L2 detail) | [`src/cli.py:116`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L116) |
-| `--level` | no | `auto` | `l0, l1, l2, auto` | Detail level: l0=outline, l1=file, l2=symbol, auto=adaptive (default: auto) | [`src/cli.py:117`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L117) |
+| `--path` | yes | `` | `` | Project root path | [`src/cli.py:140`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L140) |
+| `--query` | no | `` | `` | Natural language query to focus context on | [`src/cli.py:141`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L141) |
+| `--files` | no | `` | `` | Specific files to include (L1 detail) | [`src/cli.py:142`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L142) |
+| `--symbols` | no | `` | `` | Specific symbols to include (L2 detail) | [`src/cli.py:143`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L143) |
+| `--level` | no | `auto` | `l0, l1, l2, auto` | Detail level: l0=outline, l1=file, l2=symbol, auto=adaptive (default: auto) | [`src/cli.py:144`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L144) |
 
 ## `flyto-index status`
 
 Display .flyto-index/ statistics and fall back to legacy .flyto/ metadata when needed.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:120`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L120).
+Handler: `inline dispatch`. Source: [`src/cli.py:147`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L147).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:125`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L125) |
-| `--json` | no | `` | `` | Output as JSON instead of human-readable text | [`src/cli.py:126`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L126) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:152`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L152) |
+| `--json` | no | `` | `` | Output as JSON instead of human-readable text | [`src/cli.py:153`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L153) |
 
 ## `flyto-index brief`
 
 Create a concise project overview from .flyto/ data, suitable for LLM system prompts.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:129`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L129).
+Handler: `inline dispatch`. Source: [`src/cli.py:156`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L156).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:134`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L134) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:161`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L161) |
 
 ## `flyto-index describe`
 
 Manage file descriptions stored in .flyto/descriptions.jsonl. Omit --summary to read, include it to write.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:137`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L137).
+Handler: `inline dispatch`. Source: [`src/cli.py:164`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L164).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `file_path` | no | `required` | `` | File path relative to project root (e.g., src/api/auth.py) | [`src/cli.py:142`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L142) |
-| `--summary` | no | `` | `` | One-liner description to write (omit to read existing) | [`src/cli.py:143`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L143) |
-| `--path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:144`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L144) |
-| `--source` | no | `ai` | `` | Description source tag (default: ai) | [`src/cli.py:145`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L145) |
+| `file_path` | no | `required` | `` | File path relative to project root (e.g., src/api/auth.py) | [`src/cli.py:169`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L169) |
+| `--summary` | no | `` | `` | One-liner description to write (omit to read existing) | [`src/cli.py:170`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L170) |
+| `--path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:171`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L171) |
+| `--source` | no | `ai` | `` | Description source tag (default: ai) | [`src/cli.py:172`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L172) |
 
 ## `flyto-index outline`
 
 Create a high-level map of project structure, categories, and key entry points.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:148`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L148).
+Handler: `inline dispatch`. Source: [`src/cli.py:175`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L175).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `required` | `` | Project root path | [`src/cli.py:153`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L153) |
-| `--name` | no | `` | `` | Project name (default: directory name) | [`src/cli.py:154`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L154) |
+| `path` | no | `required` | `` | Project root path | [`src/cli.py:180`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L180) |
+| `--name` | no | `` | `` | Project name (default: directory name) | [`src/cli.py:181`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L181) |
 
 ## `flyto-index tools`
 
 Output machine-readable JSON describing all available commands, their arguments, expected outputs, side effects, and examples. Feed this to an LLM so it knows how to use flyto-index.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:157`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L157).
+Handler: `inline dispatch`. Source: [`src/cli.py:184`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L184).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `--json` | no | `True` | `` | Output as JSON (default) | [`src/cli.py:162`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L162) |
-| `--compact` | no | `` | `` | Compact output: names and one-liner summaries only | [`src/cli.py:163`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L163) |
+| `--json` | no | `True` | `` | Output as JSON (default) | [`src/cli.py:189`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L189) |
+| `--compact` | no | `` | `` | Compact output: names and one-liner summaries only | [`src/cli.py:190`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L190) |
 
 ## `flyto-index install-hook`
 
 Install a git post-commit hook that automatically runs incremental scan after each commit.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:166`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L166).
+Handler: `inline dispatch`. Source: [`src/cli.py:193`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L193).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:171`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L171) |
-| `--remove` | no | `` | `` | Remove the flyto hook instead of installing it | [`src/cli.py:172`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L172) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:198`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L198) |
+| `--remove` | no | `` | `` | Remove the flyto hook instead of installing it | [`src/cli.py:199`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L199) |
 
 ## `flyto-index demo`
 
 Scan the project and demonstrate impact analysis on the most-referenced symbol. No MCP required.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:175`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L175).
+Handler: `inline dispatch`. Source: [`src/cli.py:202`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L202).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:180`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L180) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:207`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L207) |
 
 ## `flyto-index setup`
 
 Complete setup for AI-assisted development. Scans the project, writes CLAUDE.md instructions, and configures Claude Code MCP settings. Run this once per project.
-
-Handler: `inline dispatch`. Source: [`src/cli.py:183`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L183).
-
-| Argument | Required | Default | Choices | Purpose | Source |
-|---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:188`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L188) |
-| `--remove` | no | `` | `` | Remove flyto-indexer from CLAUDE.md and MCP settings | [`src/cli.py:189`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L189) |
-
-## `flyto-index setup-claude`
-
-Append task contract and tool usage instructions to CLAUDE.md so AI assistants know to use flyto-indexer.
-
-Handler: `inline dispatch`. Source: [`src/cli.py:192`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L192).
-
-| Argument | Required | Default | Choices | Purpose | Source |
-|---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:197`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L197) |
-| `--remove` | no | `` | `` | Remove flyto-indexer section from CLAUDE.md | [`src/cli.py:198`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L198) |
-
-## `flyto-index deps`
-
-Walk the project directory, find manifest files (package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml, pom.xml, Gemfile, Dockerfile, etc.), and list all dependencies with version constraints and pinned v...
-
-Handler: `inline dispatch`. Source: [`src/cli.py:201`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L201).
-
-| Argument | Required | Default | Choices | Purpose | Source |
-|---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:206`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L206) |
-| `--json` | no | `` | `` | Output as JSON instead of table | [`src/cli.py:207`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L207) |
-
-## `flyto-index profile`
-
-Aggregate all project facts into a single structured output. Uses index data if available, plus filesystem analysis, dependency scanning, and git history.
 
 Handler: `inline dispatch`. Source: [`src/cli.py:210`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L210).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
 | `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:215`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L215) |
-| `--json` | no | `` | `` | Output as raw JSON | [`src/cli.py:216`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L216) |
-| `--compact` | no | `` | `` | Summary only (omit folder structure) | [`src/cli.py:217`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L217) |
+| `--remove` | no | `` | `` | Remove flyto-indexer from CLAUDE.md and MCP settings | [`src/cli.py:216`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L216) |
+
+## `flyto-index setup-claude`
+
+Append task contract and tool usage instructions to CLAUDE.md so AI assistants know to use flyto-indexer.
+
+Handler: `inline dispatch`. Source: [`src/cli.py:219`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L219).
+
+| Argument | Required | Default | Choices | Purpose | Source |
+|---|---|---|---|---|---|
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:224`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L224) |
+| `--remove` | no | `` | `` | Remove flyto-indexer section from CLAUDE.md | [`src/cli.py:225`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L225) |
+
+## `flyto-index deps`
+
+Walk the project directory, find manifest files (package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml, pom.xml, Gemfile, Dockerfile, etc.), and list all dependencies with version constraints and pinned v...
+
+Handler: `inline dispatch`. Source: [`src/cli.py:228`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L228).
+
+| Argument | Required | Default | Choices | Purpose | Source |
+|---|---|---|---|---|---|
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:233`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L233) |
+| `--json` | no | `` | `` | Output as JSON instead of table | [`src/cli.py:234`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L234) |
+
+## `flyto-index profile`
+
+Aggregate all project facts into a single structured output. Uses index data if available, plus filesystem analysis, dependency scanning, and git history.
+
+Handler: `inline dispatch`. Source: [`src/cli.py:237`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L237).
+
+| Argument | Required | Default | Choices | Purpose | Source |
+|---|---|---|---|---|---|
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:242`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L242) |
+| `--json` | no | `` | `` | Output as raw JSON | [`src/cli.py:243`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L243) |
+| `--compact` | no | `` | `` | Summary only (omit folder structure) | [`src/cli.py:244`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L244) |
 
 ## `flyto-index export`
 
 Runs profile + taint analysis and outputs a single JSON document that can be POSTed to flyto-engine's /scan-upload endpoint. Usage: flyto-index export . | curl -X POST -H 'Authorization: Bearer TOKEN' -H 'Content-Type...
 
-Handler: `inline dispatch`. Source: [`src/cli.py:220`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L220).
+Handler: `inline dispatch`. Source: [`src/cli.py:247`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L247).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:230`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L230) |
-| `--full` | no | `` | `` | Include symbol graph (index.json) for function-level verify | [`src/cli.py:231`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L231) |
-| `--no-content` | no | `` | `` | Exclude source code snippets from --full export (default: always excluded) | [`src/cli.py:232`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L232) |
-| `--commit` | no | `` | `` | Commit SHA to associate with this scan | [`src/cli.py:233`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L233) |
-| `--branch` | no | `` | `` | Branch name to associate with this scan | [`src/cli.py:234`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L234) |
-| `--exclude` | no | `&#91;&#93;` | `` | Glob patterns to exclude (can be used multiple times) | [`src/cli.py:235`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L235) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:257`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L257) |
+| `--full` | no | `` | `` | Include symbol graph (index.json) for function-level verify | [`src/cli.py:258`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L258) |
+| `--no-content` | no | `` | `` | Exclude source code snippets from --full export (default: always excluded) | [`src/cli.py:259`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L259) |
+| `--commit` | no | `` | `` | Commit SHA to associate with this scan | [`src/cli.py:260`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L260) |
+| `--branch` | no | `` | `` | Branch name to associate with this scan | [`src/cli.py:261`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L261) |
+| `--exclude` | no | `&#91;&#93;` | `` | Glob patterns to exclude (can be used multiple times) | [`src/cli.py:262`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L262) |
 
 ## `flyto-index secrets`
 
 Regex-based scan for hardcoded secrets. Reports findings by severity (critical/high/medium).
-
-Handler: `inline dispatch`. Source: [`src/cli.py:240`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L240).
-
-| Argument | Required | Default | Choices | Purpose | Source |
-|---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:245`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L245) |
-| `--json` | no | `` | `` | Output as JSON instead of human-readable text | [`src/cli.py:246`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L246) |
-
-## `flyto-index license`
-
-Read LICENSE file and manifest files to detect project license. Collect dependency license info where available.
-
-Handler: `inline dispatch`. Source: [`src/cli.py:249`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L249).
-
-| Argument | Required | Default | Choices | Purpose | Source |
-|---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:254`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L254) |
-| `--json` | no | `` | `` | Output as JSON instead of human-readable text | [`src/cli.py:255`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L255) |
-
-## `flyto-index docs`
-
-Check README quality, API docstrings, module documentation, inline docs, and config docs. Score 0-100.
-
-Handler: `inline dispatch`. Source: [`src/cli.py:258`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L258).
-
-| Argument | Required | Default | Choices | Purpose | Source |
-|---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:263`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L263) |
-| `--json` | no | `` | `` | Output as JSON instead of human-readable text | [`src/cli.py:264`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L264) |
-
-## `flyto-index taint`
-
-Trace untrusted data (request.args, sys.argv, etc.) through function calls to dangerous sinks (cursor.execute, eval, os.system, etc.). Shows cross-function flows with sanitizer awareness.
 
 Handler: `inline dispatch`. Source: [`src/cli.py:267`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L267).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
 | `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:272`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L272) |
-| `--severity` | no | `` | `critical, high, medium, low` | Filter by severity level | [`src/cli.py:273`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L273) |
-| `--json` | no | `` | `` | Output as JSON instead of human-readable text | [`src/cli.py:274`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L274) |
-| `--max-results` | no | `50` | `` | Max flows to show (default 50) | [`src/cli.py:275`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L275) |
+| `--json` | no | `` | `` | Output as JSON instead of human-readable text | [`src/cli.py:273`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L273) |
+
+## `flyto-index license`
+
+Read LICENSE file and manifest files to detect project license. Collect dependency license info where available.
+
+Handler: `inline dispatch`. Source: [`src/cli.py:276`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L276).
+
+| Argument | Required | Default | Choices | Purpose | Source |
+|---|---|---|---|---|---|
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:281`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L281) |
+| `--json` | no | `` | `` | Output as JSON instead of human-readable text | [`src/cli.py:282`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L282) |
+
+## `flyto-index docs`
+
+Check README quality, API docstrings, module documentation, inline docs, and config docs. Score 0-100.
+
+Handler: `inline dispatch`. Source: [`src/cli.py:285`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L285).
+
+| Argument | Required | Default | Choices | Purpose | Source |
+|---|---|---|---|---|---|
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:290`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L290) |
+| `--json` | no | `` | `` | Output as JSON instead of human-readable text | [`src/cli.py:291`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L291) |
+
+## `flyto-index taint`
+
+Trace untrusted data (request.args, sys.argv, etc.) through function calls to dangerous sinks (cursor.execute, eval, os.system, etc.). Shows cross-function flows with sanitizer awareness.
+
+Handler: `inline dispatch`. Source: [`src/cli.py:294`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L294).
+
+| Argument | Required | Default | Choices | Purpose | Source |
+|---|---|---|---|---|---|
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:299`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L299) |
+| `--severity` | no | `` | `critical, high, medium, low` | Filter by severity level | [`src/cli.py:300`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L300) |
+| `--json` | no | `` | `` | Output as JSON instead of human-readable text | [`src/cli.py:301`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L301) |
+| `--max-results` | no | `50` | `` | Max flows to show (default 50) | [`src/cli.py:302`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L302) |
 
 ## `flyto-index research-priority`
 
 Answer 'what should I read first?' instead of 'here are 200 findings'. Fuses taint reachability, sink severity, entry-point exposure, function complexity, git churn, test gaps, and swallowed error handling into one ra...
 
-Handler: `inline dispatch`. Source: [`src/cli.py:278`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L278).
+Handler: `inline dispatch`. Source: [`src/cli.py:305`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L305).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:290`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L290) |
-| `--top` | no | `20` | `` | Candidates to show (default 20) | [`src/cli.py:294`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L294) |
-| `--since-days` | no | `180` | `` | Churn window in days (default 180) | [`src/cli.py:298`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L298) |
-| `--no-sanitized` | no | `` | `` | Drop flows a sanitizer claims to neutralize | [`src/cli.py:302`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L302) |
-| `--sarif` | no | `` | `` | Rank findings from a SARIF file (CodeQL, Semgrep, Trivy) with the same project signals — churn, test gaps, entry exposure, function size — that a SARIF result does not carry | [`src/cli.py:306`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L306) |
-| `--proven-only` | no | `` | `` | Only candidates with a proven source-to-sink flow | [`src/cli.py:312`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L312) |
-| `--json` | no | `` | `` | Output as JSON instead of human-readable text | [`src/cli.py:316`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L316) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:317`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L317) |
+| `--top` | no | `20` | `` | Candidates to show (default 20) | [`src/cli.py:321`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L321) |
+| `--since-days` | no | `180` | `` | Churn window in days (default 180) | [`src/cli.py:325`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L325) |
+| `--no-sanitized` | no | `` | `` | Drop flows a sanitizer claims to neutralize | [`src/cli.py:329`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L329) |
+| `--sarif` | no | `` | `` | Rank findings from a SARIF file (CodeQL, Semgrep, Trivy) with the same project signals — churn, test gaps, entry exposure, function size — that a SARIF result does not carry | [`src/cli.py:333`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L333) |
+| `--proven-only` | no | `` | `` | Only candidates with a proven source-to-sink flow | [`src/cli.py:339`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L339) |
+| `--json` | no | `` | `` | Output as JSON instead of human-readable text | [`src/cli.py:343`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L343) |
 
 ## `flyto-index agent-audit`
 
 Detect AI-agent / MCP / sandbox boundary vulnerability classes that generic SAST misses: caller-controlled outbound URLs with no SSRF guard, guarded HTTP modules that still follow redirects, state-changing routes with...
 
-Handler: `inline dispatch`. Source: [`src/cli.py:322`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L322).
+Handler: `inline dispatch`. Source: [`src/cli.py:349`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L349).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:334`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L334) |
-| `--severity` | no | `` | `critical, high, medium, low` | Filter by severity level | [`src/cli.py:335`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L335) |
-| `--json` | no | `` | `` | Output as JSON instead of human-readable text | [`src/cli.py:336`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L336) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:361`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L361) |
+| `--severity` | no | `` | `critical, high, medium, low` | Filter by severity level | [`src/cli.py:362`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L362) |
+| `--json` | no | `` | `` | Output as JSON instead of human-readable text | [`src/cli.py:363`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L363) |
 
 ## `flyto-index call-sites`
 
 Produce a JSON map of per-package fully-qualified call sites the user code references, plus a per-function call graph for transitive reachability analysis. Consumed by flyto-engine's verify path to compute Layer-3 ver...
 
-Handler: `inline dispatch`. Source: [`src/cli.py:339`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L339).
+Handler: `inline dispatch`. Source: [`src/cli.py:366`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L366).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path | [`src/cli.py:352`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L352) |
-| `--no-lsp` | no | `` | `` | Skip LSP, use regex-only extraction | [`src/cli.py:353`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L353) |
+| `path` | no | `.` | `` | Project root path | [`src/cli.py:379`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L379) |
+| `--no-lsp` | no | `` | `` | Skip LSP, use regex-only extraction | [`src/cli.py:380`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L380) |
 
 ## `flyto-index check`
 
 Detect changed files, analyze impact, and exit non-zero if risk exceeds threshold. Designed for CI pipelines.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:356`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L356).
+Handler: `inline dispatch`. Source: [`src/cli.py:383`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L383).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:361`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L361) |
-| `--threshold` | no | `high` | `high, medium, low` | Fail when risk >= this level (default: high) | [`src/cli.py:362`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L362) |
-| `--json` | no | `` | `` | Output as structured JSON | [`src/cli.py:363`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L363) |
-| `--base` | no | `` | `` | Git ref to compare against (default: detect from index staleness) | [`src/cli.py:364`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L364) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:388`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L388) |
+| `--threshold` | no | `high` | `high, medium, low` | Fail when risk >= this level (default: high) | [`src/cli.py:389`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L389) |
+| `--json` | no | `` | `` | Output as structured JSON | [`src/cli.py:390`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L390) |
+| `--base` | no | `` | `` | Git ref to compare against (default: detect from index staleness) | [`src/cli.py:391`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L391) |
 
 ## `flyto-index verify`
 
 Run scan/status integrity, context lookup, impact analysis, secret scan, taint scan, docs coverage, and agent-hygiene checks without external tools.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:369`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L369).
+Handler: `inline dispatch`. Source: [`src/cli.py:396`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L396).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:377`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L377) |
-| `--full-scan` | no | `` | `` | Rebuild the index before verification | [`src/cli.py:378`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L378) |
-| `--query` | no | `` | `` | Context query to verify (default: most-referenced symbol name) | [`src/cli.py:379`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L379) |
-| `--symbol` | no | `` | `` | Symbol to verify with impact analysis (default: most-referenced symbol) | [`src/cli.py:380`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L380) |
-| `--strict` | no | `` | `` | Treat warnings as failures | [`src/cli.py:381`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L381) |
-| `--baseline` | no | `` | `` | Baseline JSON result to compare for regression gating | [`src/cli.py:382`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L382) |
-| `--regression-only` | no | `` | `` | Only fail on checks that regress versus --baseline | [`src/cli.py:383`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L383) |
-| `--save-baseline` | no | `` | `` | Write the current verification JSON result to this file | [`src/cli.py:384`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L384) |
-| `--policy` | no | `` | `` | Path to .flyto-rules.yaml/.json policy file (default: project .flyto-rules.yaml) | [`src/cli.py:385`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L385) |
-| `--report` | no | `` | `` | Write a report artifact to this path | [`src/cli.py:386`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L386) |
-| `--report-format` | no | `json` | `json, markdown, junit, sarif` | Report artifact format | [`src/cli.py:387`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L387) |
-| `--json` | no | `` | `` | Output as JSON | [`src/cli.py:388`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L388) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:404`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L404) |
+| `--full-scan` | no | `` | `` | Rebuild the index before verification | [`src/cli.py:405`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L405) |
+| `--query` | no | `` | `` | Context query to verify (default: most-referenced symbol name) | [`src/cli.py:406`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L406) |
+| `--symbol` | no | `` | `` | Symbol to verify with impact analysis (default: most-referenced symbol) | [`src/cli.py:407`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L407) |
+| `--strict` | no | `` | `` | Treat warnings as failures | [`src/cli.py:408`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L408) |
+| `--baseline` | no | `` | `` | Baseline JSON result to compare for regression gating | [`src/cli.py:409`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L409) |
+| `--regression-only` | no | `` | `` | Only fail on checks that regress versus --baseline | [`src/cli.py:410`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L410) |
+| `--save-baseline` | no | `` | `` | Write the current verification JSON result to this file | [`src/cli.py:411`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L411) |
+| `--policy` | no | `` | `` | Path to .flyto-rules.yaml/.json policy file (default: project .flyto-rules.yaml) | [`src/cli.py:412`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L412) |
+| `--report` | no | `` | `` | Write a report artifact to this path | [`src/cli.py:413`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L413) |
+| `--report-format` | no | `json` | `json, markdown, junit, sarif` | Report artifact format | [`src/cli.py:414`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L414) |
+| `--json` | no | `` | `` | Output as JSON | [`src/cli.py:415`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L415) |
 
 ## `flyto-index verify-workspace`
 
 Discover or explicitly list projects in a workspace, run verify for each, and aggregate the result. Designed for monorepos and multi-repo AI workspaces.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:391`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L391).
+Handler: `inline dispatch`. Source: [`src/cli.py:418`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L418).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Workspace root path (default: current directory) | [`src/cli.py:399`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L399) |
-| `--project` | no | `` | `` | Project path to verify. Repeatable. Defaults to auto-discovery. | [`src/cli.py:400`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L400) |
-| `--full-scan` | no | `` | `` | Rebuild each project index before verification | [`src/cli.py:401`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L401) |
-| `--strict` | no | `` | `` | Treat warnings as failures | [`src/cli.py:402`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L402) |
-| `--baseline-dir` | no | `` | `` | Directory containing per-project baseline JSON files named <project>.json | [`src/cli.py:403`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L403) |
-| `--regression-only` | no | `` | `` | Only fail projects with regressions versus --baseline-dir | [`src/cli.py:404`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L404) |
-| `--changed-only` | no | `` | `` | Only verify projects with git changes | [`src/cli.py:405`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L405) |
-| `--base` | no | `` | `` | Git base ref for --changed-only, e.g. origin/main | [`src/cli.py:406`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L406) |
-| `--policy` | no | `` | `` | Path to shared verify policy file | [`src/cli.py:407`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L407) |
-| `--report` | no | `` | `` | Write a report artifact to this path | [`src/cli.py:408`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L408) |
-| `--report-format` | no | `json` | `json, markdown, junit, sarif` | Report artifact format | [`src/cli.py:409`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L409) |
-| `--json` | no | `` | `` | Output as JSON | [`src/cli.py:410`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L410) |
+| `path` | no | `.` | `` | Workspace root path (default: current directory) | [`src/cli.py:426`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L426) |
+| `--project` | no | `` | `` | Project path to verify. Repeatable. Defaults to auto-discovery. | [`src/cli.py:427`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L427) |
+| `--full-scan` | no | `` | `` | Rebuild each project index before verification | [`src/cli.py:428`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L428) |
+| `--strict` | no | `` | `` | Treat warnings as failures | [`src/cli.py:429`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L429) |
+| `--baseline-dir` | no | `` | `` | Directory containing per-project baseline JSON files named <project>.json | [`src/cli.py:430`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L430) |
+| `--regression-only` | no | `` | `` | Only fail projects with regressions versus --baseline-dir | [`src/cli.py:431`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L431) |
+| `--changed-only` | no | `` | `` | Only verify projects with git changes | [`src/cli.py:432`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L432) |
+| `--base` | no | `` | `` | Git base ref for --changed-only, e.g. origin/main | [`src/cli.py:433`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L433) |
+| `--policy` | no | `` | `` | Path to shared verify policy file | [`src/cli.py:434`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L434) |
+| `--report` | no | `` | `` | Write a report artifact to this path | [`src/cli.py:435`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L435) |
+| `--report-format` | no | `json` | `json, markdown, junit, sarif` | Report artifact format | [`src/cli.py:436`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L436) |
+| `--json` | no | `` | `` | Output as JSON | [`src/cli.py:437`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L437) |
 
 ## `flyto-index verify-baseline`
 
 Manage verify baselines without adding another MCP tool.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:413`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L413).
+Handler: `inline dispatch`. Source: [`src/cli.py:440`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L440).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `action` | no | `required` | `create, compare, update` | Baseline action | [`src/cli.py:418`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L418) |
-| `path` | no | `.` | `` | Project root path | [`src/cli.py:419`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L419) |
-| `--output-dir` | no | `.flyto-baselines` | `` | Directory for <project>.json baseline files | [`src/cli.py:420`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L420) |
-| `--baseline` | no | `` | `` | Explicit baseline JSON path for compare | [`src/cli.py:421`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L421) |
-| `--full-scan` | no | `` | `` | Rebuild index before creating/comparing | [`src/cli.py:422`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L422) |
-| `--json` | no | `` | `` | Output as JSON | [`src/cli.py:423`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L423) |
+| `action` | no | `required` | `create, compare, update` | Baseline action | [`src/cli.py:445`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L445) |
+| `path` | no | `.` | `` | Project root path | [`src/cli.py:446`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L446) |
+| `--output-dir` | no | `.flyto-baselines` | `` | Directory for <project>.json baseline files | [`src/cli.py:447`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L447) |
+| `--baseline` | no | `` | `` | Explicit baseline JSON path for compare | [`src/cli.py:448`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L448) |
+| `--full-scan` | no | `` | `` | Rebuild index before creating/comparing | [`src/cli.py:449`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L449) |
+| `--json` | no | `` | `` | Output as JSON | [`src/cli.py:450`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L450) |
 
 ## `flyto-index pr-risk`
 
 Parse git diff, detect risk factors (API, auth, DB, config, breaking changes), cross-reference with index for affected symbols, and suggest tests to run.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:426`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L426).
+Handler: `inline dispatch`. Source: [`src/cli.py:453`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L453).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:431`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L431) |
-| `--base` | no | `` | `` | Git ref to compare against (e.g., main, HEAD~3). Default: uncommitted changes | [`src/cli.py:432`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L432) |
-| `--staged` | no | `` | `` | Only analyze staged changes | [`src/cli.py:433`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L433) |
-| `--json` | no | `` | `` | Output as JSON | [`src/cli.py:434`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L434) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:458`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L458) |
+| `--base` | no | `` | `` | Git ref to compare against (e.g., main, HEAD~3). Default: uncommitted changes | [`src/cli.py:459`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L459) |
+| `--staged` | no | `` | `` | Only analyze staged changes | [`src/cli.py:460`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L460) |
+| `--json` | no | `` | `` | Output as JSON | [`src/cli.py:461`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L461) |
 
 ## `flyto-index sbom`
 
 Scan project dependencies and export as CycloneDX 1.5 JSON SBOM. Includes licenses, integrity hashes, dependency graph, and external references. Supports npm, pypi, Go, Rust, Maven, PHP, Ruby, and Docker ecosystems.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:437`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L437).
+Handler: `inline dispatch`. Source: [`src/cli.py:464`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L464).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:442`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L442) |
-| `--format` | no | `cyclonedx` | `cyclonedx` | SBOM format (default: cyclonedx) | [`src/cli.py:443`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L443) |
-| `--name` | no | `` | `` | Project name (default: directory name) | [`src/cli.py:444`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L444) |
-| `--output, -o` | no | `` | `` | Output file path (default: stdout) | [`src/cli.py:445`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L445) |
-| `--summary` | no | `` | `` | Print human-readable summary instead of full JSON | [`src/cli.py:446`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L446) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:469`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L469) |
+| `--format` | no | `cyclonedx` | `cyclonedx` | SBOM format (default: cyclonedx) | [`src/cli.py:470`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L470) |
+| `--name` | no | `` | `` | Project name (default: directory name) | [`src/cli.py:471`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L471) |
+| `--output, -o` | no | `` | `` | Output file path (default: stdout) | [`src/cli.py:472`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L472) |
+| `--summary` | no | `` | `` | Print human-readable summary instead of full JSON | [`src/cli.py:473`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L473) |
 
 ## `flyto-index framework`
 
 Analyze project dependencies and file patterns to detect frameworks, their versions, conventions (ORM, auth, state management), and entry points.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:449`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L449).
+Handler: `inline dispatch`. Source: [`src/cli.py:476`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L476).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:454`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L454) |
-| `--json` | no | `` | `` | Output as JSON | [`src/cli.py:455`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L455) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:481`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L481) |
+| `--json` | no | `` | `` | Output as JSON | [`src/cli.py:482`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L482) |
 
 ## `flyto-index layers`
 
 Walk the import graph and flag any edge that violates layer declarations (can_import / cannot_import) or cross_imports_deny rules.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:458`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L458).
+Handler: `inline dispatch`. Source: [`src/cli.py:485`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L485).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:463`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L463) |
-| `--json` | no | `` | `` | Output as JSON | [`src/cli.py:464`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L464) |
-| `--fail-on-violation` | no | `` | `` | Exit non-zero if any violation is found (CI mode) | [`src/cli.py:465`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L465) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:490`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L490) |
+| `--json` | no | `` | `` | Output as JSON | [`src/cli.py:491`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L491) |
+| `--fail-on-violation` | no | `` | `` | Exit non-zero if any violation is found (CI mode) | [`src/cli.py:492`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L492) |
 
 ## `flyto-index add-layer`
 
 Declare a named layer by path glob, optionally constraining which other layers it may import.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:468`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L468).
+Handler: `inline dispatch`. Source: [`src/cli.py:495`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L495).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:473`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L473) |
-| `--name` | yes | `` | `` | Layer name (e.g., ui, lib, db) | [`src/cli.py:474`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L474) |
-| `--paths` | yes | `` | `` | Comma-separated path globs (e.g., 'src/components/**,src/pages/**') | [`src/cli.py:475`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L475) |
-| `--can-import` | no | `` | `` | Comma-separated layer names this layer may import | [`src/cli.py:476`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L476) |
-| `--cannot-import` | no | `` | `` | Comma-separated layer names this layer must not import | [`src/cli.py:477`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L477) |
-| `--reason` | no | `` | `` | Why this constraint exists (shown in audit output) | [`src/cli.py:478`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L478) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:500`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L500) |
+| `--name` | yes | `` | `` | Layer name (e.g., ui, lib, db) | [`src/cli.py:501`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L501) |
+| `--paths` | yes | `` | `` | Comma-separated path globs (e.g., 'src/components/**,src/pages/**') | [`src/cli.py:502`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L502) |
+| `--can-import` | no | `` | `` | Comma-separated layer names this layer may import | [`src/cli.py:503`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L503) |
+| `--cannot-import` | no | `` | `` | Comma-separated layer names this layer must not import | [`src/cli.py:504`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L504) |
+| `--reason` | no | `` | `` | Why this constraint exists (shown in audit output) | [`src/cli.py:505`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L505) |
 
 ## `flyto-index add-taint-source`
 
 Declare where untrusted data enters this project (e.g., request.json, custom SDK getters).
 
-Handler: `inline dispatch`. Source: [`src/cli.py:483`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L483).
+Handler: `inline dispatch`. Source: [`src/cli.py:510`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L510).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:488`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L488) |
-| `--pattern` | yes | `` | `` | Match pattern (e.g., 'ctx.body', 'request.custom_header') | [`src/cli.py:489`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L489) |
-| `--language` | no | `python` | `python, javascript, go` | Language (default: python) | [`src/cli.py:490`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L490) |
-| `--taint-type` | no | `` | `` | Optional label (e.g., user_input, config) | [`src/cli.py:491`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L491) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:515`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L515) |
+| `--pattern` | yes | `` | `` | Match pattern (e.g., 'ctx.body', 'request.custom_header') | [`src/cli.py:516`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L516) |
+| `--language` | no | `python` | `python, javascript, go` | Language (default: python) | [`src/cli.py:517`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L517) |
+| `--taint-type` | no | `` | `` | Optional label (e.g., user_input, config) | [`src/cli.py:518`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L518) |
 
 ## `flyto-index add-taint-sink`
 
 Declare a dangerous function that should not receive tainted data.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:493`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L493).
+Handler: `inline dispatch`. Source: [`src/cli.py:520`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L520).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:498`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L498) |
-| `--pattern` | yes | `` | `` | Match pattern (e.g., 'dangerous_exec(', 'runShell(') | [`src/cli.py:499`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L499) |
-| `--vuln-type` | no | `custom` | `` | Category (rce, xss, sql_injection, path_traversal, ...) | [`src/cli.py:500`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L500) |
-| `--severity` | no | `high` | `critical, high, medium, low` | Severity (default: high) | [`src/cli.py:501`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L501) |
-| `--recommendation` | no | `` | `` | What to do instead (shown in taint report) | [`src/cli.py:502`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L502) |
-| `--requires` | no | `` | `` | JSON argument-shape gates, e.g. '[{"arg": 0, "shape": "mapping"}]'. Lets a rule name a method without naming its receiver. | [`src/cli.py:503`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L503) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:525`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L525) |
+| `--pattern` | yes | `` | `` | Match pattern (e.g., 'dangerous_exec(', 'runShell(') | [`src/cli.py:526`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L526) |
+| `--vuln-type` | no | `custom` | `` | Category (rce, xss, sql_injection, path_traversal, ...) | [`src/cli.py:527`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L527) |
+| `--severity` | no | `high` | `critical, high, medium, low` | Severity (default: high) | [`src/cli.py:528`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L528) |
+| `--recommendation` | no | `` | `` | What to do instead (shown in taint report) | [`src/cli.py:529`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L529) |
+| `--requires` | no | `` | `` | JSON argument-shape gates, e.g. '[{"arg": 0, "shape": "mapping"}]'. Lets a rule name a method without naming its receiver. | [`src/cli.py:530`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L530) |
 
 ## `flyto-index add-taint-sanitizer`
 
 Declare a function that cleanses tainted data (e.g., shlex.quote, escape_html).
 
-Handler: `inline dispatch`. Source: [`src/cli.py:512`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L512).
+Handler: `inline dispatch`. Source: [`src/cli.py:539`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L539).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:517`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L517) |
-| `--pattern` | yes | `` | `` | Match pattern (e.g., 'mysql.escape(', 'html.escape(') | [`src/cli.py:518`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L518) |
-| `--cleanses` | no | `*` | `` | Comma-separated vuln types this sanitizer clears, or '*' for all (default: *) | [`src/cli.py:519`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L519) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:544`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L544) |
+| `--pattern` | yes | `` | `` | Match pattern (e.g., 'mysql.escape(', 'html.escape(') | [`src/cli.py:545`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L545) |
+| `--cleanses` | no | `*` | `` | Comma-separated vuln types this sanitizer clears, or '*' for all (default: *) | [`src/cli.py:546`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L546) |
 
 ## `flyto-index add-agent-guard`
 
 Tell the agent-policy analyzer that a function of yours confines a dangerous operation. A declared guard is conclusive: the analyzer stops reporting the operations it protects.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:521`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L521).
+Handler: `inline dispatch`. Source: [`src/cli.py:548`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L548).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:530`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L530) |
-| `--domain` | yes | `` | `path, url, credential_endpoint` | What this guard protects | [`src/cli.py:533`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L533) |
-| `--name` | yes | `` | `` | The function name, e.g. 'ensure_within_media_root' | [`src/cli.py:537`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L537) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:557`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L557) |
+| `--domain` | yes | `` | `path, url, credential_endpoint` | What this guard protects | [`src/cli.py:560`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L560) |
+| `--name` | yes | `` | `` | The function name, e.g. 'ensure_within_media_root' | [`src/cli.py:564`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L564) |
 
 ## `flyto-index remove-agent-guard`
 
 Built-in recognition is unaffected.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:541`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L541).
+Handler: `inline dispatch`. Source: [`src/cli.py:568`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L568).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:546`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L546) |
-| `--domain` | yes | `` | `path, url, credential_endpoint` |  | [`src/cli.py:549`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L549) |
-| `--name` | yes | `` | `` |  | [`src/cli.py:552`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L552) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:573`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L573) |
+| `--domain` | yes | `` | `path, url, credential_endpoint` |  | [`src/cli.py:576`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L576) |
+| `--name` | yes | `` | `` |  | [`src/cli.py:579`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L579) |
 
 ## `flyto-index list-agent-guards`
 
 Built-in guard names are NOT included; this shows what the project decided.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:554`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L554).
+Handler: `inline dispatch`. Source: [`src/cli.py:581`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L581).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:559`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L559) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:586`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L586) |
 
 ## `flyto-index remove-taint-rule`
 
 Delete one declared source / sink / sanitizer. Built-in defaults are unaffected.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:563`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L563).
+Handler: `inline dispatch`. Source: [`src/cli.py:590`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L590).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:571`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L571) |
-| `--kind` | yes | `` | `source, sink, sanitizer` | Which list the rule is in | [`src/cli.py:575`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L575) |
-| `--pattern` | yes | `` | `` | The pattern to delete, exactly as declared | [`src/cli.py:579`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L579) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:598`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L598) |
+| `--kind` | yes | `` | `source, sink, sanitizer` | Which list the rule is in | [`src/cli.py:602`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L602) |
+| `--pattern` | yes | `` | `` | The pattern to delete, exactly as declared | [`src/cli.py:606`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L606) |
 
 ## `flyto-index list-taint-rules`
 
 List every project-declared source / sink / sanitizer. Built-in defaults are NOT included.
 
-Handler: `inline dispatch`. Source: [`src/cli.py:584`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L584).
+Handler: `inline dispatch`. Source: [`src/cli.py:611`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L611).
 
 | Argument | Required | Default | Choices | Purpose | Source |
 |---|---|---|---|---|---|
-| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:589`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L589) |
+| `path` | no | `.` | `` | Project root path (default: current directory) | [`src/cli.py:616`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L616) |
 
 ## `flyto-index task`
 

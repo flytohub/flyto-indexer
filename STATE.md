@@ -1,5 +1,35 @@
 # Flyto2 Indexer State
 
+## 2026-09-28 — Internal authority decomposition
+
+The public 20-tool surface and runtime dependency boundary are unchanged. The
+large internal authorities were split by responsibility without moving coding or
+execution ownership into Indexer:
+
+- verification now separates orchestration (`src/verify.py`), contract/product-loop
+  checks (`src/verification/contracts.py`), repository hygiene/policy checks
+  (`src/verification/hygiene.py`), baseline comparison, reporting, and shared
+  support;
+- taint keeps `TaintAnalyzer` as the compatibility facade while source admission,
+  Python propagation, cross-file caller attribution, regex fallback, evidence,
+  policy, propagation defaults, and common helpers live in focused modules;
+- task analysis separates exact target resolution, deterministic risk scoring,
+  plan construction, and phase gates while `task_analysis.py` remains the
+  contract orchestrator;
+- CLI grammar/dispatch stays in `src/cli.py`; workspace/setup, scanner/policy,
+  quality/security, and verification handlers live in focused `src/cli_*.py`
+  modules.
+
+The boundary remains: Indexer produces deterministic intelligence/evidence; it
+does not edit product code, run coding agents, commit, deploy, or become a second
+orchestrator. Compatibility imports and historical monkeypatch seams used by the
+regression suite remain available.
+
+Final local closure on this tree: `scripts/test_fast.sh` passed; full pytest
+reported 2728 passed and 3 skipped; Ruff, generated-reference check,
+project-memory lint, and `git diff --check` passed. The published surfaces remain
+20 MCP tools and 44 CLI commands.
+
 ## 2026-09-19 — Import-bound Python cross-file candidates
 
 The existing taint caller pass resolves unambiguous local module imports,

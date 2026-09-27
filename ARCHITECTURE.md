@@ -135,6 +135,27 @@ HTTP references.
 Adapters compose shared scanners, analyzers, indexes, and tools; lower layers
 must not import protocol entrypoints. `.flyto-rules.yaml` encodes that direction.
 
+
+### Internal implementation boundaries
+
+- `src/verify.py` is the verification orchestrator. Contract/product-loop checks,
+  repository hygiene/policy checks, regression comparison, reporting, and shared
+  workspace/result support live under `src/verification/`.
+- `src/analyzer/taint.py` is the stable `TaintAnalyzer` facade. Source snapshot
+  admission, Python flow analysis, cross-file propagation, regex fallback, rule
+  policy, evidence serialization, and propagation defaults are separate analyzer
+  modules.
+- `src/tools/task_analysis.py` builds the task contract; exact target resolution,
+  risk scoring, plan construction, and phase gates are owned by `task_resolution`,
+  `task_risk`, `task_planning`, and `task_gate` respectively.
+- `src/cli.py` owns command grammar and dispatch. Workspace/setup, scanner/policy,
+  quality/security, and verification handlers live in `src/cli_workspace.py`,
+  `src/cli_scanners.py`, `src/cli_quality.py`, and `src/cli_verify.py`.
+
+These splits are implementation boundaries, not new product surfaces. Indexer
+continues to provide evidence and planning intelligence only; runtime execution
+and coding-agent ownership stay outside this repository.
+
 ## Documentation Contract
 
 `scripts/generate-reference.py` derives interface references from AST,

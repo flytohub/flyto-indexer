@@ -31,381 +31,65 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from .task_resolution import (
+    _PATH_EXTENSIONS, _append_resolved_target, _is_exact_task_target_match,
+    _looks_like_path, _normalize_path_text, _relative_target_path,
+    _resolve_exact_search_target as _resolve_exact_search_target_impl, _resolve_targets as _resolve_targets_impl, _symbol_path_matches_target,
+    _symbol_sort_key,
+)
+from .task_risk import (
+    _compute_index_confidence, _compute_project_signals, _is_test_path,
+    _overall_risk, _score_blast_radius, _score_breaking_risk, _score_complexity,
+    _score_cross_coupling, _score_rollback_difficulty, _score_test_risk as _score_test_risk_impl,
+    _score_to_level,
+)
+from .task_planning import (
+    MAX_INDIVIDUAL_INSPECT, _ANTI_PATTERNS, _BLOCKED_ACTION_RULES,
+    _CONSTRAINT_RULES_BY_LEVEL, _INTENT_DEFAULTS, _INTENT_REASONING,
+    _LEVEL_ORDER, _REASONING_MODES, _RISK_POSTURES, _build_compound_contract,
+    _build_decision_metadata, _build_execution_plan, _classify_target_intent,
+    _derive_constraints, _derive_strategy, _generate_compound_summary,
+    _generate_human_summary, _plan_assess_steps, _plan_inspect_steps,
+)
+
 try:
-    from .references import (
-        find_references,
-        impact_analysis,
-        edit_impact_preview,
-        cross_project_impact,
-        dependency_graph,
-    )
     from .code_info import find_test_file, list_projects
-    from .governance import evaluate_task_governance, validate_governance_diff
+    from .references import find_references
     from .search import search_by_keyword
     from ..index_store import load_index
-    from ..quality import code_health_score
-except ImportError:
-    from tools.references import (
-        find_references,
-        impact_analysis,
-        edit_impact_preview,
-        cross_project_impact,
-        dependency_graph,
+    from .governance import evaluate_task_governance
+    from .task_gate import (
+        GATE_PHASES,
+        _GATE_REQUIREMENTS,
+        _REASON_CODES,
+        _STRATEGY_TO_GATE,
+        _apply_governance_gate,
+        _collect_gate_blockers,
+        _gate_check_compound,
+        task_gate_check,
     )
+except ImportError:
     from tools.code_info import find_test_file, list_projects
-    from tools.governance import evaluate_task_governance, validate_governance_diff
+    from tools.references import find_references
     from tools.search import search_by_keyword
     from index_store import load_index
-    from quality import code_health_score
+    from tools.governance import evaluate_task_governance
+    from tools.task_gate import (
+        GATE_PHASES,
+        _GATE_REQUIREMENTS,
+        _REASON_CODES,
+        _STRATEGY_TO_GATE,
+        _apply_governance_gate,
+        _collect_gate_blockers,
+        _gate_check_compound,
+        task_gate_check,
+    )
 
 
 # =========================================================================
 # Constants
 # =========================================================================
 
-VALID_INTENTS = {"refactor", "bugfix", "feature", "cleanup", "migration"}
-
-CONTRACT_VERSION = "task-contract.v2"
-
-MAX_INDIVIDUAL_INSPECT = 10  # Bound detailed inspect searches before assess
-
-
-def _is_test_path(path: str) -> bool:
-    """Return whether a canonical repository path names a test source file."""
-    parts = tuple(part for part in path.split("/") if part)
-    if not parts:
-        return False
-    if any(part in {"tests", "__tests__"} for part in parts[:-1]):
-        return True
-
-    name = parts[-1]
-    if name.endswith("_test.go"):
-        return True
-    if name.endswith(".py") and (name.startswith("test_") or name.endswith("_test.py")):
-        return True
-    stem, separator, suffix = name.rpartition(".")
-    return (
-        bool(separator)
-        and suffix in {"js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts"}
-        and (stem.endswith(".test") or stem.endswith(".spec"))
-    )
-
-# =========================================================================
-# Intent → default strategy
-# =========================================================================
-
-_INTENT_DEFAULTS = {
-    "refactor": {
-        "mode": "safe_refactor",
-        "editing_style": "incremental",
-        "verification_level": "high",
-        "preferred_patch_scope": "narrow",
-    },
-    "bugfix": {
-        "mode": "minimal_bugfix",
-        "editing_style": "minimal",
-        "verification_level": "medium",
-        "preferred_patch_scope": "narrow",
-    },
-    "feature": {
-        "mode": "contract_first_feature",
-        "editing_style": "additive",
-        "verification_level": "medium",
-        "preferred_patch_scope": "medium",
-    },
-    "cleanup": {
-        "mode": "cautious_cleanup",
-        "editing_style": "subtractive",
-        "verification_level": "low",
-        "preferred_patch_scope": "narrow",
-    },
-    "migration": {
-        "mode": "migration_mode",
-        "editing_style": "incremental",
-        "verification_level": "high",
-        "preferred_patch_scope": "narrow",
-    },
-}
-
-# =========================================================================
-# Constraint derivation rules (level-based)
-# =========================================================================
-
-# (dimension, level, constraint_key)
-# Triggers when dimension level >= the specified level
-_CONSTRAINT_RULES_BY_LEVEL = [
-    # medium+ triggers
-    ("blast_radius",   "medium", "must_run_impact_analysis"),
-    ("breaking_risk",  "medium", "must_use_edit_impact_preview"),
-    ("test_risk",      "medium", "must_add_or_update_tests"),
-    ("cross_coupling", "medium", "must_check_cross_project_usage"),
-    # high triggers
-    ("blast_radius",   "high", "must_use_small_steps"),
-    ("breaking_risk",  "high", "must_request_human_review_on_public_contract_change"),
-    ("test_risk",      "high", "must_validate_before_wide_change"),
-    ("cross_coupling", "high", "must_list_affected_projects"),
-    ("complexity",     "high", "must_review_dependency_chain"),
-    ("rollback_difficulty", "high", "must_prepare_revert_plan"),
-]
-
-_LEVEL_ORDER = {"low": 0, "medium": 1, "high": 2}
-
-# blocked_actions derived from high-risk dimensions
-_BLOCKED_ACTION_RULES = [
-    ("breaking_risk",  "high", "rename_exported_symbol_without_review"),
-    ("rollback_difficulty", "high", "multi_module_atomic_rewrite"),
-    ("blast_radius",   "high", "bulk_replace"),
-]
-
-# =========================================================================
-# Gate phases (fixed set for V1)
-# =========================================================================
-
-GATE_PHASES = ["inspect", "plan_changes", "apply_changes", "expand_changes", "finalize"]
-
-# Strategy phase → gate phase mapping
-# Allows task_gate_check to accept strategy-specific phase names
-_STRATEGY_TO_GATE = {
-    # Public MCP phase names
-    "assess": "plan_changes",
-    "implement": "apply_changes",
-    "verify": "finalize",
-    # inspect gate
-    "inspect_references": "inspect",
-    "inspect_tests": "inspect",
-    "inspect_cross_project_usage": "inspect",
-    "locate_root_cause": "inspect",
-    # plan_changes gate
-    "verify_fix_scope": "plan_changes",
-    "prepare_minimal_change_set": "plan_changes",
-    "define_interface_contract": "plan_changes",
-    "scaffold_structure": "plan_changes",
-    "confirm_no_live_callers": "plan_changes",
-    "build_compatibility_adapter": "plan_changes",
-    # apply_changes gate
-    "apply_small_changes": "apply_changes",
-    "apply_minimal_patch": "apply_changes",
-    "implement_core_logic": "apply_changes",
-    "remove_code": "apply_changes",
-    "migrate_consumers_incrementally": "apply_changes",
-    # expand_changes gate
-    "add_tests": "expand_changes",
-    "integrate_with_callers": "expand_changes",
-    "remove_compatibility_layer": "expand_changes",
-    # finalize gate
-    "run_validation": "finalize",
-}
-
-# What must be true to enter each phase
-_GATE_REQUIREMENTS = {
-    "plan_changes": [
-        ("impact_analysis_done", "must_run_impact_analysis", "Impact analysis must be completed first"),
-    ],
-    "apply_changes": [
-        ("cross_project_check_done", "must_check_cross_project_usage",
-         "Cross-project usage check required but not completed"),
-        ("tests_reviewed", "must_add_or_update_tests",
-         "Test review/addition required before applying changes"),
-    ],
-    "expand_changes": [
-        ("validation_passed", None,
-         "Previous validation must pass before expanding changes"),
-    ],
-    "finalize": [
-        ("validation_passed", None,
-         "All validations must pass before finalizing"),
-    ],
-}
-
-# Reason codes for gate blockers
-_REASON_CODES = {
-    "impact_analysis_done": "IMPACT_ANALYSIS_REQUIRED",
-    "cross_project_check_done": "CROSS_PROJECT_CHECK_REQUIRED",
-    "tests_reviewed": "TEST_REVIEW_REQUIRED",
-    "human_review_completed": "HUMAN_REVIEW_REQUIRED_FOR_PUBLIC_CONTRACT_CHANGE",
-    "validation_passed": "VALIDATION_REQUIRED",
-}
-
-
-# =========================================================================
-# Decision metadata + execution plan — data-driven cognitive guidance
-# =========================================================================
-
-# Reasoning modes: explain WHY the plan is structured a certain way
-_REASONING_MODES = {
-    "minimal_diff": "Smallest change that achieves the goal",
-    "boundary_first": "Define interfaces and boundaries before implementation",
-    "elimination": "Exclude known-safe areas first, focus on remainder",
-    "narrow_then_widen": "Verify on smallest surface first, then expand",
-    "decompose": "Break into independently verifiable sub-tasks",
-    "follow_pattern": "Match existing codebase patterns",
-}
-
-# Anti-patterns: machine-readable forbidden reasoning patterns
-_ANTI_PATTERNS = {
-    "brute_force_enumerate", "guess_and_check", "copy_paste_modify",
-    "big_bang_rewrite", "change_without_boundary_check",
-}
-
-# Intent → default reasoning mode + anti-patterns
-_INTENT_REASONING = {
-    "bugfix": {
-        "mode": "minimal_diff",
-        "anti_patterns": ["guess_and_check", "big_bang_rewrite"],
-    },
-    "refactor": {
-        "mode": "minimal_diff",
-        "anti_patterns": ["big_bang_rewrite", "copy_paste_modify"],
-    },
-    "feature": {
-        "mode": "boundary_first",
-        "anti_patterns": ["copy_paste_modify", "change_without_boundary_check"],
-    },
-    "cleanup": {
-        "mode": "elimination",
-        "anti_patterns": ["brute_force_enumerate", "big_bang_rewrite"],
-    },
-    "migration": {
-        "mode": "boundary_first",
-        "anti_patterns": ["big_bang_rewrite", "change_without_boundary_check"],
-    },
-}
-
-# Risk posture: derived from overall risk level
-_RISK_POSTURES = {
-    "high": "conservative",
-    "moderate": "cautious",
-    "low": "standard",
-    "safe": "standard",
-}
-
-
-# =========================================================================
-# Helpers
-# =========================================================================
-
-def _score_to_level(score: float) -> str:
-    """Convert 0-10 score to low/medium/high level."""
-    if score >= 7.0:
-        return "high"
-    elif score >= 4.0:
-        return "medium"
-    return "low"
-
-
-def _overall_risk(max_score: float) -> str:
-    """Convert max dimension score to overall risk label."""
-    if max_score >= 8.0:
-        return "high"
-    elif max_score >= 5.0:
-        return "moderate"
-    elif max_score >= 2.0:
-        return "low"
-    return "safe"
-
-
-# =========================================================================
-# Target resolution
-# =========================================================================
-
-_PATH_EXTENSIONS = (
-    ".py", ".ts", ".tsx", ".js", ".jsx", ".vue", ".go", ".rs",
-    ".java", ".kt", ".rb", ".cpp", ".c", ".h", ".cs", ".swift",
-)
-
-
-def _looks_like_path(target: str) -> bool:
-    normalized = target.replace("\\", "/")
-    return (
-        normalized.startswith(("/", "./", "../", "~/"))
-        or "/" in normalized
-        or any(normalized.endswith(ext) for ext in _PATH_EXTENSIONS)
-    )
-
-
-def _normalize_path_text(path: str) -> str:
-    normalized = path.replace("\\", "/")
-    while normalized.startswith("./"):
-        normalized = normalized[2:]
-    return normalized
-
-
-def _relative_target_path(target: str, project: str, project_roots: dict) -> Optional[str]:
-    if not target:
-        return None
-
-    normalized = _normalize_path_text(target)
-    if not Path(target).expanduser().is_absolute():
-        return normalized
-
-    target_path = Path(target).expanduser().resolve(strict=False)
-    root_value = project_roots.get(project) if project else None
-    if not root_value:
-        return None
-
-    root_path = Path(root_value).expanduser().resolve(strict=False)
-    try:
-        return _normalize_path_text(str(target_path.relative_to(root_path)))
-    except ValueError:
-        return None
-
-
-def _symbol_path_matches_target(sym_path: str, target: str, relative_target: Optional[str]) -> bool:
-    if not sym_path:
-        return False
-
-    normalized_symbol_path = _normalize_path_text(sym_path)
-    normalized_target = _normalize_path_text(target)
-    if relative_target and normalized_symbol_path == relative_target:
-        return True
-    if normalized_symbol_path == normalized_target:
-        return True
-    return Path(target).expanduser().is_absolute() and normalized_target.endswith(
-        "/" + normalized_symbol_path
-    )
-
-
-def _symbol_sort_key(item: tuple) -> tuple:
-    sid, sym = item
-    return (
-        0 if sym.get("type") == "file" else 1,
-        sym.get("start_line") or 0,
-        sid,
-    )
-
-
-def _append_resolved_target(
-    resolved: List[dict],
-    seen_ids: set,
-    target: str,
-    sid: str,
-    sym: dict,
-) -> bool:
-    if sid in seen_ids:
-        return False
-    resolved.append({
-        "input": target,
-        "symbol_id": sid,
-        "name": sym.get("name", ""),
-        "type": sym.get("type", ""),
-        "path": sym.get("path", ""),
-    })
-    seen_ids.add(sid)
-    return True
-
-
-def _is_exact_task_target_match(target: str, item: dict) -> bool:
-    """Require exact identity before a search hit can grant edit authority."""
-    requested = target.strip().casefold()
-    if not requested:
-        return False
-    symbol_id = str(item.get("symbol_id") or "")
-    identities = {
-        str(item.get("name") or "").strip().casefold(),
-        symbol_id.rsplit(":", 1)[-1].strip().casefold(),
-    }
-    identities.discard("")
-    return requested in identities
 
 
 def _resolve_exact_search_target(
@@ -413,1339 +97,175 @@ def _resolve_exact_search_target(
     project: str | None,
     seen_ids: set[str],
 ) -> dict | None:
-    """Return the first exact-identity search hit not already resolved."""
-    results = search_by_keyword(target, max_results=5, project=project)
-    for item in results.get("results", []):
-        if not _is_exact_task_target_match(target, item):
-            continue
-        symbol_id = item.get("symbol_id", "")
-        if symbol_id and symbol_id not in seen_ids:
-            return {
-                "input": target,
-                "symbol_id": symbol_id,
-                "name": item.get("name", ""),
-                "type": item.get("type", ""),
-                "path": item.get("path", ""),
-            }
-    return None
+    """Compatibility wrapper preserving the historical facade signature."""
+    return _resolve_exact_search_target_impl(
+        target,
+        project,
+        seen_ids,
+        search_fn=search_by_keyword,
+    )
 
 
 def _resolve_targets(targets: List[str], project: str = None) -> List[dict]:
-    """Resolve target names to symbol IDs.
+    """Compatibility wrapper preserving task_analysis dependency patch points."""
+    return _resolve_targets_impl(
+        targets,
+        project,
+        load_index_fn=load_index,
+        search_fn=search_by_keyword,
+    )
 
-    Explicit file paths are resolved by path only and do not fall back to
-    semantic search. Returning unknown is safer than planning against a
-    same-named symbol in the wrong file or project.
-    """
-    resolved = []
-    seen_ids = set()
-    index = load_index()
-    symbols = index.get("symbols", {})
-    project_roots = index.get("project_roots", {})
+def _score_test_risk(resolved: List[dict]) -> dict:
+    """Compatibility wrapper preserving task_analysis dependency patch points."""
+    return _score_test_risk_impl(
+        resolved,
+        find_references_fn=find_references,
+        find_test_file_fn=find_test_file,
+    )
 
-    for target in targets:
-        # Try as exact symbol_id first
-        if target in symbols:
-            _append_resolved_target(resolved, seen_ids, target, target, symbols[target])
-            continue
 
-        # Try exact file path matching before any keyword or semantic lookup.
-        is_path = _looks_like_path(target)
-        if is_path:
-            candidates = []
-            project_names = (
-                [project] if project else list(project_roots.keys())
-            ) or [None]
+VALID_INTENTS = {"refactor", "bugfix", "feature", "cleanup", "migration"}
 
-            for sid, sym in sorted(symbols.items(), key=_symbol_sort_key):
-                if project and not sid.lower().startswith(project.lower() + ":"):
-                    continue
-                for project_name in project_names:
-                    relative_target = _relative_target_path(target, project_name, project_roots)
-                    if _symbol_path_matches_target(sym.get("path", ""), target, relative_target):
-                        candidates.append((sid, sym))
-                        break
+CONTRACT_VERSION = "task-contract.v2"
 
-            if candidates:
-                sid, sym = candidates[0]
-                _append_resolved_target(resolved, seen_ids, target, sid, sym)
-                continue
 
-            resolved.append({
-                "input": target,
-                "symbol_id": None,
-                "name": target,
-                "type": "unknown",
-                "path": "",
-            })
-            continue
 
-        # Search by keyword (with project filter)
-        matched = _resolve_exact_search_target(target, project, seen_ids)
-        if matched is None:
-            resolved.append({
-                "input": target,
-                "symbol_id": None,
-                "name": target,
-                "type": "unknown",
-                "path": "",
-            })
-        else:
-            resolved.append(matched)
-            seen_ids.add(matched["symbol_id"])
 
-    return resolved
+# =========================================================================
+# Intent → default strategy
+# =========================================================================
+
+
+# =========================================================================
+# Constraint derivation rules (level-based)
+# =========================================================================
+
+# (dimension, level, constraint_key)
+# Triggers when dimension level >= the specified level
+
+
+# blocked_actions derived from high-risk dimensions
+
+# =========================================================================
+# Gate phases (fixed set for V1)
+# =========================================================================
+
+
+# Strategy phase → gate phase mapping
+# Allows task_gate_check to accept strategy-specific phase names
+
+# What must be true to enter each phase
+
+# Reason codes for gate blockers
+
+
+# =========================================================================
+# Decision metadata + execution plan — data-driven cognitive guidance
+# =========================================================================
+
+# Reasoning modes: explain WHY the plan is structured a certain way
+
+# Anti-patterns: machine-readable forbidden reasoning patterns
+
+# Intent → default reasoning mode + anti-patterns
+
+# Risk posture: derived from overall risk level
+
+
+# =========================================================================
+# Helpers
+# =========================================================================
+
+
+
+
+
+# =========================================================================
+# Target resolution
+# =========================================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # =========================================================================
 # Dimension scoring — all dimensions: HIGH score = HIGH risk
 # =========================================================================
 
-def _score_blast_radius(resolved: List[dict]) -> dict:
-    """How many symbols/files/projects are affected."""
-    total_affected = 0
-    affected_files = set()
-    affected_projects = set()
-    evidence_items = []
-
-    for target in resolved:
-        sid = target.get("symbol_id")
-        if not sid:
-            continue
-        result = impact_analysis(sid)
-        count = result.get("affected_count", 0)
-        total_affected += count
-        for a in result.get("affected", []):
-            path = a.get("path", "")
-            if path:
-                affected_files.add(path)
-            aid = a.get("id", "")
-            if ":" in aid:
-                affected_projects.add(aid.split(":")[0])
-        evidence_items.append({
-            "symbol": sid,
-            "affected_count": count,
-        })
-
-    # Scoring curve
-    if total_affected == 0:
-        score = 0.0
-    elif total_affected <= 3:
-        score = 2.0
-    elif total_affected <= 10:
-        score = 4.0 + (total_affected - 4) * 0.3
-    elif total_affected <= 20:
-        score = 6.0 + (total_affected - 11) * 0.2
-    elif total_affected <= 50:
-        score = 8.0 + (total_affected - 21) * 0.07
-    else:
-        score = 10.0
-    score = round(min(score, 10.0), 1)
-
-    rationale = f"{total_affected} affected symbols across {len(affected_files)} files"
-    if affected_projects:
-        rationale += f" in {len(affected_projects)} project(s)"
-
-    return {
-        "score": score,
-        "level": _score_to_level(score),
-        "rationale": rationale,
-        "evidence": {
-            "affected_symbols": total_affected,
-            "affected_files": len(affected_files),
-            "affected_projects": sorted(affected_projects),
-        },
-    }
 
 
-def _score_breaking_risk(resolved: List[dict], intent: str) -> dict:
-    """Likelihood of breaking existing callers."""
-    total_call_sites = 0
-    max_risk = "safe"
-    risk_order = {"safe": 0, "low": 1, "moderate": 2, "high": 3}
-    has_public_api = False
-    signature_changes = 0
-
-    change_type_map = {
-        "refactor": "signature_change",
-        "bugfix": "modify",
-        "feature": "modify",
-        "cleanup": "delete",
-        "migration": "rename",
-    }
-    change_type = change_type_map.get(intent, "modify")
-
-    for target in resolved:
-        sid = target.get("symbol_id")
-        if not sid:
-            continue
-        result = edit_impact_preview(sid, change_type=change_type)
-        sites = result.get("total_call_sites", 0)
-        total_call_sites += sites
-        risk = result.get("risk", "safe")
-        if risk_order.get(risk, 0) > risk_order.get(max_risk, 0):
-            max_risk = risk
-        if sites > 0:
-            has_public_api = True
-        if change_type in ("signature_change", "rename", "delete"):
-            signature_changes += 1
-
-    # Score
-    risk_scores = {"safe": 0.0, "low": 3.0, "moderate": 6.0, "high": 8.0}
-    score = risk_scores.get(max_risk, 0.0)
-    if total_call_sites > 20:
-        score = min(score + 2.0, 10.0)
-    elif total_call_sites > 10:
-        score = min(score + 1.0, 10.0)
-    score = round(score, 1)
-
-    rationale_parts = []
-    if has_public_api:
-        rationale_parts.append("touches public API")
-    if total_call_sites > 0:
-        rationale_parts.append(f"{total_call_sites} call site(s)")
-    if signature_changes > 0:
-        rationale_parts.append(f"{signature_changes} signature change(s) detected")
-    rationale = "; ".join(rationale_parts) if rationale_parts else "No breaking risk detected"
-
-    # Reduce breaking risk for private/internal symbols
-    all_private = all(
-        t.get("name", "").startswith("_") or t.get("type") == "unknown"
-        for t in resolved
-    )
-    if all_private and score > 3.0:
-        score = max(2.0, score * 0.4)
-        rationale += "; targets are private/internal (risk reduced)"
-
-    return {
-        "score": score,
-        "level": _score_to_level(score),
-        "rationale": rationale,
-        "evidence": {
-            "total_call_sites": total_call_sites,
-            "max_risk_level": max_risk,
-            "has_public_api": has_public_api,
-            "signature_changes_detected": signature_changes,
-        },
-    }
 
 
-def _score_test_risk(resolved: List[dict]) -> dict:
-    """Risk from insufficient test coverage on callers.
-
-    Checks both the target files AND their callers for test coverage.
-    A symbol with tests is still risky if its callers lack tests.
-    HIGH score = HIGH risk (low coverage).
-    """
-    targets_with_tests = 0
-    targets_without_tests = 0
-    callers_with_tests = 0
-    callers_without_tests = 0
-    test_files = []
-    checked_paths = set()
-
-    for target in resolved:
-        sid = target.get("symbol_id")
-        path = target.get("path", "")
-        target_project = sid.split(":", 1)[0] if sid and ":" in sid else None
-
-        # Check target file test coverage
-        target_key = (target_project, path)
-        if path and target_key not in checked_paths:
-            checked_paths.add(target_key)
-            result = find_test_file(path, project=target_project)
-            test_file = result.get("test_file", "")
-            if test_file:
-                targets_with_tests += 1
-                test_files.append(test_file)
-            else:
-                targets_without_tests += 1
-        elif not path:
-            targets_without_tests += 1
-
-        # Check caller test coverage via find_references
-        if sid:
-            refs = find_references(sid)
-            for ref in refs.get("references", []):
-                caller_path = ref.get("from_path", "")
-                caller_symbol = ref.get("from_symbol", "")
-                caller_project = (
-                    caller_symbol.split(":", 1)[0]
-                    if ":" in caller_symbol
-                    else target_project
-                )
-                caller_key = (caller_project, caller_path)
-                if not caller_path or caller_key in checked_paths:
-                    continue
-                checked_paths.add(caller_key)
-                caller_test = find_test_file(
-                    caller_path,
-                    project=caller_project,
-                )
-                if caller_test.get("test_file"):
-                    callers_with_tests += 1
-                    test_files.append(caller_test["test_file"])
-                else:
-                    callers_without_tests += 1
-
-    # Combined coverage: target coverage + caller coverage
-    total_targets = targets_with_tests + targets_without_tests
-    total_callers = callers_with_tests + callers_without_tests
-
-    if total_targets == 0:
-        target_ratio = 0.0
-    else:
-        target_ratio = targets_with_tests / total_targets
-
-    if total_callers == 0:
-        caller_ratio = 1.0  # No callers = no caller risk
-    else:
-        caller_ratio = callers_with_tests / total_callers
-
-    # Weighted: target coverage matters more, but untested callers are risky too
-    # 60% target coverage + 40% caller coverage
-    combined_ratio = target_ratio * 0.6 + caller_ratio * 0.4
-
-    # INVERTED: high coverage → low risk score
-    score = round((1.0 - combined_ratio) * 10.0, 1)
-
-    # Build rationale
-    parts = []
-    if total_targets > 0:
-        parts.append(f"{targets_with_tests}/{total_targets} target files have tests")
-    if total_callers > 0:
-        parts.append(f"{callers_with_tests}/{total_callers} caller files have tests")
-
-    if not parts:
-        rationale = "No targets or callers to assess"
-    elif combined_ratio == 0:
-        rationale = "No test files found — very high risk. " + "; ".join(parts)
-    elif combined_ratio < 0.5:
-        rationale = "Low test coverage. " + "; ".join(parts)
-    elif combined_ratio < 1.0:
-        rationale = "Partial test coverage. " + "; ".join(parts)
-    else:
-        rationale = "Full test coverage. " + "; ".join(parts)
-
-    return {
-        "score": score,
-        "level": _score_to_level(score),
-        "rationale": rationale,
-        "evidence": {
-            "target_files_tested": targets_with_tests,
-            "target_files_untested": targets_without_tests,
-            "caller_files_tested": callers_with_tests,
-            "caller_files_untested": callers_without_tests,
-            "test_files": sorted(set(test_files)),
-        },
-    }
 
 
-def _score_cross_coupling(resolved: List[dict]) -> dict:
-    """How many projects share the affected symbols.
-
-    Uses find_references(symbol_id) to get precise cross-project callers,
-    avoiding name-matching false positives from cross_project_impact(name).
-    """
-    all_affected_projects = set()
-    cross_refs = []
-    source_projects = set()
-
-    for target in resolved:
-        sid = target.get("symbol_id")
-        if not sid:
-            continue
-
-        # Determine source project from symbol_id
-        src_project = sid.split(":")[0] if ":" in sid else ""
-        if src_project:
-            source_projects.add(src_project)
-
-        # Use find_references for precise symbol-level cross-project refs
-        refs = find_references(sid)
-        for ref in refs.get("references", []):
-            caller_id = ref.get("from_symbol", "")
-            if ":" not in caller_id:
-                continue
-            caller_project = caller_id.split(":")[0]
-
-            # Only count cross-project references
-            if caller_project and caller_project != src_project:
-                all_affected_projects.add(caller_project)
-                cross_refs.append({
-                    "caller": caller_id,
-                    "caller_project": caller_project,
-                    "source_project": src_project,
-                })
-
-    num_projects = len(all_affected_projects)
-    total_cross_refs = len(cross_refs)
-
-    if num_projects == 0:
-        score = 0.0
-    elif num_projects == 1:
-        score = 3.0 + min(total_cross_refs * 0.5, 2.0)
-    elif num_projects == 2:
-        score = 5.0 + min(total_cross_refs * 0.3, 2.0)
-    else:
-        score = 7.0 + min(num_projects * 0.5, 3.0)
-    score = round(min(score, 10.0), 1)
-
-    if num_projects == 0:
-        rationale = "No cross-project coupling detected"
-    else:
-        rationale = f"Shared by {num_projects} project(s) with {total_cross_refs} cross-reference(s)"
-
-    return {
-        "score": score,
-        "level": _score_to_level(score),
-        "rationale": rationale,
-        "evidence": {
-            "shared_by_projects": sorted(all_affected_projects),
-            "total_cross_refs": total_cross_refs,
-            "source_projects": sorted(source_projects),
-        },
-    }
 
 
-def _score_complexity(resolved: List[dict]) -> dict:
-    """Dependency depth + code complexity of targets."""
-    max_depth = 0
-    total_deps = 0
-    total_dependents = 0
-    complex_functions_count = 0
-
-    for target in resolved:
-        sid = target.get("symbol_id")
-        path = target.get("path", "")
-        if not path and not sid:
-            continue
-
-        dep_result = dependency_graph(
-            file_path=path if path else None,
-            symbol_id=sid if not path else None,
-            direction="both",
-            max_depth=3,
-        )
-        summary = dep_result.get("summary", {})
-        imports_count = summary.get("imports_count", 0)
-        dependents_count = summary.get("dependents_count", 0)
-        total_deps += imports_count
-        total_dependents += dependents_count
-        depth = min(imports_count, 10)
-        if depth > max_depth:
-            max_depth = depth
-
-        # Check symbol line count
-        if sid:
-            index = load_index()
-            sym = index.get("symbols", {}).get(sid, {})
-            lines = sym.get("end_line", 0) - sym.get("start_line", 0)
-            if lines > 50:
-                complex_functions_count += 1
-
-    dep_score = min(total_deps * 0.5, 5.0)
-    depth_score = min(max_depth * 0.8, 3.0)
-    complex_bonus = min(complex_functions_count * 1.0, 2.0)
-    score = round(min(dep_score + depth_score + complex_bonus, 10.0), 1)
-
-    rationale = f"Dependency depth {max_depth}, {total_deps} imports, {total_dependents} dependents"
-    if complex_functions_count > 0:
-        rationale += f", {complex_functions_count} complex function(s)"
-
-    return {
-        "score": score,
-        "level": _score_to_level(score),
-        "rationale": rationale,
-        "evidence": {
-            "dependency_depth": max_depth,
-            "total_imports": total_deps,
-            "total_dependents": total_dependents,
-            "complex_functions": complex_functions_count,
-        },
-    }
 
 
-def _score_rollback_difficulty(
-    blast: dict, breaking: dict, coupling: dict, complexity: dict,
-) -> dict:
-    """Signal-based rollback difficulty scoring.
-
-    Instead of a weighted average, counts discrete risk signals:
-    - public_api_change: exported symbol with callers
-    - multi_project: affects more than 1 project
-    - many_consumers: >10 call sites
-    - high_breaking: breaking_risk is high
-    - high_coupling: cross_coupling is high
-    - deep_dependency: complexity is high
-
-    Each signal contributes to the score. More signals = harder rollback.
-    """
-    signals = []
-
-    # Signal: public API change
-    if breaking.get("evidence", {}).get("has_public_api", False):
-        signals.append("public_api_change")
-
-    # Signal: multi-project impact
-    affected_projects = blast.get("evidence", {}).get("affected_projects", [])
-    coupled_projects = coupling.get("evidence", {}).get("shared_by_projects", [])
-    all_projects = set(affected_projects) | set(coupled_projects)
-    if len(all_projects) > 1:
-        signals.append("multi_project")
-
-    # Signal: many consumers
-    call_sites = breaking.get("evidence", {}).get("total_call_sites", 0)
-    if call_sites > 10:
-        signals.append("many_consumers")
-
-    # Signal: high breaking risk
-    if breaking.get("level") == "high":
-        signals.append("high_breaking")
-
-    # Signal: high cross-coupling
-    if coupling.get("level") == "high":
-        signals.append("high_coupling")
-
-    # Signal: deep dependency chain
-    if complexity.get("level") == "high":
-        signals.append("deep_dependency")
-
-    # Score: each signal adds ~2 points, capped at 10
-    num_signals = len(signals)
-    if num_signals == 0:
-        score = 0.0
-    elif num_signals == 1:
-        score = 3.0
-    elif num_signals == 2:
-        score = 5.0
-    elif num_signals == 3:
-        score = 7.0
-    elif num_signals == 4:
-        score = 8.5
-    else:
-        score = min(9.0 + (num_signals - 5) * 0.5, 10.0)
-    score = round(score, 1)
-
-    # Rationale from signals
-    signal_descriptions = {
-        "public_api_change": "Public API change — consumers may have adapted",
-        "multi_project": f"Affects {len(all_projects)} projects — coordinated rollback needed",
-        "many_consumers": f"{call_sites} call sites — wide rollback surface",
-        "high_breaking": "High breaking risk makes rollback dangerous",
-        "high_coupling": "Cross-project coupling requires coordinated rollback",
-        "deep_dependency": "Deep dependency chain complicates rollback",
-    }
-
-    rationale_parts = [signal_descriptions[s] for s in signals]
-    if not rationale_parts:
-        rationale_parts = ["Low rollback risk"]
-
-    return {
-        "score": score,
-        "level": _score_to_level(score),
-        "rationale": "; ".join(rationale_parts),
-        "evidence": {
-            "signals": signals,
-            "signal_count": num_signals,
-        },
-    }
 
 
 # =========================================================================
 # Project signals (reuses code_health_score — zero extra I/O)
 # =========================================================================
 
-def _compute_project_signals(resolved: List[dict], project: str = None) -> dict:
-    """Compute project signals: health score + real test file sampling.
-
-    - health_score: from code_health_score (zero extra I/O)
-    - test_maturity: actual find_test_file sampling on unique project paths (max 30)
-    - complexity_baseline: from code_health_score complexity dimension
-    """
-    index = load_index()
-    symbols = index.get("symbols", {})
-
-    # Determine project from resolved targets
-    target_project = project
-    if not target_project:
-        for t in resolved:
-            sid = t.get("symbol_id") or ""
-            if ":" in sid:
-                target_project = sid.split(":")[0]
-                break
-
-    # --- Health score (zero extra I/O) ---
-    health = code_health_score(project=target_project)
-
-    if health.get("error"):
-        health_signal = {"score": 0, "grade": "N/A", "basis": "No data available"}
-        complexity_baseline = {"score": 0.0, "basis": "No data available"}
-    else:
-        total_score = health.get("score", 0)
-        grade = health.get("grade", "N/A")
-        health_signal = {
-            "score": total_score,
-            "grade": grade,
-            "basis": f"Code health {total_score}/100 (grade {grade})",
-        }
-        breakdown = health.get("breakdown", {})
-        complexity_raw = breakdown.get("complexity", {}).get("score", 25)
-        complexity_detail = breakdown.get("complexity", {}).get("detail", "")
-        # Invert: health score gives 25=good, 0=bad → we want 0=simple, 10=complex
-        complexity_baseline = {
-            "score": round((25 - complexity_raw) / 25 * 10, 1),
-            "basis": complexity_detail or f"Complexity score {complexity_raw}/25",
-        }
-
-    # --- Test maturity: real sampling with path dedup ---
-    tested = 0
-    sampled = 0
-    seen_paths = set()
-    SAMPLE_CAP = 30
-
-    for sid, sym in symbols.items():
-        if target_project and not sid.startswith(target_project + ":"):
-            continue
-        path = sym.get("path", "")
-        if not path or path in seen_paths:
-            continue
-        # Skip test files themselves
-        if "/test" in path.lower() or path.lower().startswith("test"):
-            continue
-        seen_paths.add(path)
-        sampled += 1
-        if sampled > SAMPLE_CAP:
-            break
-        result = find_test_file(path)
-        if result.get("test_file"):
-            tested += 1
-
-    if sampled > 0:
-        maturity_score = round(tested / sampled * 10, 1)
-        basis = f"{tested}/{sampled} sampled source files have test files"
-    else:
-        maturity_score = 0.0
-        basis = "No source files to sample"
-
-    return {
-        "health_score": health_signal,
-        "test_maturity": {
-            "score": maturity_score,
-            "basis": basis,
-        },
-        "complexity_baseline": complexity_baseline,
-    }
 
 
 # =========================================================================
 # Index confidence
 # =========================================================================
 
-def _compute_index_confidence(resolved: List[dict]) -> dict:
-    """Assess how trustworthy the index data is for the resolved targets.
-
-    Checks:
-    - reverse_index coverage: do resolved symbols have entries?
-    - dependency resolution: are deps resolved or just name-based?
-    - symbol completeness: do symbols have path, start_line, end_line?
-
-    Returns score 0-10 (10 = fully reliable) and list of warnings.
-    """
-    index = load_index()
-    symbols = index.get("symbols", {})
-    reverse_index = index.get("reverse_index", {})
-    dependencies = index.get("dependencies", {})
-
-    total_checks = 0
-    passed_checks = 0
-    warnings = []
-
-    for target in resolved:
-        sid = target.get("symbol_id")
-        if not sid:
-            continue
-
-        # Check 1: symbol exists in index
-        total_checks += 1
-        sym = symbols.get(sid)
-        if sym:
-            passed_checks += 1
-        else:
-            warnings.append(f"Symbol {sid} not found in index")
-            continue
-
-        # Check 2: symbol has complete metadata (path + lines)
-        total_checks += 1
-        if sym.get("path") and sym.get("start_line") is not None:
-            passed_checks += 1
-        else:
-            warnings.append(f"Symbol {sid} has incomplete metadata")
-
-        # Check 3: reverse_index has entry for this symbol
-        total_checks += 1
-        if sid in reverse_index or sym.get("name", "") in reverse_index:
-            passed_checks += 1
-        else:
-            # Not having reverse_index entries could mean 0 callers (ok)
-            # or missing data (bad). Check if deps reference this symbol.
-            has_dep_refs = any(
-                dep.get("metadata", {}).get("resolved_target") == sid
-                for dep in dependencies.values()
-            )
-            if has_dep_refs:
-                # Deps reference it but reverse_index doesn't — data gap
-                warnings.append(f"Symbol {sid} referenced in deps but missing from reverse_index")
-            else:
-                passed_checks += 1  # Likely just has no callers
-
-    # Check overall index stats
-    total_checks += 1
-    total_syms = len(symbols)
-    reverse_entries = len(reverse_index)
-    if total_syms > 0 and reverse_entries / total_syms > 0.1:
-        passed_checks += 1
-    elif total_syms > 0:
-        warnings.append(f"Low reverse_index coverage: {reverse_entries}/{total_syms} symbols")
-    else:
-        warnings.append("No symbols in index")
-
-    if total_checks == 0:
-        return {"score": 0.0, "level": "low", "warnings": ["No targets to assess"]}
-
-    score = round(passed_checks / total_checks * 10, 1)
-    level = "high" if score >= 8 else "medium" if score >= 5 else "low"
-
-    return {
-        "score": score,
-        "level": level,
-        "checks_passed": passed_checks,
-        "checks_total": total_checks,
-        "warnings": warnings,
-    }
 
 
 # =========================================================================
 # Constraint + strategy derivation
 # =========================================================================
 
-def _derive_constraints(dimensions: Dict[str, dict], intent: str) -> dict:
-    """Derive constraints from dimension levels with cross-dimension rules."""
-    constraints = {}
-
-    # Level-based constraint rules
-    for dim_name, required_level, constraint_key in _CONSTRAINT_RULES_BY_LEVEL:
-        dim_level = dimensions.get(dim_name, {}).get("level", "low")
-        if _LEVEL_ORDER.get(dim_level, 0) >= _LEVEL_ORDER.get(required_level, 0):
-            constraints[constraint_key] = True
-
-    # blocked_actions (level-based)
-    blocked = []
-    for dim_name, required_level, action in _BLOCKED_ACTION_RULES:
-        dim_level = dimensions.get(dim_name, {}).get("level", "low")
-        if _LEVEL_ORDER.get(dim_level, 0) >= _LEVEL_ORDER.get(required_level, 0):
-            blocked.append(action)
-
-    # Intent-specific
-    if intent == "cleanup":
-        constraints["must_verify_no_live_callers"] = True
-    if intent == "migration":
-        constraints["must_build_compatibility_layer"] = True
-
-    # ---------------------------------------------------------------
-    # Cross-dimension rules: combined risk escalation
-    # ---------------------------------------------------------------
-    blast_level = dimensions.get("blast_radius", {}).get("level", "low")
-    test_level = dimensions.get("test_risk", {}).get("level", "low")
-    breaking_level = dimensions.get("breaking_risk", {}).get("level", "low")
-    coupling_level = dimensions.get("cross_coupling", {}).get("level", "low")
-
-    # High blast + high test_risk → very strict step size
-    if blast_level == "high" and test_level == "high":
-        constraints["max_files_per_step"] = 1
-        constraints["must_validate_before_wide_change"] = True
-    # High breaking + high coupling → block wide changes
-    elif breaking_level == "high" and coupling_level == "high":
-        constraints["max_files_per_step"] = 1
-        if "multi_module_atomic_rewrite" not in blocked:
-            blocked.append("multi_module_atomic_rewrite")
-    # Any two high dimensions → tighter step size
-    elif sum(1 for d in dimensions.values() if d.get("level") == "high") >= 2:
-        constraints.setdefault("max_files_per_step", 2)
-    else:
-        # Normal max_files_per_step based on blast_radius alone
-        if blast_level == "high":
-            constraints.setdefault("max_files_per_step", 2)
-        elif blast_level == "medium" or constraints.get("must_use_small_steps"):
-            constraints.setdefault("max_files_per_step", 3)
-        else:
-            constraints.setdefault("max_files_per_step", 5)
-
-    if blocked:
-        constraints["blocked_actions"] = blocked
-
-    return constraints
 
 
-def _derive_strategy(dimensions: Dict[str, dict], intent: str, constraints: dict) -> dict:
-    """Derive execution strategy from intent + dimensions.
-
-    Mode override rules (dimensions can upgrade the intent-based mode):
-    - bugfix/cleanup/feature with blast_radius=high → safe_refactor
-    - bugfix/cleanup with cross_coupling=high → migration_mode
-    - Any intent with 3+ high dimensions → safe_refactor
-    The original intent mode is preserved in 'original_mode' when overridden.
-    """
-    defaults = _INTENT_DEFAULTS.get(intent, _INTENT_DEFAULTS["refactor"])
-    mode = defaults["mode"]
-    original_mode = None
-
-    # --- Mode override by dimensions ---
-    blast_level = dimensions.get("blast_radius", {}).get("level", "low")
-    coupling_level = dimensions.get("cross_coupling", {}).get("level", "low")
-    high_count = sum(1 for d in dimensions.values() if d.get("level") == "high")
-
-    # 3+ high dimensions → always safe_refactor (most cautious)
-    if high_count >= 3 and mode != "safe_refactor":
-        original_mode = mode
-        mode = "safe_refactor"
-    # High cross_coupling on bugfix/cleanup → migration_mode (need coordinated approach)
-    elif coupling_level == "high" and intent in ("bugfix", "cleanup"):
-        original_mode = mode
-        mode = "migration_mode"
-    # High blast_radius on bugfix/cleanup/feature → safe_refactor (need inspection phases)
-    elif blast_level == "high" and intent in ("bugfix", "cleanup", "feature"):
-        original_mode = mode
-        mode = "safe_refactor"
-
-    # Risk level from max dimension score
-    max_score = max(
-        dimensions.get("blast_radius", {}).get("score", 0),
-        dimensions.get("breaking_risk", {}).get("score", 0),
-        dimensions.get("cross_coupling", {}).get("score", 0),
-        dimensions.get("test_risk", {}).get("score", 0),
-    )
-    risk_level = _overall_risk(max_score)
-
-    # Verification level
-    if max_score >= 8:
-        verification_level = "high"
-    elif max_score >= 5:
-        verification_level = "medium"
-    else:
-        verification_level = defaults["verification_level"]
-
-    result = {
-        "mode": mode,
-        "risk_level": risk_level,
-        "editing_style": defaults["editing_style"],
-        "verification_level": verification_level,
-        "preferred_patch_scope": defaults["preferred_patch_scope"],
-    }
-    if original_mode:
-        result["original_mode"] = original_mode
-        result["mode_overridden_by"] = (
-            "3+ high dimensions" if high_count >= 3
-            else f"{coupling_level} cross_coupling" if coupling_level == "high"
-            else f"{blast_level} blast_radius"
-        )
-    return result
 
 
 # =========================================================================
 # Thinking hints derivation
 # =========================================================================
 
-def _build_decision_metadata(dimensions: Dict[str, dict], intent: str) -> dict:
-    """Build decision metadata explaining WHY the plan is structured this way.
-
-    This is for explainability, audit, and human_summary — NOT for driving AI behavior.
-    """
-    defaults = _INTENT_REASONING.get(intent, _INTENT_REASONING["refactor"])
-    reasoning_mode = defaults["mode"]
-    anti_patterns = list(defaults["anti_patterns"])
-
-    # Dimension-based anti-pattern upgrades
-    if dimensions.get("breaking_risk", {}).get("level") == "high":
-        if "change_without_boundary_check" not in anti_patterns:
-            anti_patterns.append("change_without_boundary_check")
-    if dimensions.get("test_risk", {}).get("level") == "high":
-        if "guess_and_check" not in anti_patterns:
-            anti_patterns.append("guess_and_check")
-
-    # Override reasoning_mode for extreme risk
-    high_count = sum(1 for d in dimensions.values() if d.get("level") == "high")
-    if high_count >= 3:
-        reasoning_mode = "narrow_then_widen"
-
-    # Risk posture
-    max_score = max((d.get("score", 0) for d in dimensions.values()), default=0)
-    risk_label = _overall_risk(max_score)
-    risk_posture = _RISK_POSTURES.get(risk_label, "standard")
-
-    return {
-        "reasoning_mode": reasoning_mode,
-        "risk_posture": risk_posture,
-        "anti_patterns": anti_patterns,
-    }
 
 
-def _plan_inspect_steps(symbol_ids, file_paths, first_sid, first_path,
-                        coupling_level, complexity_level, test_level, intent, _add):
-    """Phase 1: INSPECT — understand the landscape."""
-    # Collect all inspect step IDs for gate dependencies
-    inspect_step_ids = []
-
-    # Step(s): scope callers — one per symbol, up to MAX_INDIVIDUAL_INSPECT
-    ref_steps = []
-    if symbol_ids and intent != "feature":
-        individual_sids = symbol_ids[:MAX_INDIVIDUAL_INSPECT]
-        for idx, sid in enumerate(individual_sids):
-            # Single target: use plain purpose for V1 compatibility
-            purpose = "scope_callers" if len(symbol_ids) == 1 else f"scope_callers_{idx}"
-            sid_step = _add(
-                "impact",
-                {"target": sid, "change_type": "modify"},
-                purpose,
-            )
-            ref_steps.append(sid_step)
-        inspect_step_ids.extend(ref_steps)
-
-    # Back-compat alias for downstream deps (single-target case)
-    ref_step = ref_steps[0] if ref_steps else None
-
-    # Step(s): verify test coverage — one per unique file path
-    test_steps = []
-    if file_paths:
-        unique_test_paths = [
-            path for path in dict.fromkeys(file_paths) if not _is_test_path(path)
-        ]
-        individual_paths = unique_test_paths[:MAX_INDIVIDUAL_INSPECT]
-        for idx, fpath in enumerate(individual_paths):
-            purpose = "verify_test_coverage" if len(unique_test_paths) == 1 else f"verify_test_coverage_{idx}"
-            t_step = _add(
-                "search", {"query": f"tests covering {fpath}"}, purpose,
-                required=test_level in ("medium", "high"),
-            )
-            test_steps.append(t_step)
-        inspect_step_ids.extend(test_steps)
-
-    # Back-compat alias
-    test_step = test_steps[0] if test_steps else None
-
-    # Step: check cross-project usage (if coupling is a concern)
-    cross_step = None
-    if coupling_level in ("medium", "high") and first_sid and not ref_step:
-        cross_step = _add(
-            "impact",
-            {"target": first_sid, "change_type": "modify"},
-            "check_cross_project",
-        )
-        inspect_step_ids.append(cross_step)
-
-    # Step: map dependency graph (if complexity is a concern) — first path only
-    dep_step = None
-    if complexity_level in ("medium", "high") and first_path:
-        dep_step = _add(
-            "structure",
-            {"focus": "dependencies", "path": first_path},
-            "map_dependencies",
-            required=complexity_level == "high",
-        )
-        inspect_step_ids.append(dep_step)
-
-    return inspect_step_ids, ref_steps, ref_step, test_steps, test_step
 
 
-def _plan_assess_steps(symbol_ids, first_sid, blast_level, breaking_level,
-                       intent, inspect_steps, inspect_step_ids, _add):
-    """Phase 2: ASSESS — quantify risk before making changes."""
-    assess_step_ids = []
-
-    inspect_ids = set(inspect_step_ids)
-    inspect_impact_by_target = {
-        step["args"]["target"]: step["id"]
-        for step in inspect_steps
-        if step.get("id") in inspect_ids
-        and step.get("tool") == "impact"
-        and step.get("args", {}).get("change_type") == "modify"
-        and step.get("args", {}).get("target")
-    }
-
-    # Step(s): exact impact analysis — one per symbol
-    impact_steps = []
-    if symbol_ids:
-        for idx, sid in enumerate(symbol_ids):
-            purpose = "assess_blast_radius" if len(symbol_ids) == 1 else f"assess_blast_radius_{idx}"
-            i_step = inspect_impact_by_target.get(sid)
-            if i_step is None:
-                i_step = _add(
-                    "impact",
-                    {"target": sid, "change_type": "modify"},
-                    purpose,
-                    required=blast_level in ("medium", "high"),
-                )
-                assess_step_ids.append(i_step)
-            impact_steps.append(i_step)
-
-    # Reused inspect IDs already participate in the inspect gate dependency set;
-    # only newly emitted assess calls need to be added to assess_step_ids.
-
-    # Back-compat alias
-    impact_step = impact_steps[0] if impact_steps else None
-
-    # Step: edit impact preview (required when breaking is medium+) — first sid only
-    preview_step = None
-    if first_sid and breaking_level in ("medium", "high"):
-        change_type_map = {
-            "refactor": "signature_change", "bugfix": "modify",
-            "feature": "modify", "cleanup": "delete", "migration": "rename",
-        }
-        preview_change_type = change_type_map.get(intent, "modify")
-        if preview_change_type == "modify":
-            preview_step = impact_step
-        else:
-            preview_step = _add(
-                "impact",
-                {
-                    "target": first_sid,
-                    "change_type": preview_change_type,
-                },
-                "preview_change_risk",
-                depends_on=[impact_step] if impact_step else [],
-            )
-            assess_step_ids.append(preview_step)
-
-    return assess_step_ids, impact_step
 
 
-def _build_execution_plan(
-    resolved: List[dict],
-    dimensions: Dict[str, dict],
-    intent: str,
-    constraints: dict,
-) -> list:
-    """Build a concrete, ordered sequence of tool calls with pre-filled args.
-
-    The execution plan is the compiled result of intent × dimensions × constraints.
-    Each step has:
-    - id: unique step identifier
-    - tool: public MCP tool name to call
-    - args: pre-filled arguments from resolved targets
-    - purpose: machine-readable tag (scope_callers, verify_tests, etc.)
-    - required: whether this step is mandatory
-    - depends_on: list of step IDs that must complete first
-
-    The reasoning mode (elimination, boundary_first, etc.) is expressed through
-    the ORDER and SELECTION of steps — not as text advice.
-    """
-    steps = []
-    step_num = [0]  # mutable counter for closures
-
-    def _add(tool: str, args: dict, purpose: str,
-             required: bool = True, depends_on: list = None):
-        step_num[0] += 1
-        step_id = f"step_{step_num[0]:02d}_{purpose}"
-        steps.append({
-            "id": step_id,
-            "tool": tool,
-            "args": args,
-            "purpose": purpose,
-            "required": required,
-            "depends_on": depends_on or [],
-        })
-        return step_id
-
-    # Extract target data for pre-filling args
-    symbol_ids = [t["symbol_id"] for t in resolved if t.get("symbol_id")]
-    file_paths = list(dict.fromkeys(
-        t["path"] for t in resolved if t.get("path")
-    ))
-    first_sid = symbol_ids[0] if symbol_ids else None
-    first_path = file_paths[0] if file_paths else None
-
-    # Dimension levels
-    blast_level = dimensions.get("blast_radius", {}).get("level", "low")
-    breaking_level = dimensions.get("breaking_risk", {}).get("level", "low")
-    coupling_level = dimensions.get("cross_coupling", {}).get("level", "low")
-    test_level = dimensions.get("test_risk", {}).get("level", "low")
-    complexity_level = dimensions.get("complexity", {}).get("level", "low")
-
-    # Fast path: minimal plan for all-low-risk cleanup/bugfix tasks
-    all_low = all(level == "low" for level in [
-        blast_level, breaking_level, coupling_level, test_level, complexity_level,
-    ])
-    if all_low and intent in ("cleanup", "bugfix"):
-        # Only verify no live callers if the constraint exists
-        if constraints.get("must_verify_no_live_callers") and first_sid:
-            _add(
-                "impact",
-                {"target": first_sid, "change_type": "modify"},
-                "scope_callers",
-            )
-        _add(
-            "task",
-            {"action": "gate", "next_phase": "implement"},
-            "gate_before_apply",
-        )
-        return steps
-
-    # =================================================================
-    # Phase 1: INSPECT — understand the landscape
-    # =================================================================
-
-    inspect_step_ids, ref_steps, ref_step, test_steps, test_step = _plan_inspect_steps(
-        symbol_ids, file_paths, first_sid, first_path,
-        coupling_level, complexity_level, test_level, intent, _add,
-    )
-
-    # =================================================================
-    # Phase 2: ASSESS — quantify risk before making changes
-    # =================================================================
-
-    assess_step_ids, impact_step = _plan_assess_steps(
-        symbol_ids, first_sid, blast_level, breaking_level,
-        intent, steps, inspect_step_ids, _add,
-    )
-
-    # =================================================================
-    # Phase 3: GATE — verify ready to proceed
-    # =================================================================
-
-    gate_deps = inspect_step_ids + assess_step_ids
-    gate_step = _add(
-        "task",
-        {"action": "gate", "next_phase": "assess"},
-        "gate_before_plan",
-        depends_on=gate_deps,
-    )
-
-    # Step: final gate before applying changes
-    _add(
-        "task",
-        {"action": "gate", "next_phase": "implement"},
-        "gate_before_apply",
-        depends_on=[gate_step],
-    )
-
-    return steps
 
 
 # =========================================================================
 # Human summary
 # =========================================================================
 
-def _generate_human_summary(dimensions: Dict[str, dict], constraints: dict) -> dict:
-    """Generate human-readable summary, top risks, and attention items."""
-    # Top risks
-    top_risks = []
-    attention = []
-
-    blast = dimensions.get("blast_radius", {})
-    breaking = dimensions.get("breaking_risk", {})
-    test_risk = dimensions.get("test_risk", {})
-    coupling = dimensions.get("cross_coupling", {})
-
-    if coupling.get("level") == "high":
-        top_risks.append("Cross-project dependency is high")
-        projects = coupling.get("evidence", {}).get("shared_by_projects", [])
-        if projects:
-            attention.append(f"Confirm impact on: {', '.join(projects)}")
-
-    if breaking.get("level") == "high":
-        top_risks.append("Public API may be affected")
-        attention.append("Confirm exported API is allowed to change")
-
-    if test_risk.get("level") in ("medium", "high"):
-        top_risks.append("Test coverage is insufficient")
-        attention.append("Add or review tests before making changes")
-
-    if blast.get("level") == "high":
-        count = blast.get("evidence", {}).get("affected_symbols", 0)
-        top_risks.append(f"Large blast radius ({count} affected symbols)")
-
-    rollback = dimensions.get("rollback_difficulty", {})
-    if rollback.get("level") == "high":
-        top_risks.append("Rollback will be difficult if something goes wrong")
-        attention.append("Prepare revert plan before starting")
-
-    # Summary text
-    high_dims = [k for k, v in dimensions.items() if v.get("level") == "high"]
-    if high_dims:
-        summary = f"High-risk task. Key concerns: {', '.join(high_dims)}. Proceed with caution — follow constraints and strategy phases."
-    elif any(v.get("level") == "medium" for v in dimensions.values()):
-        summary = "Moderate-risk task. Some dimensions require attention. Follow the recommended execution order."
-    else:
-        summary = "Low-risk task. Safe to proceed with standard workflow."
-
-    if not top_risks:
-        top_risks.append("No significant risks detected")
-
-    return {
-        "summary": summary,
-        "top_risks": top_risks,
-        "recommended_human_attention": attention,
-    }
 
 
 # =========================================================================
 # Main entry points
 # =========================================================================
 
-def _classify_target_intent(resolved: List[dict], caller_intent: str) -> Dict[str, str]:
-    """Classify each target's natural intent based on index data.
-
-    Returns dict mapping symbol_id -> classified intent.
-    Dead code (no references) -> 'cleanup'
-    Complex functions (>50 lines with callers) -> 'refactor'
-    Otherwise -> caller_intent
-    """
-    index = load_index()
-    reverse_index = index.get("reverse_index", {})
-    symbols = index.get("symbols", {})
-    dependencies = index.get("dependencies", {})
-
-    # Build set of referenced names (same logic as find_dead_code)
-    referenced_names = set()
-    for dep in dependencies.values():
-        dep_type = dep.get("type", "")
-        if dep_type == "imports":
-            for name in dep.get("metadata", {}).get("names", []):
-                referenced_names.add(name)
-        elif dep_type == "calls":
-            target = dep.get("target", "")
-            if target:
-                referenced_names.add(target)
-                for part in target.split("."):
-                    if len(part) > 2:
-                        referenced_names.add(part)
-
-    result = {}
-    for t in resolved:
-        sid = t.get("symbol_id")
-        if not sid:
-            result[t.get("input", "")] = caller_intent
-            continue
-
-        name = t.get("name", "")
-        has_callers = bool(reverse_index.get(sid, [])) or name in referenced_names
-
-        if not has_callers:
-            result[sid] = "cleanup"
-        else:
-            sym = symbols.get(sid, {})
-            lines = sym.get("end_line", 0) - sym.get("start_line", 0)
-            if lines > 50:
-                result[sid] = "refactor"
-            else:
-                result[sid] = caller_intent
-
-    return result
 
 
-def _generate_compound_summary(sub_tasks: list) -> dict:
-    """Generate human summary for compound contract."""
-    parts = []
-    for st in sub_tasks:
-        intent = st["intent"]
-        count = len(st["targets"])
-        risk = st["overall_risk"]
-        parts.append(f"{intent}: {count} targets ({risk} risk)")
-
-    return {
-        "summary": f"Compound task with {len(sub_tasks)} sub-tasks: " + ", ".join(parts),
-        "sub_task_summaries": parts,
-        "recommended_execution_order": [
-            st["intent"] for st in sorted(
-                sub_tasks,
-                key=lambda s: {"cleanup": 0, "bugfix": 1, "refactor": 2, "feature": 3, "migration": 4}.get(s["intent"], 5),
-            )
-        ],
-    }
 
 
-def _build_compound_contract(
-    description: str,
-    resolved: List[dict],
-    classified: Dict[str, str],
-    original_intent: str,
-    project: str,
-    task_id: str,
-    opts: dict,
-) -> dict:
-    """Build a compound contract for mixed-intent tasks."""
-    # Group by classified intent
-    groups = {}  # intent -> [resolved_targets]
-    for t in resolved:
-        key = t.get("symbol_id") or t.get("input", "")
-        target_intent = classified.get(key, original_intent)
-        groups.setdefault(target_intent, []).append(t)
-
-    sub_tasks = []
-    max_risk_score = 0
-
-    for sub_intent, sub_resolved in sorted(groups.items()):
-        # Score dimensions for this sub-group
-        blast = _score_blast_radius(sub_resolved)
-        breaking = _score_breaking_risk(sub_resolved, sub_intent)
-        test = _score_test_risk(sub_resolved)
-        coupling = _score_cross_coupling(sub_resolved)
-        complexity = _score_complexity(sub_resolved)
-        rollback = _score_rollback_difficulty(blast, breaking, coupling, complexity)
-
-        dims = {
-            "blast_radius": blast,
-            "breaking_risk": breaking,
-            "test_risk": test,
-            "cross_coupling": coupling,
-            "complexity": complexity,
-            "rollback_difficulty": rollback,
-        }
-
-        constraints = _derive_constraints(dims, sub_intent)
-        strategy = _derive_strategy(dims, sub_intent, constraints)
-        plan = _build_execution_plan(sub_resolved, dims, sub_intent, constraints)
-
-        sub_max = max(d.get("score", 0) for d in dims.values())
-        max_risk_score = max(max_risk_score, sub_max)
-
-        sub_tasks.append({
-            "intent": sub_intent,
-            "targets": [t.get("input", t.get("symbol_id", "")) for t in sub_resolved],
-            "resolved_targets": sub_resolved,
-            "overall_risk": _overall_risk(sub_max),
-            "dimensions": dims,
-            "constraints": constraints,
-            "strategy": strategy,
-            "execution_plan": plan,
-        })
-
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    contract = {
-        "task_profile": {
-            "task_id": task_id,
-            "title": description[:120],
-            "description": description,
-            "original_intent": original_intent,
-            "compound": True,
-            "sub_task_count": len(sub_tasks),
-            "project": project,
-            "overall_risk": _overall_risk(max_risk_score),
-            "version": CONTRACT_VERSION,
-            "generated_at": now,
-        },
-        "sub_tasks": sub_tasks,
-        "human_summary": _generate_compound_summary(sub_tasks),
-    }
-    contract["governance"] = evaluate_task_governance(
-        description=description,
-        targets=[t.get("input", "") for t in resolved],
-        resolved_targets=resolved,
-        project=project,
-        options=opts,
-    )
-    return contract
 
 
 def analyze_task(
@@ -1861,176 +381,3 @@ def analyze_task(
     )
 
     return contract
-
-
-def _apply_governance_gate(
-    result: dict,
-    task_contract: dict,
-    current_state: dict | None,
-) -> dict:
-    """Merge opt-in governance blockers into an existing gate result."""
-    governance = task_contract.get("governance")
-    if not governance:
-        return result
-    state = current_state or {}
-    gate = validate_governance_diff(
-        governance,
-        changed_paths=state.get("changed_paths") or [],
-        state=state,
-    )
-    result["governance"] = gate
-    if gate.get("pass"):
-        return result
-    codes = [
-        f"GOVERNANCE_{item.get('code', 'VIOLATION').upper()}"
-        for item in gate.get("blocking") or []
-    ]
-    result["pass"] = False
-    result["decision"] = "blocked"
-    result["reason_codes"] = list(dict.fromkeys(
-        list(result.get("reason_codes") or []) + codes
-    ))
-    result["required_actions"] = list(dict.fromkeys(
-        list(result.get("required_actions") or [])
-        + list(gate.get("required_actions") or [])
-    ))
-    result.setdefault("required_state", {})
-    result["message"] = (
-        f"Cannot enter {result.get('phase')}. "
-        f"Governance blocked {len(gate.get('blocking') or [])} finding(s)."
-    )
-    return result
-
-
-def _gate_check_compound(task_contract, next_phase, current_state):
-    """Gate one compound sub-task at a time in the recommended order."""
-    sub_tasks = task_contract.get("sub_tasks", [])
-    if not sub_tasks:
-        return {"error": "Compound contract has no sub_tasks"}
-
-    state = current_state or {}
-    completed = set(state.get("completed_subtasks") or [])
-    pending = [
-        (index, sub_task)
-        for index, sub_task in enumerate(sub_tasks)
-        if f"subtask_{index + 1}" not in completed
-    ]
-    if not pending:
-        result = {
-            "pass": True,
-            "decision": "pass",
-            "phase": next_phase,
-            "reason_codes": [],
-            "message": (
-                f"Clear to proceed to {next_phase}; "
-                f"all {len(sub_tasks)} sub-tasks are complete."
-            ),
-            "required_actions": [],
-            "required_state": {},
-            "completed_subtasks": sorted(completed),
-        }
-        return _apply_governance_gate(result, task_contract, current_state)
-
-    index, active = pending[0]
-    subtask_id = f"subtask_{index + 1}"
-    result = task_gate_check(active, next_phase, state)
-    result["active_subtask"] = {
-        "id": subtask_id,
-        "index": index,
-        "intent": active.get("intent"),
-        "targets": active.get("targets", []),
-    }
-    if result.get("pass"):
-        result["message"] = (
-            f"{result.get('message', '')} Complete {subtask_id} before "
-            "adding it to current_state.completed_subtasks."
-        )
-    else:
-        prefix = f"[{subtask_id}:{active.get('intent', 'unknown')}] "
-        result["reason_codes"] = [
-            prefix + code for code in result.get("reason_codes", [])
-        ]
-    return _apply_governance_gate(result, task_contract, current_state)
-
-
-def _collect_gate_blockers(next_phase, state, constraints):
-    """Collect blockers for a gate phase based on requirements and constraints."""
-    blockers = []
-    reason_codes = []
-    required_actions = []
-    required_state = {}
-
-    for state_key, constraint_key, message in _GATE_REQUIREMENTS.get(next_phase, []):
-        if constraint_key is not None and not constraints.get(constraint_key):
-            continue
-        if not state.get(state_key, False):
-            blockers.append(message)
-            reason_codes.append(_REASON_CODES.get(state_key, state_key.upper()))
-            required_actions.append(state_key)
-            required_state[state_key] = True
-
-    # Public contract change requires human review for later phases
-    if (state.get("public_contract_change_detected")
-            and constraints.get("must_request_human_review_on_public_contract_change")
-            and not state.get("human_review_completed")
-            and next_phase in ("apply_changes", "expand_changes", "finalize")):
-        msg = "Human review required for public contract change"
-        if msg not in blockers:
-            blockers.append(msg)
-            reason_codes.append("HUMAN_REVIEW_REQUIRED_FOR_PUBLIC_CONTRACT_CHANGE")
-            required_actions.append("complete_human_review_for_public_contract_change")
-            required_state["human_review_completed"] = True
-
-    return blockers, reason_codes, required_actions, required_state
-
-
-def task_gate_check(
-    task_contract: dict,
-    next_phase: str = None,
-    current_state: dict = None,
-) -> dict:
-    """Check whether a task can proceed to the next phase.
-
-    Accepts both gate phase names (inspect, plan_changes, apply_changes,
-    expand_changes, finalize) AND strategy-specific phase names
-    (e.g., apply_small_changes → apply_changes gate).
-    """
-    if not task_contract:
-        return {"error": "task_contract is required"}
-
-    # Handle compound contracts
-    if task_contract.get("task_profile", {}).get("compound") or task_contract.get("compound"):
-        return _gate_check_compound(task_contract, next_phase, current_state)
-
-    state = current_state or {}
-    constraints = task_contract.get("constraints", {})
-
-    if not next_phase:
-        next_phase = "inspect"
-
-    # Map strategy phase to gate phase
-    original_phase = next_phase
-    if next_phase not in GATE_PHASES and next_phase in _STRATEGY_TO_GATE:
-        next_phase = _STRATEGY_TO_GATE[next_phase]
-
-    blockers, reason_codes, required_actions, required_state = _collect_gate_blockers(
-        next_phase,
-        state,
-        constraints,
-    )
-
-    passed = not blockers
-    result = {
-        "pass": passed,
-        "decision": "pass" if passed else "blocked",
-        "phase": next_phase,
-        "reason_codes": reason_codes,
-        "message": f"Clear to proceed to {next_phase}." if passed
-                   else f"Cannot enter {next_phase}. " + " ".join(blockers),
-        "required_actions": required_actions,
-        "required_state": required_state,
-    }
-    if original_phase != next_phase:
-        result["strategy_phase"] = original_phase
-        result["mapped_to_gate"] = next_phase
-    return _apply_governance_gate(result, task_contract, state)

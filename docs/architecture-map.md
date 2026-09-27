@@ -7,10 +7,10 @@
 | Models and safe I/O | Shared records, signatures, serialization, bounded reads | `src/models.py`, `src/safe_io.py`, `src/safe_xml.py` |
 | Scanners | Language, manifest, route, framework, secret, license, Docker, and IaC extraction | `src/scanner/`, `src/*_scanner.py` |
 | Index core | Symbol resolution, reverse graph, lexical and semantic indexes | `src/indexer/`, `src/search_index.py`, `src/reverse_index.py`, `src/semantic.py` |
-| Analyzers | API drift, quality, security, taint, layers, documentation, and Git evidence | `src/analyzer/`, `src/auditor/`, `src/quality.py` |
-| Runtime services | Context, profiles, sessions, diff impact, LSP enrichment, and task state | `src/context/`, `src/profile/`, `src/lsp/`, `src/tools/task_analysis.py` |
-| Tool services | Focused operations shared by adapters | `src/tools/`, `src/verify.py` |
-| Adapters | CLI, MCP stdio, and localhost HTTP | `src/cli.py`, `src/mcp_server.py`, `src/api_server.py` |
+| Analyzers | API drift, quality, security, taint, layers, documentation, and Git evidence | `src/analyzer/` (including split taint flow/cross-file/policy/evidence modules), `src/auditor/`, `src/quality.py` |
+| Runtime services | Context, profiles, sessions, diff impact, LSP enrichment, and task state | `src/context/`, `src/profile/`, `src/lsp/`, `src/tools/task_analysis.py`, `src/tools/task_{resolution,risk,planning,gate}.py` |
+| Tool services | Focused operations shared by adapters | `src/tools/`, `src/verify.py`, `src/verification/` |
+| Adapters | CLI grammar/dispatch, domain handlers, MCP stdio, and localhost HTTP | `src/cli.py`, `src/cli_{workspace,scanners,quality,verify}.py`, `src/mcp_server.py`, `src/api_server.py` |
 | Contracts and automation | Defaults, rule corpus, packaging, generated docs, CI, and publication | `config/`, `pyproject.toml`, `scripts/`, `.github/workflows/` |
 
 The generated [module inventory](reference/modules.md) and

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-28
+
+- Refactored verification, taint, task analysis, and verify CLI internals into
+  focused responsibility modules while preserving the existing 20 MCP tools,
+  Python compatibility facades, CLI behavior, evidence semantics, and runtime
+  dependency boundary.
+- Kept Indexer evidence-only: no coding-agent, commit, deploy, or runtime execution
+  authority was added.
+
 ## 2026-09-19
 
 - Reuse Python AST taint for import-bound cross-file calls, keyword/literal

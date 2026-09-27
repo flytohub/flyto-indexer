@@ -1,5 +1,23 @@
 # Decisions
 
+## 2026-09-28 — Split implementation authority without expanding product authority
+
+Decision: decompose the large verification, taint, task-analysis, and CLI modules
+by internal responsibility while preserving the existing public MCP/CLI/Python
+contracts. `TaintAnalyzer`, `src.verify`, and `tools.task_analysis` remain
+compatibility facades; focused modules own implementation details behind them.
+
+Reason: the external product boundary was already intentionally small, but
+several internal files had accumulated unrelated policy, evidence, traversal,
+formatting, and orchestration responsibilities. Continuing to add features there
+would turn evidence infrastructure into God modules and make regressions harder
+to localize.
+
+Consequence: no MCP tool is added, no runtime dependency is added, and Indexer
+does not acquire execution/agent/commit/deploy authority. Static-analysis limits,
+truncation disclosure, and evidence semantics remain unchanged. Future features
+should extend the focused owner module rather than grow the compatibility facade.
+
 ## 2026-09-19 — Bind Python callees inside the existing taint pass
 
 Resolve unambiguous module imports from admitted ASTs before consulting the
