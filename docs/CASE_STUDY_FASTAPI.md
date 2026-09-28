@@ -19,9 +19,11 @@ It returns four lines, all in `backend/app/utils.py`: the definition and three
 direct calls. That is accurate, but it does not show which request handlers sit
 above those calls.
 
-After indexing the same commit, a depth-two impact query finds seven affected
-functions across four files. Four request handlers are outside the file found
-by text search:
+After indexing the same commit, a depth-two impact query finds exactly the seven
+ground-truth affected functions across four files, with no extra or missing
+function edges in the pinned case. That gives impact precision=1.0 and
+recall=1.0 for this source/target pair. Four request handlers are outside the
+file found by text search:
 
 - `recover_password`
 - `recover_password_html_content`
@@ -46,7 +48,8 @@ The command performs these steps:
 3. runs the direct `git grep` comparison;
 4. builds a fresh local index;
 5. runs impact analysis to depth two;
-6. verifies the expected transitive handlers and the committed receipt.
+6. verifies the complete expected affected-function set, rejects extra/missing
+   edges, computes impact precision/recall, and checks the committed receipt.
 
 The current machine-readable result is
 [`docs/evidence/fastapi-full-stack-0.10.0.json`](evidence/fastapi-full-stack-0.10.0.json).
@@ -55,8 +58,10 @@ repeats the case and publishes its receipt as a GitHub Actions artifact.
 
 ## What this proves
 
-It proves that, for this pinned source and target, Flyto2 Indexer discovers
-static transitive impact outside the files returned by a literal text search.
+It proves that, for this pinned source and target, Flyto2 Indexer discovers the
+complete labelled static impact set through depth two: seven true-positive
+functions, zero false-positive functions, and zero false negatives. The receipt
+therefore records impact precision=1.0 and recall=1.0 for this case.
 
 It does not prove runtime correctness, universal framework precision, or that
 every graph edge in every language is equally strong. Runtime behavior still

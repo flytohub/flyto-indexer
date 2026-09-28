@@ -173,6 +173,9 @@ offline and network-free.
 ## Reading A Result
 
 - A pass proves only the checks and filesystem snapshot named in the report.
+- Zero indexed callers/dependents means none were found in the current bounded
+  static evidence. It is not a proof that dynamic, runtime, reflection-based, or
+  external consumers do not exist.
 - A warning is actionable evidence; strict mode decides whether it blocks CI.
 - A scanner error means the affected dimension was not verified and must not
   be reported as a clean scan.

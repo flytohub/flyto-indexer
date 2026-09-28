@@ -591,7 +591,11 @@ def impact_analysis(symbol_id: str) -> dict:
 
     warning = ""
     if len(affected) == 0:
-        suggestion = "This symbol is not referenced anywhere else and can be safely modified."
+        suggestion = (
+            "No callers were found in the current static index. "
+            "Treat this as bounded evidence, not proof that the change is safe; "
+            "dynamic, runtime, reflection-based, or external callers may be unmodeled."
+        )
     elif len(affected) <= 3:
         warning = f"Modification affects {len(affected)} locations"
         suggestion = "Impact is small. Recommend checking each call site individually."
@@ -604,7 +608,10 @@ def impact_analysis(symbol_id: str) -> dict:
 
     # next_action hint for AI
     if len(affected) == 0:
-        next_action = "Safe to modify — no callers found."
+        next_action = (
+            "No indexed callers found. Verify dynamic/runtime/external use when relevant "
+            "before treating the change as isolated."
+        )
     elif len(affected) <= 3:
         first = affected[0]
         next_action = f"Low impact ({len(affected)} callers). Check first caller: {first.get('path', '')}:{first.get('name', '')}"
@@ -619,6 +626,8 @@ def impact_analysis(symbol_id: str) -> dict:
         "warning": warning,
         "suggestion": suggestion,
         "next_action": next_action,
+        "evidence_scope": "current_static_index",
+        "absence_is_safety_proof": False,
     }
 
 
@@ -693,8 +702,11 @@ def _assess_edit_risk(total, by_project, change_type):
     risk_info = change_risk_map.get(change_type, ("Unknown change type.", []))
 
     if total == 0:
-        risk = "safe"
-        risk_reason = "No call sites found, safe to change."
+        risk = "low"
+        risk_reason = (
+            "No call sites found in the current static index; "
+            "dynamic/runtime/external callers remain outside this proof."
+        )
     elif total <= 3 and len(by_project) <= 1:
         risk = "low"
         risk_reason = f"{total} call site(s) in {len(by_project)} project(s)"
@@ -1020,7 +1032,11 @@ def cross_project_impact(
 
     # Generate suggestions
     if len(cross_project_refs) == 0:
-        suggestion = f"'{symbol_name}' has no cross-project references and can be safely modified."
+        suggestion = (
+            f"No indexed cross-project references were found for '{symbol_name}'. "
+            "This is bounded static evidence, not proof that no dynamic or external "
+            "consumer exists."
+        )
         risk = "low"
     elif len(by_affected_project) == 1:
         suggestion = f"Modifying '{symbol_name}' will affect {len(cross_project_refs)} call sites in 1 other project."
@@ -1038,6 +1054,8 @@ def cross_project_impact(
         "total_cross_refs": len(cross_project_refs),
         "risk": risk,
         "suggestion": suggestion,
+        "evidence_scope": "current_static_index",
+        "absence_is_safety_proof": False,
     }
 
 

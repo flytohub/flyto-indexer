@@ -2,6 +2,12 @@
 
 ## 2026-09-28
 
+- Strengthened the pinned FastAPI real-repository impact proof from required-node
+  recall to complete seven-function ground truth with explicit impact precision
+  and recall; extra or missing graph edges now fail the receipt.
+- Removed overconfident zero-caller safety language across impact, edit preflight,
+  API, auditor, quality, and cross-project guidance. Empty indexed impact is now
+  bounded static evidence and edit risk is `low`, not `safe`.
 - Expanded the offline security accuracy gate from 27 cases to 46 canonical
   ground-truth projects plus 184 deterministic adversarial mutations (230 unique
   source fingerprints), with balanced positive/negative evidence for Python,

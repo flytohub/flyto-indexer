@@ -1,5 +1,33 @@
 # Flyto2 Indexer State
 
+## 2026-09-28 — Accuracy V2 impact evidence and bounded absence
+
+The pinned FastAPI full-stack real-repository proof now labels the complete
+depth-two affected-function set instead of checking only four required
+transitive handlers. The current pinned run finds exactly seven expected
+functions with zero extra and zero missing edges, so the receipt records impact
+precision=1.0 and recall=1.0 for that specific repository/target pair.
+
+Impact and dead-code surfaces no longer turn an empty indexed caller set into a
+claim that a change is safe. `impact_analysis` exposes
+`evidence_scope=current_static_index` and `absence_is_safety_proof=false`; edit
+impact reports zero known call sites as low bounded static impact rather than
+`safe`. API/auditor/quality/cross-project recommendations use the same bounded
+language because dynamic dispatch, runtime registration, reflection, and
+external consumers can exist outside the index.
+
+The public tool set is unchanged. Existing confidence/truncation semantics remain
+active: heuristic/name-only/regex evidence does not become high-confidence proof,
+and truncation/read/parse gaps remain explicit instead of collapsing to a clean
+result.
+
+Final local closure on this Accuracy V2 tree: the pinned FastAPI case records
+7 TP / 0 FP / 0 FN with impact precision=1.0 and recall=1.0; the 230-case
+security gate remains TP=140 / FP=0 / FN=0. Fast tests report 2673 passed, 3
+skipped and 61 deselected; full pytest reports 2734 passed and 3 skipped. Package
+build passes and strict full self-verification reports 22 pass / 0 warn / 0 fail.
+The public surfaces remain 20 MCP tools and 44 CLI commands.
+
 ## 2026-09-28 — Accuracy gate expansion
 
 Security accuracy is now gated by 46 human-readable canonical projects plus 184

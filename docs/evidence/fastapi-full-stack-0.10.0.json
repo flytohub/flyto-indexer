@@ -7,7 +7,7 @@
     "tag": "0.10.0",
     "target": "render_email_template"
   },
-  "evidence_fingerprint": "691df24f16031b77e3da6d19f59f72ed7e09cfaf6ae62d1c448d862541690043",
+  "evidence_fingerprint": "24dc191eb6f51c6264edbfb34c1554804acaa17f318cd16913278b3f9a96ad20",
   "indexer": {
     "affected_files_through_depth_2": [
       "backend/app/api/routes/login.py",
@@ -34,12 +34,25 @@
     "The source commit and expected functions are pinned; no customer code is used."
   ],
   "proof": {
+    "expected_affected_functions": [
+      "backend/app/api/routes/login.py::recover_password",
+      "backend/app/api/routes/login.py::recover_password_html_content",
+      "backend/app/api/routes/users.py::create_user",
+      "backend/app/api/routes/utils.py::test_email",
+      "backend/app/utils.py::generate_new_account_email",
+      "backend/app/utils.py::generate_reset_password_email",
+      "backend/app/utils.py::generate_test_email"
+    ],
+    "false_negative_functions": [],
+    "false_positive_functions": [],
     "functions_in_files_missed_by_text_search": [
       "backend/app/api/routes/login.py::recover_password",
       "backend/app/api/routes/login.py::recover_password_html_content",
       "backend/app/api/routes/users.py::create_user",
       "backend/app/api/routes/utils.py::test_email"
     ],
+    "impact_precision": 1.0,
+    "impact_recall": 1.0,
     "pass": true,
     "required_found": [
       "backend/app/api/routes/login.py::recover_password",
@@ -53,6 +66,15 @@
       "backend/app/api/routes/login.py::recover_password_html_content",
       "backend/app/api/routes/users.py::create_user",
       "backend/app/api/routes/utils.py::test_email"
+    ],
+    "true_positive_functions": [
+      "backend/app/api/routes/login.py::recover_password",
+      "backend/app/api/routes/login.py::recover_password_html_content",
+      "backend/app/api/routes/users.py::create_user",
+      "backend/app/api/routes/utils.py::test_email",
+      "backend/app/utils.py::generate_new_account_email",
+      "backend/app/utils.py::generate_reset_password_email",
+      "backend/app/utils.py::generate_test_email"
     ]
   },
   "schema_version": 1,

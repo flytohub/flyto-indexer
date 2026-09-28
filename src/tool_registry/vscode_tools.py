@@ -55,7 +55,9 @@ _VSCODE_DESC_OVERRIDES: Dict[str, str] = {
     ),
     "impact_analysis": (
         "Analyze the blast radius of modifying a symbol. Shows all call sites with actual code lines, "
-        "affected file count, and risk assessment (safe/moderate/high risk). "
+        "affected file count, and bounded static risk assessment. "
+        "Zero indexed callers is not proof "
+        "that dynamic, runtime, or external callers do not exist. "
         "MUST call before renaming, deleting, or changing function signatures. "
         "Chain with: find_references (detailed caller list), file_read (read affected files)."
     ),

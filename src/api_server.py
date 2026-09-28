@@ -307,7 +307,11 @@ def impact_analysis(symbol_id: str) -> dict:
 
     warning = ""
     if len(affected) == 0:
-        suggestion = "This symbol is not referenced elsewhere, safe to modify."
+        suggestion = (
+            "No callers were found in the current static index. "
+            "This is bounded evidence, not proof that the change is safe; "
+            "dynamic, runtime, reflection-based, or external callers may be unmodeled."
+        )
     elif len(affected) <= 3:
         warning = f"Modification affects {len(affected)} locations"
         suggestion = "Impact scope is small, recommend checking each call site."
@@ -321,6 +325,8 @@ def impact_analysis(symbol_id: str) -> dict:
         "affected": affected,
         "warning": warning,
         "suggestion": suggestion,
+        "evidence_scope": "current_static_index",
+        "absence_is_safety_proof": False,
     }
 
 

@@ -151,7 +151,9 @@ class TestImpactAnalysis:
         mock_load.return_value = {"symbols": {}, "dependencies": {}}
         result = impact_analysis("nonexistent")
         assert result["affected_count"] == 0
-        assert "safe" in result["suggestion"].lower() or len(result["affected"]) == 0
+        assert "bounded evidence" in result["suggestion"].lower()
+        assert result["evidence_scope"] == "current_static_index"
+        assert result["absence_is_safety_proof"] is False
 
     @patch("api_server.load_index")
     def test_has_impact(self, mock_load):

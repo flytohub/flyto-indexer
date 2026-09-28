@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from src.tools.references import edit_impact_preview
+from src.tools.references import edit_impact_preview, impact_analysis
 
 
 def test_preflight_reports_ambiguity_unresolved_refs_and_update_sites():
@@ -74,3 +74,30 @@ def test_preflight_reports_ambiguity_unresolved_refs_and_update_sites():
     assert preflight["required_update_sites"]["tests"] == ["tests/test_utils.py"]
     assert preflight["required_update_sites"]["manual_review"] == ["src/plugin.py"]
     assert preflight["manual_review_required"] is True
+
+
+def test_zero_indexed_callers_is_bounded_evidence_not_safety_proof():
+    symbol_id = "proj:src/utils.py:function:isolated"
+    mock_index = {
+        "symbols": {
+            symbol_id: {
+                "path": "src/utils.py",
+                "name": "isolated",
+                "type": "function",
+            },
+        },
+        "reverse_index": {},
+        "dependencies": {},
+    }
+
+    with patch("src.tools.references.load_index", return_value=mock_index), patch(
+        "src.tools.references._enrich_impact_with_call_hierarchy",
+        return_value=[],
+    ):
+        result = impact_analysis(symbol_id)
+
+    assert result["affected_count"] == 0
+    assert result["evidence_scope"] == "current_static_index"
+    assert result["absence_is_safety_proof"] is False
+    assert "not proof" in result["suggestion"].lower()
+    assert "no indexed callers found" in result["next_action"].lower()

@@ -27,6 +27,12 @@ REQUIRED_TRANSITIVE_FUNCTIONS = {
     "backend/app/api/routes/users.py::create_user",
     "backend/app/api/routes/utils.py::test_email",
 }
+EXPECTED_AFFECTED_FUNCTIONS = {
+    *REQUIRED_TRANSITIVE_FUNCTIONS,
+    "backend/app/utils.py::generate_new_account_email",
+    "backend/app/utils.py::generate_reset_password_email",
+    "backend/app/utils.py::generate_test_email",
+}
 
 
 def _run(
@@ -152,6 +158,19 @@ def build_evidence(
     )
     required_found = sorted(REQUIRED_TRANSITIVE_FUNCTIONS & affected_functions)
     required_missing = sorted(REQUIRED_TRANSITIVE_FUNCTIONS - affected_functions)
+    true_positive_functions = sorted(EXPECTED_AFFECTED_FUNCTIONS & affected_functions)
+    false_positive_functions = sorted(affected_functions - EXPECTED_AFFECTED_FUNCTIONS)
+    false_negative_functions = sorted(EXPECTED_AFFECTED_FUNCTIONS - affected_functions)
+    precision_denominator = len(true_positive_functions) + len(false_positive_functions)
+    recall_denominator = len(true_positive_functions) + len(false_negative_functions)
+    impact_precision = (
+        len(true_positive_functions) / precision_denominator
+        if precision_denominator else 1.0
+    )
+    impact_recall = (
+        len(true_positive_functions) / recall_denominator
+        if recall_denominator else 1.0
+    )
     stable = {
         "schema_version": 1,
         "case": {
@@ -176,12 +195,22 @@ def build_evidence(
             "affected_files_through_depth_2": sorted(affected_files),
         },
         "proof": {
+            "expected_affected_functions": sorted(EXPECTED_AFFECTED_FUNCTIONS),
             "required_transitive_functions": sorted(REQUIRED_TRANSITIVE_FUNCTIONS),
             "required_found": required_found,
             "required_missing": required_missing,
+            "true_positive_functions": true_positive_functions,
+            "false_positive_functions": false_positive_functions,
+            "false_negative_functions": false_negative_functions,
+            "impact_precision": round(impact_precision, 6),
+            "impact_recall": round(impact_recall, 6),
             "functions_in_files_missed_by_text_search": missing_from_text,
             "pass": (
                 not required_missing
+                and not false_positive_functions
+                and not false_negative_functions
+                and impact_precision == 1.0
+                and impact_recall == 1.0
                 and bool(missing_from_text)
                 and scan_error_count == 0
             ),

@@ -743,8 +743,8 @@ class TestEditImpactPreview:
             mcp_server._index_cache = old_cache
             _idx._cache_generation = old_gen
 
-    def test_no_callers(self):
-        """Symbol with no callers is safe to change."""
+    def test_no_callers_is_low_known_impact_not_proven_safe(self):
+        """No indexed callers is bounded evidence, not a safety proof."""
         import mcp_server
 
         mock_index = {
@@ -770,7 +770,8 @@ class TestEditImpactPreview:
         try:
             result = mcp_server.edit_impact_preview("lonely", change_type="delete")
             assert result["total_call_sites"] == 0
-            assert result["risk"] == "safe"
+            assert result["risk"] == "low"
+            assert "current static index" in result["risk_reason"]
         finally:
             mcp_server._index_cache = old_cache
             _idx._cache_generation = old_gen

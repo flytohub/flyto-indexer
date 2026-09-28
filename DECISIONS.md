@@ -1,5 +1,26 @@
 # Decisions
 
+## 2026-09-28 — Absence of indexed callers is not a safety proof
+
+Decision: treat zero callers/dependents in the current static index as bounded
+low-impact evidence, never as proof that a symbol is safe to modify or remove.
+User-facing impact, audit, API, quality, and cross-project messages must name the
+static scope and preserve the possibility of dynamic/runtime/reflection/external
+consumers.
+
+The real-repository impact receipt must also reject false-positive graph edges,
+not only require selected true positives. The pinned FastAPI case therefore owns
+a complete seven-function ground-truth set and computes impact precision/recall;
+extra or missing functions fail the proof.
+
+Reason: architecture/regression health can coexist with overconfident evidence.
+A false `safe` claim or an impact proof that ignores extra edges can steer an
+agent more dangerously than an explicit `unknown`/bounded result.
+
+Consequence: no MCP tool or execution authority is added. This tightens evidence
+semantics and one existing risk label (`safe` -> `low` when zero indexed call
+sites are found) while keeping the static-analysis boundary explicit.
+
 ## 2026-09-28 — Accuracy claims require canonical and adversarial evidence
 
 Decision: keep human-labelled canonical fixtures as the authority for expected

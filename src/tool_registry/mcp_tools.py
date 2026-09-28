@@ -38,7 +38,9 @@ MCP_TOOLS: list = [
             "Analyze the blast radius of modifying a symbol. "
             "Use this to assess risk BEFORE making changes to shared code. "
             "Returns: count of affected locations, list of affected symbols with paths, "
-            "and a risk assessment (safe / moderate / high risk) with suggestions."
+            "and a bounded static risk assessment with suggestions. "
+            "Zero indexed callers is not proof that dynamic, runtime, or "
+            "external callers do not exist."
         ),
         "inputSchema": {
             "type": "object",

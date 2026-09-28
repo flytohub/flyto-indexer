@@ -280,7 +280,10 @@ class AIWorkflow:
         suggestion = ""
 
         if len(affected) == 0:
-            suggestion = "This symbol is not referenced anywhere else. Safe to modify."
+            suggestion = (
+                "No callers were found in the current static dependency evidence. "
+                "Verify dynamic, runtime, reflection-based, or external use before modifying."
+            )
         elif len(affected) <= 3:
             warning = f"Modification will affect {len(affected)} locations"
             suggestion = "Small blast radius. Recommend reviewing each call site individually."

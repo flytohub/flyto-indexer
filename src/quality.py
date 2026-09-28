@@ -868,7 +868,10 @@ def suggest_refactoring(project: str = None, max_results: int = 20) -> dict:
                 "path": sym.get("path", ""),
                 "line": sym.get("line", 0),
                 "reason": f"Unreferenced ({lines} lines)",
-                "suggestion": "Safe to remove — no callers found in indexed code",
+                "suggestion": (
+                    "No callers found in indexed static evidence. "
+                    "Verify dynamic, runtime, reflection-based, or external use before removal."
+                ),
                 "score": lines // 5,
             })
 

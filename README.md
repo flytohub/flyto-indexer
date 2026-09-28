@@ -91,7 +91,8 @@ finds four request handlers in three additional files above those direct calls.
 
 ```text
 git grep:  4 matching lines · 1 file
-impact:    7 affected functions · 4 files · 0 scan errors
+impact:    7/7 expected affected functions · 4 files · 0 scan errors
+quality:   precision 1.0 · recall 1.0 · 0 false-positive edges
 missed by literal search: 4 request handlers
 ```
 
@@ -103,8 +104,8 @@ python scripts/reproduce_impact_case.py --check-snapshot
 
 Read the [method, pinned source, exact result, and limits](docs/CASE_STUDY_FASTAPI.md)
 or inspect the [machine-readable receipt](docs/evidence/fastapi-full-stack-0.10.0.json).
-This proves static transitive discovery for the pinned case; it does not replace
-runtime tests.
+This proves exact static transitive discovery for the pinned case; it does not
+replace runtime tests or prove that an empty static caller set is universally safe.
 
 ## Why It Fits Your Existing Workflow
 
@@ -135,7 +136,9 @@ search → impact → task(plan) → task(gate) → edit → task(validate) → 
 ```
 
 - `search` finds the relevant code and concepts.
-- `impact` shows what a change can affect.
+- `impact` shows what the current static evidence says a change can affect. Zero
+  indexed callers is bounded evidence, not proof that dynamic/runtime/external
+  callers do not exist.
 - `task` keeps decisions, project rules, requirements, and proof connected.
 - `verify` checks whether the repository is actually ready to finish or merge.
 
