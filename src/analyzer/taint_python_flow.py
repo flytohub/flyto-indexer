@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 
 class TaintPythonFlowMixin:
+    findings: list[TaintFlow]
+
     def _build_return_source_registry(self) -> None:
         """Find functions whose return value carries untrusted input.
 

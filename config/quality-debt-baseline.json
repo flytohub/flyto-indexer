@@ -6,16 +6,16 @@
   "mypy": {
     "codes": {
       "arg-type": 40,
-      "assignment": 40,
-      "attr-defined": 87,
+      "assignment": 42,
+      "attr-defined": 224,
       "index": 21,
-      "no-redef": 366,
+      "no-redef": 381,
       "operator": 11,
       "return-value": 7,
       "union-attr": 43,
-      "var-annotated": 116
+      "var-annotated": 119
     },
-    "total": 731
+    "total": 888
   },
   "policy": "exact baseline; every decrease requires a baseline update",
   "ruff": {
@@ -24,10 +24,10 @@
       "B904": 2,
       "C401": 3,
       "E402": 6,
-      "E501": 848,
+      "E501": 850,
       "E741": 5,
-      "F401": 83,
-      "I001": 86,
+      "F401": 341,
+      "I001": 106,
       "SIM102": 29,
       "SIM103": 13,
       "SIM105": 19,
@@ -35,7 +35,7 @@
       "SIM110": 1,
       "SIM114": 11
     },
-    "total": 1123
+    "total": 1403
   },
   "schema_version": 1,
   "scope": "src",

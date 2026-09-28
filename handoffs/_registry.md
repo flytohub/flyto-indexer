@@ -2,6 +2,7 @@
 
 | Date | Topic | File | Status |
 | --- | --- | --- | --- |
+| 2026-09-28 | Accuracy gate expansion | `2026-09-28-accuracy-gate.md` | Final local gates passed; landing on main in this change. Owner: ChatGPT |
 | 2026-09-28 | Internal authority decomposition | `2026-09-28-internal-authority-decomposition.md` | Final local gates passed; landing on main. Owner: ChatGPT |
 | 2026-09-19 | Import-bound Python call evidence | `2026-09-19-python-call-binding.md` | Source and regression changes; final checks in PR. Owner: codex |
 | 2026-09-13 | Guard recognition without our own function names | `2026-09-13-agent-guard-recognition.md` | PR #69 open. Owner: claude |

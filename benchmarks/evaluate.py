@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import math
@@ -22,7 +23,10 @@ if str(ROOT) not in sys.path:
 from src.analyzer.taint import TaintAnalyzer
 from src.engine import IndexEngine
 
+from benchmarks.mutation_corpus import MUTATION_DIMENSIONS, build_mutation_cases
+
 DEFAULT_CORPUS = Path(__file__).resolve().parent / "fixture" / "corpus"
+REQUIRED_GATED_LANGUAGES = ("python", "javascript", "typescript", "go")
 
 
 def _stable_fingerprint(payload: Any) -> str:
@@ -46,20 +50,54 @@ def _read_manifest(corpus_root: Path) -> dict[str, Any]:
     return data
 
 
+def _source_fingerprint(project_root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(project_root.rglob("*")):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(project_root).as_posix().encode("utf-8")
+        digest.update(len(relative).to_bytes(4, "big"))
+        digest.update(relative)
+        payload = path.read_bytes()
+        digest.update(len(payload).to_bytes(8, "big"))
+        digest.update(payload)
+    return digest.hexdigest()
+
+
+@contextlib.contextmanager
+def _case_project(corpus_root: Path, case: dict[str, Any]):
+    files = case.get("files")
+    if not isinstance(files, dict):
+        project_root = (corpus_root / str(case["path"])).resolve()
+        if not project_root.is_dir() or corpus_root.resolve() not in project_root.parents:
+            raise ValueError(f"Invalid corpus path for {case['id']}: {project_root}")
+        yield project_root
+        return
+
+    with tempfile.TemporaryDirectory(prefix=f"flyto-mutation-{case['id']}-") as temp_dir:
+        project_root = Path(temp_dir) / "project"
+        project_root.mkdir()
+        for relative, content in sorted(files.items()):
+            destination = (project_root / relative).resolve()
+            if project_root.resolve() not in destination.parents:
+                raise ValueError(f"Invalid mutation path for {case['id']}: {relative}")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(str(content), encoding="utf-8")
+        yield project_root
+
+
 def _evaluate_case(corpus_root: Path, case: dict[str, Any]) -> dict[str, Any]:
     case_id = str(case["id"])
-    project_root = (corpus_root / str(case["path"])).resolve()
-    if not project_root.is_dir() or corpus_root.resolve() not in project_root.parents:
-        raise ValueError(f"Invalid corpus path for {case_id}: {project_root}")
-
     tracemalloc.start()
     started_at = time.monotonic()
-    with tempfile.TemporaryDirectory(prefix=f"flyto-eval-{case_id}-") as index_dir:
-        index_path = Path(index_dir)
-        engine = IndexEngine(case_id, project_root, index_dir=index_path)
-        scan_result = engine.scan(incremental=False)
-        index = json.loads((index_path / "index.json").read_text(encoding="utf-8"))
-        flows = TaintAnalyzer(project_root, index=index).analyze()
+    with _case_project(corpus_root, case) as project_root:
+        source_fingerprint = _source_fingerprint(project_root)
+        with tempfile.TemporaryDirectory(prefix=f"flyto-eval-{case_id}-") as index_dir:
+            index_path = Path(index_dir)
+            engine = IndexEngine(case_id, project_root, index_dir=index_path)
+            scan_result = engine.scan(incremental=False)
+            index = json.loads((index_path / "index.json").read_text(encoding="utf-8"))
+            flows = TaintAnalyzer(project_root, index=index).analyze()
     elapsed_ms = round((time.monotonic() - started_at) * 1000, 2)
     _, peak_bytes = tracemalloc.get_traced_memory()
     tracemalloc.stop()
@@ -100,6 +138,10 @@ def _evaluate_case(corpus_root: Path, case: dict[str, Any]) -> dict[str, Any]:
         "metamorphic_relation": case.get("metamorphic_relation"),
         "reference_categories": sorted(case.get("reference_categories") or []),
         "reference_sources": sorted(case.get("reference_sources") or []),
+        "corpus_kind": str(case.get("corpus_kind") or "canonical"),
+        "base_case_id": case.get("base_case_id"),
+        "mutation_dimension": case.get("mutation_dimension"),
+        "source_fingerprint": source_fingerprint,
     }
     reference_agreement = sorted(actual_counts) == stable_evidence["reference_categories"]
     return {
@@ -215,11 +257,22 @@ def _metamorphic_evidence(cases: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def evaluate_corpus(corpus_root: str | Path = DEFAULT_CORPUS) -> dict[str, Any]:
+def evaluate_corpus(
+    corpus_root: str | Path = DEFAULT_CORPUS,
+    *,
+    include_mutations: bool = True,
+) -> dict[str, Any]:
     """Evaluate every committed case and return deterministic quality evidence."""
     root = Path(corpus_root).resolve()
     manifest = _read_manifest(root)
-    cases = [_evaluate_case(root, case) for case in manifest["cases"]]
+    canonical_cases = [
+        {**case, "corpus_kind": "canonical"}
+        for case in manifest["cases"]
+    ]
+    case_specs = list(canonical_cases)
+    if include_mutations:
+        case_specs.extend(build_mutation_cases(root, canonical_cases))
+    cases = [_evaluate_case(root, case) for case in case_specs]
 
     true_positives = sum(
         min(result["actual"].get(category, 0), expected_count)
@@ -249,6 +302,18 @@ def evaluate_corpus(corpus_root: str | Path = DEFAULT_CORPUS) -> dict[str, Any]:
         }),
     }
     by_language = _language_summaries(cases)
+    canonical_by_language = _language_summaries([
+        case for case in cases if case.get("corpus_kind") == "canonical"
+    ])
+    by_mutation_dimension = {
+        dimension: sum(
+            1 for case in cases if case.get("mutation_dimension") == dimension
+        )
+        for dimension in MUTATION_DIMENSIONS
+    }
+    unique_source_fingerprints = len({
+        case["source_fingerprint"] for case in cases
+    })
     stable_by_language = {
         language: {
             key: value
@@ -256,6 +321,14 @@ def evaluate_corpus(corpus_root: str | Path = DEFAULT_CORPUS) -> dict[str, Any]:
             if key != "p95_latency_ms"
         }
         for language, summary in by_language.items()
+    }
+    stable_canonical_by_language = {
+        language: {
+            key: value
+            for key, value in summary.items()
+            if key != "p95_latency_ms"
+        }
+        for language, summary in canonical_by_language.items()
     }
     stable_summary = {
         "schema_version": 2,
@@ -269,6 +342,9 @@ def evaluate_corpus(corpus_root: str | Path = DEFAULT_CORPUS) -> dict[str, Any]:
         "metamorphic": metamorphic,
         "differential": differential,
         "by_language": stable_by_language,
+        "canonical_by_language": stable_canonical_by_language,
+        "by_mutation_dimension": by_mutation_dimension,
+        "unique_source_fingerprints": unique_source_fingerprints,
     }
     return {
         "schema_version": 2,
@@ -276,10 +352,14 @@ def evaluate_corpus(corpus_root: str | Path = DEFAULT_CORPUS) -> dict[str, Any]:
             all(result["pass"] and result["scan_errors"] == 0 for result in cases)
             and metamorphic["pass"]
             and differential["pass"]
+            and unique_source_fingerprints == len(cases)
         ),
         "corpus": str(root),
         "summary": {
             "cases": len(cases),
+            "canonical_cases": sum(case["corpus_kind"] == "canonical" for case in cases),
+            "mutation_cases": sum(case["corpus_kind"] == "mutation" for case in cases),
+            "unique_source_fingerprints": unique_source_fingerprints,
             "passed": sum(1 for result in cases if result["pass"]),
             "positive_cases": sum(1 for result in cases if result["expected"]),
             "negative_cases": len(negative_cases),
@@ -307,6 +387,8 @@ def evaluate_corpus(corpus_root: str | Path = DEFAULT_CORPUS) -> dict[str, Any]:
                 default=0,
             ),
             "by_language": by_language,
+            "canonical_by_language": canonical_by_language,
+            "by_mutation_dimension": by_mutation_dimension,
         },
         "metamorphic": metamorphic,
         "differential": differential,
@@ -317,6 +399,22 @@ def evaluate_corpus(corpus_root: str | Path = DEFAULT_CORPUS) -> dict[str, Any]:
 
 def _threshold_pass(result: dict[str, Any], args: argparse.Namespace) -> bool:
     summary = result["summary"]
+    required_languages_present = all(
+        language in summary["by_language"]
+        and language in summary["canonical_by_language"]
+        for language in REQUIRED_GATED_LANGUAGES
+    )
+    language_thresholds_pass = required_languages_present and all(
+        summary["canonical_by_language"][name]["positive_cases"]
+        >= args.min_positive_per_language
+        and summary["canonical_by_language"][name]["negative_cases"]
+        >= args.min_negative_per_language
+        and summary["by_language"][name]["precision"] >= args.min_language_precision
+        and summary["by_language"][name]["recall"] >= args.min_language_recall
+        and summary["by_language"][name]["false_positive_rate"]
+        <= args.max_language_false_positive_rate
+        for name in REQUIRED_GATED_LANGUAGES
+    )
     return (
         result["pass"]
         and summary["precision"] >= args.min_precision
@@ -324,7 +422,18 @@ def _threshold_pass(result: dict[str, Any], args: argparse.Namespace) -> bool:
         and summary["false_positive_rate"] <= args.max_false_positive_rate
         and summary["p95_case_latency_ms"] <= args.max_p95_latency_ms
         and summary["max_case_latency_ms"] <= args.max_case_latency_ms
-        and summary["cases"] >= args.min_cases
+        and summary["canonical_cases"] >= args.min_canonical_cases
+        and (args.canonical_only or summary["cases"] >= args.min_cases)
+        and (args.canonical_only or summary["mutation_cases"] >= args.min_mutation_cases)
+        and summary["unique_source_fingerprints"] == summary["cases"]
+        and (
+            args.canonical_only
+            or all(
+                count >= args.min_mutations_per_dimension
+                for count in summary["by_mutation_dimension"].values()
+            )
+        )
+        and language_thresholds_pass
     )
 
 
@@ -336,22 +445,39 @@ def main() -> int:
     parser.add_argument("--output")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--canonical-only", action="store_true")
     parser.add_argument("--min-precision", type=float, default=1.0)
     parser.add_argument("--min-recall", type=float, default=1.0)
     parser.add_argument("--max-false-positive-rate", type=float, default=0.0)
+    parser.add_argument("--min-language-precision", type=float, default=0.98)
+    parser.add_argument("--min-language-recall", type=float, default=0.95)
+    parser.add_argument("--max-language-false-positive-rate", type=float, default=0.05)
+    parser.add_argument("--min-positive-per-language", type=int, default=4)
+    parser.add_argument("--min-negative-per-language", type=int, default=4)
     parser.add_argument("--max-p95-latency-ms", type=float, default=1000.0)
     parser.add_argument("--max-case-latency-ms", type=float, default=2500.0)
-    parser.add_argument("--min-cases", type=int, default=27)
+    parser.add_argument("--min-canonical-cases", type=int, default=40)
+    parser.add_argument("--min-cases", type=int, default=200)
+    parser.add_argument("--min-mutation-cases", type=int, default=150)
+    parser.add_argument("--min-mutations-per-dimension", type=int, default=40)
     args = parser.parse_args()
 
-    result = evaluate_corpus(args.corpus)
+    result = evaluate_corpus(args.corpus, include_mutations=not args.canonical_only)
     result["thresholds"] = {
         "min_precision": args.min_precision,
         "min_recall": args.min_recall,
         "max_false_positive_rate": args.max_false_positive_rate,
+        "min_language_precision": args.min_language_precision,
+        "min_language_recall": args.min_language_recall,
+        "max_language_false_positive_rate": args.max_language_false_positive_rate,
+        "min_positive_per_language": args.min_positive_per_language,
+        "min_negative_per_language": args.min_negative_per_language,
         "max_p95_latency_ms": args.max_p95_latency_ms,
         "max_case_latency_ms": args.max_case_latency_ms,
+        "min_canonical_cases": args.min_canonical_cases,
         "min_cases": args.min_cases,
+        "min_mutation_cases": args.min_mutation_cases,
+        "min_mutations_per_dimension": args.min_mutations_per_dimension,
     }
     result["threshold_pass"] = _threshold_pass(result, args)
     rendered = json.dumps(result, ensure_ascii=False, indent=2)

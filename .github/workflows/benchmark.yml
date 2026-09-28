@@ -49,6 +49,12 @@ jobs:
           summary = result["summary"]
           print("# Flyto2 Indexer benchmark evidence\n")
           print(f"Evidence fingerprint: `{result['evidence_fingerprint']}`\n")
+          print(
+              f"Cases: **{summary['cases']}** "
+              f"({summary['canonical_cases']} canonical + "
+              f"{summary['mutation_cases']} mutation; "
+              f"{summary['unique_source_fingerprints']} unique source fingerprints)\n"
+          )
           print("| Language | Cases | Positive | Negative | Precision | Recall | FPR | p95 |")
           print("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
           for language, item in summary["by_language"].items():
@@ -58,7 +64,11 @@ jobs:
                   f"{item['recall']:.3f} | {item['false_positive_rate']:.3f} | "
                   f"{item['p95_latency_ms']:.2f} ms |"
               )
-          print("\nThis is the small committed offline regression corpus, not a universal parity claim.")
+          print("\nMutation dimensions: " + ", ".join(
+              f"{name}={count}"
+              for name, count in summary["by_mutation_dimension"].items()
+          ))
+          print("\nThis is a committed offline accuracy regression gate, not a universal parity claim.")
 
           task = json.load(open("task-efficiency-evidence.json", encoding="utf-8"))
           print("\n# Task continuity and efficiency evidence\n")

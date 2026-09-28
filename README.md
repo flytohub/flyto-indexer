@@ -324,10 +324,11 @@ Target repositories are treated as untrusted input. Static checks do not
 intentionally import or execute the code being analyzed. Findings include
 confidence and trace evidence without retaining raw secrets.
 
-The committed offline benchmark covers positive, negative, sanitized, and
-cross-file cases across Python, JavaScript, TypeScript, and Go. It gates
-accuracy, false positives, scan errors, and latency on every release. See the
-[reproducible benchmark](benchmarks/README.md) and
+The committed offline benchmark covers 46 canonical positive/negative cases
+plus 184 deterministic adversarial mutations across Python, JavaScript,
+TypeScript, and Go. The 230 source-unique cases gate precision, recall, false
+positives, scan errors, mutation robustness, and latency on every release. See
+the [reproducible benchmark](benchmarks/README.md) and
 [security model](docs/SECURITY_MODEL.md).
 
 Ignored production Ruff and dependency-isolated, Linux-targeted mypy findings

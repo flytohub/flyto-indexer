@@ -14,8 +14,8 @@
       "indexing": "Token-aware structural extraction with import and call edges",
       "relationship_analysis": "Static graph plus optional LSP and SCIP precision",
       "security_analysis": "Pattern-based taint fallback for common source-to-sink shapes",
-      "evidence_level": "positive-only",
-      "limitations": "The committed corpus has positive cases but no JavaScript negative control yet."
+      "evidence_level": "gated",
+      "limitations": "Pattern fallback is gated by committed positive and negative controls, but framework-specific aliases and dynamic dataflow can still require LSP, SCIP, or manual review."
     },
     "typescript": {
       "label": "TypeScript",

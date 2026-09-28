@@ -2,6 +2,17 @@
 
 ## 2026-09-28
 
+- Expanded the offline security accuracy gate from 27 cases to 46 canonical
+  ground-truth projects plus 184 deterministic adversarial mutations (230 unique
+  source fingerprints), with balanced positive/negative evidence for Python,
+  JavaScript, TypeScript, and Go.
+- Fixed JavaScript/TypeScript and Go regex-fallback SQL precision so parameterized
+  queries with separately bound user data are not reported as SQL injection;
+  string-built SQL remains a finding.
+- Resynchronized the exact ignored Ruff/mypy debt baseline to the already-shipped
+  `fc91228` decomposition state after proving this accuracy change adds zero debt
+  relative to that commit, then tightened it after fixing the decomposition
+  mixins so full mypy returns zero issues.
 - Refactored verification, taint, task analysis, and verify CLI internals into
   focused responsibility modules while preserving the existing 20 MCP tools,
   Python compatibility facades, CLI behavior, evidence semantics, and runtime

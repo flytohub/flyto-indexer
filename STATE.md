@@ -1,5 +1,41 @@
 # Flyto2 Indexer State
 
+## 2026-09-28 — Accuracy gate expansion
+
+Security accuracy is now gated by 46 human-readable canonical projects plus 184
+deterministic adversarial mutations (230 source-unique cases) across Python,
+JavaScript, TypeScript, and Go. Every gated language has both positive and
+negative evidence. The mutation dimensions exercise comment/source-sink decoys,
+identifier changes, receiver aliases, and layout/safe-neighbour noise without
+deriving expected labels from analyzer output.
+
+The gate rejects duplicate source fingerprints, missing mutation dimensions,
+category drift, false positives, false negatives, broken metamorphic relations,
+scan errors, and latency regressions. Global committed-corpus thresholds remain
+precision=1.0, recall=1.0, and negative-case FPR=0.0; per-language floors are
+0.98 precision, 0.95 recall, FPR<=0.05, with at least four positive and four
+negative controls.
+
+The expanded negative controls exposed a real regex-fallback false positive:
+parameterized JavaScript/TypeScript and Go SQL calls were previously reported as
+SQL injection because user data appeared later in the call. Regex fallback now
+exempts only a static quoted first SQL argument containing a parameter placeholder
+and a separate bound-argument position; string-built SQL remains reported.
+
+The accuracy change itself adds zero ignored Ruff/mypy debt relative to its
+starting main commit `fc91228`. During closure the quality-debt ratchet was found
+to still describe the pre-decomposition tree, so its exact baseline was refreshed
+to the already-shipped `fc91228` debt state after a same-tool-version comparison.
+The five pre-existing mixin `has-type` errors were then fixed with explicit mixin
+state annotations; full mypy now reports zero issues across 188 source files, and
+the exact debt baseline was tightened again to lock the improvement.
+
+Final local closure on this accuracy tree: 230/230 accuracy cases passed with
+TP=140, FP=0, FN=0; fast tests reported 2671 passed, 3 skipped and 61 deselected;
+full pytest reported 2732 passed and 3 skipped. Package build passed, strict
+self-verification reported 22 pass / 0 warn / 0 fail, and public surfaces remain
+20 MCP tools and 44 CLI commands.
+
 ## 2026-09-28 — Internal authority decomposition
 
 The public 20-tool surface and runtime dependency boundary are unchanged. The

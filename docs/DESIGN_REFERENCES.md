@@ -23,13 +23,14 @@ Flyto2 Indexer borrows successful mechanics, not product bulk.
 
 ## Evidence gates adopted
 
-- `benchmarks/evaluate.py` runs committed positive and negative cases through
-  the real index and taint analyzer. It measures exact category counts,
-  precision, recall, false-positive rate, cross-file path depth, p50/p95/max
-  latency, and peak memory. Metamorphic pairs prove sanitization and constant
-  substitution change only the intended result; pinned differential categories
-  catch language-specific drift without cloning repositories or calling a
-  hosted service.
+- `benchmarks/evaluate.py` runs 46 canonical positive/negative cases plus 184
+  deterministic adversarial mutations through the real index and taint
+  analyzer. It measures exact category counts, source uniqueness, mutation
+  coverage, precision, recall, false-positive rate, cross-file path depth,
+  p50/p95/max latency, and peak memory. Metamorphic pairs prove sanitization and
+  constant substitution change only the intended result; pinned differential
+  categories catch language-specific drift without cloning repositories or
+  calling a hosted service.
 - Verification finding IDs exclude line numbers and raw source bodies. The
   same ID is used by JSON baselines and SARIF, so line-only edits do not create
   churn while genuinely new findings still regress.

@@ -48,15 +48,44 @@ def test_offline_evaluation_corpus_is_precise_reproducible_and_fast():
         first_result["summary"]["p95_case_latency_ms"]
         <= first_result["summary"]["max_case_latency_ms"]
     )
-    assert first_result["summary"]["cases"] >= 13
-    assert first_result["summary"]["positive_cases"] >= 7
-    assert first_result["summary"]["negative_cases"] >= 5
+    assert first_result["summary"]["cases"] >= 200
+    assert first_result["summary"]["canonical_cases"] >= 40
+    assert first_result["summary"]["mutation_cases"] >= 150
+    assert (
+        first_result["summary"]["unique_source_fingerprints"]
+        == first_result["summary"]["cases"]
+    )
+    assert first_result["summary"]["positive_cases"] >= 100
+    assert first_result["summary"]["negative_cases"] >= 80
     assert set(first_result["summary"]["by_language"]) == {
         "go",
         "javascript",
         "python",
         "typescript",
     }
+    assert set(first_result["summary"]["canonical_by_language"]) == {
+        "go",
+        "javascript",
+        "python",
+        "typescript",
+    }
+    for name, language in first_result["summary"]["by_language"].items():
+        canonical = first_result["summary"]["canonical_by_language"][name]
+        assert canonical["positive_cases"] >= 4
+        assert canonical["negative_cases"] >= 4
+        assert language["precision"] >= 0.98
+        assert language["recall"] >= 0.95
+        assert language["false_positive_rate"] <= 0.05
+    assert set(first_result["summary"]["by_mutation_dimension"]) == {
+        "comment_decoys",
+        "identifier_rename",
+        "receiver_alias",
+        "layout_safe_neighbor",
+    }
+    assert all(
+        count >= 40
+        for count in first_result["summary"]["by_mutation_dimension"].values()
+    )
     assert first_result["metamorphic"]["pass"] is True
     assert first_result["metamorphic"]["groups"] >= 4
     assert first_result["differential"]["pass"] is True

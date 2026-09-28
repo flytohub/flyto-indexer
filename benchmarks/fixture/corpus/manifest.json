@@ -410,6 +410,270 @@
         "semgrep/python-ldap-injection",
         "codeql/py-ldap-injection"
       ]
+    },
+    {
+      "id": "javascript-constant-ssrf",
+      "path": "javascript-constant-ssrf",
+      "language": "javascript",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": [
+        "semgrep/javascript-ssrf",
+        "codeql/js-request-forgery"
+      ]
+    },
+    {
+      "id": "javascript-internal-redirect",
+      "path": "javascript-internal-redirect",
+      "language": "javascript",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": [
+        "semgrep/javascript-open-redirect",
+        "codeql/js-client-side-url-redirect"
+      ]
+    },
+    {
+      "id": "javascript-regex-constant",
+      "path": "javascript-regex-constant",
+      "language": "javascript",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": [
+        "semgrep/javascript-redos",
+        "codeql/js-redos"
+      ]
+    },
+    {
+      "id": "javascript-prototype-safe",
+      "path": "javascript-prototype-safe",
+      "language": "javascript",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": [
+        "semgrep/javascript-prototype-pollution",
+        "codeql/js-prototype-pollution"
+      ]
+    },
+    {
+      "id": "javascript-open-redirect",
+      "path": "javascript-open-redirect",
+      "language": "javascript",
+      "kind": "positive",
+      "expected": {
+        "open_redirect": 1
+      },
+      "reference_categories": [
+        "open_redirect"
+      ],
+      "reference_sources": [
+        "semgrep/javascript-open-redirect",
+        "codeql/js-client-side-url-redirect"
+      ]
+    },
+    {
+      "id": "javascript-redos",
+      "path": "javascript-redos",
+      "language": "javascript",
+      "kind": "positive",
+      "expected": {
+        "redos": 1
+      },
+      "reference_categories": [
+        "redos"
+      ],
+      "reference_sources": [
+        "semgrep/javascript-redos",
+        "codeql/js-redos"
+      ]
+    },
+    {
+      "id": "javascript-sqli-unsafe",
+      "path": "javascript-sqli-unsafe",
+      "language": "javascript",
+      "kind": "positive",
+      "expected": {
+        "sql_injection": 1
+      },
+      "reference_categories": [
+        "sql_injection"
+      ],
+      "reference_sources": [
+        "semgrep/javascript-sqli",
+        "codeql/js-sql-injection"
+      ]
+    },
+    {
+      "id": "javascript-sqli-parameterized",
+      "path": "javascript-sqli-parameterized",
+      "language": "javascript",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": [
+        "semgrep/javascript-sqli",
+        "codeql/js-sql-injection"
+      ]
+    },
+    {
+      "id": "typescript-ssrf",
+      "path": "typescript-ssrf",
+      "language": "typescript",
+      "kind": "positive",
+      "expected": {
+        "ssrf": 1
+      },
+      "reference_categories": [
+        "ssrf"
+      ],
+      "reference_sources": [
+        "semgrep/typescript-ssrf",
+        "codeql/js-request-forgery"
+      ]
+    },
+    {
+      "id": "typescript-constant-ssrf",
+      "path": "typescript-constant-ssrf",
+      "language": "typescript",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": [
+        "semgrep/typescript-ssrf",
+        "codeql/js-request-forgery"
+      ]
+    },
+    {
+      "id": "typescript-redos",
+      "path": "typescript-redos",
+      "language": "typescript",
+      "kind": "positive",
+      "expected": {
+        "redos": 1
+      },
+      "reference_categories": [
+        "redos"
+      ],
+      "reference_sources": [
+        "semgrep/typescript-redos",
+        "codeql/js-redos"
+      ]
+    },
+    {
+      "id": "typescript-regex-constant",
+      "path": "typescript-regex-constant",
+      "language": "typescript",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": [
+        "semgrep/typescript-redos",
+        "codeql/js-redos"
+      ]
+    },
+    {
+      "id": "typescript-sqli-unsafe",
+      "path": "typescript-sqli-unsafe",
+      "language": "typescript",
+      "kind": "positive",
+      "expected": {
+        "sql_injection": 1
+      },
+      "reference_categories": [
+        "sql_injection"
+      ],
+      "reference_sources": [
+        "semgrep/typescript-sqli",
+        "codeql/js-sql-injection"
+      ]
+    },
+    {
+      "id": "typescript-sqli-parameterized",
+      "path": "typescript-sqli-parameterized",
+      "language": "typescript",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": [
+        "semgrep/typescript-sqli",
+        "codeql/js-sql-injection"
+      ]
+    },
+    {
+      "id": "go-open-redirect",
+      "path": "go-open-redirect",
+      "language": "go",
+      "kind": "positive",
+      "expected": {
+        "open_redirect": 1
+      },
+      "reference_categories": [
+        "open_redirect"
+      ],
+      "reference_sources": [
+        "semgrep/go-open-redirect",
+        "codeql/go-unvalidated-url-redirection"
+      ]
+    },
+    {
+      "id": "go-internal-redirect",
+      "path": "go-internal-redirect",
+      "language": "go",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": [
+        "semgrep/go-open-redirect",
+        "codeql/go-unvalidated-url-redirection"
+      ]
+    },
+    {
+      "id": "go-redos",
+      "path": "go-redos",
+      "language": "go",
+      "kind": "positive",
+      "expected": {
+        "redos": 1
+      },
+      "reference_categories": [
+        "redos"
+      ],
+      "reference_sources": [
+        "semgrep/go-redos",
+        "codeql/go-redos"
+      ]
+    },
+    {
+      "id": "go-sqli",
+      "path": "go-sqli",
+      "language": "go",
+      "kind": "positive",
+      "expected": {
+        "sql_injection": 1
+      },
+      "reference_categories": [
+        "sql_injection"
+      ],
+      "reference_sources": [
+        "semgrep/go-sqli",
+        "codeql/go-sql-injection"
+      ]
+    },
+    {
+      "id": "go-sqli-parameterized",
+      "path": "go-sqli-parameterized",
+      "language": "go",
+      "kind": "negative",
+      "expected": {},
+      "reference_categories": [],
+      "reference_sources": [
+        "semgrep/go-sqli",
+        "codeql/go-sql-injection"
+      ]
     }
   ]
 }

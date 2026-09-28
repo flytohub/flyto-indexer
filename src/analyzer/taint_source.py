@@ -6,14 +6,20 @@ import ast
 import os
 import stat
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .taint_common import (
     MAX_TAINT_FILE_BYTES, MAX_TAINT_SOURCE_BYTES, MAX_TAINT_SOURCE_FILES,
     SKIP_DIR_PATTERNS, _in_hidden_dir,
 )
 
+if TYPE_CHECKING:
+    from .taint_lsp import CalleeVerifier
+
 
 class TaintSourceMixin:
+    _verifier: "CalleeVerifier | None"
+
     def _filesystem_paths(self, pattern: str) -> list[Path]:
         """Return sorted built-in candidates refined by standard Git excludes."""
         candidates = sorted(self.project_root.rglob(pattern))

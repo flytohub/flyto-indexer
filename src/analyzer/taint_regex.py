@@ -8,6 +8,31 @@ from .taint_common import MAX_FINDINGS, SKIP_DIR_PATTERNS, _in_hidden_dir, _is_g
 from .taint_evidence import TaintFlow
 from .taint_rules import GO_TAINT_PATTERNS, JS_TAINT_PATTERNS
 
+_JS_PARAMETERIZED_SQL = re.compile(
+    r"\b(?:query|execute)\s*\(\s*"
+    r"(?P<quote>['\"`])(?P<sql>.*?)(?P=quote)\s*,",
+    re.IGNORECASE,
+)
+_GO_PARAMETERIZED_SQL = re.compile(
+    r"\b(?:db|tx|conn|database)\.(?:Query|Exec|QueryRow)\s*\(\s*"
+    r'"(?P<sql>(?:\\.|[^"\\])*)"\s*,',
+    re.IGNORECASE,
+)
+_SQL_PLACEHOLDER = re.compile(r"(?:\$\d+|\?|:[A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _is_parameterized_sql_call(text: str, language: str) -> bool:
+    """Return True when user data is bound separately from a static SQL string.
+
+    Regex fallback has no AST argument model, so it must not equate
+    `query("... $1", [req.query.id])` with string-built SQL.  Requiring a
+    complete quoted first argument followed by a comma keeps the exemption
+    narrow: concatenation/interpolation in the first argument does not match.
+    """
+    matcher = _GO_PARAMETERIZED_SQL if language == "go" else _JS_PARAMETERIZED_SQL
+    match = matcher.search(text)
+    return bool(match and _SQL_PLACEHOLDER.search(match.group("sql")))
+
 
 class TaintRegexMixin:
     def _scan_regex_languages(self):
@@ -64,6 +89,11 @@ class TaintRegexMixin:
             # Check single line
             for pat, vuln_type, severity, rec in patterns:
                 if re.search(pat, line, re.IGNORECASE):
+                    language = "go" if file_path.endswith(".go") else "javascript"
+                    if vuln_type == "sql_injection" and _is_parameterized_sql_call(
+                        line, language
+                    ):
+                        continue
                     self.findings.append(TaintFlow(
                         file_path=file_path,
                         line=i + 1,
@@ -87,6 +117,11 @@ class TaintRegexMixin:
                 two_lines = line + " " + lines[i + 1]
                 for pat, vuln_type, severity, rec in patterns:
                     if re.search(pat, two_lines, re.IGNORECASE):
+                        language = "go" if file_path.endswith(".go") else "javascript"
+                        if vuln_type == "sql_injection" and _is_parameterized_sql_call(
+                            two_lines, language
+                        ):
+                            continue
                         # Only emit a window finding when the rule genuinely
                         # spans both lines. The next iteration owns matches
                         # wholly contained in the second line.

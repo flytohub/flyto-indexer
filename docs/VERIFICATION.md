@@ -92,21 +92,27 @@ finding across line-only moves.
 
 ## Offline Scanner Evaluation
 
-The repository includes a committed positive/negative corpus for Python,
-JavaScript, TypeScript, and Go. It runs the real index and taint analyzer
-without network access and fails on missed findings, extra findings, broken
-metamorphic relations, differential-category drift, missing cross-file path
-proof, scan errors, or p95/max latency beyond the configured bounds:
+The repository includes a two-layer committed positive/negative corpus for
+Python, JavaScript, TypeScript, and Go: 46 canonical ground-truth projects plus
+184 deterministic adversarial/mutation variants (230 source-unique cases total).
+It runs the real index and taint analyzer without network access and fails on
+missed findings, extra findings, duplicate source fingerprints, missing mutation
+dimensions, broken metamorphic relations, differential-category drift, missing
+cross-file path proof, scan errors, weak per-language evidence, or p95/max
+latency beyond the configured bounds:
 
 ```bash
 python benchmarks/evaluate.py --check --json
 ```
 
-The report includes per-language precision and recall, negative-case
-false-positive rate, p50/p95/max latency and peak memory, plus a deterministic
-evidence fingerprint that excludes timing noise. This fast gate
-complements—not replaces—the larger optional external corpus described in
-[benchmarks/README.md](../benchmarks/README.md).
+The report includes canonical/mutation counts, per-language precision and
+recall, negative-case false-positive rate, source uniqueness, mutation-dimension
+coverage, p50/p95/max latency and peak memory, plus a deterministic evidence
+fingerprint that excludes timing noise. The committed global thresholds remain
+strict at precision=1.0, recall=1.0 and FPR=0.0; language floors are 0.98/0.95
+and FPR<=0.05 with at least four positive and four negative cases per language.
+This gate complements—not replaces—the larger optional external corpus described
+in [benchmarks/README.md](../benchmarks/README.md).
 
 Task continuity and efficiency evidence has a separate fixed contract:
 

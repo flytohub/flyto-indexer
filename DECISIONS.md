@@ -1,5 +1,25 @@
 # Decisions
 
+## 2026-09-28 — Accuracy claims require canonical and adversarial evidence
+
+Decision: keep human-labelled canonical fixtures as the authority for expected
+security categories, then derive deterministic semantic-preserving mutations from
+those fixtures to test robustness. Do not count byte-identical variants as extra
+evidence, and do not derive expected labels from analyzer output. Every language
+called `gated` must have both positive and negative canonical controls.
+
+The release gate requires at least 40 canonical cases, 200 total cases, 150
+mutation cases, 40 cases in each mutation dimension, unique source fingerprints,
+global precision/recall/FPR of 1.0/1.0/0.0, and per-language floors of 0.98
+precision, 0.95 recall, FPR<=0.05 with at least four positive and four negative
+cases. These are committed regression thresholds, not a universal real-world
+accuracy claim.
+
+Reason: architecture and regression compatibility prove that the system still
+runs, not that its findings are correct. Negative controls and adversarial
+mutations are required to expose false positives such as the parameterized SQL
+case found during this expansion.
+
 ## 2026-09-28 — Split implementation authority without expanding product authority
 
 Decision: decompose the large verification, taint, task-analysis, and CLI modules

@@ -14,6 +14,8 @@ from .taint_evidence import TaintFlow
 
 
 class TaintCrossFileMixin:
+    _active_sink_category: str | None
+
     def _scan_cross_function_via_index(self):
         """Trace callers of dangerous functions using the index dependency graph.
 

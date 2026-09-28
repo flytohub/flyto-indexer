@@ -1,9 +1,10 @@
 # Flyto2 security benchmark corpus
 
-This directory has two deliberately separate layers:
+This directory has three deliberately separate layers:
 
-1. a small, committed, offline core gate that runs in every CI verification;
-2. an optional large external comparison corpus for release research.
+1. a human-readable canonical ground-truth corpus;
+2. a deterministic adversarial/mutation layer derived from that ground truth;
+3. an optional large external comparison corpus for release research.
 
 ## Executable offline gate
 
@@ -14,27 +15,31 @@ python benchmarks/evaluate.py --check --json
 ```
 
 `evaluate.py` builds temporary indexes and runs the real taint analyzer against
-13 committed `fixture/corpus/` cases: eight positive and five negative examples
-across Python, JavaScript, TypeScript, and Go. The `fixture/` boundary keeps
-intentionally vulnerable samples out of repository self-scans, including older
-Indexer releases used by shared workflows. The manifest includes direct and
-cross-file flows, sanitizers, constants, and four metamorphic groups. Pinned
-differential categories make language-specific drift visible. The gate checks
-exact category counts, scan errors, cross-file path depth, precision, recall,
-negative-case false-positive rate, and p50/p95/max latency budgets. Its evidence
-fingerprint excludes timing and memory noise, so identical findings produce
-identical proof across runs.
+46 committed canonical `fixture/corpus/` cases plus 184 deterministic mutation
+cases, for 230 evaluated source trees across Python, JavaScript, TypeScript, and
+Go. Canonical cases are the human-readable source of truth. The mutation layer
+changes comments/decoys, identifiers, sink receivers, layout, and neighbouring
+safe code without changing the expected category, so the gate checks robustness
+rather than merely replaying identical fixtures.
 
-The default gate is intentionally tiny and has no network or third-party
-scanner dependency. It catches local analyzer regressions quickly; it does not
-claim parity with a full external scanner corpus.
+The gate rejects duplicated source fingerprints, requires all four mutation
+dimensions to remain populated, requires positive and negative evidence for
+every gated language, and checks exact category counts, scan errors, cross-file
+path depth, precision, recall, negative-case false-positive rate, and
+p50/p95/max latency budgets. Global committed-corpus precision/recall/FPR remain
+strict at 1.0/1.0/0.0; per-language floors are 0.98 precision, 0.95 recall, and
+0.05 negative-case FPR. Its evidence fingerprint excludes timing and memory
+noise while including each case's source fingerprint.
+
+The default gate is still fully offline and has no network or third-party
+scanner dependency. It is an accuracy regression gate, not a claim of universal
+real-world parity with a commercial scanner or compiler-backed dataflow engine.
 
 Per-language indexing depth, security-analysis depth, case counts, and known
 limits are published in the generated
-[language evidence matrix](../docs/LANGUAGE_EVIDENCE.md). JavaScript currently
-has positive-only corpus evidence; Python, TypeScript, and Go have both positive
-and negative committed cases. CI rejects a `gated` label unless both kinds are
-present.
+[language evidence matrix](../docs/LANGUAGE_EVIDENCE.md). Python, JavaScript,
+TypeScript, and Go all have positive and negative canonical controls. CI rejects
+a `gated` label unless both kinds are present.
 
 The separate [real-repository impact case](../docs/CASE_STUDY_FASTAPI.md) is not
 part of this security corpus. It pins an external full-stack source commit and
@@ -54,6 +59,7 @@ Consumers: QA in week 4 (FLY-11 MVP-exit gate); Backend Dev in week 2 when wirin
 | File | Purpose |
 |---|---|
 | `evaluate.py` | Offline executable accuracy, path, latency, and memory gate. |
+| `mutation_corpus.py` | Deterministic semantic-preserving adversarial variants of canonical cases. |
 | `fixture/corpus/manifest.json` | Ground truth for the committed mini-projects. |
 | `fixture/corpus/**` | Positive and negative source fixtures used by the local gate. |
 | `semgrep_baseline.csv` | Rule baseline: `rule_id,expected_severity,source_repo`. 311 rules across Python, JS/TS, Go, Terraform. |

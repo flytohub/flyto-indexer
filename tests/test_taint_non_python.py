@@ -118,3 +118,45 @@ class TestJavaScriptRceIsBidirectional:
             "});\n"
         )
         assert TaintAnalyzer(tmp_path).analyze() == []
+
+
+class TestParameterizedSqlIsNotInjection:
+    """Binding user data separately from static SQL is not string-built SQL."""
+
+    def test_javascript_parameterized_query_is_not_reported(self, tmp_path):
+        flows = _analyze(tmp_path, "route.js", """\
+            app.get('/user', async (req, res) => { const rows = await db.query('SELECT * FROM users WHERE id=$1', [req.query.id]); res.json(rows); });
+        """)
+        assert not [f for f in flows if f.category == "sql_injection"]
+
+    def test_typescript_parameterized_query_is_not_reported(self, tmp_path):
+        flows = _analyze(tmp_path, "route.ts", """\
+            app.get('/user', async (req, res) => { const rows = await db.query(`SELECT * FROM users WHERE id=$1`, [req.query.id]); res.json(rows); });
+        """)
+        assert not [f for f in flows if f.category == "sql_injection"]
+
+    def test_go_parameterized_query_is_not_reported(self, tmp_path):
+        flows = _analyze(tmp_path, "main.go", """\
+            package main
+
+            func lookup(db *sql.DB, r *http.Request) {
+                db.Query("SELECT * FROM users WHERE id=$1", r.FormValue("id"))
+            }
+        """)
+        assert not [f for f in flows if f.category == "sql_injection"]
+
+    def test_string_built_sql_is_still_reported(self, tmp_path):
+        js_flows = _analyze(tmp_path, "unsafe.js", """\
+            app.get('/user', async (req, res) => {
+              return db.query('SELECT * FROM users WHERE id=' + req.query.id);
+            });
+        """)
+        go_flows = _analyze(tmp_path, "unsafe.go", """\
+            package main
+
+            func lookup(db *sql.DB, r *http.Request) {
+                db.Query("SELECT * FROM users WHERE id=" + r.FormValue("id"))
+            }
+        """)
+        assert any(f.category == "sql_injection" for f in js_flows)
+        assert any(f.category == "sql_injection" for f in go_flows)
