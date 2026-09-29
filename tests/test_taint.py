@@ -717,6 +717,61 @@ class TestSinkNameBoundary:
         """)
         assert [f for f in findings if f.category == "rce"] == []
 
+    def test_receiver_call_argument_is_not_the_outer_callee(self):
+        """A model named Template inside select(...) is not Template(...)."""
+        findings = _analyze_code("""\
+            from flask import request
+
+            class Template:
+                author_id = object()
+
+            def select(model):
+                return Query()
+
+            class Query:
+                def where(self, clause):
+                    return self
+
+            def handler():
+                user_id = request.args.get("user_id")
+                return select(Template).where(Template.author_id == user_id)
+        """)
+        assert [f for f in findings if f.category == "ssti"] == []
+
+    def test_redis_eval_method_is_not_python_eval(self):
+        """Redis EVAL executes a fixed Lua script; its key remains data."""
+        findings = _analyze_code("""\
+            from flask import request
+
+            LUA = "return redis.call('GET', KEYS[1])"
+
+            def handler(redis):
+                key = request.args.get("key")
+                return redis.eval(LUA, 1, key)
+        """)
+        assert [f for f in findings if f.category == "rce"] == []
+
+    def test_qualified_template_constructor_still_matches_ssti(self):
+        findings = _analyze_code("""\
+            from flask import request
+            import jinja2
+
+            def handler():
+                source = request.args.get("template")
+                return jinja2.Template(source)
+        """)
+        assert [f.category for f in findings if f.category == "ssti"] == ["ssti"]
+
+    def test_builtin_eval_still_matches_rce(self):
+        findings = _analyze_code("""\
+            from flask import request
+
+            def handler():
+                source = request.args.get("expr")
+                return eval(source)
+        """)
+        assert [f.category for f in findings if f.category == "rce"] == ["rce"]
+
 
 class TestProjectRulesTolerance:
     """A hand-written `.flyto-rules.yaml` must not be able to crash the scan."""

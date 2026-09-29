@@ -10,7 +10,7 @@ from dataclasses import replace
 from .taint_common import (
     MAX_FINDINGS, MAX_FUNCTIONS, MAX_RETURN_SOURCE_FUNCS, MAX_RETURN_TAINT_ROUNDS,
     MAX_TOTAL_FUNCTIONS, SKIP_DIR_PATTERNS, _builds_sql_string,
-    _call_short_name, _functions_with_qualnames, _in_hidden_dir,
+    _call_matches_sink_pattern, _call_short_name, _functions_with_qualnames, _in_hidden_dir,
     _is_orm_expression, _safe_unparse, _unwrap_await,
 )
 from .taint_evidence import TaintFlow
@@ -760,29 +760,9 @@ class TaintPythonFlowMixin:
             return
 
         for pattern, vuln_type, severity, rec, requires in self._flat_sinks:
-            # Strip trailing ( for matching against unparsed func name
             match_pat = pattern.rstrip("(")
-            if match_pat not in call_str:
+            if not _call_matches_sink_pattern(call, pattern):
                 continue
-            # Avoid partial matches at either end. The right-hand guard alone
-            # let "exec(" match "create_subprocess_exec(" and "Template("
-            # match "ResourceTemplate(" — a whole false-positive class on real
-            # projects.
-            #
-            # An underscore continues an identifier exactly as a letter does,
-            # and leaving it out kept the same class alive on the other side:
-            # "fetch" matched "fetch_user_config" and "fetch_template_listing",
-            # reporting SSRF against two functions that build no URL at all.
-            idx = call_str.find(match_pat)
-            end_idx = idx + len(match_pat)
-            if end_idx < len(call_str) and (
-                call_str[end_idx].isalnum() or call_str[end_idx] == "_"
-            ):
-                continue
-            if idx > 0 and not match_pat.startswith("."):
-                prev = call_str[idx - 1]
-                if prev.isalnum() or prev == "_":
-                    continue
 
             # subprocess.* is only an RCE sink in this AST pass when shell=True.
             # Arg-list subprocess usage is handled as safe by default; shell=True

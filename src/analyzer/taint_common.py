@@ -94,6 +94,56 @@ def _call_short_name(call: ast.Call) -> str:
         return func.id
     return ""
 
+
+def _dotted_call_target(func: ast.expr) -> str:
+    """Return only the callable attribute path, never receiver call arguments.
+
+    ``ast.unparse(call.func)`` is unsafe for sink identity on chained calls:
+    ``select(Template).where(...)`` unparses the callable as
+    ``select(Template).where`` and therefore makes the *argument* ``Template``
+    look like the callee. Walking Name/Attribute nodes preserves real targets
+    such as ``requests.get`` while a computed receiver such as
+    ``factory().execute`` intentionally resolves only to ``execute``.
+    """
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        parent = _dotted_call_target(func.value)
+        return f"{parent}.{func.attr}" if parent else func.attr
+    return ""
+
+
+_BUILTIN_ONLY_BARE_SINKS = frozenset({"eval", "exec"})
+
+
+def _call_matches_sink_pattern(call: ast.Call, pattern: str) -> bool:
+    """Match a sink against the call that is actually invoked.
+
+    Bare builtin execution sinks must remain bare calls: the Redis ``eval``
+    method is a Redis command, not Python's builtin evaluator. Other bare names match the
+    terminal identifier so imported constructors such as ``Template(...)`` and
+    ``jinja2.Template(...)`` keep working. Qualified patterns match a dotted
+    callable suffix, and receiver-agnostic patterns such as ``.execute`` match
+    the terminal method only.
+    """
+    match_pat = pattern.rstrip("(")
+    short = _call_short_name(call)
+    dotted = _dotted_call_target(call.func)
+
+    if match_pat.startswith("."):
+        return bool(short) and short == match_pat[1:]
+
+    if "." in match_pat:
+        return dotted == match_pat or dotted.endswith(f".{match_pat}")
+
+    if short != match_pat:
+        return False
+
+    if match_pat in _BUILTIN_ONLY_BARE_SINKS:
+        return isinstance(call.func, ast.Name) or dotted == f"builtins.{match_pat}"
+
+    return True
+
 def _unwrap_await(node: ast.expr) -> ast.expr:
     """Strip `await` so an awaited call is the same call.
 

@@ -1,5 +1,22 @@
 # Flyto2 Indexer State
 
+## 2026-09-29 — Terminal-callee taint precision
+
+Python sink matching now resolves the callable that is actually invoked rather
+than substring-matching the full unparsed receiver expression. This removes the
+real-project SSTI false-positive class where SQLAlchemy
+`select(Template).where(...)` exposed the model name `Template` inside the
+receiver expression. Bare builtin execution sinks are also identity-aware:
+`redis.eval(...)` is not Python `eval(...)`, while direct/builtins `eval` and
+real `Template(...)` constructors retain their existing detection.
+
+Focused taint/callee regression tests pass, including explicit negative controls
+for SQLAlchemy-style query chains and Redis EVAL plus positive controls for
+genuine builtin eval and qualified Template construction. Using this source
+directly against clean `flyto-cloud@45acb290` changes strict verification from
+20 pass / 1 fail with seven name-only false positives to 21 pass / 0 warn /
+0 fail. Public surfaces remain 20 MCP tools and 44 CLI commands.
+
 ## 2026-09-28 — Accuracy V2 impact evidence and bounded absence
 
 The pinned FastAPI full-stack real-repository proof now labels the complete

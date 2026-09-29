@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-09-29
+
+- Tightened Python taint sink identity so chained receiver expressions no longer
+  leak argument names into callee matching: `select(Template).where(...)` is
+  evaluated as a call to `where`, not `Template`.
+- Distinguished Python builtin execution sinks from same-named methods, so
+  `redis.eval(FIXED_LUA, ..., user_key)` is not reported as Python `eval()`;
+  genuine `eval(user_input)` and template-constructor sinks remain findings.
+- Added focused regression coverage for both false-positive classes and their
+  corresponding true-positive controls. Flyto-cloud strict verification moves
+  from 20 pass / 1 fail with seven known samples to 21 pass / 0 fail.
+
 ## 2026-09-28
 
 - Strengthened the pinned FastAPI real-repository impact proof from required-node
