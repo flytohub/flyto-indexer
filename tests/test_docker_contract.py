@@ -15,6 +15,7 @@ def test_scanner_dependency_overrides_stay_on_tested_secure_versions():
     assert '"mcp==1.29.0"' in dockerfile
     assert '"msgpack==1.2.1"' in dockerfile
     assert '"setuptools==83.0.0"' in dockerfile
+    assert '"PyJWT==2.14.0"' in dockerfile
     assert "from mcp.server.fastmcp import FastMCP" in dockerfile
     assert 'pip install --upgrade "mcp>=1.28.1"' not in dockerfile
     assert '"checkov==3.3.8"' not in dockerfile
