@@ -42,7 +42,7 @@ policy, quality/security, and verification handlers moved to
 
 Indexer continues to answer what a change affects, what evidence exists, and
 what verification/planning constraints apply. It does not edit product code, run
-a coding agent, commit, deploy, or replace Flyto Runtime.
+a coding agent, commit, deploy, or replace Flyto2 Runtime.
 ## Final verification
 
 - `scripts/test_fast.sh`: PASS (the chained command continued into the full suite).

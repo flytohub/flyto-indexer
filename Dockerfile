@@ -91,7 +91,8 @@ COPY --from=build /wheels/*.whl /tmp/
 # also downgrade msgpack and setuptools to vulnerable releases. Re-apply all
 # tested security overrides after the complete dependency solve; the import and
 # CLI smoke checks below guard the intentionally overridden Semgrep MCP
-# dependency.
+# dependency. PyJWT (pulled in by MCP) is raised to 2.14.0, the first release
+# fixing CVE-2026-102266..102273.
 RUN pip install --upgrade pip \
     && pip install \
         /tmp/*.whl \
@@ -103,8 +104,9 @@ RUN pip install --upgrade pip \
         "mcp==1.29.0" \
         "msgpack==1.2.1" \
         "setuptools==83.0.0" \
+        "PyJWT==2.14.0" \
     && rm -f /tmp/*.whl \
-    && python -c "from importlib.metadata import version; expected={'aiohttp': '3.14.3', 'checkov': '3.3.10', 'mcp': '1.29.0', 'msgpack': '1.2.1', 'setuptools': '83.0.0'}; actual={name: version(name) for name in expected}; assert actual == expected, actual" \
+    && python -c "from importlib.metadata import version; expected={'aiohttp': '3.14.3', 'checkov': '3.3.10', 'mcp': '1.29.0', 'msgpack': '1.2.1', 'setuptools': '83.0.0', 'PyJWT': '2.14.0'}; actual={name: version(name) for name in expected}; assert actual == expected, actual" \
     && python -c "from mcp.server.fastmcp import FastMCP; assert FastMCP" \
     && semgrep --version \
     && checkov --version

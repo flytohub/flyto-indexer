@@ -9,7 +9,7 @@
   `redis.eval(FIXED_LUA, ..., user_key)` is not reported as Python `eval()`;
   genuine `eval(user_input)` and template-constructor sinks remain findings.
 - Added focused regression coverage for both false-positive classes and their
-  corresponding true-positive controls. Flyto-cloud strict verification moves
+  corresponding true-positive controls. flyto-cloud strict verification moves
   from 20 pass / 1 fail with seven known samples to 21 pass / 0 fail.
 
 ## 2026-09-28

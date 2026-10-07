@@ -2,7 +2,7 @@
 
 # Module Inventory
 
-Generated inventory: **229 Python modules**, **82,831 lines**, and **2,545 class/function/method declarations**.
+Generated inventory: **229 Python modules**, **82,861 lines**, and **2,547 class/function/method declarations**.
 
 | Module | Lines | Declarations | Direct import roots | Responsibility |
 |---|---:|---:|---|---|
@@ -75,14 +75,14 @@ Generated inventory: **229 Python modules**, **82,831 lines**, and **2,545 class
 | [`src/analyzer/stale_files.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/stale_files.py#L1) | 216 | 11 | `collections, dataclasses, datetime, pathlib, subprocess` | Stale file detection - use git history to find files untouched for a long time |
 | [`src/analyzer/taint.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint.py#L1) | 359 | 4 | `ast, collections, dataclasses, importlib, logging, os, pathlib, re, stat, taint_bindings, taint_common, taint_cross_file` | AST-based taint analysis engine. |
 | [`src/analyzer/taint_bindings.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_bindings.py#L1) | 284 | 13 | `__future__, ast, collections, dataclasses, pathlib` | Bounded Python import binding for the existing taint caller pass. |
-| [`src/analyzer/taint_common.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_common.py#L1) | 201 | 11 | `__future__, ast, profile, re, taint_evidence` | Shared constants and pure helpers for taint analysis. |
+| [`src/analyzer/taint_common.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_common.py#L1) | 251 | 13 | `__future__, ast, profile, re, taint_evidence` | Shared constants and pure helpers for taint analysis. |
 | [`src/analyzer/taint_cross_file.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_cross_file.py#L1) | 481 | 11 | `__future__, ast, collections, taint_bindings, taint_common, taint_evidence` | Cross-file caller attribution and bounded taint propagation. |
 | [`src/analyzer/taint_dsl.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_dsl.py#L1) | 408 | 17 | `json, logging, pathlib, re, yaml` | Taint DSL — read/write helpers for the `taint:` block in .flyto-rules.yaml. |
 | [`src/analyzer/taint_evidence.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_evidence.py#L1) | 124 | 4 | `__future__, dataclasses, finding_identity` | Taint finding models and evidence serialization. |
 | [`src/analyzer/taint_lsp.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_lsp.py#L1) | 207 | 8 | `__future__, ast, logging, lsp, os, pathlib, typing` | Type-aware callee verification for the cross-function taint pass. |
 | [`src/analyzer/taint_policy.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_policy.py#L1) | 176 | 4 | `__future__, logging, pathlib, taint_rules, taint_shapes, yaml` | Taint source/sink policy and repository-local rule loading. |
 | [`src/analyzer/taint_propagation.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_propagation.py#L1) | 45 | 1 | `__future__` | Built-in and project-configured taint propagation policy. |
-| [`src/analyzer/taint_python_flow.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_python_flow.py#L1) | 1397 | 36 | `__future__, ast, collections, dataclasses, logging, taint_common, taint_evidence, taint_policy, taint_rules, taint_shapes, type_filter` | Intraprocedural Python taint propagation and sink analysis. |
+| [`src/analyzer/taint_python_flow.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_python_flow.py#L1) | 1377 | 36 | `__future__, ast, collections, dataclasses, logging, taint_common, taint_evidence, taint_policy, taint_rules, taint_shapes, type_filter` | Intraprocedural Python taint propagation and sink analysis. |
 | [`src/analyzer/taint_regex.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_regex.py#L1) | 149 | 4 | `__future__, re, taint_common, taint_evidence, taint_rules` | Regex fallback analysis for non-Python source languages. |
 | [`src/analyzer/taint_rules.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_rules.py#L1) | 618 | 0 | `none` | Default taint analysis rules — sources, sinks, and sanitizers by language. |
 | [`src/analyzer/taint_shapes.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/analyzer/taint_shapes.py#L1) | 327 | 15 | `ast, re` | Argument-shape gates for sink rules. |
@@ -98,7 +98,7 @@ Generated inventory: **229 Python modules**, **82,831 lines**, and **2,545 class
 | [`src/cli.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli.py#L1) | 832 | 9 | `argparse, cli_quality, cli_scanners, cli_verify, cli_workspace, contextlib, index_store, json, os, pathlib, subprocess, sys` | Command-line interface for Flyto2 Indexer. |
 | [`src/cli_quality.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli_quality.py#L1) | 425 | 8 | `__future__, analyzer, contextlib, engine, indexer, json, lsp, pathlib, subprocess, sys, time` | Change-impact, taint, research-priority, and quality gate CLI handlers. |
 | [`src/cli_scanners.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli_scanners.py#L1) | 472 | 20 | `__future__, analyzer, dataclasses, dependency_scanner, doc_scanner, fnmatch, framework_detector, json, license_scanner, pathlib, pr_analyzer, project_profile` | Dependency, documentation, architecture, and scanner CLI handlers. |
-| [`src/cli_verify.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli_verify.py#L1) | 103 | 4 | `__future__, json, pathlib, sys, verify` | Verification command handlers for the Flyto Indexer CLI. |
+| [`src/cli_verify.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli_verify.py#L1) | 103 | 4 | `__future__, json, pathlib, sys, verify` | Verification command handlers for the flyto-indexer CLI. |
 | [`src/cli_workspace.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/cli_workspace.py#L1) | 1073 | 21 | `__future__, argparse, datetime, engine, flyto_output, hashlib, json, os, pathlib, sys, task_cli, time` | Workspace lifecycle, setup, task, and tool-list CLI handlers. |
 | [`src/context/__init__.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/context/__init__.py#L1) | 5 | 0 | `loader` | Context loading module. |
 | [`src/context/loader.py:1`](https://github.com/flytohub/flyto-indexer/blob/main/src/context/loader.py#L1) | 410 | 17 | `dataclasses, models, pathlib, re, typing` | Progressive Context Loading |
