@@ -1,4 +1,4 @@
-"""Verification command handlers for the Flyto Indexer CLI.
+"""Verification command handlers for the flyto-indexer CLI.
 
 Argument parsing stays in :mod:`src.cli`; this module translates parsed verify
 commands into verification service calls and report artifacts.
